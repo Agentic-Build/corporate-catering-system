@@ -1,0 +1,71 @@
+# =========================
+# Rust
+# =========================
+debug/
+target/
+**/*.rs.bk
+*.pdb
+
+# =========================
+# Node.js / SvelteKit
+# =========================
+node_modules/
+build/
+.svelte-kit/
+.output/
+dist/
+package/
+.env
+.env.*
+!.env.example
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# =========================
+# Docker
+# =========================
+.docker/
+docker-compose.override.yml
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# =========================
+# Logs & temp
+# =========================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+tmp/
+temp/
+
+# =========================
+# Coverage & test
+# =========================
+coverage/
+*.lcov
+.nyc_output/
+
+# =========================
+# Misc
+# =========================
+*.bak
+*.tmp
+*.orig
