@@ -385,6 +385,10 @@ components:
             $ref: '#/components/schemas/MenuHealthTag'
           type: array
           uniqueItems: true
+        imageUrl:
+          format: uri
+          maxLength: 512
+          type: string
         menuItemId:
           pattern: ^menu-[a-z0-9]{8,32}$
           type: string
@@ -468,13 +472,16 @@ components:
         menuItemId:
           pattern: ^menu-[a-z0-9]{8,32}$
           type: string
-        note:
-          maxLength: 120
-          type: string
         quantity:
           maximum: 20
           minimum: 1
           type: integer
+        specialRequests:
+          items:
+            $ref: '#/components/schemas/SpecialRequestOption'
+          maxItems: 3
+          type: array
+          uniqueItems: true
       required:
       - menuItemId
       - quantity
@@ -565,6 +572,15 @@ components:
       enum:
       - asc
       - desc
+      type: string
+    SpecialRequestOption:
+      description: Controlled special-request options. Free-text instructions are intentionally disabled pending final policy clarification.
+      enum:
+      - LESS_RICE
+      - NO_GREEN_ONION
+      - SAUCE_ON_SIDE
+      - NO_UTENSILS
+      - EXTRA_SPICY
       type: string
     TaipeiBusinessDateTime:
       description: Fixed Asia/Taipei business timestamp. Always serialize with +08:00 offset.
@@ -864,6 +880,10 @@ components:
             $ref: '#/components/schemas/MenuHealthTag'
           type: array
           uniqueItems: true
+        imageUrl:
+          format: uri
+          maxLength: 512
+          type: string
         maxDailyQuantity:
           maximum: 2000
           minimum: 1
@@ -871,12 +891,24 @@ components:
         menuItemId:
           pattern: ^menu-[a-z0-9]{8,32}$
           type: string
+        modifyCancelCutoffMinuteOfDay:
+          maximum: 1200
+          minimum: 900
+          type: integer
         name:
           maxLength: 80
           minLength: 1
           type: string
+        preorderOpenDaysAhead:
+          maximum: 7
+          minimum: 1
+          type: integer
         price:
           $ref: '#/components/schemas/Money'
+        remainingQuantity:
+          maximum: 2000
+          minimum: 0
+          type: integer
         vendorId:
           pattern: ^ven-[a-z0-9]{8,32}$
           type: string
@@ -887,6 +919,9 @@ components:
       - description
       - price
       - maxDailyQuantity
+      - remainingQuantity
+      - preorderOpenDaysAhead
+      - modifyCancelCutoffMinuteOfDay
       - deliveryDate
       type: object
     VendorMenuItemUpsertRequest:
@@ -904,14 +939,28 @@ components:
             $ref: '#/components/schemas/MenuHealthTag'
           type: array
           uniqueItems: true
+        imageUrl:
+          format: uri
+          maxLength: 512
+          type: string
         maxDailyQuantity:
           maximum: 2000
           minimum: 1
+          type: integer
+        modifyCancelCutoffMinuteOfDayOverride:
+          description: Optional vendor override minute-of-day (Asia/Taipei) for previous-day modify/cancel cutoff.
+          maximum: 1200
+          minimum: 900
           type: integer
         name:
           maxLength: 80
           minLength: 1
           type: string
+        preorderOpenDaysAheadOverride:
+          description: Optional vendor override for how many days ahead preorder stays open.
+          maximum: 7
+          minimum: 1
+          type: integer
         price:
           $ref: '#/components/schemas/Money'
       required:
@@ -1449,6 +1498,23 @@ paths:
         enabled: true
         ruleSource: VENDOR_PLANT_DELIVERY_MAPPING
         timezone: Asia/Taipei
+      x-order-governance:
+        modifyCancelCutoff:
+          defaultRule:
+            minuteOfDay: 1020
+            relativeDayFromDelivery: -1
+          vendorOverrideBounds:
+            maximumMinuteOfDay: 1200
+            minimumMinuteOfDay: 900
+        preorderWindow:
+          defaultOpenDaysAhead: 7
+          vendorOverrideBounds:
+            maximum: 7
+            minimum: 1
+        specialRequestPolicy:
+          allowFreeText: false
+          mode: CONTROLLED_ENUM_ONLY
+        timezone: Asia/Taipei
   /api/v1/employee/orders/{orderId}:
     patch:
       operationId: updateEmployeeOrder
@@ -1484,6 +1550,15 @@ paths:
       summary: Modify an existing order before cutoff
       tags:
       - Employee
+      x-order-governance:
+        modifyCancelCutoff:
+          defaultRule:
+            minuteOfDay: 1020
+            relativeDayFromDelivery: -1
+          vendorOverrideBounds:
+            maximumMinuteOfDay: 1200
+            minimumMinuteOfDay: 900
+        timezone: Asia/Taipei
   /api/v1/integrations/payroll/deductions:
     get:
       operationId: exportPayrollDeductions

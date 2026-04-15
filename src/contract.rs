@@ -311,6 +311,30 @@ pub fn canonical_openapi_spec() -> Value {
               "ruleSource": "VENDOR_PLANT_DELIVERY_MAPPING",
               "timezone": "Asia/Taipei"
             },
+            "x-order-governance": {
+              "timezone": "Asia/Taipei",
+              "preorderWindow": {
+                "defaultOpenDaysAhead": 7,
+                "vendorOverrideBounds": {
+                  "minimum": 1,
+                  "maximum": 7
+                }
+              },
+              "modifyCancelCutoff": {
+                "defaultRule": {
+                  "relativeDayFromDelivery": -1,
+                  "minuteOfDay": 1020
+                },
+                "vendorOverrideBounds": {
+                  "minimumMinuteOfDay": 900,
+                  "maximumMinuteOfDay": 1200
+                }
+              },
+              "specialRequestPolicy": {
+                "mode": "CONTROLLED_ENUM_ONLY",
+                "allowFreeText": false
+              }
+            },
             "security": [{ "corporateSsoBearer": [] }],
             "requestBody": {
               "required": true,
@@ -342,6 +366,19 @@ pub fn canonical_openapi_spec() -> Value {
             "tags": ["Employee"],
             "summary": "Modify an existing order before cutoff",
             "operationId": HttpOperation::UpdateEmployeeOrder.operation_id(),
+            "x-order-governance": {
+              "timezone": "Asia/Taipei",
+              "modifyCancelCutoff": {
+                "defaultRule": {
+                  "relativeDayFromDelivery": -1,
+                  "minuteOfDay": 1020
+                },
+                "vendorOverrideBounds": {
+                  "minimumMinuteOfDay": 900,
+                  "maximumMinuteOfDay": 1200
+                }
+              }
+            },
             "security": [{ "corporateSsoBearer": [] }],
             "parameters": [
               { "$ref": "#/components/parameters/OrderIdPath" }
@@ -1028,6 +1065,17 @@ pub fn canonical_openapi_spec() -> Value {
             "type": "string",
             "enum": ["LOW_CALORIE", "HIGH_PROTEIN", "VEGETARIAN", "VEGAN", "GLUTEN_FREE"]
           },
+          "SpecialRequestOption": {
+            "type": "string",
+            "enum": [
+              "LESS_RICE",
+              "NO_GREEN_ONION",
+              "SAUCE_ON_SIDE",
+              "NO_UTENSILS",
+              "EXTRA_SPICY"
+            ],
+            "description": "Controlled special-request options. Free-text instructions are intentionally disabled pending final policy clarification."
+          },
           "EmployeeOrderStatus": {
             "type": "string",
             "enum": ["PENDING", "CONFIRMED", "CANCELLED", "FULFILLED"]
@@ -1205,6 +1253,11 @@ pub fn canonical_openapi_spec() -> Value {
               "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
               "name": { "type": "string", "minLength": 1, "maxLength": 80 },
               "description": { "type": "string", "maxLength": 280 },
+              "imageUrl": {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 512
+              },
               "price": { "$ref": "#/components/schemas/Money" },
               "remainingQuantity": { "type": "integer", "minimum": 0, "maximum": 2000 },
               "deliveryDate": { "type": "string", "format": "date" },
@@ -1235,7 +1288,12 @@ pub fn canonical_openapi_spec() -> Value {
             "properties": {
               "menuItemId": { "type": "string", "pattern": "^menu-[a-z0-9]{8,32}$" },
               "quantity": { "type": "integer", "minimum": 1, "maximum": 20 },
-              "note": { "type": "string", "maxLength": 120 }
+              "specialRequests": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/SpecialRequestOption" },
+                "uniqueItems": true,
+                "maxItems": 3
+              }
             },
             "additionalProperties": false
           },
@@ -1348,9 +1406,26 @@ pub fn canonical_openapi_spec() -> Value {
             "properties": {
               "name": { "type": "string", "minLength": 1, "maxLength": 80 },
               "description": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "imageUrl": {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 512
+              },
               "price": { "$ref": "#/components/schemas/Money" },
               "maxDailyQuantity": { "type": "integer", "minimum": 1, "maximum": 2000 },
               "deliveryDate": { "type": "string", "format": "date" },
+              "preorderOpenDaysAheadOverride": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 7,
+                "description": "Optional vendor override for how many days ahead preorder stays open."
+              },
+              "modifyCancelCutoffMinuteOfDayOverride": {
+                "type": "integer",
+                "minimum": 900,
+                "maximum": 1200,
+                "description": "Optional vendor override minute-of-day (Asia/Taipei) for previous-day modify/cancel cutoff."
+              },
               "healthTags": {
                 "type": "array",
                 "items": { "$ref": "#/components/schemas/MenuHealthTag" },
@@ -1368,6 +1443,9 @@ pub fn canonical_openapi_spec() -> Value {
               "description",
               "price",
               "maxDailyQuantity",
+              "remainingQuantity",
+              "preorderOpenDaysAhead",
+              "modifyCancelCutoffMinuteOfDay",
               "deliveryDate"
             ],
             "properties": {
@@ -1375,8 +1453,20 @@ pub fn canonical_openapi_spec() -> Value {
               "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
               "name": { "type": "string", "minLength": 1, "maxLength": 80 },
               "description": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "imageUrl": {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 512
+              },
               "price": { "$ref": "#/components/schemas/Money" },
               "maxDailyQuantity": { "type": "integer", "minimum": 1, "maximum": 2000 },
+              "remainingQuantity": { "type": "integer", "minimum": 0, "maximum": 2000 },
+              "preorderOpenDaysAhead": { "type": "integer", "minimum": 1, "maximum": 7 },
+              "modifyCancelCutoffMinuteOfDay": {
+                "type": "integer",
+                "minimum": 900,
+                "maximum": 1200
+              },
               "deliveryDate": { "type": "string", "format": "date" },
               "healthTags": {
                 "type": "array",

@@ -8,8 +8,17 @@ export type VendorMenuItemUpsertRequest = {
     deliveryDate: string;
     description: string;
     healthTags?: Array<MenuHealthTag>;
+    imageUrl?: string;
     maxDailyQuantity: number;
+    /**
+     * Optional vendor override minute-of-day (Asia/Taipei) for previous-day modify/cancel cutoff.
+     */
+    modifyCancelCutoffMinuteOfDayOverride?: number;
     name: string;
+    /**
+     * Optional vendor override for how many days ahead preorder stays open.
+     */
+    preorderOpenDaysAheadOverride?: number;
     price: Money;
 };
 

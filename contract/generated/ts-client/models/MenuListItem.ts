@@ -9,6 +9,7 @@ export type MenuListItem = {
     deliveryDate: string;
     description?: string;
     healthTags: Array<MenuHealthTag>;
+    imageUrl?: string;
     menuItemId: string;
     name: string;
     price: Money;

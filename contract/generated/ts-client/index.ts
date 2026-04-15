@@ -48,6 +48,7 @@ export type { Role } from './models/Role';
 export type { ServiceWindowActiveAtQuery } from './models/ServiceWindowActiveAtQuery';
 export type { SortOrder } from './models/SortOrder';
 export type { SortOrderQuery } from './models/SortOrderQuery';
+export type { SpecialRequestOption } from './models/SpecialRequestOption';
 export type { TaipeiBusinessDateTime } from './models/TaipeiBusinessDateTime';
 export type { TemplateIdPath } from './models/TemplateIdPath';
 export type { ToDateQuery } from './models/ToDateQuery';

@@ -434,6 +434,92 @@ fn mcp_contract_checks_are_wired_for_future_runtime_tools() {
 }
 
 #[test]
+fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_requests() {
+    let spec = canonical_openapi_spec();
+
+    let create_order_operation =
+        operation_by_path_and_method(&spec, "/api/v1/employee/orders", "post");
+    assert_eq!(
+        create_order_operation["x-order-governance"]["timezone"],
+        "Asia/Taipei"
+    );
+    assert_eq!(
+        create_order_operation["x-order-governance"]["preorderWindow"]["defaultOpenDaysAhead"],
+        7
+    );
+    assert_eq!(
+        create_order_operation["x-order-governance"]["modifyCancelCutoff"]["defaultRule"]
+            ["minuteOfDay"],
+        1020
+    );
+    assert_eq!(
+        create_order_operation["x-order-governance"]["specialRequestPolicy"]["allowFreeText"],
+        false
+    );
+
+    let patch_order_operation =
+        operation_by_path_and_method(&spec, "/api/v1/employee/orders/{orderId}", "patch");
+    assert_eq!(
+        patch_order_operation["x-order-governance"]["timezone"],
+        "Asia/Taipei"
+    );
+
+    let order_line_item_properties =
+        &spec["components"]["schemas"]["OrderLineItemRequest"]["properties"];
+    assert!(
+        order_line_item_properties.get("note").is_none(),
+        "free-text note must not exist in controlled special-request schema"
+    );
+    assert_eq!(order_line_item_properties["specialRequests"]["maxItems"], 3);
+    assert_eq!(
+        order_line_item_properties["specialRequests"]["items"]["$ref"],
+        "#/components/schemas/SpecialRequestOption"
+    );
+
+    let special_request_options = spec["components"]["schemas"]["SpecialRequestOption"]["enum"]
+        .as_array()
+        .expect("special request enum must exist")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("special request enum value must be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        special_request_options,
+        BTreeSet::from([
+            "LESS_RICE".to_owned(),
+            "NO_GREEN_ONION".to_owned(),
+            "SAUCE_ON_SIDE".to_owned(),
+            "NO_UTENSILS".to_owned(),
+            "EXTRA_SPICY".to_owned(),
+        ])
+    );
+
+    let vendor_menu_schema = &spec["components"]["schemas"]["VendorMenuItem"];
+    let vendor_required = vendor_menu_schema["required"]
+        .as_array()
+        .expect("vendor menu item required fields should be array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("required entry should be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(vendor_required.contains("remainingQuantity"));
+    assert!(vendor_required.contains("preorderOpenDaysAhead"));
+    assert!(vendor_required.contains("modifyCancelCutoffMinuteOfDay"));
+    assert_eq!(
+        vendor_menu_schema["properties"]["imageUrl"]["format"],
+        "uri"
+    );
+}
+
+#[test]
 fn openapi_export_produces_json_yaml_and_browsable_docs_artifacts() {
     let unique_suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)

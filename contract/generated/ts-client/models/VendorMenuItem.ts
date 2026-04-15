@@ -8,10 +8,14 @@ export type VendorMenuItem = {
     deliveryDate: string;
     description: string;
     healthTags?: Array<MenuHealthTag>;
+    imageUrl?: string;
     maxDailyQuantity: number;
     menuItemId: string;
+    modifyCancelCutoffMinuteOfDay: number;
     name: string;
+    preorderOpenDaysAhead: number;
     price: Money;
+    remainingQuantity: number;
     vendorId: string;
 };
 

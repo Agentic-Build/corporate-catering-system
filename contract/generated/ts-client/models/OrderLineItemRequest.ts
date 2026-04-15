@@ -2,9 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { SpecialRequestOption } from './SpecialRequestOption';
 export type OrderLineItemRequest = {
     menuItemId: string;
-    note?: string;
     quantity: number;
+    specialRequests?: Array<SpecialRequestOption>;
 };
 

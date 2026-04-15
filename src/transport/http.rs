@@ -3,6 +3,9 @@ use crate::access::{
 };
 use crate::contract::{HttpMethod, HttpOperation};
 use crate::identity::{AuthenticatedActorContext, PlantId};
+use crate::menu_supply_window::{
+    MenuSupplyPolicy, MenuSupplyWindowError, OrderId, OrderLineItemRequest, OrderMutation,
+};
 use crate::vendor_compliance::{VendorComplianceLifecycle, VendorId};
 use crate::vendor_delivery_mapping::{
     TaipeiBusinessMoment, VendorPlantDeliveryError, VendorPlantDeliveryPolicy,
@@ -220,3 +223,79 @@ impl<'a> HttpDeliveryExecutionGateway<'a> {
         )
     }
 }
+
+pub struct HttpOrderingExecutionGateway<'a> {
+    compliance_lifecycle: &'a VendorComplianceLifecycle,
+    delivery_policy: &'a VendorPlantDeliveryPolicy,
+    menu_supply_policy: &'a MenuSupplyPolicy,
+}
+
+impl<'a> HttpOrderingExecutionGateway<'a> {
+    pub fn new(
+        compliance_lifecycle: &'a VendorComplianceLifecycle,
+        delivery_policy: &'a VendorPlantDeliveryPolicy,
+        menu_supply_policy: &'a MenuSupplyPolicy,
+    ) -> Self {
+        Self {
+            compliance_lifecycle,
+            delivery_policy,
+            menu_supply_policy,
+        }
+    }
+
+    pub fn execute_create_employee_order(
+        &self,
+        order_id: OrderId,
+        vendor_id: &VendorId,
+        plant_id: &PlantId,
+        delivery_epoch_day: i32,
+        line_items: Vec<OrderLineItemRequest>,
+        at: TaipeiBusinessMoment,
+    ) -> Result<(), HttpOrderExecutionError> {
+        self.delivery_policy
+            .ensure_vendor_deliverable_for_order(self.compliance_lifecycle, vendor_id, plant_id, at)
+            .map_err(HttpOrderExecutionError::Deliverability)?;
+
+        self.menu_supply_policy
+            .create_order(order_id, vendor_id, delivery_epoch_day, line_items, at)
+            .map_err(HttpOrderExecutionError::MenuSupply)?;
+
+        Ok(())
+    }
+
+    pub fn execute_update_employee_order(
+        &self,
+        order_id: &OrderId,
+        vendor_id: &VendorId,
+        plant_id: &PlantId,
+        mutation: OrderMutation,
+        at: TaipeiBusinessMoment,
+    ) -> Result<(), HttpOrderExecutionError> {
+        self.delivery_policy
+            .ensure_vendor_deliverable_for_order(self.compliance_lifecycle, vendor_id, plant_id, at)
+            .map_err(HttpOrderExecutionError::Deliverability)?;
+
+        self.menu_supply_policy
+            .update_order(order_id, mutation, at)
+            .map_err(HttpOrderExecutionError::MenuSupply)?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum HttpOrderExecutionError {
+    Deliverability(VendorPlantDeliveryError),
+    MenuSupply(MenuSupplyWindowError),
+}
+
+impl std::fmt::Display for HttpOrderExecutionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Deliverability(error) => write!(f, "deliverability enforcement failed: {error}"),
+            Self::MenuSupply(error) => write!(f, "menu supply enforcement failed: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for HttpOrderExecutionError {}
