@@ -34,7 +34,7 @@ Baseline artifacts are committed and release-gated under `ops/`:
 - Pre-launch load-test thresholds:
   - `ops/observability/load/prelaunch-thresholds.yaml`
   - `ops/observability/load/k6-prelaunch.js`
-  - `ops/observability/load/mock-prelaunch-server.js` (deterministic gate harness for CI/local threshold enforcement)
+  - `src/bin/observability_runtime_service.rs` (runtime service used by the hard-SLO load gate)
 - Kubernetes baseline with health/scaling signals:
   - `ops/kubernetes/base/*.yaml`
 

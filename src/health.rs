@@ -36,7 +36,10 @@ impl RuntimeHealthRoute {
 }
 
 const RUNTIME_HEALTH_ROUTES: [RuntimeHealthRoute; 3] = [
-    RuntimeHealthRoute::new(HealthProbeKind::Readiness, HealthProbeKind::Readiness.path()),
+    RuntimeHealthRoute::new(
+        HealthProbeKind::Readiness,
+        HealthProbeKind::Readiness.path(),
+    ),
     RuntimeHealthRoute::new(HealthProbeKind::Liveness, HealthProbeKind::Liveness.path()),
     RuntimeHealthRoute::new(HealthProbeKind::Startup, HealthProbeKind::Startup.path()),
 ];

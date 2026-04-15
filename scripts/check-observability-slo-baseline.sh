@@ -9,13 +9,13 @@ required_files=(
   "ops/observability/slo/grafana-dashboard-hard-slo.json"
   "ops/observability/load/prelaunch-thresholds.yaml"
   "ops/observability/load/k6-prelaunch.js"
-  "ops/observability/load/mock-prelaunch-server.js"
   "ops/kubernetes/base/deployment.yaml"
   "ops/kubernetes/base/deployment-mcp.yaml"
   "ops/kubernetes/base/deployment-compliance-worker.yaml"
   "ops/kubernetes/base/hpa.yaml"
   "ops/kubernetes/base/hpa-mcp.yaml"
   "ops/kubernetes/base/hpa-compliance-worker.yaml"
+  "src/bin/observability_runtime_service.rs"
 )
 
 for file in "${required_files[@]}"; do
@@ -43,8 +43,8 @@ rg -q "/api/v1/employee/orders" ops/observability/load/k6-prelaunch.js
 
 cargo test --test observability_k8s_slo_baseline --test runtime_observability_instrumentation
 
-if ! command -v node >/dev/null 2>&1; then
-  echo "node is required to run the prelaunch load gate"
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "cargo is required to run the prelaunch load gate"
   exit 1
 fi
 if ! command -v k6 >/dev/null 2>&1; then
@@ -53,32 +53,34 @@ if ! command -v k6 >/dev/null 2>&1; then
 fi
 
 summary_file="$(mktemp -t prelaunch-k6-summary.XXXXXX.json)"
-mock_log_file="$(mktemp -t prelaunch-k6-mock.XXXXXX.log)"
-mock_pid=""
+service_log_file="$(mktemp -t prelaunch-k6-service.XXXXXX.log)"
+service_pid=""
 
 cleanup() {
-  if [[ -n "${mock_pid}" ]]; then
-    kill "${mock_pid}" >/dev/null 2>&1 || true
-    wait "${mock_pid}" >/dev/null 2>&1 || true
+  if [[ -n "${service_pid}" ]]; then
+    kill "${service_pid}" >/dev/null 2>&1 || true
+    wait "${service_pid}" >/dev/null 2>&1 || true
   fi
-  rm -f "${summary_file}" "${mock_log_file}"
+  rm -f "${summary_file}" "${service_log_file}"
 }
 trap cleanup EXIT
 
 PORT="${LOAD_GATE_PORT:-18080}"
-PORT="${PORT}" node ops/observability/load/mock-prelaunch-server.js >"${mock_log_file}" 2>&1 &
-mock_pid=$!
+PRELAUNCH_BIND_ADDR="127.0.0.1:${PORT}" \
+OTEL_SERVICE_NAME="catering-http-api" \
+cargo run --quiet --bin observability_runtime_service >"${service_log_file}" 2>&1 &
+service_pid=$!
 
 for _ in {1..40}; do
-  if rg -q "mock prelaunch server listening on ${PORT}" "${mock_log_file}"; then
+  if curl --silent --fail --show-error "http://127.0.0.1:${PORT}/health/ready" >/dev/null; then
     break
   fi
   sleep 0.25
 done
 
-if ! rg -q "mock prelaunch server listening on ${PORT}" "${mock_log_file}"; then
-  echo "mock prelaunch server failed to start"
-  cat "${mock_log_file}"
+if ! curl --silent --fail --show-error "http://127.0.0.1:${PORT}/health/ready" >/dev/null; then
+  echo "observability runtime service failed to start"
+  cat "${service_log_file}"
   exit 1
 fi
 

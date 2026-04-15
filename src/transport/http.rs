@@ -3,11 +3,11 @@ use crate::access::{
 };
 use crate::contract::{HttpMethod, HttpOperation};
 use crate::identity::{AuthenticatedActorContext, PlantId};
-use crate::observability::{TelemetryOutcome, TelemetryService};
 use crate::menu_supply_window::{
     MenuSupplyPolicy, MenuSupplyWindowError, OrderId, OrderLineItemRequest, OrderMutation,
     VendorMenuItem,
 };
+use crate::observability::{TelemetryOutcome, TelemetryService};
 use crate::vendor_compliance::{VendorComplianceLifecycle, VendorId};
 use crate::vendor_delivery_mapping::{
     TaipeiBusinessMoment, VendorPlantDeliveryError, VendorPlantDeliveryPolicy,

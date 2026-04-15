@@ -3,12 +3,17 @@ use std::collections::BTreeSet;
 use corporate_catering_system::health::{
     evaluate_probe, runtime_health_routes, HealthProbeKind, HealthState,
 };
-use corporate_catering_system::observability::{TelemetryOutcome, TelemetryService};
+use corporate_catering_system::observability::{
+    initialize_telemetry_runtime_from_env, TelemetryOutcome, TelemetryService,
+};
 
 #[test]
 fn correlated_operation_generates_trace_span_and_request_ids() {
-    let operation =
-        TelemetryService::HttpApi.begin_operation("createEmployeeOrder", Some("emp-1"), Some("fab-a"));
+    let operation = TelemetryService::HttpApi.begin_operation(
+        "createEmployeeOrder",
+        Some("emp-1"),
+        Some("fab-a"),
+    );
     let correlation = operation.correlation_context().clone();
 
     assert_eq!(correlation.service_name(), "catering-http-api");
@@ -49,4 +54,19 @@ fn health_probe_evaluation_enforces_dependency_readiness() {
 
     let liveness = evaluate_probe(HealthProbeKind::Liveness, false, "process heartbeat active");
     assert_eq!(liveness.state(), HealthState::Healthy);
+}
+
+#[test]
+fn telemetry_runtime_bootstrap_is_idempotent() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime should be created");
+
+    runtime.block_on(async {
+        initialize_telemetry_runtime_from_env("catering-http-api")
+            .expect("telemetry runtime bootstrap should initialize");
+        initialize_telemetry_runtime_from_env("catering-http-api")
+            .expect("telemetry runtime bootstrap should be idempotent");
+    });
 }

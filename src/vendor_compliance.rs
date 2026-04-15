@@ -708,7 +708,9 @@ impl VendorComplianceLifecycle {
                     .templates_by_category
                     .get(vendor.category())
                     .ok_or_else(|| {
-                        VendorComplianceError::MissingTemplateConfiguration(vendor.category().clone())
+                        VendorComplianceError::MissingTemplateConfiguration(
+                            vendor.category().clone(),
+                        )
                     })?;
                 let evaluation = evaluate_vendor_lifecycle(vendor, templates, run_on);
 

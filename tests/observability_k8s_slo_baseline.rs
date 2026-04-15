@@ -12,7 +12,8 @@ fn repo_path(relative: &str) -> PathBuf {
 
 fn read_text(relative: &str) -> String {
     let path = repo_path(relative);
-    fs::read_to_string(&path).unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()))
+    fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()))
 }
 
 fn read_yaml(relative: &str) -> YamlValue {
@@ -107,7 +108,10 @@ fn instrumentation_baseline_requires_cross_signal_correlation_fields() {
         yaml_get(&baseline, "decisionIssueId").as_str(),
         Some("issue-pickup-throughput-slo")
     );
-    assert_eq!(yaml_get(&baseline, "defaultBehavior").as_str(), Some("hard-enforced"));
+    assert_eq!(
+        yaml_get(&baseline, "defaultBehavior").as_str(),
+        Some("hard-enforced")
+    );
 
     let required_context: BTreeSet<String> =
         yaml_sequence_strings(yaml_get(&baseline, "requiredCorrelationContext"))
@@ -124,13 +128,19 @@ fn instrumentation_baseline_requires_cross_signal_correlation_fields() {
         "service.namespace",
         "deployment.environment",
     ] {
-        assert!(required_context.contains(key), "missing context key `{key}`");
+        assert!(
+            required_context.contains(key),
+            "missing context key `{key}`"
+        );
     }
 
     let services = yaml_get(&baseline, "services")
         .as_sequence()
         .expect("services must be a sequence");
-    assert!(services.len() >= 3, "at least three services must be instrumented");
+    assert!(
+        services.len() >= 3,
+        "at least three services must be instrumented"
+    );
 
     for service in services {
         let signals = yaml_get(service, "signals");
@@ -187,9 +197,12 @@ fn hard_slo_policy_blocks_release_without_dashboard_alerts_and_load_thresholds()
         ])
     );
 
-    let scenarios = yaml_get(yaml_get(spec, "preLaunchLoadAcceptance"), "requiredScenarios")
-        .as_sequence()
-        .expect("requiredScenarios must be a sequence");
+    let scenarios = yaml_get(
+        yaml_get(spec, "preLaunchLoadAcceptance"),
+        "requiredScenarios",
+    )
+    .as_sequence()
+    .expect("requiredScenarios must be a sequence");
     assert!(scenarios.iter().any(|scenario| {
         yaml_get(scenario, "name").as_str() == Some("peak-order-placement")
             && yaml_get(scenario, "p95LatencyMsMax").as_i64() == Some(350)
@@ -321,10 +334,7 @@ fn kubernetes_manifests_define_health_checks_and_load_scaling_signals() {
         assert_eq!(yaml_get(&deployment, "kind").as_str(), Some("Deployment"));
 
         let container = yaml_get(
-            yaml_get(
-                yaml_get(yaml_get(&deployment, "spec"), "template"),
-                "spec",
-            ),
+            yaml_get(yaml_get(yaml_get(&deployment, "spec"), "template"), "spec"),
             "containers",
         )
         .as_sequence()
@@ -544,4 +554,37 @@ fn ci_workflow_enforces_observability_hard_slo_gate() {
         runs_gate_script,
         "workflow must run observability hard-SLO baseline script"
     );
+
+    let gate_script = read_text("scripts/check-observability-slo-baseline.sh");
+    assert!(
+        gate_script.contains("cargo run --quiet --bin observability_runtime_service"),
+        "hard-SLO gate must execute the Rust runtime service, not a synthetic mock"
+    );
+    assert!(
+        !gate_script.contains("mock-prelaunch-server.js"),
+        "hard-SLO gate must not target a mock prelaunch server"
+    );
+}
+
+#[test]
+fn runtime_observability_bootstrap_and_metric_contracts_are_wired() {
+    let source = read_text("src/observability.rs");
+
+    for required in [
+        "global::set_tracer_provider",
+        "global::set_meter_provider",
+        "opentelemetry_otlp::new_pipeline()",
+        "http_server_requests_total",
+        "http_server_request_duration_ms",
+        "http_server_requests_per_second",
+        "mcp_tool_requests_per_second",
+        "in_flight_requests",
+        "mcp_tool_in_flight_requests",
+        "compliance_lifecycle_jobs_in_flight",
+    ] {
+        assert!(
+            source.contains(required),
+            "runtime observability source must contain `{required}`"
+        );
+    }
 }
