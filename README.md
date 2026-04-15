@@ -26,7 +26,7 @@ Baseline artifacts are committed and release-gated under `ops/`:
 - OpenTelemetry + Victoria stack wiring:
   - `ops/observability/otel/collector.yaml`
   - `ops/observability/otel/instrumentation-baseline.yaml`
-  - Runtime instrumentation hooks are implemented in `src/observability.rs` and wired into HTTP/MCP/compliance execution paths.
+  - Runtime instrumentation hooks are implemented in `src/observability.rs` and wired into HTTP/MCP/compliance execution paths, including OTLP traces, metrics, and logs export bootstrap.
 - Hard-SLO policy, dashboard, and alerts:
   - `ops/observability/slo/hard-slo-policy.yaml`
   - `ops/observability/slo/grafana-dashboard-hard-slo.json`
@@ -35,6 +35,7 @@ Baseline artifacts are committed and release-gated under `ops/`:
   - `ops/observability/load/prelaunch-thresholds.yaml`
   - `ops/observability/load/k6-prelaunch.js`
   - `src/bin/observability_runtime_service.rs` (runtime service used by the hard-SLO load gate)
+  - `scripts/check-observability-slo-baseline.sh` enforces thresholds from `hard-slo-policy.yaml` and `prelaunch-thresholds.yaml` as source-of-truth.
 - Kubernetes baseline with health/scaling signals:
   - `ops/kubernetes/base/*.yaml`
 

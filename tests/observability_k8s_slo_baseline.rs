@@ -516,8 +516,8 @@ fn prelaunch_load_assets_are_aligned_with_hard_slo_policy() {
 
     let k6_script = read_text("ops/observability/load/k6-prelaunch.js");
     for required in [
-        "peak_order_placement",
-        "mixed_order_and_menu_reads",
+        "peak-order-placement",
+        "mixed-order-and-menu-reads",
         "/api/v1/employee/orders",
         "/api/v1/employee/menus",
     ] {
@@ -574,6 +574,7 @@ fn runtime_observability_bootstrap_and_metric_contracts_are_wired() {
         "global::set_tracer_provider",
         "global::set_meter_provider",
         "opentelemetry_otlp::new_pipeline()",
+        ".logging()",
         "http_server_requests_total",
         "http_server_request_duration_ms",
         "http_server_requests_per_second",
@@ -581,6 +582,14 @@ fn runtime_observability_bootstrap_and_metric_contracts_are_wired() {
         "in_flight_requests",
         "mcp_tool_in_flight_requests",
         "compliance_lifecycle_jobs_in_flight",
+        "http.route",
+        "http.method",
+        "http.status_code",
+        "rpc.system",
+        "rpc.method",
+        "compliance_state",
+        "authorization.checked",
+        "domain.policy.applied",
     ] {
         assert!(
             source.contains(required),

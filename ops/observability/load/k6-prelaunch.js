@@ -3,7 +3,7 @@ import { check, sleep } from "k6";
 
 export const options = {
   scenarios: {
-    peak_order_placement: {
+    "peak-order-placement": {
       executor: "ramping-arrival-rate",
       exec: "peakOrderPlacement",
       startRate: 50,
@@ -16,7 +16,7 @@ export const options = {
         { target: 50, duration: "10s" }
       ]
     },
-    mixed_order_and_menu_reads: {
+    "mixed-order-and-menu-reads": {
       executor: "constant-arrival-rate",
       exec: "mixedOrderAndMenuReads",
       rate: 180,
@@ -28,12 +28,12 @@ export const options = {
     }
   },
   thresholds: {
-    "http_reqs{scenario:peak_order_placement}": ["rate>120"],
-    "http_reqs{scenario:mixed_order_and_menu_reads}": ["rate>180"],
-    "http_req_duration{scenario:peak_order_placement}": ["p(95)<350"],
-    "http_req_failed{scenario:peak_order_placement}": ["rate<0.002"],
-    "http_req_duration{scenario:mixed_order_and_menu_reads}": ["p(95)<250"],
-    "http_req_failed{scenario:mixed_order_and_menu_reads}": ["rate<0.001"],
+    "http_reqs{scenario:peak-order-placement}": ["rate>120"],
+    "http_reqs{scenario:mixed-order-and-menu-reads}": ["rate>180"],
+    "http_req_duration{scenario:peak-order-placement}": ["p(95)<350"],
+    "http_req_failed{scenario:peak-order-placement}": ["rate<0.002"],
+    "http_req_duration{scenario:mixed-order-and-menu-reads}": ["p(95)<250"],
+    "http_req_failed{scenario:mixed-order-and-menu-reads}": ["rate<0.001"],
     "checks{check_type:readiness}": ["rate>0.999"]
   }
 };

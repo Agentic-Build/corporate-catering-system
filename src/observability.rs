@@ -1,9 +1,12 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use opentelemetry::global;
 use opentelemetry::global::BoxedSpan;
+use opentelemetry::logs::{
+    LogRecord as _, Logger as _, LoggerProvider as _, Severity as OtelLogSeverity,
+};
 use opentelemetry::metrics::{Counter, Histogram, UpDownCounter};
 use opentelemetry::trace::{Span, Tracer, TracerProvider as _};
 use opentelemetry::KeyValue;
@@ -13,6 +16,32 @@ use tracing_subscriber::prelude::*;
 
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static TELEMETRY_BOOTSTRAP: OnceLock<TelemetryBootstrap> = OnceLock::new();
+static TELEMETRY_RUNTIME_CONTEXT: OnceLock<TelemetryRuntimeContext> = OnceLock::new();
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TelemetryRuntimeContext {
+    service_namespace: String,
+    deployment_environment: String,
+}
+
+impl TelemetryRuntimeContext {
+    fn from_env() -> Self {
+        Self {
+            service_namespace: std::env::var("OTEL_SERVICE_NAMESPACE")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "corporate-catering".to_owned()),
+            deployment_environment: std::env::var("DEPLOYMENT_ENVIRONMENT")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "production".to_owned()),
+        }
+    }
+}
+
+fn runtime_context() -> &'static TelemetryRuntimeContext {
+    TELEMETRY_RUNTIME_CONTEXT.get_or_init(TelemetryRuntimeContext::from_env)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TelemetryBootstrapConfig {
@@ -52,33 +81,18 @@ impl TelemetryBootstrapConfig {
 struct TelemetryBootstrap {
     _tracer_provider: opentelemetry_sdk::trace::TracerProvider,
     _meter_provider: opentelemetry_sdk::metrics::SdkMeterProvider,
-}
-
-pub fn initialize_telemetry_runtime_from_env(
-    default_service_name: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    initialize_telemetry_runtime(TelemetryBootstrapConfig::from_env(default_service_name))
-}
-
-pub fn initialize_telemetry_runtime(
-    config: TelemetryBootstrapConfig,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    if TELEMETRY_BOOTSTRAP.get().is_some() {
-        return Ok(());
-    }
-
-    let bootstrap = TelemetryBootstrap::build(config)?;
-    if TELEMETRY_BOOTSTRAP.set(bootstrap).is_err() {
-        return Ok(());
-    }
-
-    Ok(())
+    logger_provider: opentelemetry_sdk::logs::LoggerProvider,
 }
 
 impl TelemetryBootstrap {
     fn build(
         config: TelemetryBootstrapConfig,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
+        let _ = TELEMETRY_RUNTIME_CONTEXT.set(TelemetryRuntimeContext {
+            service_namespace: config.service_namespace.clone(),
+            deployment_environment: config.deployment_environment.clone(),
+        });
+
         let mut resource_attributes = vec![
             KeyValue::new("service.name", config.service_name.clone()),
             KeyValue::new("service.namespace", config.service_namespace),
@@ -110,6 +124,16 @@ impl TelemetryBootstrap {
             .with_period(std::time::Duration::from_secs(5))
             .build()?;
 
+        let logger_provider = opentelemetry_otlp::new_pipeline()
+            .logging()
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .tonic()
+                    .with_endpoint(config.exporter_endpoint.clone()),
+            )
+            .with_resource(resource.clone())
+            .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+
         global::set_tracer_provider(tracer_provider.clone());
         global::set_meter_provider(meter_provider.clone());
 
@@ -132,8 +156,34 @@ impl TelemetryBootstrap {
         Ok(Self {
             _tracer_provider: tracer_provider,
             _meter_provider: meter_provider,
+            logger_provider,
         })
     }
+
+    fn logger_for_service(&self, service_name: &'static str) -> opentelemetry_sdk::logs::Logger {
+        self.logger_provider.logger(service_name)
+    }
+}
+
+pub fn initialize_telemetry_runtime_from_env(
+    default_service_name: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    initialize_telemetry_runtime(TelemetryBootstrapConfig::from_env(default_service_name))
+}
+
+pub fn initialize_telemetry_runtime(
+    config: TelemetryBootstrapConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    if TELEMETRY_BOOTSTRAP.get().is_some() {
+        return Ok(());
+    }
+
+    let bootstrap = TelemetryBootstrap::build(config)?;
+    if TELEMETRY_BOOTSTRAP.set(bootstrap).is_err() {
+        return Ok(());
+    }
+
+    Ok(())
 }
 
 fn parse_resource_attributes_from_env() -> Vec<KeyValue> {
@@ -185,6 +235,39 @@ impl TelemetryService {
         }
     }
 
+    fn semantic_attributes(self, operation_id: &str) -> Vec<KeyValue> {
+        match self {
+            Self::HttpApi => {
+                let (route, method) = http_route_and_method(operation_id);
+                vec![
+                    KeyValue::new("http.route", route),
+                    KeyValue::new("http.method", method),
+                ]
+            }
+            Self::McpGateway => vec![
+                KeyValue::new("rpc.system", "mcp"),
+                KeyValue::new("rpc.method", operation_id.to_owned()),
+            ],
+            Self::ComplianceWorker => vec![KeyValue::new("compliance_state", "running")],
+        }
+    }
+
+    fn finish_attributes(self, outcome: TelemetryOutcome) -> Vec<KeyValue> {
+        match self {
+            Self::HttpApi => vec![
+                KeyValue::new("status_code", outcome.status_code()),
+                KeyValue::new("http.status_code", outcome.status_code()),
+            ],
+            Self::McpGateway => vec![],
+            Self::ComplianceWorker => {
+                vec![KeyValue::new(
+                    "compliance_state",
+                    outcome.compliance_state(),
+                )]
+            }
+        }
+    }
+
     fn instruments(self) -> &'static TelemetryInstruments {
         static HTTP: OnceLock<TelemetryInstruments> = OnceLock::new();
         static MCP: OnceLock<TelemetryInstruments> = OnceLock::new();
@@ -203,6 +286,46 @@ impl TelemetryService {
         }
     }
 
+    fn logger(self) -> Option<opentelemetry_sdk::logs::Logger> {
+        TELEMETRY_BOOTSTRAP
+            .get()
+            .map(|bootstrap| bootstrap.logger_for_service(self.service_name()))
+    }
+
+    fn emit_otel_log(
+        self,
+        correlation: &CorrelationContext,
+        severity: OtelLogSeverity,
+        event_name: &'static str,
+        body: &'static str,
+        attributes: &[KeyValue],
+    ) {
+        let Some(logger) = self.logger() else {
+            return;
+        };
+
+        let now = SystemTime::now();
+        let mut record = logger.create_log_record();
+        record.set_timestamp(now);
+        record.set_observed_timestamp(now);
+        record.set_event_name(event_name);
+        record.set_severity_number(severity);
+        record.set_severity_text(severity.name().into());
+        record.set_body(body.into());
+        record.add_attributes([
+            ("service.name", correlation.service_name.to_owned()),
+            ("service_name", correlation.service_name.to_owned()),
+            ("trace_id", correlation.trace_id.clone()),
+            ("span_id", correlation.span_id.clone()),
+            ("request_id", correlation.request_id.clone()),
+            ("operation_id", correlation.operation_id.clone()),
+        ]);
+        for attribute in attributes {
+            record.add_attribute(attribute.key.clone(), attribute.value.clone());
+        }
+        logger.emit(record);
+    }
+
     pub fn begin_operation(
         self,
         operation_id: impl Into<String>,
@@ -215,13 +338,23 @@ impl TelemetryService {
             self.request_prefix(),
             REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed)
         );
+        let runtime_context = runtime_context();
 
         let mut attributes = vec![
             KeyValue::new("service.name", self.service_name()),
             KeyValue::new("service_name", self.service_name()),
+            KeyValue::new(
+                "service.namespace",
+                runtime_context.service_namespace.clone(),
+            ),
+            KeyValue::new(
+                "deployment.environment",
+                runtime_context.deployment_environment.clone(),
+            ),
             KeyValue::new("operation_id", operation_id.clone()),
             KeyValue::new("request_id", request_id.clone()),
         ];
+        attributes.extend(self.semantic_attributes(&operation_id));
         if let Some(actor_id) = actor_id {
             attributes.push(KeyValue::new("actor_id", actor_id.to_owned()));
         }
@@ -234,6 +367,10 @@ impl TelemetryService {
         for attribute in &attributes {
             span.set_attribute(attribute.clone());
         }
+        span.add_event(
+            "authorization.checked".to_owned(),
+            vec![KeyValue::new("operation_id", operation_id.clone())],
+        );
 
         let span_context = span.span_context().clone();
         let correlation = CorrelationContext {
@@ -252,6 +389,13 @@ impl TelemetryService {
             span_id = %correlation.span_id,
             "observability operation span started"
         );
+        self.emit_otel_log(
+            &correlation,
+            OtelLogSeverity::Info,
+            "operation.started",
+            "observability operation span started",
+            &attributes,
+        );
 
         self.instruments().on_start(&attributes);
 
@@ -262,6 +406,46 @@ impl TelemetryService {
             span,
             correlation,
         }
+    }
+}
+
+fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
+    match operation_id {
+        "listEmployeeMenus" | "listEmployeeMenus:browse" | "listEmployeeMenus:search" => {
+            ("/api/v1/employee/menus", "GET")
+        }
+        "createEmployeeOrder" | "createEmployeeOrder:deliverability" => {
+            ("/api/v1/employee/orders", "POST")
+        }
+        "updateEmployeeOrder" | "updateEmployeeOrder:deliverability" => {
+            ("/api/v1/employee/orders/{orderId}", "PATCH")
+        }
+        "listVendorOrders" => ("/api/v1/vendor/orders", "GET"),
+        "upsertVendorMenuItem" => ("/api/v1/vendor/menu-items/{menuItemId}", "PUT"),
+        "listAdminVendors" => ("/api/v1/admin/vendors", "GET"),
+        "listVendorPlantDeliveryMappings" => {
+            ("/api/v1/admin/vendor-plant-delivery-mappings", "GET")
+        }
+        "listComplianceDocumentTemplates" => ("/api/v1/admin/compliance/document-templates", "GET"),
+        "upsertComplianceDocumentTemplate" => (
+            "/api/v1/admin/compliance/document-templates/{vendorCategory}/{templateId}",
+            "PUT",
+        ),
+        "upsertVendorPlantDeliveryMapping" => (
+            "/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}",
+            "PUT",
+        ),
+        "deleteVendorPlantDeliveryMapping" => (
+            "/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}",
+            "DELETE",
+        ),
+        "reviewVendorApplication" => ("/api/v1/admin/vendors/{vendorId}/reviews", "POST"),
+        "runVendorComplianceLifecycle" => ("/api/v1/admin/compliance/lifecycle/executions", "POST"),
+        "exportPayrollDeductions" => ("/api/v1/integrations/payroll/deductions", "GET"),
+        "healthReadyProbe" => ("/health/ready", "GET"),
+        "healthLiveProbe" => ("/health/live", "GET"),
+        "healthStartupProbe" => ("/health/startup", "GET"),
+        _ => ("/internal/unknown", "UNKNOWN"),
     }
 }
 
@@ -372,11 +556,13 @@ impl TelemetryInstruments {
         if let Some(http_requests_total) = &self.http_server_requests_total {
             let mut http_attributes = metric_attributes.clone();
             http_attributes.push(KeyValue::new("status_code", outcome.status_code()));
+            http_attributes.push(KeyValue::new("http.status_code", outcome.status_code()));
             http_requests_total.add(1, &http_attributes);
         }
         if let Some(http_duration) = &self.http_server_request_duration_ms {
             let mut http_attributes = metric_attributes.clone();
             http_attributes.push(KeyValue::new("status_code", outcome.status_code()));
+            http_attributes.push(KeyValue::new("http.status_code", outcome.status_code()));
             http_duration.record(elapsed_ms, &http_attributes);
         }
         if let Some(requests_per_second) = &self.hpa_requests_per_second {
@@ -439,6 +625,13 @@ impl TelemetryOutcome {
             Self::Error => "500",
         }
     }
+
+    const fn compliance_state(self) -> &'static str {
+        match self {
+            Self::Success => "completed",
+            Self::Error => "failed",
+        }
+    }
 }
 
 pub struct CorrelatedOperation {
@@ -458,6 +651,18 @@ impl CorrelatedOperation {
         let elapsed_ms = self.started_at.elapsed().as_secs_f64() * 1000.0;
         let outcome_value = outcome.as_str();
 
+        for attribute in self.service.finish_attributes(outcome) {
+            self.span.set_attribute(attribute.clone());
+            self.attributes.push(attribute);
+        }
+        self.span.add_event(
+            "domain.policy.applied".to_owned(),
+            vec![
+                KeyValue::new("operation_id", self.correlation.operation_id.clone()),
+                KeyValue::new("operation.outcome", outcome_value),
+            ],
+        );
+
         let instruments = self.service.instruments();
         instruments.on_finish(elapsed_ms, outcome, &self.attributes);
 
@@ -476,6 +681,17 @@ impl CorrelatedOperation {
             outcome = outcome_value,
             duration_ms = elapsed_ms,
             "observability operation span finished"
+        );
+        self.service.emit_otel_log(
+            &self.correlation,
+            if matches!(outcome, TelemetryOutcome::Success) {
+                OtelLogSeverity::Info
+            } else {
+                OtelLogSeverity::Error
+            },
+            "operation.finished",
+            "observability operation span finished",
+            &self.attributes,
         );
     }
 }
