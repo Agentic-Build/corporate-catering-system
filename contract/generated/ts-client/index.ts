@@ -45,6 +45,8 @@ export type { PayrollDeductionPage } from './models/PayrollDeductionPage';
 export type { PayrollDeductionRecord } from './models/PayrollDeductionRecord';
 export type { PayrollSortByQuery } from './models/PayrollSortByQuery';
 export type { PayrollSortField } from './models/PayrollSortField';
+export type { PickupVerificationRequest } from './models/PickupVerificationRequest';
+export type { PickupVerificationResponse } from './models/PickupVerificationResponse';
 export type { PlantId } from './models/PlantId';
 export type { PlantIdFilterQuery } from './models/PlantIdFilterQuery';
 export type { PlantIdQuery } from './models/PlantIdQuery';

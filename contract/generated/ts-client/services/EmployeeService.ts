@@ -8,6 +8,8 @@ import type { EmployeeOrderPatchRequest } from '../models/EmployeeOrderPatchRequ
 import type { MenuHealthTag } from '../models/MenuHealthTag';
 import type { MenuPage } from '../models/MenuPage';
 import type { MenuSortField } from '../models/MenuSortField';
+import type { PickupVerificationRequest } from '../models/PickupVerificationRequest';
+import type { PickupVerificationResponse } from '../models/PickupVerificationResponse';
 import type { PlantId } from '../models/PlantId';
 import type { SortOrder } from '../models/SortOrder';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -106,6 +108,34 @@ export class EmployeeService {
                 404: `Requested resource was not found.`,
                 409: `Request conflicts with business constraints.`,
                 422: `Request is syntactically valid but violates business validation rules.`,
+            },
+        });
+    }
+    /**
+     * Verify order pickup handoff
+     * @param orderId
+     * @param requestBody
+     * @returns PickupVerificationResponse Pickup verification accepted
+     * @throws ApiError
+     */
+    public static verifyPickupOrder(
+        orderId: string,
+        requestBody: PickupVerificationRequest,
+    ): CancelablePromise<PickupVerificationResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/employee/orders/{orderId}/pickup-verifications',
+            path: {
+                'orderId': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                500: `Internal server error while processing request.`,
             },
         });
     }
