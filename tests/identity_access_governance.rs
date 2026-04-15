@@ -5,6 +5,7 @@ use corporate_catering_system::access::{
     AccessController, Action, AuthorizationError, AuthorizationPolicyEngine,
     CentralAuthorizationPolicyEngine, TransportLayer,
 };
+use corporate_catering_system::contract::HttpOperation;
 use corporate_catering_system::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, IdentityContextError, PlantId,
     PlantScope, Role,
@@ -236,7 +237,7 @@ fn write_operations_require_authenticated_actor_context_and_auditable_link() {
             None,
             Action::PlaceEmployeeOrder,
             Some(&target_plant),
-            "http-write-1",
+            HttpOperation::CreateEmployeeOrder.operation_id(),
         ),
         Err(AuthorizationError::MissingAuthenticatedActorContext {
             action: Action::PlaceEmployeeOrder,
@@ -302,7 +303,7 @@ fn http_and_mcp_paths_share_the_same_policy_engine() {
             Some(&employee),
             Action::PlaceEmployeeOrder,
             Some(&target_plant),
-            "http-write-2",
+            HttpOperation::CreateEmployeeOrder.operation_id(),
         )
         .expect("http write should succeed");
     mcp_gateway

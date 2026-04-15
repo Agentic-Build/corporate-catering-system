@@ -157,6 +157,17 @@ pub enum AuthorizationError {
         actor_id: crate::identity::ActorId,
         target_plant: PlantId,
     },
+    UnknownHttpOperationId {
+        operation_id: String,
+    },
+    HttpOperationIsNotWriteOperation {
+        operation_id: String,
+    },
+    HttpOperationActionMismatch {
+        operation_id: String,
+        expected_action: Action,
+        provided_action: Action,
+    },
     ActionIsNotWriteOperation(Action),
     InvalidOperationId,
 }
@@ -178,6 +189,20 @@ impl fmt::Display for AuthorizationError {
                 f,
                 "actor {actor_id} is not authorized for plant {}",
                 target_plant.as_str()
+            ),
+            Self::UnknownHttpOperationId { operation_id } => {
+                write!(f, "http operation id {operation_id} is not defined in the contract")
+            }
+            Self::HttpOperationIsNotWriteOperation { operation_id } => {
+                write!(f, "http operation id {operation_id} is not declared as a write operation")
+            }
+            Self::HttpOperationActionMismatch {
+                operation_id,
+                expected_action,
+                provided_action,
+            } => write!(
+                f,
+                "http operation id {operation_id} expects action {expected_action:?}, got {provided_action:?}"
             ),
             Self::ActionIsNotWriteOperation(action) => {
                 write!(f, "action {action:?} is not registered as write operation")

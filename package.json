@@ -1,0 +1,16 @@
+{
+  "name": "corporate-catering-system-contract-tooling",
+  "private": true,
+  "version": "0.1.0",
+  "description": "OpenAPI contract generation and typed client validation tooling",
+  "scripts": {
+    "contract:export": "cargo run --quiet --bin export_openapi_contract -- artifacts/openapi",
+    "contract:generate-client": "pnpm run contract:export && openapi --input artifacts/openapi/openapi.json --output generated/ts-client --client fetch --useUnionTypes",
+    "contract:check-client": "tsc --project tsconfig.contract.json",
+    "contract:verify": "pnpm run contract:generate-client && pnpm run contract:check-client"
+  },
+  "devDependencies": {
+    "openapi-typescript-codegen": "0.29.0",
+    "typescript": "5.9.3"
+  }
+}
