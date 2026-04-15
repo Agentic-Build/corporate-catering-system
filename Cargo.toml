@@ -1,0 +1,8 @@
+[package]
+name = "corporate-catering-system"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "corporate_catering_system"
+path = "src/lib.rs"
