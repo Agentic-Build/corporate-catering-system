@@ -4,6 +4,7 @@ use crate::access::{
     AccessController, Action, AuthorizationError, AuthorizedWriteOperation, TransportLayer,
 };
 use crate::identity::{AuthenticatedActorContext, PlantId};
+use crate::observability::{TelemetryOutcome, TelemetryService};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum McpOperation {
@@ -146,26 +147,41 @@ impl McpAuthorizationGateway {
         operation_id: impl Into<String>,
     ) -> Result<AuthorizedWriteOperation, AuthorizationError> {
         let operation_id = operation_id.into();
-        let operation = McpOperation::from_operation_id(&operation_id).ok_or(
-            AuthorizationError::UnknownMcpOperationId {
-                operation_id: operation_id.clone(),
-            },
-        )?;
-        let expected_action = operation.action();
-        if expected_action != action {
-            return Err(AuthorizationError::McpOperationActionMismatch {
-                operation_id,
-                expected_action,
-                provided_action: action,
-            });
-        }
+        let telemetry = TelemetryService::McpGateway.begin_operation(
+            operation_id.clone(),
+            actor.map(|value| value.actor_id().as_str()),
+            target_plant.map(PlantId::as_str),
+        );
 
-        self.access_controller.authorize_write(
-            actor,
-            action,
-            target_plant,
-            TransportLayer::Mcp,
-            operation.operation_id(),
-        )
+        let result = (|| {
+            let operation = McpOperation::from_operation_id(&operation_id).ok_or(
+                AuthorizationError::UnknownMcpOperationId {
+                    operation_id: operation_id.clone(),
+                },
+            )?;
+            let expected_action = operation.action();
+            if expected_action != action {
+                return Err(AuthorizationError::McpOperationActionMismatch {
+                    operation_id: operation_id.clone(),
+                    expected_action,
+                    provided_action: action,
+                });
+            }
+
+            self.access_controller.authorize_write(
+                actor,
+                action,
+                target_plant,
+                TransportLayer::Mcp,
+                operation.operation_id(),
+            )
+        })();
+
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
     }
 }

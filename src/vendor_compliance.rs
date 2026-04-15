@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::identity::{ActorId, AuthenticatedActorContext, Role};
+use crate::observability::{TelemetryOutcome, TelemetryService};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VendorId(String);
@@ -687,80 +688,93 @@ impl VendorComplianceLifecycle {
         actor: &AuthenticatedActorContext,
         run_on: ComplianceDate,
     ) -> Result<LifecycleRunResult, VendorComplianceError> {
-        ensure_role(actor, Role::CommitteeAdmin)?;
+        let telemetry = TelemetryService::ComplianceWorker.begin_operation(
+            "runVendorComplianceLifecycle",
+            Some(actor.actor_id().as_str()),
+            None,
+        );
+        let result = (|| {
+            ensure_role(actor, Role::CommitteeAdmin)?;
 
-        let mut result = LifecycleRunResult::default();
-        for vendor in self.vendors.values_mut() {
-            if !matches!(
-                vendor.status,
-                VendorComplianceStatus::Active | VendorComplianceStatus::Suspended
-            ) {
-                continue;
-            }
-            let templates = self
-                .templates_by_category
-                .get(vendor.category())
-                .ok_or_else(|| {
-                    VendorComplianceError::MissingTemplateConfiguration(vendor.category().clone())
-                })?;
-            let evaluation = evaluate_vendor_lifecycle(vendor, templates, run_on);
-
-            for reminder in evaluation.reminders {
-                let marker = ReminderRegistryKey {
-                    template_id: reminder.template_id.clone(),
-                    expires_on: reminder.expires_on,
-                    lead_days: reminder.days_until_expiry,
-                };
-                if !vendor.reminder_registry.insert(marker) {
+            let mut run_result = LifecycleRunResult::default();
+            for vendor in self.vendors.values_mut() {
+                if !matches!(
+                    vendor.status,
+                    VendorComplianceStatus::Active | VendorComplianceStatus::Suspended
+                ) {
                     continue;
                 }
+                let templates = self
+                    .templates_by_category
+                    .get(vendor.category())
+                    .ok_or_else(|| {
+                        VendorComplianceError::MissingTemplateConfiguration(vendor.category().clone())
+                    })?;
+                let evaluation = evaluate_vendor_lifecycle(vendor, templates, run_on);
 
-                vendor.push_history(
-                    actor,
-                    run_on,
-                    ComplianceHistoryKind::ExpiryReminderIssued {
+                for reminder in evaluation.reminders {
+                    let marker = ReminderRegistryKey {
                         template_id: reminder.template_id.clone(),
                         expires_on: reminder.expires_on,
-                        days_until_expiry: reminder.days_until_expiry,
-                    },
-                );
-                result.reminders.push(LifecycleExpiryReminder {
-                    vendor_id: vendor.vendor_id.clone(),
-                    template_id: reminder.template_id,
-                    expires_on: reminder.expires_on,
-                    days_until_expiry: reminder.days_until_expiry,
-                });
-            }
+                        lead_days: reminder.days_until_expiry,
+                    };
+                    if !vendor.reminder_registry.insert(marker) {
+                        continue;
+                    }
 
-            if let Some(reason) = evaluation.suspension_reason {
-                if vendor.status != VendorComplianceStatus::Suspended
-                    || vendor.suspension_reason.as_ref() != Some(&reason)
-                {
-                    vendor.status = VendorComplianceStatus::Suspended;
-                    vendor.suspension_reason = Some(reason.clone());
                     vendor.push_history(
                         actor,
                         run_on,
-                        ComplianceHistoryKind::Suspended {
-                            reason: reason.clone(),
+                        ComplianceHistoryKind::ExpiryReminderIssued {
+                            template_id: reminder.template_id.clone(),
+                            expires_on: reminder.expires_on,
+                            days_until_expiry: reminder.days_until_expiry,
                         },
                     );
-                    result.suspensions.push(LifecycleSuspension {
+                    run_result.reminders.push(LifecycleExpiryReminder {
                         vendor_id: vendor.vendor_id.clone(),
-                        reason,
+                        template_id: reminder.template_id,
+                        expires_on: reminder.expires_on,
+                        days_until_expiry: reminder.days_until_expiry,
                     });
                 }
-            } else if vendor.status == VendorComplianceStatus::Suspended {
-                vendor.status = VendorComplianceStatus::Active;
-                vendor.suspension_reason = None;
-                vendor.push_history(actor, run_on, ComplianceHistoryKind::Reinstated);
-                result.reinstatements.push(LifecycleReinstatement {
-                    vendor_id: vendor.vendor_id.clone(),
-                });
-            }
-        }
 
-        Ok(result)
+                if let Some(reason) = evaluation.suspension_reason {
+                    if vendor.status != VendorComplianceStatus::Suspended
+                        || vendor.suspension_reason.as_ref() != Some(&reason)
+                    {
+                        vendor.status = VendorComplianceStatus::Suspended;
+                        vendor.suspension_reason = Some(reason.clone());
+                        vendor.push_history(
+                            actor,
+                            run_on,
+                            ComplianceHistoryKind::Suspended {
+                                reason: reason.clone(),
+                            },
+                        );
+                        run_result.suspensions.push(LifecycleSuspension {
+                            vendor_id: vendor.vendor_id.clone(),
+                            reason,
+                        });
+                    }
+                } else if vendor.status == VendorComplianceStatus::Suspended {
+                    vendor.status = VendorComplianceStatus::Active;
+                    vendor.suspension_reason = None;
+                    vendor.push_history(actor, run_on, ComplianceHistoryKind::Reinstated);
+                    run_result.reinstatements.push(LifecycleReinstatement {
+                        vendor_id: vendor.vendor_id.clone(),
+                    });
+                }
+            }
+
+            Ok(run_result)
+        })();
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
     }
 
     pub fn prune_history(

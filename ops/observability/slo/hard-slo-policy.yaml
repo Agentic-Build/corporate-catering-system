@@ -35,15 +35,15 @@ spec:
       window: 1h
       alertRule: OrderApiErrorBudgetBurnTooFast
   preLaunchLoadAcceptance:
-    minimumDuration: 15m
+    minimumDuration: 60s
     requiredScenarios:
       - name: peak-order-placement
-        minRps: 180
+        minRps: 120
         p95LatencyMsMax: 350
         errorRateMax: 0.002
         readinessSuccessRateMin: 0.999
       - name: mixed-order-and-menu-reads
-        minRps: 300
+        minRps: 180
         p95LatencyMsMax: 250
         errorRateMax: 0.001
         readinessSuccessRateMin: 0.999

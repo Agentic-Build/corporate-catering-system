@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use corporate_catering_system::health::runtime_health_routes;
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
 
@@ -193,6 +194,10 @@ fn hard_slo_policy_blocks_release_without_dashboard_alerts_and_load_thresholds()
         yaml_get(scenario, "name").as_str() == Some("peak-order-placement")
             && yaml_get(scenario, "p95LatencyMsMax").as_i64() == Some(350)
     }));
+    assert!(scenarios.iter().any(|scenario| {
+        yaml_get(scenario, "name").as_str() == Some("mixed-order-and-menu-reads")
+            && yaml_get(scenario, "p95LatencyMsMax").as_i64() == Some(250)
+    }));
 }
 
 #[test]
@@ -302,6 +307,14 @@ fn kubernetes_manifests_define_health_checks_and_load_scaling_signals() {
         "ops/kubernetes/base/deployment-mcp.yaml",
         "ops/kubernetes/base/deployment-compliance-worker.yaml",
     ];
+    let runtime_health_paths = runtime_health_routes()
+        .iter()
+        .map(|route| route.path())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        runtime_health_paths,
+        BTreeSet::from(["/health/live", "/health/ready", "/health/startup"])
+    );
     let mut deployed_service_names = BTreeSet::new();
     for deployment_file in deployment_files {
         let deployment = read_yaml(deployment_file);
@@ -332,6 +345,13 @@ fn kubernetes_manifests_define_health_checks_and_load_scaling_signals() {
                 .and_then(|http_get| http_get.get(&YamlValue::String("path".to_owned())))
                 .and_then(YamlValue::as_str),
             Some("/health/live")
+        );
+        assert_eq!(
+            yaml_get(yaml_get(container, "startupProbe"), "httpGet")
+                .as_mapping()
+                .and_then(|http_get| http_get.get(&YamlValue::String("path".to_owned())))
+                .and_then(YamlValue::as_str),
+            Some("/health/startup")
         );
 
         let env = yaml_get(container, "env")
@@ -443,6 +463,58 @@ fn kubernetes_manifests_define_health_checks_and_load_scaling_signals() {
                 "missing pod metric `{required}` in `{hpa_file}`"
             );
         }
+    }
+}
+
+#[test]
+fn prelaunch_load_assets_are_aligned_with_hard_slo_policy() {
+    let policy = read_yaml("ops/observability/slo/hard-slo-policy.yaml");
+    let policy_scenarios = yaml_get(
+        yaml_get(yaml_get(&policy, "spec"), "preLaunchLoadAcceptance"),
+        "requiredScenarios",
+    )
+    .as_sequence()
+    .expect("policy requiredScenarios must be sequence")
+    .iter()
+    .map(|scenario| {
+        yaml_get(scenario, "name")
+            .as_str()
+            .expect("scenario name must be string")
+            .to_owned()
+    })
+    .collect::<BTreeSet<_>>();
+    assert_eq!(
+        policy_scenarios,
+        BTreeSet::from([
+            "mixed-order-and-menu-reads".to_owned(),
+            "peak-order-placement".to_owned(),
+        ])
+    );
+
+    let thresholds = read_yaml("ops/observability/load/prelaunch-thresholds.yaml");
+    let threshold_scenarios = yaml_get(&thresholds, "scenarios")
+        .as_mapping()
+        .expect("threshold scenarios must be mapping")
+        .keys()
+        .map(|key| {
+            key.as_str()
+                .expect("threshold scenario key must be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(threshold_scenarios, policy_scenarios);
+
+    let k6_script = read_text("ops/observability/load/k6-prelaunch.js");
+    for required in [
+        "peak_order_placement",
+        "mixed_order_and_menu_reads",
+        "/api/v1/employee/orders",
+        "/api/v1/employee/menus",
+    ] {
+        assert!(
+            k6_script.contains(required),
+            "k6 prelaunch script must include `{required}`"
+        );
     }
 }
 

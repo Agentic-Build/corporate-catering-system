@@ -3,6 +3,7 @@ use crate::access::{
 };
 use crate::contract::{HttpMethod, HttpOperation};
 use crate::identity::{AuthenticatedActorContext, PlantId};
+use crate::observability::{TelemetryOutcome, TelemetryService};
 use crate::menu_supply_window::{
     MenuSupplyPolicy, MenuSupplyWindowError, OrderId, OrderLineItemRequest, OrderMutation,
     VendorMenuItem,
@@ -128,31 +129,46 @@ impl HttpAuthorizationGateway {
         operation_id: impl Into<String>,
     ) -> Result<AuthorizedWriteOperation, AuthorizationError> {
         let operation_id = operation_id.into();
-        let operation = HttpOperation::from_operation_id(&operation_id).ok_or(
-            AuthorizationError::UnknownHttpOperationId {
-                operation_id: operation_id.clone(),
-            },
-        )?;
-        let expected_action = operation.write_action().ok_or(
-            AuthorizationError::HttpOperationIsNotWriteOperation {
-                operation_id: operation_id.clone(),
-            },
-        )?;
-        if expected_action != action {
-            return Err(AuthorizationError::HttpOperationActionMismatch {
-                operation_id,
-                expected_action,
-                provided_action: action,
-            });
-        }
+        let telemetry = TelemetryService::HttpApi.begin_operation(
+            operation_id.clone(),
+            actor.map(|value| value.actor_id().as_str()),
+            target_plant.map(PlantId::as_str),
+        );
 
-        self.access_controller.authorize_write(
-            actor,
-            action,
-            target_plant,
-            TransportLayer::Http,
-            operation.operation_id(),
-        )
+        let result = (|| {
+            let operation = HttpOperation::from_operation_id(&operation_id).ok_or(
+                AuthorizationError::UnknownHttpOperationId {
+                    operation_id: operation_id.clone(),
+                },
+            )?;
+            let expected_action = operation.write_action().ok_or(
+                AuthorizationError::HttpOperationIsNotWriteOperation {
+                    operation_id: operation_id.clone(),
+                },
+            )?;
+            if expected_action != action {
+                return Err(AuthorizationError::HttpOperationActionMismatch {
+                    operation_id: operation_id.clone(),
+                    expected_action,
+                    provided_action: action,
+                });
+            }
+
+            self.access_controller.authorize_write(
+                actor,
+                action,
+                target_plant,
+                TransportLayer::Http,
+                operation.operation_id(),
+            )
+        })();
+
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
     }
 }
 
@@ -177,11 +193,18 @@ impl<'a> HttpDeliveryExecutionGateway<'a> {
         plant_id: &PlantId,
         at: TaipeiBusinessMoment,
     ) -> Vec<VendorId> {
-        self.delivery_policy.employee_visible_vendor_ids_for_browse(
+        let telemetry = TelemetryService::HttpApi.begin_operation(
+            "listEmployeeMenus:browse",
+            None,
+            Some(plant_id.as_str()),
+        );
+        let result = self.delivery_policy.employee_visible_vendor_ids_for_browse(
             self.compliance_lifecycle,
             plant_id,
             at,
-        )
+        );
+        telemetry.finish(TelemetryOutcome::Success);
+        result
     }
 
     pub fn execute_list_employee_menus_for_search(
@@ -189,11 +212,18 @@ impl<'a> HttpDeliveryExecutionGateway<'a> {
         plant_id: &PlantId,
         at: TaipeiBusinessMoment,
     ) -> Vec<VendorId> {
-        self.delivery_policy.employee_visible_vendor_ids_for_search(
+        let telemetry = TelemetryService::HttpApi.begin_operation(
+            "listEmployeeMenus:search",
+            None,
+            Some(plant_id.as_str()),
+        );
+        let result = self.delivery_policy.employee_visible_vendor_ids_for_search(
             self.compliance_lifecycle,
             plant_id,
             at,
-        )
+        );
+        telemetry.finish(TelemetryOutcome::Success);
+        result
     }
 
     pub fn execute_create_employee_order_deliverability_check(
@@ -202,12 +232,23 @@ impl<'a> HttpDeliveryExecutionGateway<'a> {
         plant_id: &PlantId,
         at: TaipeiBusinessMoment,
     ) -> Result<(), VendorPlantDeliveryError> {
-        self.delivery_policy.ensure_vendor_deliverable_for_order(
+        let telemetry = TelemetryService::HttpApi.begin_operation(
+            "createEmployeeOrder:deliverability",
+            None,
+            Some(plant_id.as_str()),
+        );
+        let result = self.delivery_policy.ensure_vendor_deliverable_for_order(
             self.compliance_lifecycle,
             vendor_id,
             plant_id,
             at,
-        )
+        );
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
     }
 
     pub fn execute_update_employee_order_deliverability_check(
@@ -216,12 +257,23 @@ impl<'a> HttpDeliveryExecutionGateway<'a> {
         plant_id: &PlantId,
         at: TaipeiBusinessMoment,
     ) -> Result<(), VendorPlantDeliveryError> {
-        self.delivery_policy.ensure_vendor_deliverable_for_order(
+        let telemetry = TelemetryService::HttpApi.begin_operation(
+            "updateEmployeeOrder:deliverability",
+            None,
+            Some(plant_id.as_str()),
+        );
+        let result = self.delivery_policy.ensure_vendor_deliverable_for_order(
             self.compliance_lifecycle,
             vendor_id,
             plant_id,
             at,
-        )
+        );
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
     }
 }
 
@@ -253,15 +305,33 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
         line_items: Vec<OrderLineItemRequest>,
         at: TaipeiBusinessMoment,
     ) -> Result<(), HttpOrderExecutionError> {
-        self.delivery_policy
-            .ensure_vendor_deliverable_for_order(self.compliance_lifecycle, vendor_id, plant_id, at)
-            .map_err(HttpOrderExecutionError::Deliverability)?;
+        let telemetry = TelemetryService::HttpApi.begin_operation(
+            "createEmployeeOrder",
+            None,
+            Some(plant_id.as_str()),
+        );
+        let result = (|| {
+            self.delivery_policy
+                .ensure_vendor_deliverable_for_order(
+                    self.compliance_lifecycle,
+                    vendor_id,
+                    plant_id,
+                    at,
+                )
+                .map_err(HttpOrderExecutionError::Deliverability)?;
 
-        self.menu_supply_policy
-            .create_order(order_id, vendor_id, delivery_epoch_day, line_items, at)
-            .map_err(HttpOrderExecutionError::MenuSupply)?;
+            self.menu_supply_policy
+                .create_order(order_id, vendor_id, delivery_epoch_day, line_items, at)
+                .map_err(HttpOrderExecutionError::MenuSupply)?;
 
-        Ok(())
+            Ok(())
+        })();
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
     }
 
     pub fn execute_update_employee_order(
@@ -272,15 +342,33 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
         mutation: OrderMutation,
         at: TaipeiBusinessMoment,
     ) -> Result<(), HttpOrderExecutionError> {
-        self.delivery_policy
-            .ensure_vendor_deliverable_for_order(self.compliance_lifecycle, vendor_id, plant_id, at)
-            .map_err(HttpOrderExecutionError::Deliverability)?;
+        let telemetry = TelemetryService::HttpApi.begin_operation(
+            "updateEmployeeOrder",
+            None,
+            Some(plant_id.as_str()),
+        );
+        let result = (|| {
+            self.delivery_policy
+                .ensure_vendor_deliverable_for_order(
+                    self.compliance_lifecycle,
+                    vendor_id,
+                    plant_id,
+                    at,
+                )
+                .map_err(HttpOrderExecutionError::Deliverability)?;
 
-        self.menu_supply_policy
-            .update_order(order_id, mutation, at)
-            .map_err(HttpOrderExecutionError::MenuSupply)?;
+            self.menu_supply_policy
+                .update_order(order_id, mutation, at)
+                .map_err(HttpOrderExecutionError::MenuSupply)?;
 
-        Ok(())
+            Ok(())
+        })();
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
     }
 }
 
@@ -298,7 +386,18 @@ impl<'a> HttpVendorMenuExecutionGateway<'a> {
         actor: &AuthenticatedActorContext,
         menu_item: VendorMenuItem,
     ) -> Result<(), MenuSupplyWindowError> {
-        self.menu_supply_policy.upsert_menu_item(actor, menu_item)
+        let telemetry = TelemetryService::HttpApi.begin_operation(
+            "upsertVendorMenuItem",
+            Some(actor.actor_id().as_str()),
+            None,
+        );
+        let result = self.menu_supply_policy.upsert_menu_item(actor, menu_item);
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
     }
 }
 
