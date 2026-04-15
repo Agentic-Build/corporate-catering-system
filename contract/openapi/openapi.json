@@ -263,6 +263,16 @@
         },
         "description": "Authenticated actor is not authorized to perform this operation."
       },
+      "InternalServerError": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error while processing request."
+      },
       "NotFound": {
         "content": {
           "application/json": {
@@ -483,7 +493,10 @@
           "FORBIDDEN",
           "NOT_FOUND",
           "CONFLICT",
-          "VALIDATION_FAILED"
+          "VALIDATION_FAILED",
+          "INVALID_PICKUP_VERIFICATION_REQUEST",
+          "PICKUP_VERIFICATION_INTERNAL_ERROR",
+          "ORDER_NOT_FOUND"
         ],
         "type": "string"
       },
@@ -834,6 +847,37 @@
           "deliveryDate"
         ],
         "type": "string"
+      },
+      "PickupVerificationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "verificationCode": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "verificationCode"
+        ],
+        "type": "object"
+      },
+      "PickupVerificationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "orderId": {
+            "pattern": "^ord-[a-z0-9]{8,32}$",
+            "type": "string"
+          },
+          "verified": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "orderId",
+          "verified"
+        ],
+        "type": "object"
       },
       "PlantId": {
         "pattern": "^[a-z0-9][a-z0-9-]{1,31}$",
@@ -2338,6 +2382,70 @@
             "REPLACE_LINE_ITEMS",
             "CANCEL"
           ],
+          "timezone": "Asia/Taipei"
+        }
+      }
+    },
+    "/api/v1/employee/orders/{orderId}/pickup-verifications": {
+      "post": {
+        "operationId": "verifyPickupOrder",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrderIdPath"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PickupVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PickupVerificationResponse"
+                }
+              }
+            },
+            "description": "Pickup verification accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "corporateSsoBearer": []
+          }
+        ],
+        "summary": "Verify order pickup handoff",
+        "tags": [
+          "Employee"
+        ],
+        "x-order-governance": {
+          "inventoryReservationMode": "ATOMIC_IDEMPOTENT",
+          "pickupVerification": {
+            "required": true
+          },
+          "strictLifecycle": true,
           "timezone": "Asia/Taipei"
         }
       }

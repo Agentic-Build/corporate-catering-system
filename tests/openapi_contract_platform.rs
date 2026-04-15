@@ -382,6 +382,37 @@ fn ordering_and_menu_endpoints_have_tested_error_code_to_schema_refs() {
         "#/components/responses/ValidationFailed",
     );
 
+    let pickup_verification_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/employee/orders/{orderId}/pickup-verifications",
+        "post",
+    );
+    assert_error_response_ref(
+        pickup_verification_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        pickup_verification_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        pickup_verification_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        pickup_verification_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+    assert_error_response_ref(
+        pickup_verification_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+
     let upsert_menu_operation =
         operation_by_path_and_method(&spec, "/api/v1/vendor/menu-items/{menuItemId}", "put");
     assert_error_response_ref(
@@ -412,6 +443,7 @@ fn ordering_and_menu_endpoints_have_tested_error_code_to_schema_refs() {
         "NotFound",
         "Conflict",
         "ValidationFailed",
+        "InternalServerError",
     ] {
         let response_schema_ref = spec["components"]["responses"][response_name]["content"]
             ["application/json"]["schema"]["$ref"]
@@ -433,6 +465,9 @@ fn ordering_and_menu_endpoints_have_tested_error_code_to_schema_refs() {
     assert!(as_set.contains("NOT_FOUND"));
     assert!(as_set.contains("CONFLICT"));
     assert!(as_set.contains("VALIDATION_FAILED"));
+    assert!(as_set.contains("INVALID_PICKUP_VERIFICATION_REQUEST"));
+    assert!(as_set.contains("PICKUP_VERIFICATION_INTERNAL_ERROR"));
+    assert!(as_set.contains("ORDER_NOT_FOUND"));
 }
 
 #[test]
@@ -626,6 +661,29 @@ fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_re
     assert_eq!(
         supported_operations,
         BTreeSet::from(["REPLACE_LINE_ITEMS".to_owned(), "CANCEL".to_owned()])
+    );
+
+    let pickup_verify_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/employee/orders/{orderId}/pickup-verifications",
+        "post",
+    );
+    assert_eq!(
+        pickup_verify_operation["x-order-governance"]["timezone"],
+        "Asia/Taipei"
+    );
+    assert_eq!(
+        pickup_verify_operation["x-order-governance"]["strictLifecycle"],
+        true
+    );
+    assert_eq!(
+        pickup_verify_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/PickupVerificationRequest"
+    );
+    assert_eq!(
+        pickup_verify_operation["responses"]["200"]["content"]["application/json"]["schema"]
+            ["$ref"],
+        "#/components/schemas/PickupVerificationResponse"
     );
 
     let patch_schema_variants = spec["components"]["schemas"]["EmployeeOrderPatchRequest"]["oneOf"]

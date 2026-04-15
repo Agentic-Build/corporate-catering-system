@@ -39,6 +39,7 @@ pub enum HttpOperation {
     ListEmployeeMenus,
     CreateEmployeeOrder,
     UpdateEmployeeOrder,
+    VerifyPickupOrder,
     ListVendorOrders,
     UpsertVendorMenuItem,
     ListAdminVendors,
@@ -53,10 +54,11 @@ pub enum HttpOperation {
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::ListEmployeeMenus,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
+        Self::VerifyPickupOrder,
         Self::ListVendorOrders,
         Self::UpsertVendorMenuItem,
         Self::ListAdminVendors,
@@ -75,6 +77,7 @@ impl HttpOperation {
             Self::ListEmployeeMenus => "listEmployeeMenus",
             Self::CreateEmployeeOrder => "createEmployeeOrder",
             Self::UpdateEmployeeOrder => "updateEmployeeOrder",
+            Self::VerifyPickupOrder => "verifyPickupOrder",
             Self::ListVendorOrders => "listVendorOrders",
             Self::UpsertVendorMenuItem => "upsertVendorMenuItem",
             Self::ListAdminVendors => "listAdminVendors",
@@ -98,6 +101,7 @@ impl HttpOperation {
             | Self::ListComplianceDocumentTemplates
             | Self::ExportPayrollDeductions => HttpMethod::Get,
             Self::CreateEmployeeOrder
+            | Self::VerifyPickupOrder
             | Self::ReviewVendorApplication
             | Self::RunVendorComplianceLifecycle => HttpMethod::Post,
             Self::UpdateEmployeeOrder => HttpMethod::Patch,
@@ -113,6 +117,7 @@ impl HttpOperation {
             Self::ListEmployeeMenus => "/api/v1/employee/menus",
             Self::CreateEmployeeOrder => "/api/v1/employee/orders",
             Self::UpdateEmployeeOrder => "/api/v1/employee/orders/{orderId}",
+            Self::VerifyPickupOrder => "/api/v1/employee/orders/{orderId}/pickup-verifications",
             Self::ListVendorOrders => "/api/v1/vendor/orders",
             Self::UpsertVendorMenuItem => "/api/v1/vendor/menu-items/{menuItemId}",
             Self::ListAdminVendors => "/api/v1/admin/vendors",
@@ -135,9 +140,10 @@ impl HttpOperation {
 
     pub const fn audience(self) -> HttpAudience {
         match self {
-            Self::ListEmployeeMenus | Self::CreateEmployeeOrder | Self::UpdateEmployeeOrder => {
-                HttpAudience::Employee
-            }
+            Self::ListEmployeeMenus
+            | Self::CreateEmployeeOrder
+            | Self::UpdateEmployeeOrder
+            | Self::VerifyPickupOrder => HttpAudience::Employee,
             Self::ListVendorOrders | Self::UpsertVendorMenuItem => HttpAudience::Vendor,
             Self::ListAdminVendors
             | Self::ListVendorPlantDeliveryMappings
@@ -153,7 +159,7 @@ impl HttpOperation {
 
     pub const fn write_action(self) -> Option<Action> {
         match self {
-            Self::CreateEmployeeOrder | Self::UpdateEmployeeOrder => {
+            Self::CreateEmployeeOrder | Self::UpdateEmployeeOrder | Self::VerifyPickupOrder => {
                 Some(Action::PlaceEmployeeOrder)
             }
             Self::UpsertVendorMenuItem => Some(Action::ManageVendorMenu),
@@ -180,6 +186,7 @@ impl HttpOperation {
             "listEmployeeMenus" => Some(Self::ListEmployeeMenus),
             "createEmployeeOrder" => Some(Self::CreateEmployeeOrder),
             "updateEmployeeOrder" => Some(Self::UpdateEmployeeOrder),
+            "verifyPickupOrder" => Some(Self::VerifyPickupOrder),
             "listVendorOrders" => Some(Self::ListVendorOrders),
             "upsertVendorMenuItem" => Some(Self::UpsertVendorMenuItem),
             "listAdminVendors" => Some(Self::ListAdminVendors),
@@ -423,6 +430,48 @@ pub fn canonical_openapi_spec() -> Value {
               "404": { "$ref": "#/components/responses/NotFound" },
               "409": { "$ref": "#/components/responses/Conflict" },
               "422": { "$ref": "#/components/responses/ValidationFailed" }
+            }
+          }
+        },
+        "/api/v1/employee/orders/{orderId}/pickup-verifications": {
+          "post": {
+            "tags": ["Employee"],
+            "summary": "Verify order pickup handoff",
+            "operationId": HttpOperation::VerifyPickupOrder.operation_id(),
+            "x-order-governance": {
+              "timezone": "Asia/Taipei",
+              "strictLifecycle": true,
+              "inventoryReservationMode": "ATOMIC_IDEMPOTENT",
+              "pickupVerification": {
+                "required": true
+              }
+            },
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/OrderIdPath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/PickupVerificationRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Pickup verification accepted",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/PickupVerificationResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
         },
@@ -1030,6 +1079,14 @@ pub fn canonical_openapi_spec() -> Value {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
+          },
+          "InternalServerError": {
+            "description": "Internal server error while processing request.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
           }
         },
         "schemas": {
@@ -1399,6 +1456,27 @@ pub fn canonical_openapi_spec() -> Value {
               { "$ref": "#/components/schemas/EmployeeOrderCancelPatchRequest" }
             ],
             "description": "Order patch command. Supports line-item replacement and cancellation under the same cutoff governance."
+          },
+          "PickupVerificationRequest": {
+            "type": "object",
+            "required": ["verificationCode"],
+            "properties": {
+              "verificationCode": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "additionalProperties": false
+          },
+          "PickupVerificationResponse": {
+            "type": "object",
+            "required": ["orderId", "verified"],
+            "properties": {
+              "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
+              "verified": { "type": "boolean" }
+            },
+            "additionalProperties": false
           },
           "OrderLineItem": {
             "type": "object",
@@ -1805,7 +1883,10 @@ pub fn canonical_openapi_spec() -> Value {
               "FORBIDDEN",
               "NOT_FOUND",
               "CONFLICT",
-              "VALIDATION_FAILED"
+              "VALIDATION_FAILED",
+              "INVALID_PICKUP_VERIFICATION_REQUEST",
+              "PICKUP_VERIFICATION_INTERNAL_ERROR",
+              "ORDER_NOT_FOUND"
             ]
           },
           "ErrorDetail": {
