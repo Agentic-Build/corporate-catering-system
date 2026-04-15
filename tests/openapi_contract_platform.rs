@@ -8,7 +8,11 @@ use corporate_catering_system::contract::{
 use corporate_catering_system::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
 };
-use corporate_catering_system::transport::http::HttpAuthorizationGateway;
+use corporate_catering_system::transport::http::{runtime_http_routes, HttpAuthorizationGateway};
+use corporate_catering_system::transport::mcp::{
+    mcp_contract_checks_enabled, runtime_mcp_tool_contract_issues, runtime_mcp_tools,
+    McpAuthorizationGateway, McpOperation,
+};
 use serde_json::Value;
 
 fn actor_id(value: &str) -> ActorId {
@@ -47,6 +51,38 @@ fn collect_operation_ids(spec: &Value) -> BTreeSet<String> {
     }
 
     operation_ids
+}
+
+fn collect_openapi_routes(spec: &Value) -> BTreeSet<(String, String, String)> {
+    let mut routes = BTreeSet::new();
+    let paths = spec["paths"].as_object().expect("paths must be an object");
+    for (path, path_item) in paths {
+        let methods = path_item.as_object().expect("path item must be an object");
+        for (method, operation) in methods {
+            if !matches!(
+                method.as_str(),
+                "get" | "post" | "put" | "patch" | "delete" | "options" | "head" | "trace"
+            ) {
+                continue;
+            }
+
+            let operation_id = operation["operationId"]
+                .as_str()
+                .expect("operation id must be string");
+            routes.insert((method.to_owned(), path.to_owned(), operation_id.to_owned()));
+        }
+    }
+
+    routes
+}
+
+fn different_action(action: Action) -> Action {
+    match action {
+        Action::PlaceEmployeeOrder => Action::ManageVendorMenu,
+        Action::ManageVendorMenu => Action::ApproveVendorEnrollment,
+        Action::ApproveVendorEnrollment => Action::ExportPayrollDeductions,
+        Action::ExportPayrollDeductions => Action::PlaceEmployeeOrder,
+    }
 }
 
 #[test]
@@ -126,6 +162,29 @@ fn openapi_spec_covers_all_official_http_operations() {
 }
 
 #[test]
+fn runtime_http_route_catalog_matches_openapi_contract() {
+    let spec = canonical_openapi_spec();
+    let openapi_routes = collect_openapi_routes(&spec);
+    let runtime_routes = runtime_http_routes()
+        .iter()
+        .map(|route| {
+            (
+                route.method().as_openapi_verb().to_owned(),
+                route.path().to_owned(),
+                route.operation_id().to_owned(),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        runtime_routes.len(),
+        runtime_http_routes().len(),
+        "runtime HTTP route catalog must not contain duplicate method/path/operation entries",
+    );
+    assert_eq!(runtime_routes, openapi_routes);
+}
+
+#[test]
 fn http_gateway_enforces_contract_operation_id_and_action_mapping() {
     let access_controller = AccessController::with_default_policy();
     let gateway = HttpAuthorizationGateway::new(access_controller);
@@ -161,6 +220,60 @@ fn http_gateway_enforces_contract_operation_id_and_action_mapping() {
         ),
         Err(AuthorizationError::HttpOperationActionMismatch { .. })
     ));
+}
+
+#[test]
+fn mcp_contract_checks_are_wired_for_future_runtime_tools() {
+    let issues = runtime_mcp_tool_contract_issues();
+    assert!(
+        issues.is_empty(),
+        "runtime MCP tool catalog has contract issues:\n{}",
+        issues.join("\n")
+    );
+
+    let access_controller = AccessController::with_default_policy();
+    let gateway = McpAuthorizationGateway::new(access_controller);
+    let actor = employee_actor();
+    let target_plant = plant_id("fab-a");
+
+    if mcp_contract_checks_enabled() {
+        let runtime_tools = runtime_mcp_tools();
+        assert!(!runtime_tools.is_empty());
+        let first_tool = runtime_tools[0];
+        assert_eq!(
+            McpOperation::from_operation_id(first_tool.operation_id()),
+            Some(first_tool.operation())
+        );
+
+        assert!(matches!(
+            gateway.authorize_write(
+                Some(&actor),
+                first_tool.action(),
+                Some(&target_plant),
+                "unknownMcpOperationId"
+            ),
+            Err(AuthorizationError::UnknownMcpOperationId { .. })
+        ));
+
+        assert!(matches!(
+            gateway.authorize_write(
+                Some(&actor),
+                different_action(first_tool.action()),
+                Some(&target_plant),
+                first_tool.operation_id()
+            ),
+            Err(AuthorizationError::McpOperationActionMismatch { .. })
+        ));
+    } else {
+        gateway
+            .authorize_write(
+                Some(&actor),
+                Action::PlaceEmployeeOrder,
+                Some(&target_plant),
+                "mcp-write-operation-without-runtime-catalog",
+            )
+            .expect("MCP contract checks are intentionally deferred until tools are declared");
+    }
 }
 
 #[test]

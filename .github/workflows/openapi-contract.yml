@@ -17,28 +17,6 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run Rust test suite
-        run: cargo test --all-targets
-
-      - name: Export OpenAPI artifacts
-        run: cargo run --quiet --bin export_openapi_contract -- artifacts/openapi
-
-      - name: Upload machine-readable spec artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: openapi-spec
-          path: |
-            artifacts/openapi/openapi.json
-            artifacts/openapi/openapi.yaml
-
-      - name: Upload browsable docs artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: openapi-docs
-          path: |
-            artifacts/openapi/index.html
-            artifacts/openapi/openapi.json
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -52,11 +30,32 @@ jobs:
       - name: Install TypeScript generator dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Validate generated TypeScript client and types
-        run: pnpm run contract:verify
+      - name: Contract conformance gate
+        run: |
+          cargo test --test openapi_contract_platform
+          pnpm run contract:verify
+
+      - name: Run Rust test suite
+        run: cargo test --all-targets
+
+      - name: Upload machine-readable spec artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-spec
+          path: |
+            contract/openapi/openapi.json
+            contract/openapi/openapi.yaml
+
+      - name: Upload browsable docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-docs
+          path: |
+            contract/openapi/index.html
+            contract/openapi/openapi.json
 
       - name: Upload generated TypeScript client artifact
         uses: actions/upload-artifact@v4
         with:
           name: generated-ts-client
-          path: generated/ts-client
+          path: contract/generated/ts-client

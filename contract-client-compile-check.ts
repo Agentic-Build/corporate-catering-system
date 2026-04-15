@@ -1,10 +1,10 @@
-import { OpenAPI } from "./generated/ts-client";
+import { OpenAPI } from "./contract/generated/ts-client";
 import type {
   EmployeeOrder,
   MenuPage,
   PayrollDeductionPage,
   VendorEnrollmentPage,
-} from "./generated/ts-client";
+} from "./contract/generated/ts-client";
 
 OpenAPI.BASE = "https://api.corporate-catering.example.com";
 

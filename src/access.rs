@@ -168,6 +168,14 @@ pub enum AuthorizationError {
         expected_action: Action,
         provided_action: Action,
     },
+    UnknownMcpOperationId {
+        operation_id: String,
+    },
+    McpOperationActionMismatch {
+        operation_id: String,
+        expected_action: Action,
+        provided_action: Action,
+    },
     ActionIsNotWriteOperation(Action),
     InvalidOperationId,
 }
@@ -203,6 +211,17 @@ impl fmt::Display for AuthorizationError {
             } => write!(
                 f,
                 "http operation id {operation_id} expects action {expected_action:?}, got {provided_action:?}"
+            ),
+            Self::UnknownMcpOperationId { operation_id } => {
+                write!(f, "mcp operation id {operation_id} is not defined in the contract")
+            }
+            Self::McpOperationActionMismatch {
+                operation_id,
+                expected_action,
+                provided_action,
+            } => write!(
+                f,
+                "mcp operation id {operation_id} expects action {expected_action:?}, got {provided_action:?}"
             ),
             Self::ActionIsNotWriteOperation(action) => {
                 write!(f, "action {action:?} is not registered as write operation")

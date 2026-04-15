@@ -1,8 +1,76 @@
 use crate::access::{
     AccessController, Action, AuthorizationError, AuthorizedWriteOperation, TransportLayer,
 };
-use crate::contract::HttpOperation;
+use crate::contract::{HttpMethod, HttpOperation};
 use crate::identity::{AuthenticatedActorContext, PlantId};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RuntimeHttpRoute {
+    method: HttpMethod,
+    path: &'static str,
+    operation_id: &'static str,
+}
+
+impl RuntimeHttpRoute {
+    pub const fn new(method: HttpMethod, path: &'static str, operation_id: &'static str) -> Self {
+        Self {
+            method,
+            path,
+            operation_id,
+        }
+    }
+
+    pub const fn method(self) -> HttpMethod {
+        self.method
+    }
+
+    pub const fn path(self) -> &'static str {
+        self.path
+    }
+
+    pub const fn operation_id(self) -> &'static str {
+        self.operation_id
+    }
+}
+
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 8] = [
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/employee/menus",
+        "listEmployeeMenus",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/employee/orders",
+        "createEmployeeOrder",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Patch,
+        "/api/v1/employee/orders/{orderId}",
+        "updateEmployeeOrder",
+    ),
+    RuntimeHttpRoute::new(HttpMethod::Get, "/api/v1/vendor/orders", "listVendorOrders"),
+    RuntimeHttpRoute::new(
+        HttpMethod::Put,
+        "/api/v1/vendor/menu-items/{menuItemId}",
+        "upsertVendorMenuItem",
+    ),
+    RuntimeHttpRoute::new(HttpMethod::Get, "/api/v1/admin/vendors", "listAdminVendors"),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/admin/vendors/{vendorId}/approvals",
+        "approveVendorEnrollment",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/integrations/payroll/deductions",
+        "exportPayrollDeductions",
+    ),
+];
+
+pub fn runtime_http_routes() -> &'static [RuntimeHttpRoute] {
+    &RUNTIME_HTTP_ROUTES
+}
 
 #[derive(Clone)]
 pub struct HttpAuthorizationGateway {

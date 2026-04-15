@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let output_dir = std::env::args()
         .nth(1)
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("artifacts/openapi"));
+        .unwrap_or_else(|| PathBuf::from("contract/openapi"));
 
     let artifacts = write_openapi_artifacts(&output_dir)?;
     println!("openapi_json={}", artifacts.openapi_json.display());

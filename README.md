@@ -2,14 +2,19 @@
 
 ## OpenAPI Contract Platform
 
-Canonical HTTP contract artifacts are generated from the Rust contract module.
+Canonical HTTP contract artifacts are generated from the Rust contract module and committed under `contract/`.
 
-- Export spec and docs: `cargo run --bin export_openapi_contract -- artifacts/openapi`
+- Sync committed spec/docs + generated TS client: `pnpm run contract:sync`
 - Output artifacts:
-  - `artifacts/openapi/openapi.json` (machine-readable)
-  - `artifacts/openapi/openapi.yaml` (machine-readable)
-  - `artifacts/openapi/index.html` (browsable Redoc docs)
+  - `contract/openapi/openapi.json` (machine-readable)
+  - `contract/openapi/openapi.yaml` (machine-readable)
+  - `contract/openapi/index.html` (browsable Redoc docs)
+  - `contract/generated/ts-client/**` (OpenAPI-generated TypeScript client/types)
 - Generate and type-check TS client/types from OpenAPI:
   - `pnpm run contract:verify`
+  - This command fails if regeneration changes committed contract artifacts.
 
-CI (`.github/workflows/openapi-contract.yml`) enforces contract checks and publishes artifacts.
+CI (`.github/workflows/openapi-contract.yml`) enforces:
+- runtime HTTP route parity vs OpenAPI contract
+- generated artifact drift detection
+- MCP contract parity checks (auto-activated once runtime MCP tools are declared)

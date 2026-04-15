@@ -11,7 +11,9 @@ use corporate_catering_system::identity::{
     PlantScope, Role,
 };
 use corporate_catering_system::transport::http::HttpAuthorizationGateway;
-use corporate_catering_system::transport::mcp::McpAuthorizationGateway;
+use corporate_catering_system::transport::mcp::{
+    mcp_contract_checks_enabled, runtime_mcp_tools, McpAuthorizationGateway,
+};
 
 fn actor_id(value: &str) -> ActorId {
     ActorId::parse(value).expect("actor id should be valid")
@@ -64,6 +66,23 @@ fn payroll_actor() -> AuthenticatedActorContext {
         AuthenticationSource::CorporateSso,
     )
     .expect("payroll actor should be valid")
+}
+
+fn mcp_operation_id_for(action: Action) -> String {
+    if mcp_contract_checks_enabled() {
+        runtime_mcp_tools()
+            .iter()
+            .find(|tool| tool.action() == action)
+            .map(|tool| tool.operation_id().to_owned())
+            .expect("runtime MCP checks require a tool mapping for every authorized action")
+    } else {
+        match action {
+            Action::PlaceEmployeeOrder => "mcp-place-employee-order".to_owned(),
+            Action::ManageVendorMenu => "mcp-manage-vendor-menu".to_owned(),
+            Action::ApproveVendorEnrollment => "mcp-approve-vendor-enrollment".to_owned(),
+            Action::ExportPayrollDeductions => "mcp-export-payroll-deductions".to_owned(),
+        }
+    }
 }
 
 #[test]
@@ -246,12 +265,13 @@ fn write_operations_require_authenticated_actor_context_and_auditable_link() {
     ));
 
     let employee = employee_actor();
+    let operation_id = mcp_operation_id_for(Action::PlaceEmployeeOrder);
     let authorized = mcp_gateway
         .authorize_write(
             Some(&employee),
             Action::PlaceEmployeeOrder,
             Some(&target_plant),
-            "mcp-write-1",
+            &operation_id,
         )
         .expect("authorized write should succeed");
 
@@ -262,7 +282,7 @@ fn write_operations_require_authenticated_actor_context_and_auditable_link() {
         authorized.audit_identity().authentication_source(),
         AuthenticationSource::CorporateSso
     );
-    assert_eq!(authorized.audit_identity().operation_id(), "mcp-write-1");
+    assert_eq!(authorized.audit_identity().operation_id(), operation_id);
     assert_eq!(authorized.transport(), TransportLayer::Mcp);
 }
 
@@ -306,12 +326,13 @@ fn http_and_mcp_paths_share_the_same_policy_engine() {
             HttpOperation::CreateEmployeeOrder.operation_id(),
         )
         .expect("http write should succeed");
+    let operation_id = mcp_operation_id_for(Action::PlaceEmployeeOrder);
     mcp_gateway
         .authorize_write(
             Some(&employee),
             Action::PlaceEmployeeOrder,
             Some(&target_plant),
-            "mcp-write-2",
+            &operation_id,
         )
         .expect("mcp write should succeed");
 

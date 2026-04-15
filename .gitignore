@@ -57,6 +57,12 @@ tmp/
 temp/
 artifacts/
 generated/
+!contract/
+!contract/openapi/
+!contract/openapi/**
+!contract/generated/
+!contract/generated/ts-client/
+!contract/generated/ts-client/**
 
 # =========================
 # Coverage & test

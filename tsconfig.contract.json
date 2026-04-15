@@ -9,7 +9,7 @@
     "allowSyntheticDefaultImports": true
   },
   "include": [
-    "generated/ts-client/**/*.ts",
+    "contract/generated/ts-client/**/*.ts",
     "contract-client-compile-check.ts"
   ]
 }
