@@ -395,7 +395,8 @@ pub fn canonical_openapi_spec() -> Value {
               "401": { "$ref": "#/components/responses/Unauthorized" },
               "403": { "$ref": "#/components/responses/Forbidden" },
               "409": { "$ref": "#/components/responses/Conflict" },
-              "422": { "$ref": "#/components/responses/ValidationFailed" }
+              "422": { "$ref": "#/components/responses/ValidationFailed" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
         },
@@ -446,7 +447,8 @@ pub fn canonical_openapi_spec() -> Value {
               "403": { "$ref": "#/components/responses/Forbidden" },
               "404": { "$ref": "#/components/responses/NotFound" },
               "409": { "$ref": "#/components/responses/Conflict" },
-              "422": { "$ref": "#/components/responses/ValidationFailed" }
+              "422": { "$ref": "#/components/responses/ValidationFailed" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
         },

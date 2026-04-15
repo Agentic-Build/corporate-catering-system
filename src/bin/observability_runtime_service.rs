@@ -266,6 +266,14 @@ struct HealthPayload {
 struct ErrorPayload {
     code: &'static str,
     message: String,
+    request_id: String,
+}
+
+impl ErrorPayload {
+    fn with_request_id(mut self, request_id: &str) -> Self {
+        self.request_id = request_id.to_owned();
+        self
+    }
 }
 
 #[tokio::main]
@@ -572,6 +580,7 @@ async fn list_employee_menus(
         Some("load-gate"),
         Some(state.plant_id.as_str()),
     );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
 
     let response = match handle_list_employee_menus(&state, query) {
         Ok(payload) => {
@@ -589,7 +598,7 @@ async fn list_employee_menus(
             (
                 status,
                 Json(
-                    serde_json::to_value(error)
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
                         .expect("menu discovery error payload serialization should succeed"),
                 ),
             )
@@ -1078,6 +1087,7 @@ async fn create_employee_order(
         Some("load-gate"),
         Some(state.plant_id.as_str()),
     );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
 
     let response = match handle_create_employee_order(&state, request) {
         Ok(response) => {
@@ -1095,7 +1105,7 @@ async fn create_employee_order(
             (
                 status,
                 Json(
-                    serde_json::to_value(error)
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
                         .expect("error payload serialization should succeed"),
                 ),
             )
@@ -1183,6 +1193,7 @@ async fn update_employee_order(
         Some("load-gate"),
         Some(state.plant_id.as_str()),
     );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
 
     let response = match handle_update_employee_order(&state, order_id, request) {
         Ok(response) => {
@@ -1200,7 +1211,7 @@ async fn update_employee_order(
             (
                 status,
                 Json(
-                    serde_json::to_value(error)
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
                         .expect("error payload serialization should succeed"),
                 ),
             )
@@ -1604,7 +1615,14 @@ fn domain_error(
     code: &'static str,
     message: String,
 ) -> (StatusCode, ErrorPayload) {
-    (status, ErrorPayload { code, message })
+    (
+        status,
+        ErrorPayload {
+            code,
+            message,
+            request_id: String::new(),
+        },
+    )
 }
 
 async fn verify_order_pickup(
@@ -1617,6 +1635,7 @@ async fn verify_order_pickup(
         Some("load-gate"),
         Some(state.plant_id.as_str()),
     );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
 
     if request.verification_code.trim().is_empty() {
         telemetry.finish_with_http_status(StatusCode::BAD_REQUEST.as_u16());
@@ -1626,6 +1645,7 @@ async fn verify_order_pickup(
                 serde_json::to_value(ErrorPayload {
                     code: "INVALID_PICKUP_VERIFICATION_REQUEST",
                     message: "verificationCode must be non-empty".to_owned(),
+                    request_id: request_id.clone(),
                 })
                 .expect("error payload serialization should succeed"),
             ),
@@ -1642,6 +1662,7 @@ async fn verify_order_pickup(
                     serde_json::to_value(ErrorPayload {
                         code: "INVALID_PICKUP_VERIFICATION_REQUEST",
                         message: format!("orderId path parameter is invalid: {error}"),
+                        request_id: request_id.clone(),
                     })
                     .expect("error payload serialization should succeed"),
                 ),
@@ -1659,6 +1680,7 @@ async fn verify_order_pickup(
                     serde_json::to_value(ErrorPayload {
                         code: "PICKUP_VERIFICATION_INTERNAL_ERROR",
                         message: error.to_string(),
+                        request_id: request_id.clone(),
                     })
                     .expect("error payload serialization should succeed"),
                 ),
@@ -1674,6 +1696,7 @@ async fn verify_order_pickup(
                 serde_json::to_value(ErrorPayload {
                     code: "ORDER_NOT_FOUND",
                     message: "order does not exist for pickup verification".to_owned(),
+                    request_id: request_id.clone(),
                 })
                 .expect("error payload serialization should succeed"),
             ),

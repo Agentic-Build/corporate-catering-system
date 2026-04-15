@@ -106,6 +106,7 @@ export class EmployeeService {
                 403: `Authenticated actor is not authorized to perform this operation.`,
                 409: `Request conflicts with business constraints.`,
                 422: `Request is syntactically valid but violates business validation rules.`,
+                500: `Internal server error while processing request.`,
             },
         });
     }
@@ -135,6 +136,7 @@ export class EmployeeService {
                 404: `Requested resource was not found.`,
                 409: `Request conflicts with business constraints.`,
                 422: `Request is syntactically valid but violates business validation rules.`,
+                500: `Internal server error while processing request.`,
             },
         });
     }

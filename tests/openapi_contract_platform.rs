@@ -749,6 +749,10 @@ fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_re
             "FULFILLED".to_owned(),
         ])
     );
+    assert_eq!(
+        create_order_operation["responses"]["500"]["$ref"],
+        "#/components/responses/InternalServerError"
+    );
 
     let patch_order_operation =
         operation_by_path_and_method(&spec, "/api/v1/employee/orders/{orderId}", "patch");
@@ -770,6 +774,10 @@ fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_re
     assert_eq!(
         supported_operations,
         BTreeSet::from(["REPLACE_LINE_ITEMS".to_owned(), "CANCEL".to_owned()])
+    );
+    assert_eq!(
+        patch_order_operation["responses"]["500"]["$ref"],
+        "#/components/responses/InternalServerError"
     );
 
     let pickup_verify_operation = operation_by_path_and_method(
