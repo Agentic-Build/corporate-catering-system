@@ -8,7 +8,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use corporate_catering_system::health::{evaluate_probe, HealthProbeKind, HealthState};
 use corporate_catering_system::observability::{
-    initialize_telemetry_runtime_from_env, TelemetryOutcome, TelemetryService,
+    initialize_telemetry_runtime_from_env, TelemetryService,
 };
 use serde::{Deserialize, Serialize};
 
@@ -119,15 +119,11 @@ fn health_probe_response(
     let telemetry = TelemetryService::HttpApi.begin_operation(operation_id, None, None);
 
     let report = evaluate_probe(probe_kind, dependencies_ready, detail);
-    let (status_code, status_text, outcome) = match report.state() {
-        HealthState::Healthy => (StatusCode::OK, "ok", TelemetryOutcome::Success),
-        HealthState::Unhealthy => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "degraded",
-            TelemetryOutcome::Error,
-        ),
+    let (status_code, status_text) = match report.state() {
+        HealthState::Healthy => (StatusCode::OK, "ok"),
+        HealthState::Unhealthy => (StatusCode::SERVICE_UNAVAILABLE, "degraded"),
     };
-    telemetry.finish(outcome);
+    telemetry.finish_with_http_status(status_code.as_u16());
 
     (
         status_code,
@@ -157,7 +153,7 @@ async fn list_employee_menus() -> (StatusCode, Json<Vec<MenuSummary>>) {
             display_name: "Mushroom Rice Bowl".to_owned(),
         },
     ];
-    telemetry.finish(TelemetryOutcome::Success);
+    telemetry.finish_with_http_status(StatusCode::OK.as_u16());
     (StatusCode::OK, Json(payload))
 }
 
@@ -185,7 +181,7 @@ async fn create_employee_order(
         });
 
     if !request_valid {
-        telemetry.finish(TelemetryOutcome::Error);
+        telemetry.finish_with_http_status(StatusCode::BAD_REQUEST.as_u16());
         return (
             StatusCode::BAD_REQUEST,
             Json(
@@ -199,7 +195,7 @@ async fn create_employee_order(
     }
 
     let next_order_id = state.next_order_sequence.fetch_add(1, Ordering::Relaxed);
-    telemetry.finish(TelemetryOutcome::Success);
+    telemetry.finish_with_http_status(StatusCode::CREATED.as_u16());
 
     (
         StatusCode::CREATED,

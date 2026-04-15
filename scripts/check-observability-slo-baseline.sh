@@ -39,6 +39,17 @@ rg -q "mcp_tool_requests_per_second" ops/kubernetes/base/hpa-mcp.yaml
 rg -q "compliance_lifecycle_jobs_in_flight" ops/kubernetes/base/hpa-compliance-worker.yaml
 rg -q "/api/v1/employee/orders" ops/observability/load/k6-prelaunch.js
 
+collector_endpoint="$(awk '
+  /^collector:/ { in_collector=1; next }
+  in_collector && /^[[:space:]]+endpoint:/ { gsub(/^[[:space:]]+endpoint:[[:space:]]*/, "", $0); print $0; exit }
+  in_collector && /^[^[:space:]]/ { in_collector=0 }
+' ops/observability/otel/instrumentation-baseline.yaml)"
+if [[ -z "${collector_endpoint}" ]]; then
+  echo "failed to resolve collector.endpoint from ops/observability/otel/instrumentation-baseline.yaml"
+  exit 1
+fi
+
+OTEL_EXPORTER_OTLP_ENDPOINT="${collector_endpoint}" \
 cargo test --test observability_k8s_slo_baseline --test runtime_observability_instrumentation
 
 if ! command -v cargo >/dev/null 2>&1; then
@@ -66,16 +77,6 @@ cleanup() {
   rm -f "${summary_file}" "${service_log_file}"
 }
 trap cleanup EXIT
-
-collector_endpoint="$(awk '
-  /^collector:/ { in_collector=1; next }
-  in_collector && /^[[:space:]]+endpoint:/ { gsub(/^[[:space:]]+endpoint:[[:space:]]*/, "", $0); print $0; exit }
-  in_collector && /^[^[:space:]]/ { in_collector=0 }
-' ops/observability/otel/instrumentation-baseline.yaml)"
-if [[ -z "${collector_endpoint}" ]]; then
-  echo "failed to resolve collector.endpoint from ops/observability/otel/instrumentation-baseline.yaml"
-  exit 1
-fi
 
 PORT="${LOAD_GATE_PORT:-18080}"
 PRELAUNCH_BIND_ADDR="127.0.0.1:${PORT}" \

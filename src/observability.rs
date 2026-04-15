@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Instant, SystemTime};
 
 use opentelemetry::global;
@@ -16,6 +16,8 @@ use tracing_subscriber::prelude::*;
 
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static TELEMETRY_BOOTSTRAP: OnceLock<TelemetryBootstrap> = OnceLock::new();
+static TELEMETRY_BOOTSTRAP_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+static TELEMETRY_BOOTSTRAP_INIT_LOCK: Mutex<()> = Mutex::new(());
 static TELEMETRY_RUNTIME_CONTEXT: OnceLock<TelemetryRuntimeContext> = OnceLock::new();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,6 +93,18 @@ struct TelemetryBootstrap {
     _tracer_provider: opentelemetry_sdk::trace::TracerProvider,
     _meter_provider: opentelemetry_sdk::metrics::SdkMeterProvider,
     logger_provider: opentelemetry_sdk::logs::LoggerProvider,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TelemetryEmissionMode {
+    Full,
+    Internal,
+}
+
+impl TelemetryEmissionMode {
+    const fn records_load_signals(self) -> bool {
+        matches!(self, Self::Full)
+    }
 }
 
 impl TelemetryBootstrap {
@@ -186,6 +200,12 @@ pub fn initialize_telemetry_runtime(
     if TELEMETRY_BOOTSTRAP.get().is_some() {
         return Ok(());
     }
+    let _init_guard = TELEMETRY_BOOTSTRAP_INIT_LOCK
+        .lock()
+        .expect("telemetry bootstrap init lock must not be poisoned");
+    if TELEMETRY_BOOTSTRAP.get().is_some() {
+        return Ok(());
+    }
 
     let bootstrap = TelemetryBootstrap::build(config)?;
     if TELEMETRY_BOOTSTRAP.set(bootstrap).is_err() {
@@ -193,6 +213,34 @@ pub fn initialize_telemetry_runtime(
     }
 
     Ok(())
+}
+
+fn telemetry_bootstrap_or_panic(default_service_name: &str) -> &'static TelemetryBootstrap {
+    if TELEMETRY_BOOTSTRAP.get().is_none() {
+        let initialize = || {
+            initialize_telemetry_runtime_from_env(default_service_name).unwrap_or_else(|error| {
+                panic!(
+                    "hard-enforced telemetry runtime bootstrap failed for `{default_service_name}`: {error}"
+                )
+            });
+        };
+        if tokio::runtime::Handle::try_current().is_ok() {
+            initialize();
+        } else {
+            let runtime = TELEMETRY_BOOTSTRAP_RUNTIME.get_or_init(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("failed to create Tokio runtime for telemetry bootstrap")
+            });
+            runtime.block_on(async {
+                initialize();
+            });
+        }
+    }
+    TELEMETRY_BOOTSTRAP
+        .get()
+        .expect("hard-enforced telemetry runtime bootstrap missing after initialization attempt")
 }
 
 fn parse_resource_attributes_from_env() -> Vec<KeyValue> {
@@ -261,12 +309,21 @@ impl TelemetryService {
         }
     }
 
-    fn finish_attributes(self, outcome: TelemetryOutcome) -> Vec<KeyValue> {
+    fn finish_attributes(
+        self,
+        outcome: TelemetryOutcome,
+        http_status_code: Option<u16>,
+    ) -> Vec<KeyValue> {
         match self {
-            Self::HttpApi => vec![
-                KeyValue::new("status_code", outcome.status_code()),
-                KeyValue::new("http.status_code", outcome.status_code()),
-            ],
+            Self::HttpApi => {
+                let status_code = http_status_code
+                    .unwrap_or_else(|| outcome.default_http_status_code())
+                    .to_string();
+                vec![
+                    KeyValue::new("status_code", status_code.clone()),
+                    KeyValue::new("http.status_code", status_code),
+                ]
+            }
             Self::McpGateway => vec![],
             Self::ComplianceWorker => {
                 vec![KeyValue::new(
@@ -295,10 +352,8 @@ impl TelemetryService {
         }
     }
 
-    fn logger(self) -> Option<opentelemetry_sdk::logs::Logger> {
-        TELEMETRY_BOOTSTRAP
-            .get()
-            .map(|bootstrap| bootstrap.logger_for_service(self.service_name()))
+    fn logger(self) -> opentelemetry_sdk::logs::Logger {
+        telemetry_bootstrap_or_panic(self.service_name()).logger_for_service(self.service_name())
     }
 
     fn emit_otel_log(
@@ -309,10 +364,7 @@ impl TelemetryService {
         body: &'static str,
         attributes: &[KeyValue],
     ) {
-        let Some(logger) = self.logger() else {
-            return;
-        };
-
+        let logger = self.logger();
         let now = SystemTime::now();
         let mut record = logger.create_log_record();
         record.set_timestamp(now);
@@ -341,6 +393,36 @@ impl TelemetryService {
         actor_id: Option<&str>,
         plant_id: Option<&str>,
     ) -> CorrelatedOperation {
+        self.begin_operation_with_mode(
+            operation_id,
+            actor_id,
+            plant_id,
+            TelemetryEmissionMode::Full,
+        )
+    }
+
+    pub fn begin_internal_operation(
+        self,
+        operation_id: impl Into<String>,
+        actor_id: Option<&str>,
+        plant_id: Option<&str>,
+    ) -> CorrelatedOperation {
+        self.begin_operation_with_mode(
+            operation_id,
+            actor_id,
+            plant_id,
+            TelemetryEmissionMode::Internal,
+        )
+    }
+
+    fn begin_operation_with_mode(
+        self,
+        operation_id: impl Into<String>,
+        actor_id: Option<&str>,
+        plant_id: Option<&str>,
+        emission_mode: TelemetryEmissionMode,
+    ) -> CorrelatedOperation {
+        let _ = telemetry_bootstrap_or_panic(self.service_name());
         let operation_id = operation_id.into();
         let request_id = format!(
             "{}-{}",
@@ -362,6 +444,14 @@ impl TelemetryService {
             ),
             KeyValue::new("operation_id", operation_id.clone()),
             KeyValue::new("request_id", request_id.clone()),
+            KeyValue::new(
+                "telemetry.mode",
+                if emission_mode.records_load_signals() {
+                    "full"
+                } else {
+                    "internal"
+                },
+            ),
         ];
         attributes.extend(self.semantic_attributes(&operation_id));
         if let Some(actor_id) = actor_id {
@@ -406,7 +496,7 @@ impl TelemetryService {
             &attributes,
         );
 
-        self.instruments().on_start(&attributes);
+        self.instruments().on_start(&attributes, emission_mode);
 
         CorrelatedOperation {
             service: self,
@@ -414,6 +504,7 @@ impl TelemetryService {
             attributes,
             span,
             correlation,
+            emission_mode,
         }
     }
 }
@@ -454,7 +545,7 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
         "healthReadyProbe" => ("/health/ready", "GET"),
         "healthLiveProbe" => ("/health/live", "GET"),
         "healthStartupProbe" => ("/health/startup", "GET"),
-        _ => ("/internal/unknown", "UNKNOWN"),
+        _ => panic!("unknown HTTP operation id `{operation_id}` in telemetry route mapping"),
     }
 }
 
@@ -548,13 +639,22 @@ impl TelemetryInstruments {
         }
     }
 
-    fn on_start(&self, attributes: &[KeyValue]) {
-        if let Some(in_flight) = &self.in_flight_work {
-            in_flight.add(1, attributes);
+    fn on_start(&self, attributes: &[KeyValue], emission_mode: TelemetryEmissionMode) {
+        if emission_mode.records_load_signals() {
+            if let Some(in_flight) = &self.in_flight_work {
+                in_flight.add(1, attributes);
+            }
         }
     }
 
-    fn on_finish(&self, elapsed_ms: f64, outcome: TelemetryOutcome, attributes: &[KeyValue]) {
+    fn on_finish(
+        &self,
+        elapsed_ms: f64,
+        outcome: TelemetryOutcome,
+        attributes: &[KeyValue],
+        emission_mode: TelemetryEmissionMode,
+        http_status_code: Option<u16>,
+    ) {
         let mut metric_attributes = attributes.to_vec();
         metric_attributes.push(KeyValue::new("outcome", outcome.as_str()));
 
@@ -562,23 +662,31 @@ impl TelemetryInstruments {
         self.operation_duration_ms
             .record(elapsed_ms, &metric_attributes);
 
-        if let Some(http_requests_total) = &self.http_server_requests_total {
-            let mut http_attributes = metric_attributes.clone();
-            http_attributes.push(KeyValue::new("status_code", outcome.status_code()));
-            http_attributes.push(KeyValue::new("http.status_code", outcome.status_code()));
-            http_requests_total.add(1, &http_attributes);
-        }
-        if let Some(http_duration) = &self.http_server_request_duration_ms {
-            let mut http_attributes = metric_attributes.clone();
-            http_attributes.push(KeyValue::new("status_code", outcome.status_code()));
-            http_attributes.push(KeyValue::new("http.status_code", outcome.status_code()));
-            http_duration.record(elapsed_ms, &http_attributes);
-        }
-        if let Some(requests_per_second) = &self.hpa_requests_per_second {
-            requests_per_second.add(1, &metric_attributes);
-        }
-        if let Some(in_flight) = &self.in_flight_work {
-            in_flight.add(-1, &metric_attributes);
+        if emission_mode.records_load_signals() {
+            if let Some(http_requests_total) = &self.http_server_requests_total {
+                let status_code = http_status_code
+                    .unwrap_or_else(|| outcome.default_http_status_code())
+                    .to_string();
+                let mut http_attributes = metric_attributes.clone();
+                http_attributes.push(KeyValue::new("status_code", status_code.clone()));
+                http_attributes.push(KeyValue::new("http.status_code", status_code));
+                http_requests_total.add(1, &http_attributes);
+            }
+            if let Some(http_duration) = &self.http_server_request_duration_ms {
+                let status_code = http_status_code
+                    .unwrap_or_else(|| outcome.default_http_status_code())
+                    .to_string();
+                let mut http_attributes = metric_attributes.clone();
+                http_attributes.push(KeyValue::new("status_code", status_code.clone()));
+                http_attributes.push(KeyValue::new("http.status_code", status_code));
+                http_duration.record(elapsed_ms, &http_attributes);
+            }
+            if let Some(requests_per_second) = &self.hpa_requests_per_second {
+                requests_per_second.add(1, &metric_attributes);
+            }
+            if let Some(in_flight) = &self.in_flight_work {
+                in_flight.add(-1, &metric_attributes);
+            }
         }
     }
 }
@@ -628,10 +736,10 @@ impl TelemetryOutcome {
         }
     }
 
-    const fn status_code(self) -> &'static str {
+    const fn default_http_status_code(self) -> u16 {
         match self {
-            Self::Success => "200",
-            Self::Error => "500",
+            Self::Success => 200,
+            Self::Error => 500,
         }
     }
 
@@ -649,6 +757,7 @@ pub struct CorrelatedOperation {
     attributes: Vec<KeyValue>,
     span: BoxedSpan,
     correlation: CorrelationContext,
+    emission_mode: TelemetryEmissionMode,
 }
 
 impl CorrelatedOperation {
@@ -656,11 +765,24 @@ impl CorrelatedOperation {
         &self.correlation
     }
 
-    pub fn finish(mut self, outcome: TelemetryOutcome) {
+    pub fn finish(self, outcome: TelemetryOutcome) {
+        self.finish_with_details(outcome, None);
+    }
+
+    pub fn finish_with_http_status(self, status_code: u16) {
+        let outcome = if status_code >= 500 {
+            TelemetryOutcome::Error
+        } else {
+            TelemetryOutcome::Success
+        };
+        self.finish_with_details(outcome, Some(status_code));
+    }
+
+    fn finish_with_details(mut self, outcome: TelemetryOutcome, http_status_code: Option<u16>) {
         let elapsed_ms = self.started_at.elapsed().as_secs_f64() * 1000.0;
         let outcome_value = outcome.as_str();
 
-        for attribute in self.service.finish_attributes(outcome) {
+        for attribute in self.service.finish_attributes(outcome, http_status_code) {
             self.span.set_attribute(attribute.clone());
             self.attributes.push(attribute);
         }
@@ -673,7 +795,13 @@ impl CorrelatedOperation {
         );
 
         let instruments = self.service.instruments();
-        instruments.on_finish(elapsed_ms, outcome, &self.attributes);
+        instruments.on_finish(
+            elapsed_ms,
+            outcome,
+            &self.attributes,
+            self.emission_mode,
+            http_status_code,
+        );
 
         self.span
             .set_attribute(KeyValue::new("operation.outcome", outcome_value));

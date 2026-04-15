@@ -594,10 +594,52 @@ fn runtime_observability_bootstrap_and_metric_contracts_are_wired() {
         "compliance_state",
         "authorization.checked",
         "domain.policy.applied",
+        "begin_internal_operation",
+        "finish_with_http_status",
+        "telemetry_bootstrap_or_panic",
     ] {
         assert!(
             source.contains(required),
             "runtime observability source must contain `{required}`"
+        );
+    }
+
+    assert!(
+        source.contains("unknown HTTP operation id"),
+        "unknown HTTP operation ids must fail fast instead of using fallback route placeholders"
+    );
+    assert!(
+        !source.contains("\"/internal/unknown\""),
+        "legacy unknown HTTP route fallback must not exist"
+    );
+}
+
+#[test]
+fn http_internal_gateways_do_not_emit_release_gate_request_metrics() {
+    let source = read_text("src/transport/http.rs");
+    assert!(
+        !source.contains("TelemetryService::HttpApi.begin_operation("),
+        "HTTP transport gateway must mark spans as internal to avoid SLO metric double counting"
+    );
+    assert!(
+        source.contains("TelemetryService::HttpApi.begin_internal_operation("),
+        "HTTP transport gateway must use internal telemetry mode"
+    );
+}
+
+#[test]
+fn runtime_http_handlers_emit_actual_http_status_dimensions() {
+    let source = read_text("src/bin/observability_runtime_service.rs");
+
+    for required in [
+        "finish_with_http_status(status_code.as_u16())",
+        "finish_with_http_status(StatusCode::OK.as_u16())",
+        "finish_with_http_status(StatusCode::BAD_REQUEST.as_u16())",
+        "finish_with_http_status(StatusCode::CREATED.as_u16())",
+    ] {
+        assert!(
+            source.contains(required),
+            "runtime service must emit concrete HTTP status codes via telemetry: missing `{required}`"
         );
     }
 }

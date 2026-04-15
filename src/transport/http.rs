@@ -129,18 +129,18 @@ impl HttpAuthorizationGateway {
         operation_id: impl Into<String>,
     ) -> Result<AuthorizedWriteOperation, AuthorizationError> {
         let operation_id = operation_id.into();
-        let telemetry = TelemetryService::HttpApi.begin_operation(
-            operation_id.clone(),
+        let operation = HttpOperation::from_operation_id(&operation_id).ok_or(
+            AuthorizationError::UnknownHttpOperationId {
+                operation_id: operation_id.clone(),
+            },
+        )?;
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
+            operation.operation_id(),
             actor.map(|value| value.actor_id().as_str()),
             target_plant.map(PlantId::as_str),
         );
 
         let result = (|| {
-            let operation = HttpOperation::from_operation_id(&operation_id).ok_or(
-                AuthorizationError::UnknownHttpOperationId {
-                    operation_id: operation_id.clone(),
-                },
-            )?;
             let expected_action = operation.write_action().ok_or(
                 AuthorizationError::HttpOperationIsNotWriteOperation {
                     operation_id: operation_id.clone(),
@@ -193,7 +193,7 @@ impl<'a> HttpDeliveryExecutionGateway<'a> {
         plant_id: &PlantId,
         at: TaipeiBusinessMoment,
     ) -> Vec<VendorId> {
-        let telemetry = TelemetryService::HttpApi.begin_operation(
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
             "listEmployeeMenus:browse",
             None,
             Some(plant_id.as_str()),
@@ -212,7 +212,7 @@ impl<'a> HttpDeliveryExecutionGateway<'a> {
         plant_id: &PlantId,
         at: TaipeiBusinessMoment,
     ) -> Vec<VendorId> {
-        let telemetry = TelemetryService::HttpApi.begin_operation(
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
             "listEmployeeMenus:search",
             None,
             Some(plant_id.as_str()),
@@ -232,7 +232,7 @@ impl<'a> HttpDeliveryExecutionGateway<'a> {
         plant_id: &PlantId,
         at: TaipeiBusinessMoment,
     ) -> Result<(), VendorPlantDeliveryError> {
-        let telemetry = TelemetryService::HttpApi.begin_operation(
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
             "createEmployeeOrder:deliverability",
             None,
             Some(plant_id.as_str()),
@@ -257,7 +257,7 @@ impl<'a> HttpDeliveryExecutionGateway<'a> {
         plant_id: &PlantId,
         at: TaipeiBusinessMoment,
     ) -> Result<(), VendorPlantDeliveryError> {
-        let telemetry = TelemetryService::HttpApi.begin_operation(
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
             "updateEmployeeOrder:deliverability",
             None,
             Some(plant_id.as_str()),
@@ -305,7 +305,7 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
         line_items: Vec<OrderLineItemRequest>,
         at: TaipeiBusinessMoment,
     ) -> Result<(), HttpOrderExecutionError> {
-        let telemetry = TelemetryService::HttpApi.begin_operation(
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
             "createEmployeeOrder",
             None,
             Some(plant_id.as_str()),
@@ -342,7 +342,7 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
         mutation: OrderMutation,
         at: TaipeiBusinessMoment,
     ) -> Result<(), HttpOrderExecutionError> {
-        let telemetry = TelemetryService::HttpApi.begin_operation(
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
             "updateEmployeeOrder",
             None,
             Some(plant_id.as_str()),
@@ -386,7 +386,7 @@ impl<'a> HttpVendorMenuExecutionGateway<'a> {
         actor: &AuthenticatedActorContext,
         menu_item: VendorMenuItem,
     ) -> Result<(), MenuSupplyWindowError> {
-        let telemetry = TelemetryService::HttpApi.begin_operation(
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
             "upsertVendorMenuItem",
             Some(actor.actor_id().as_str()),
             None,

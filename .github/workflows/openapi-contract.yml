@@ -9,6 +9,8 @@ on:
 jobs:
   contract:
     runs-on: ubuntu-latest
+    env:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4317
 
     steps:
       - name: Checkout

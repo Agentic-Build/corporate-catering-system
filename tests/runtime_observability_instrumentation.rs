@@ -7,8 +7,13 @@ use corporate_catering_system::observability::{
     initialize_telemetry_runtime_from_env, TelemetryOutcome, TelemetryService,
 };
 
+fn ensure_test_otel_endpoint() {
+    std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
+}
+
 #[test]
 fn correlated_operation_generates_trace_span_and_request_ids() {
+    ensure_test_otel_endpoint();
     let operation = TelemetryService::HttpApi.begin_operation(
         "createEmployeeOrder",
         Some("emp-1"),
@@ -64,7 +69,7 @@ fn telemetry_runtime_bootstrap_is_idempotent() {
         .expect("tokio runtime should be created");
 
     runtime.block_on(async {
-        std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
+        ensure_test_otel_endpoint();
         initialize_telemetry_runtime_from_env("catering-http-api")
             .expect("telemetry runtime bootstrap should initialize");
         initialize_telemetry_runtime_from_env("catering-http-api")
