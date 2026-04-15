@@ -48,6 +48,15 @@ impl McpOperation {
             _ => None,
         }
     }
+
+    pub const fn from_action(action: Action) -> Option<Self> {
+        match action {
+            Action::PlaceEmployeeOrder => Some(Self::PlaceEmployeeOrder),
+            Action::ManageVendorMenu => Some(Self::ManageVendorMenu),
+            Action::ApproveVendorEnrollment => Some(Self::ApproveVendorEnrollment),
+            Action::ExportPayrollDeductions => Some(Self::ExportPayrollDeductions),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -87,15 +96,7 @@ pub fn runtime_mcp_tools() -> &'static [RuntimeMcpTool] {
     &RUNTIME_MCP_TOOLS
 }
 
-pub fn mcp_contract_checks_enabled() -> bool {
-    !runtime_mcp_tools().is_empty()
-}
-
 pub fn runtime_mcp_tool_contract_issues() -> Vec<String> {
-    if !mcp_contract_checks_enabled() {
-        return Vec::new();
-    }
-
     let mut issues = Vec::new();
     let mut tool_names = HashSet::new();
     let mut operation_ids = HashSet::new();
@@ -127,13 +128,6 @@ pub fn runtime_mcp_tool_contract_issues() -> Vec<String> {
     issues
 }
 
-fn resolve_runtime_mcp_operation(operation_id: &str) -> Option<McpOperation> {
-    runtime_mcp_tools()
-        .iter()
-        .find(|tool| tool.operation_id() == operation_id)
-        .map(|tool| tool.operation())
-}
-
 #[derive(Clone)]
 pub struct McpAuthorizationGateway {
     access_controller: AccessController,
@@ -152,21 +146,18 @@ impl McpAuthorizationGateway {
         operation_id: impl Into<String>,
     ) -> Result<AuthorizedWriteOperation, AuthorizationError> {
         let operation_id = operation_id.into();
-        if mcp_contract_checks_enabled() {
-            let operation = resolve_runtime_mcp_operation(&operation_id).ok_or(
-                AuthorizationError::UnknownMcpOperationId {
-                    operation_id: operation_id.clone(),
-                },
-            )?;
-
-            let expected_action = operation.action();
-            if expected_action != action {
-                return Err(AuthorizationError::McpOperationActionMismatch {
-                    operation_id,
-                    expected_action,
-                    provided_action: action,
-                });
-            }
+        let operation = McpOperation::from_operation_id(&operation_id).ok_or(
+            AuthorizationError::UnknownMcpOperationId {
+                operation_id: operation_id.clone(),
+            },
+        )?;
+        let expected_action = operation.action();
+        if expected_action != action {
+            return Err(AuthorizationError::McpOperationActionMismatch {
+                operation_id,
+                expected_action,
+                provided_action: action,
+            });
         }
 
         self.access_controller.authorize_write(
@@ -174,7 +165,7 @@ impl McpAuthorizationGateway {
             action,
             target_plant,
             TransportLayer::Mcp,
-            operation_id,
+            operation.operation_id(),
         )
     }
 }

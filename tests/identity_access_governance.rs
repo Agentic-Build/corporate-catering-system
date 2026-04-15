@@ -11,9 +11,7 @@ use corporate_catering_system::identity::{
     PlantScope, Role,
 };
 use corporate_catering_system::transport::http::HttpAuthorizationGateway;
-use corporate_catering_system::transport::mcp::{
-    mcp_contract_checks_enabled, runtime_mcp_tools, McpAuthorizationGateway,
-};
+use corporate_catering_system::transport::mcp::{McpAuthorizationGateway, McpOperation};
 
 fn actor_id(value: &str) -> ActorId {
     ActorId::parse(value).expect("actor id should be valid")
@@ -68,21 +66,10 @@ fn payroll_actor() -> AuthenticatedActorContext {
     .expect("payroll actor should be valid")
 }
 
-fn mcp_operation_id_for(action: Action) -> String {
-    if mcp_contract_checks_enabled() {
-        runtime_mcp_tools()
-            .iter()
-            .find(|tool| tool.action() == action)
-            .map(|tool| tool.operation_id().to_owned())
-            .expect("runtime MCP checks require a tool mapping for every authorized action")
-    } else {
-        match action {
-            Action::PlaceEmployeeOrder => "mcp-place-employee-order".to_owned(),
-            Action::ManageVendorMenu => "mcp-manage-vendor-menu".to_owned(),
-            Action::ApproveVendorEnrollment => "mcp-approve-vendor-enrollment".to_owned(),
-            Action::ExportPayrollDeductions => "mcp-export-payroll-deductions".to_owned(),
-        }
-    }
+fn mcp_operation_id_for(action: Action) -> &'static str {
+    McpOperation::from_action(action)
+        .expect("every write action must have an MCP operation mapping")
+        .operation_id()
 }
 
 #[test]
@@ -271,7 +258,7 @@ fn write_operations_require_authenticated_actor_context_and_auditable_link() {
             Some(&employee),
             Action::PlaceEmployeeOrder,
             Some(&target_plant),
-            &operation_id,
+            operation_id,
         )
         .expect("authorized write should succeed");
 
@@ -332,7 +319,7 @@ fn http_and_mcp_paths_share_the_same_policy_engine() {
             Some(&employee),
             Action::PlaceEmployeeOrder,
             Some(&target_plant),
-            &operation_id,
+            operation_id,
         )
         .expect("mcp write should succeed");
 

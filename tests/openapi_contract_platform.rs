@@ -10,8 +10,7 @@ use corporate_catering_system::identity::{
 };
 use corporate_catering_system::transport::http::{runtime_http_routes, HttpAuthorizationGateway};
 use corporate_catering_system::transport::mcp::{
-    mcp_contract_checks_enabled, runtime_mcp_tool_contract_issues, runtime_mcp_tools,
-    McpAuthorizationGateway, McpOperation,
+    runtime_mcp_tool_contract_issues, runtime_mcp_tools, McpAuthorizationGateway, McpOperation,
 };
 use serde_json::Value;
 
@@ -235,45 +234,46 @@ fn mcp_contract_checks_are_wired_for_future_runtime_tools() {
     let gateway = McpAuthorizationGateway::new(access_controller);
     let actor = employee_actor();
     let target_plant = plant_id("fab-a");
+    let valid_operation = runtime_mcp_tools()
+        .first()
+        .map(|tool| tool.operation())
+        .unwrap_or(McpOperation::PlaceEmployeeOrder);
 
-    if mcp_contract_checks_enabled() {
-        let runtime_tools = runtime_mcp_tools();
-        assert!(!runtime_tools.is_empty());
-        let first_tool = runtime_tools[0];
+    for tool in runtime_mcp_tools() {
         assert_eq!(
-            McpOperation::from_operation_id(first_tool.operation_id()),
-            Some(first_tool.operation())
+            McpOperation::from_operation_id(tool.operation_id()),
+            Some(tool.operation())
         );
-
-        assert!(matches!(
-            gateway.authorize_write(
-                Some(&actor),
-                first_tool.action(),
-                Some(&target_plant),
-                "unknownMcpOperationId"
-            ),
-            Err(AuthorizationError::UnknownMcpOperationId { .. })
-        ));
-
-        assert!(matches!(
-            gateway.authorize_write(
-                Some(&actor),
-                different_action(first_tool.action()),
-                Some(&target_plant),
-                first_tool.operation_id()
-            ),
-            Err(AuthorizationError::McpOperationActionMismatch { .. })
-        ));
-    } else {
-        gateway
-            .authorize_write(
-                Some(&actor),
-                Action::PlaceEmployeeOrder,
-                Some(&target_plant),
-                "mcp-write-operation-without-runtime-catalog",
-            )
-            .expect("MCP contract checks are intentionally deferred until tools are declared");
     }
+
+    gateway
+        .authorize_write(
+            Some(&actor),
+            valid_operation.action(),
+            Some(&target_plant),
+            valid_operation.operation_id(),
+        )
+        .expect("MCP writes must always use a known contract operation id");
+
+    assert!(matches!(
+        gateway.authorize_write(
+            Some(&actor),
+            valid_operation.action(),
+            Some(&target_plant),
+            "unknownMcpOperationId"
+        ),
+        Err(AuthorizationError::UnknownMcpOperationId { .. })
+    ));
+
+    assert!(matches!(
+        gateway.authorize_write(
+            Some(&actor),
+            different_action(valid_operation.action()),
+            Some(&target_plant),
+            valid_operation.operation_id()
+        ),
+        Err(AuthorizationError::McpOperationActionMismatch { .. })
+    ));
 }
 
 #[test]
