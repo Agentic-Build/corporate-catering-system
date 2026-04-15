@@ -28,6 +28,12 @@ done
 rg -q "mode: blocking" ops/observability/slo/hard-slo-policy.yaml
 rg -q "OrderApiAvailabilityBurnRateFast" ops/observability/slo/alerts.yaml
 rg -q "OrderApiLatencyP95Breach" ops/observability/slo/alerts.yaml
+rg -q "OrderApiLatencyP99Breach" ops/observability/slo/alerts.yaml
+rg -q "p99LatencyMsMax" ops/observability/slo/hard-slo-policy.yaml
+rg -q "p99LatencyMsMax" ops/observability/load/prelaunch-thresholds.yaml
+rg -q --fixed-strings "p(99)<" ops/observability/load/k6-prelaunch.js
+rg -q "peak-order-and-pickup-verification" ops/observability/load/k6-prelaunch.js
+rg -q "/api/v1/employee/orders/.*/pickup-verifications" ops/observability/load/k6-prelaunch.js
 rg -q "readinessProbe:" ops/kubernetes/base/deployment.yaml
 rg -q "livenessProbe:" ops/kubernetes/base/deployment.yaml
 rg -q "OTEL_EXPORTER_OTLP_ENDPOINT" ops/kubernetes/base/deployment.yaml
@@ -69,6 +75,11 @@ summary_file="$(mktemp -t prelaunch-k6-summary.XXXXXX.json)"
 service_log_file="$(mktemp -t prelaunch-k6-service.XXXXXX.log)"
 service_pid=""
 
+retained_summary="ops/observability/load/reports/prelaunch-k6-summary.json"
+retained_report="ops/observability/load/reports/prelaunch-slo-report.json"
+reports_dir="$(dirname "${retained_summary}")"
+mkdir -p "${reports_dir}"
+
 cleanup() {
   if [[ -n "${service_pid}" ]]; then
     kill "${service_pid}" >/dev/null 2>&1 || true
@@ -98,15 +109,21 @@ if ! curl --silent --fail --show-error "http://127.0.0.1:${PORT}/health/ready" >
   exit 1
 fi
 
-BASE_URL="http://127.0.0.1:${PORT}" k6 run --summary-export "${summary_file}" ops/observability/load/k6-prelaunch.js
+BASE_URL="http://127.0.0.1:${PORT}" \
+  k6 run --summary-export "${summary_file}" ops/observability/load/k6-prelaunch.js
 
-node - "${summary_file}" "ops/observability/slo/hard-slo-policy.yaml" "ops/observability/load/prelaunch-thresholds.yaml" "ops/observability/load/k6-prelaunch.js" <<'NODE'
+cp "${summary_file}" "${retained_summary}"
+
+node - "${summary_file}" "ops/observability/slo/hard-slo-policy.yaml" "ops/observability/load/prelaunch-thresholds.yaml" "ops/observability/load/k6-prelaunch.js" "${retained_report}" "${retained_summary}" <<'NODE'
 const fs = require("node:fs");
 
 const summaryPath = process.argv[2];
 const policyPath = process.argv[3];
 const thresholdPath = process.argv[4];
 const k6ScriptPath = process.argv[5];
+const reportPath = process.argv[6];
+const retainedSummaryPath = process.argv[7];
+
 const summary = JSON.parse(fs.readFileSync(summaryPath, "utf8"));
 const policyRaw = fs.readFileSync(policyPath, "utf8");
 const thresholdRaw = fs.readFileSync(thresholdPath, "utf8");
@@ -114,9 +131,9 @@ const k6Script = fs.readFileSync(k6ScriptPath, "utf8");
 const metrics = summary.metrics || {};
 
 const policyScenarioPattern =
-  /-\s+name:\s*([a-z0-9-]+)\s*\n\s*minRps:\s*([0-9.]+)\s*\n\s*p95LatencyMsMax:\s*([0-9.]+)\s*\n\s*errorRateMax:\s*([0-9.]+)\s*\n\s*readinessSuccessRateMin:\s*([0-9.]+)/g;
+  /-\s+name:\s*([a-z0-9-]+)\s*\n\s*minRps:\s*([0-9.]+)\s*\n\s*p95LatencyMsMax:\s*([0-9.]+)\s*\n\s*p99LatencyMsMax:\s*([0-9.]+)\s*\n\s*errorRateMax:\s*([0-9.]+)\s*\n\s*readinessSuccessRateMin:\s*([0-9.]+)/g;
 const thresholdScenarioPattern =
-  /^  ([a-z0-9-]+):\s*\n    minRps:\s*([0-9.]+)\s*\n    thresholds:\s*\n      p95LatencyMsMax:\s*([0-9.]+)\s*\n      errorRateMax:\s*([0-9.]+)\s*\n      readinessSuccessRateMin:\s*([0-9.]+)/gm;
+  /^  ([a-z0-9-]+):\s*\n    minRps:\s*([0-9.]+)\s*\n    thresholds:\s*\n      p95LatencyMsMax:\s*([0-9.]+)\s*\n      p99LatencyMsMax:\s*([0-9.]+)\s*\n      errorRateMax:\s*([0-9.]+)\s*\n      readinessSuccessRateMin:\s*([0-9.]+)/gm;
 
 const policyScenarios = [];
 for (const match of policyRaw.matchAll(policyScenarioPattern)) {
@@ -124,13 +141,10 @@ for (const match of policyRaw.matchAll(policyScenarioPattern)) {
     name: match[1],
     minRps: Number(match[2]),
     p95LatencyMsMax: Number(match[3]),
-    errorRateMax: Number(match[4]),
-    readinessSuccessRateMin: Number(match[5])
+    p99LatencyMsMax: Number(match[4]),
+    errorRateMax: Number(match[5]),
+    readinessSuccessRateMin: Number(match[6])
   });
-}
-if (policyScenarios.length === 0) {
-  console.error("failed to parse preLaunchLoadAcceptance.requiredScenarios from hard-slo-policy.yaml");
-  process.exit(1);
 }
 
 const thresholdScenarios = new Map();
@@ -138,32 +152,49 @@ for (const match of thresholdRaw.matchAll(thresholdScenarioPattern)) {
   thresholdScenarios.set(match[1], {
     minRps: Number(match[2]),
     p95LatencyMsMax: Number(match[3]),
-    errorRateMax: Number(match[4]),
-    readinessSuccessRateMin: Number(match[5])
+    p99LatencyMsMax: Number(match[4]),
+    errorRateMax: Number(match[5]),
+    readinessSuccessRateMin: Number(match[6])
   });
 }
+
+const report = {
+  generatedAt: new Date().toISOString(),
+  summaryPath: retainedSummaryPath,
+  scenarios: [],
+  readiness: null,
+  violations: [],
+  status: "pass"
+};
+
+const addViolation = (message) => {
+  report.violations.push(message);
+  console.error(message);
+};
+
+if (policyScenarios.length === 0) {
+  addViolation("failed to parse preLaunchLoadAcceptance.requiredScenarios from hard-slo-policy.yaml");
+}
 if (thresholdScenarios.size === 0) {
-  console.error("failed to parse scenarios from prelaunch-thresholds.yaml");
-  process.exit(1);
+  addViolation("failed to parse scenarios from prelaunch-thresholds.yaml");
 }
 
 for (const scenario of policyScenarios) {
   const threshold = thresholdScenarios.get(scenario.name);
   if (!threshold) {
-    console.error(`policy scenario ${scenario.name} is missing from prelaunch-thresholds.yaml`);
-    process.exit(1);
+    addViolation(`policy scenario ${scenario.name} is missing from prelaunch-thresholds.yaml`);
+    continue;
   }
-  for (const key of ["minRps", "p95LatencyMsMax", "errorRateMax", "readinessSuccessRateMin"]) {
+
+  for (const key of ["minRps", "p95LatencyMsMax", "p99LatencyMsMax", "errorRateMax", "readinessSuccessRateMin"]) {
     if (Math.abs(Number(scenario[key]) - Number(threshold[key])) > 1e-9) {
-      console.error(`policy/threshold mismatch for scenario ${scenario.name} on ${key}`);
-      process.exit(1);
+      addViolation(`policy/threshold mismatch for scenario ${scenario.name} on ${key}`);
     }
   }
 
   const keyPattern = new RegExp(`["']${scenario.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']\\s*:\\s*\\{`);
   if (!keyPattern.test(k6Script)) {
-    console.error(`k6 scenario key ${scenario.name} is missing in k6-prelaunch.js`);
-    process.exit(1);
+    addViolation(`k6 scenario key ${scenario.name} is missing in k6-prelaunch.js`);
   }
 }
 
@@ -179,51 +210,71 @@ const findScenarioMetric = (prefix, scenario) => {
 for (const scenarioSpec of policyScenarios) {
   const scenario = scenarioSpec.name;
   const requestMetric = findScenarioMetric("http_reqs", scenario);
+  const durationMetric = findScenarioMetric("http_req_duration", scenario);
+  const failedMetric = findScenarioMetric("http_req_failed", scenario);
+
   if (!requestMetric) {
-    console.error(`missing request metric for scenario ${scenario}`);
-    process.exit(1);
+    addViolation(`missing request metric for scenario ${scenario}`);
+    continue;
   }
+  if (!durationMetric) {
+    addViolation(`missing duration metric for scenario ${scenario}`);
+    continue;
+  }
+  if (!failedMetric) {
+    addViolation(`missing error-rate metric for scenario ${scenario}`);
+    continue;
+  }
+
   const observedRate = Number(
     requestMetric.metric?.rate ?? requestMetric.metric?.values?.rate ?? 0
   );
-  if (observedRate < scenarioSpec.minRps * 0.95) {
-    console.error(
-      `scenario ${scenario} observed rate ${observedRate.toFixed(2)} rps is below required floor ${scenarioSpec.minRps}`
-    );
-    process.exit(1);
-  }
-
-  const durationMetric = findScenarioMetric("http_req_duration", scenario);
-  if (!durationMetric) {
-    console.error(`missing duration metric for scenario ${scenario}`);
-    process.exit(1);
-  }
   const observedP95 = Number(
     durationMetric.metric?.values?.["p(95)"] ??
     durationMetric.metric?.["p(95)"] ??
     durationMetric.metric?.p95 ??
     0
   );
-  if (observedP95 > scenarioSpec.p95LatencyMsMax) {
-    console.error(
-      `scenario ${scenario} observed p95 latency ${observedP95.toFixed(2)}ms exceeds max ${scenarioSpec.p95LatencyMsMax}ms`
-    );
-    process.exit(1);
-  }
-
-  const failedMetric = findScenarioMetric("http_req_failed", scenario);
-  if (!failedMetric) {
-    console.error(`missing error-rate metric for scenario ${scenario}`);
-    process.exit(1);
-  }
+  const observedP99 = Number(
+    durationMetric.metric?.values?.["p(99)"] ??
+    durationMetric.metric?.["p(99)"] ??
+    durationMetric.metric?.p99 ??
+    0
+  );
   const observedErrorRate = Number(
     failedMetric.metric?.rate ?? failedMetric.metric?.values?.rate ?? 0
   );
+
+  report.scenarios.push({
+    name: scenario,
+    observed: {
+      requestRate: observedRate,
+      p95LatencyMs: observedP95,
+      p99LatencyMs: observedP99,
+      errorRate: observedErrorRate
+    },
+    thresholds: scenarioSpec
+  });
+
+  if (observedRate < scenarioSpec.minRps * 0.95) {
+    addViolation(
+      `scenario ${scenario} observed rate ${observedRate.toFixed(2)} rps is below required floor ${scenarioSpec.minRps}`
+    );
+  }
+  if (observedP95 > scenarioSpec.p95LatencyMsMax) {
+    addViolation(
+      `scenario ${scenario} observed p95 latency ${observedP95.toFixed(2)}ms exceeds max ${scenarioSpec.p95LatencyMsMax}ms`
+    );
+  }
+  if (observedP99 > scenarioSpec.p99LatencyMsMax) {
+    addViolation(
+      `scenario ${scenario} observed p99 latency ${observedP99.toFixed(2)}ms exceeds max ${scenarioSpec.p99LatencyMsMax}ms`
+    );
+  }
   if (observedErrorRate > scenarioSpec.errorRateMax) {
-    console.error(
+    addViolation(
       `scenario ${scenario} observed error rate ${observedErrorRate.toFixed(6)} exceeds max ${scenarioSpec.errorRateMax}`
     );
-    process.exit(1);
   }
 }
 
@@ -231,22 +282,46 @@ const readinessCheckMetric = Object.entries(metrics).find(([name]) =>
   name.startsWith("checks") && name.includes("check_type:readiness")
 );
 if (!readinessCheckMetric) {
-  console.error("missing readiness check metric output");
-  process.exit(1);
+  addViolation("missing readiness check metric output");
+} else {
+  const readinessMetric = readinessCheckMetric[1] || {};
+  let readinessRate = Number(readinessMetric.rate ?? readinessMetric.values?.rate ?? 0);
+  if (!Number.isFinite(readinessRate) || readinessRate <= 0) {
+    const passes = Number(readinessMetric.passes ?? readinessMetric.values?.passes ?? 0);
+    const fails = Number(readinessMetric.fails ?? readinessMetric.values?.fails ?? 0);
+    const total = passes + fails;
+    readinessRate = total > 0 ? passes / total : 0;
+  }
+
+  const readinessMin = Math.min(
+    ...policyScenarios.map((scenario) => scenario.readinessSuccessRateMin)
+  );
+  report.readiness = { observedRate: readinessRate, minimumRequired: readinessMin };
+  if (readinessRate < readinessMin) {
+    addViolation(
+      `readiness success rate ${readinessRate.toFixed(5)} is below ${readinessMin}`
+    );
+  }
 }
-const readinessMetric = readinessCheckMetric[1] || {};
-let readinessRate = Number(readinessMetric.rate ?? readinessMetric.values?.rate ?? 0);
-if (!Number.isFinite(readinessRate) || readinessRate <= 0) {
-  const passes = Number(readinessMetric.passes ?? readinessMetric.values?.passes ?? 0);
-  const fails = Number(readinessMetric.fails ?? readinessMetric.values?.fails ?? 0);
-  const total = passes + fails;
-  readinessRate = total > 0 ? passes / total : 0;
-}
-const readinessMin = Math.min(...policyScenarios.map((scenario) => scenario.readinessSuccessRateMin));
-if (readinessRate < readinessMin) {
-  console.error(`readiness success rate ${readinessRate.toFixed(5)} is below ${readinessMin}`);
+
+report.status = report.violations.length === 0 ? "pass" : "fail";
+fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+
+if (report.violations.length > 0) {
   process.exit(1);
 }
 NODE
 
+if [[ ! -s "${retained_summary}" ]]; then
+  echo "retained k6 summary artifact is missing: ${retained_summary}"
+  exit 1
+fi
+if [[ ! -s "${retained_report}" ]]; then
+  echo "retained SLO evaluation artifact is missing: ${retained_report}"
+  exit 1
+fi
+
 echo "observability hard-SLO baseline checks passed"
+echo "retained artifacts:"
+echo "  - ${retained_summary}"
+echo "  - ${retained_report}"

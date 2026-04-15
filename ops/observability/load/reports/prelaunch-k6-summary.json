@@ -1,0 +1,6 @@
+{
+  "generatedAt": null,
+  "source": "scripts/check-observability-slo-baseline.sh",
+  "status": "pending-prelaunch-run",
+  "note": "Overwritten by the hard SLO gate on every prelaunch verification run."
+}

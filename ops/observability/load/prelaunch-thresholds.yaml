@@ -5,17 +5,27 @@ scenarios:
     minRps: 120
     thresholds:
       p95LatencyMsMax: 350
+      p99LatencyMsMax: 500
       errorRateMax: 0.002
       readinessSuccessRateMin: 0.999
   mixed-order-and-menu-reads:
     minRps: 180
     thresholds:
       p95LatencyMsMax: 250
+      p99LatencyMsMax: 400
       errorRateMax: 0.001
       readinessSuccessRateMin: 0.999
   peak-order-lifecycle-mutations:
     minRps: 140
     thresholds:
       p95LatencyMsMax: 320
+      p99LatencyMsMax: 480
+      errorRateMax: 0.002
+      readinessSuccessRateMin: 0.999
+  peak-order-and-pickup-verification:
+    minRps: 160
+    thresholds:
+      p95LatencyMsMax: 300
+      p99LatencyMsMax: 450
       errorRateMax: 0.002
       readinessSuccessRateMin: 0.999

@@ -1,0 +1,9 @@
+{
+  "generatedAt": null,
+  "summaryPath": "ops/observability/load/reports/prelaunch-k6-summary.json",
+  "scenarios": [],
+  "readiness": null,
+  "violations": [],
+  "status": "pending-prelaunch-run",
+  "note": "Overwritten by scripts/check-observability-slo-baseline.sh after policy evaluation."
+}

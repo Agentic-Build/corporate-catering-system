@@ -35,6 +35,22 @@ groups:
         annotations:
           summary: "Order API p95 latency exceeded hard limit"
           runbook: "Block release and scale pods or reduce hot-path latency"
+      - alert: OrderApiLatencyP99Breach
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (
+              rate(http_server_request_duration_ms_bucket{service_name="catering-http-api",operation_id="createEmployeeOrder"}[5m])
+            )
+          ) > 500
+        for: 10m
+        labels:
+          severity: critical
+          gate: hard-slo
+          slo: order-api-latency-p99
+        annotations:
+          summary: "Order API p99 latency exceeded hard limit"
+          runbook: "Block release until p99 tail latency returns under 500ms"
       - alert: OrderApiErrorBudgetBurnTooFast
         expr: |
           (

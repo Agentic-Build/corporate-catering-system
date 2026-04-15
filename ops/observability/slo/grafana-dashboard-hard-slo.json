@@ -5,7 +5,7 @@
   "tags": ["hard-slo", "release-gate", "corporate-catering"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "panels": [
     {
@@ -54,6 +54,32 @@
             "steps": [
               { "color": "green", "value": null },
               { "color": "red", "value": 350 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Hard SLO: Order API P99 Latency",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "victoriametrics" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_ms_bucket{service_name=\"catering-http-api\",operation_id=\"createEmployeeOrder\"}[5m])))",
+          "legendFormat": "p99 latency ms"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 500 }
             ]
           }
         },

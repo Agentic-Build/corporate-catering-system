@@ -27,6 +27,13 @@ spec:
       unit: milliseconds
       window: 1h
       alertRule: OrderApiLatencyP95Breach
+    - id: order-api-latency-p99
+      description: Create order p99 latency must remain within hard peak tail limits.
+      indicator: p99_latency_ms(createEmployeeOrder)
+      target: 500
+      unit: milliseconds
+      window: 1h
+      alertRule: OrderApiLatencyP99Breach
     - id: order-api-error-budget-burn
       description: Error budget burn cannot exceed safe release pace.
       indicator: burn_rate(order-api-availability)
@@ -40,15 +47,24 @@ spec:
       - name: peak-order-placement
         minRps: 120
         p95LatencyMsMax: 350
+        p99LatencyMsMax: 500
         errorRateMax: 0.002
         readinessSuccessRateMin: 0.999
       - name: mixed-order-and-menu-reads
         minRps: 180
         p95LatencyMsMax: 250
+        p99LatencyMsMax: 400
         errorRateMax: 0.001
         readinessSuccessRateMin: 0.999
       - name: peak-order-lifecycle-mutations
         minRps: 140
         p95LatencyMsMax: 320
+        p99LatencyMsMax: 480
+        errorRateMax: 0.002
+        readinessSuccessRateMin: 0.999
+      - name: peak-order-and-pickup-verification
+        minRps: 160
+        p95LatencyMsMax: 300
+        p99LatencyMsMax: 450
         errorRateMax: 0.002
         readinessSuccessRateMin: 0.999

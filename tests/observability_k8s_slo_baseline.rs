@@ -194,6 +194,7 @@ fn hard_slo_policy_blocks_release_without_dashboard_alerts_and_load_thresholds()
             "order-api-availability".to_owned(),
             "order-api-error-budget-burn".to_owned(),
             "order-api-latency-p95".to_owned(),
+            "order-api-latency-p99".to_owned(),
         ])
     );
 
@@ -206,14 +207,22 @@ fn hard_slo_policy_blocks_release_without_dashboard_alerts_and_load_thresholds()
     assert!(scenarios.iter().any(|scenario| {
         yaml_get(scenario, "name").as_str() == Some("peak-order-placement")
             && yaml_get(scenario, "p95LatencyMsMax").as_i64() == Some(350)
+            && yaml_get(scenario, "p99LatencyMsMax").as_i64() == Some(500)
     }));
     assert!(scenarios.iter().any(|scenario| {
         yaml_get(scenario, "name").as_str() == Some("mixed-order-and-menu-reads")
             && yaml_get(scenario, "p95LatencyMsMax").as_i64() == Some(250)
+            && yaml_get(scenario, "p99LatencyMsMax").as_i64() == Some(400)
     }));
     assert!(scenarios.iter().any(|scenario| {
         yaml_get(scenario, "name").as_str() == Some("peak-order-lifecycle-mutations")
             && yaml_get(scenario, "p95LatencyMsMax").as_i64() == Some(320)
+            && yaml_get(scenario, "p99LatencyMsMax").as_i64() == Some(480)
+    }));
+    assert!(scenarios.iter().any(|scenario| {
+        yaml_get(scenario, "name").as_str() == Some("peak-order-and-pickup-verification")
+            && yaml_get(scenario, "p95LatencyMsMax").as_i64() == Some(300)
+            && yaml_get(scenario, "p99LatencyMsMax").as_i64() == Some(450)
     }));
 }
 
@@ -250,6 +259,7 @@ fn hard_slo_dashboard_contains_required_release_gating_panels() {
     for required in [
         "Hard SLO: Order API Availability",
         "Hard SLO: Order API P95 Latency",
+        "Hard SLO: Order API P99 Latency",
         "Hard SLO: Error Budget Burn Ratio",
         "Kubernetes Readiness Success Ratio",
     ] {
@@ -288,6 +298,7 @@ fn hard_slo_alert_rules_cover_release_blocking_and_kubernetes_peak_signals() {
     for required in [
         "OrderApiAvailabilityBurnRateFast",
         "OrderApiLatencyP95Breach",
+        "OrderApiLatencyP99Breach",
         "OrderApiErrorBudgetBurnTooFast",
         "KubernetesReadinessDrop",
         "KubernetesHpaSaturation",
@@ -503,6 +514,7 @@ fn prelaunch_load_assets_are_aligned_with_hard_slo_policy() {
             "mixed-order-and-menu-reads".to_owned(),
             "peak-order-placement".to_owned(),
             "peak-order-lifecycle-mutations".to_owned(),
+            "peak-order-and-pickup-verification".to_owned(),
         ])
     );
 
@@ -524,9 +536,12 @@ fn prelaunch_load_assets_are_aligned_with_hard_slo_policy() {
         "peak-order-placement",
         "mixed-order-and-menu-reads",
         "peak-order-lifecycle-mutations",
+        "peak-order-and-pickup-verification",
         "/api/v1/employee/orders",
         "/api/v1/employee/orders/",
+        "/pickup-verifications",
         "/api/v1/employee/menus",
+        "p(99)<",
     ] {
         assert!(
             k6_script.contains(required),
@@ -568,12 +583,32 @@ fn ci_workflow_enforces_observability_hard_slo_gate() {
         "hard-SLO gate must execute the Rust runtime service, not a synthetic mock"
     );
     assert!(
+        gate_script.contains("ops/observability/load/reports/prelaunch-k6-summary.json"),
+        "hard-SLO gate must retain k6 summary artifacts for auditability"
+    );
+    assert!(
+        gate_script.contains("ops/observability/load/reports/prelaunch-slo-report.json"),
+        "hard-SLO gate must retain evaluated SLO report artifacts for auditability"
+    );
+    assert!(
         !gate_script.contains("mock-prelaunch-server.js"),
         "hard-SLO gate must not target a mock prelaunch server"
     );
     assert!(
         !repo_path("ops/observability/load/mock-prelaunch-server.js").exists(),
         "legacy mock prelaunch server artifact must be removed"
+    );
+    assert!(
+        repo_path("ops/observability/load/reports").exists(),
+        "retained load report directory must exist for pre-launch evidence"
+    );
+    assert!(
+        repo_path("ops/observability/load/reports/prelaunch-slo-report.json").exists(),
+        "retained evaluated SLO report artifact must exist"
+    );
+    assert!(
+        repo_path("ops/observability/load/reports/prelaunch-k6-summary.json").exists(),
+        "retained k6 summary artifact must exist"
     );
 }
 
@@ -643,6 +678,8 @@ fn runtime_http_handlers_emit_actual_http_status_dimensions() {
         "finish_with_http_status(StatusCode::OK.as_u16())",
         "finish_with_http_status(StatusCode::BAD_REQUEST.as_u16())",
         "finish_with_http_status(StatusCode::CREATED.as_u16())",
+        "verifyPickupOrder",
+        "/pickup-verifications",
     ] {
         assert!(
             source.contains(required),

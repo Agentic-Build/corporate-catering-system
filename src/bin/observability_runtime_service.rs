@@ -64,6 +64,19 @@ struct UpdateOrderResponse {
     operation: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PickupVerificationRequest {
+    verification_code: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PickupVerificationResponse {
+    order_id: String,
+    verified: bool,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MenuSummary {
@@ -105,6 +118,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         .route(
             "/api/v1/employee/orders/:orderId",
             patch(update_employee_order),
+        )
+        .route(
+            "/api/v1/employee/orders/:orderId/pickup-verifications",
+            post(verify_order_pickup),
         )
         .with_state(state);
 
@@ -282,6 +299,43 @@ async fn update_employee_order(
                 operation: request.operation,
             })
             .expect("update order payload serialization should succeed"),
+        ),
+    )
+}
+
+async fn verify_order_pickup(
+    Path(order_id): Path<String>,
+    Json(request): Json<PickupVerificationRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "verifyPickupOrder",
+        Some("load-gate"),
+        Some("plant-a"),
+    );
+
+    if order_id.trim().is_empty() || request.verification_code.trim().is_empty() {
+        telemetry.finish_with_http_status(StatusCode::BAD_REQUEST.as_u16());
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(
+                serde_json::to_value(ErrorPayload {
+                    code: "INVALID_PICKUP_VERIFICATION_REQUEST",
+                    message: "pickup verification payload is invalid".to_owned(),
+                })
+                .expect("error payload serialization should succeed"),
+            ),
+        );
+    }
+
+    telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+    (
+        StatusCode::OK,
+        Json(
+            serde_json::to_value(PickupVerificationResponse {
+                order_id,
+                verified: true,
+            })
+            .expect("pickup verification payload serialization should succeed"),
         ),
     )
 }
