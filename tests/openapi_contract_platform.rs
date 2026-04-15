@@ -607,6 +607,10 @@ fn employee_discovery_contract_supports_multi_day_preorder_and_deterministic_fil
         operation["x-discovery-governance"]["remainingQuantitySource"],
         "MENU_SUPPLY_POLICY_ALLOCATED_COUNTER"
     );
+    assert_eq!(
+        operation["responses"]["500"]["$ref"],
+        "#/components/responses/InternalServerError"
+    );
 
     let parameter_refs = operation["parameters"]
         .as_array()
@@ -673,6 +677,22 @@ fn employee_discovery_contract_supports_multi_day_preorder_and_deterministic_fil
     assert!(menu_item_required.contains("preorderOpen"));
     assert!(menu_item_required.contains("preorderOpenDaysAhead"));
     assert!(menu_item_required.contains("modifyCancelCutoffMinuteOfDay"));
+
+    let error_codes = spec["components"]["schemas"]["ErrorCode"]["enum"]
+        .as_array()
+        .expect("error code enum should exist")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("error code enum value should be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(error_codes.contains("UNSUPPORTED_PLANT_ID"));
+    assert!(error_codes.contains("INVALID_MENU_DISCOVERY_QUERY"));
+    assert!(error_codes.contains("TIME_RESOLUTION_FAILED"));
+    assert!(error_codes.contains("MENU_DISCOVERY_INTERNAL_ERROR"));
 }
 
 #[test]

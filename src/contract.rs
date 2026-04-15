@@ -319,7 +319,8 @@ pub fn canonical_openapi_spec() -> Value {
               },
               "400": { "$ref": "#/components/responses/BadRequest" },
               "401": { "$ref": "#/components/responses/Unauthorized" },
-              "403": { "$ref": "#/components/responses/Forbidden" }
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
         },
@@ -2019,6 +2020,17 @@ pub fn canonical_openapi_spec() -> Value {
               "NOT_FOUND",
               "CONFLICT",
               "VALIDATION_FAILED",
+              "INVALID_ORDER_REQUEST",
+              "UNSUPPORTED_VENDOR_ID",
+              "TIME_RESOLUTION_FAILED",
+              "ORDER_ID_GENERATION_FAILED",
+              "ORDER_VENDOR_DELIVERY_REJECTED",
+              "ORDER_POLICY_VIOLATION",
+              "ORDER_MUTATION_NOT_ALLOWED",
+              "INVALID_ORDER_UPDATE_REQUEST",
+              "UNSUPPORTED_PLANT_ID",
+              "INVALID_MENU_DISCOVERY_QUERY",
+              "MENU_DISCOVERY_INTERNAL_ERROR",
               "INVALID_PICKUP_VERIFICATION_REQUEST",
               "PICKUP_VERIFICATION_INTERNAL_ERROR",
               "ORDER_NOT_FOUND"

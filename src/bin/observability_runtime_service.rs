@@ -588,17 +588,22 @@ fn handle_list_employee_menus(
     state: &AppState,
     query: EmployeeMenuDiscoveryQuery,
 ) -> Result<MenuDiscoveryResponse, (StatusCode, ErrorPayload)> {
-    if let Some(request_plant_id) = query.plant_id.as_deref() {
-        if request_plant_id != state.plant_id.as_str() {
-            return Err(domain_error(
-                StatusCode::BAD_REQUEST,
-                "UNSUPPORTED_PLANT_ID",
-                format!(
-                    "plantId `{request_plant_id}` is unsupported by this runtime, expected `{}`",
-                    state.plant_id.as_str()
-                ),
-            ));
-        }
+    let request_plant_id = query.plant_id.as_deref().ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_MENU_DISCOVERY_QUERY",
+            "plantId query parameter is required".to_owned(),
+        )
+    })?;
+    if request_plant_id != state.plant_id.as_str() {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "UNSUPPORTED_PLANT_ID",
+            format!(
+                "plantId `{request_plant_id}` is unsupported by this runtime, expected `{}`",
+                state.plant_id.as_str()
+            ),
+        ));
     }
 
     let moment = current_taipei_business_moment().map_err(|error| {
@@ -1638,6 +1643,7 @@ mod tests {
         let now_epoch_day = 300;
         let state = build_state(now_epoch_day);
         let query = EmployeeMenuDiscoveryQuery {
+            plant_id: Some("fab-a".to_owned()),
             view: Some(MenuDiscoveryViewQuery::Week),
             menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
             menu_type: Some("bento".to_owned()),
@@ -1670,6 +1676,7 @@ mod tests {
         let now_epoch_day = 300;
         let state = build_state(now_epoch_day);
         let query = EmployeeMenuDiscoveryQuery {
+            plant_id: Some("fab-a".to_owned()),
             view: Some(MenuDiscoveryViewQuery::Week),
             menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
             recommendation_enabled: Some(true),
@@ -1680,6 +1687,7 @@ mod tests {
             handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
                 .expect("discovery request should succeed");
         let query = EmployeeMenuDiscoveryQuery {
+            plant_id: Some("fab-a".to_owned()),
             view: Some(MenuDiscoveryViewQuery::Week),
             menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
             recommendation_enabled: Some(true),
@@ -1704,5 +1712,21 @@ mod tests {
                 .collect::<Vec<_>>(),
             "deterministic ordering should remain stable"
         );
+    }
+
+    #[test]
+    fn discovery_rejects_missing_plant_id_query_parameter() {
+        let now_epoch_day = 300;
+        let state = build_state(now_epoch_day);
+        let query = EmployeeMenuDiscoveryQuery {
+            view: Some(MenuDiscoveryViewQuery::Week),
+            menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+            ..EmployeeMenuDiscoveryQuery::default()
+        };
+
+        let error = handle_list_employee_menus(&state, query)
+            .expect_err("missing plantId must fail without legacy fallback");
+        assert_eq!(error.0, StatusCode::BAD_REQUEST);
+        assert_eq!(error.1.code, "INVALID_MENU_DISCOVERY_QUERY");
     }
 }
