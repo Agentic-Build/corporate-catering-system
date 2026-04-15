@@ -69,3 +69,5 @@ coverage/
 *.bak
 *.tmp
 *.orig
+
+!.agents/build
