@@ -4,9 +4,10 @@ use corporate_catering_system::identity::{
 use corporate_catering_system::menu_supply_window::{
     MenuImageUrl, MenuItemId, MenuSupplyPolicy, Money, OrderId, OrderLineItemRequest,
     OrderMutation, SpecialRequest, VendorMenuItem, VendorMenuItemDraft,
+    VendorOrderingPolicyOverride,
 };
 use corporate_catering_system::transport::http::{
-    HttpOrderExecutionError, HttpOrderingExecutionGateway,
+    HttpOrderExecutionError, HttpOrderingExecutionGateway, HttpVendorMenuExecutionGateway,
 };
 use corporate_catering_system::vendor_compliance::{
     ComplianceDate, ComplianceDocumentTemplate, DocumentTemplateId, HistoryRetentionPolicy,
@@ -152,11 +153,12 @@ fn mapping(
     )
 }
 
-fn menu_item(
+fn menu_item_with_overrides(
     menu_item_id_value: &str,
     vendor_id: &VendorId,
     max_daily_quantity: u16,
     delivery_epoch_day: i32,
+    policy_override: VendorOrderingPolicyOverride,
 ) -> VendorMenuItem {
     VendorMenuItem::new(
         menu_item_id(menu_item_id_value),
@@ -172,7 +174,8 @@ fn menu_item(
             max_daily_quantity,
             delivery_epoch_day,
         )
-        .expect("menu draft should be valid"),
+        .expect("menu draft should be valid")
+        .with_ordering_policy_overrides(policy_override),
     )
 }
 
@@ -215,10 +218,20 @@ fn http_ordering_gateway_enforces_deliverability_and_menu_supply_rules() {
         .expect("allow mapping should be upserted");
 
     let menu_supply = MenuSupplyPolicy::default();
-    menu_supply
-        .upsert_menu_item(
+    let vendor_menu_gateway = HttpVendorMenuExecutionGateway::new(&menu_supply);
+    vendor_menu_gateway
+        .execute_upsert_vendor_menu_item(
             &vendor_actor,
-            menu_item("menu-http-supply-a1", &vendor, 5, 11),
+            menu_item_with_overrides(
+                "menu-http-supply-a1",
+                &vendor,
+                5,
+                11,
+                VendorOrderingPolicyOverride {
+                    preorder_open_days_ahead: Some(3),
+                    modify_cancel_cutoff_minute_of_day: Some(15 * 60),
+                },
+            ),
         )
         .expect("menu item upsert should succeed");
 
@@ -237,7 +250,7 @@ fn http_ordering_gateway_enforces_deliverability_and_menu_supply_rules() {
                 vec![SpecialRequest::NoUtensils],
             )
             .expect("line item should be valid")],
-            taipei_moment(10, 900),
+            taipei_moment(10, 850),
         )
         .expect("create order should pass deliverability and supply checks");
 
@@ -247,9 +260,9 @@ fn http_ordering_gateway_enforces_deliverability_and_menu_supply_rules() {
             &vendor,
             &plant_id("fab-a"),
             OrderMutation::Cancel,
-            taipei_moment(10, 1020),
+            taipei_moment(10, 900),
         )
-        .expect_err("order update should fail after previous-day cutoff");
+        .expect_err("order update should fail after overridden previous-day cutoff");
     assert!(matches!(
         update_after_cutoff_error,
         HttpOrderExecutionError::MenuSupply(_)

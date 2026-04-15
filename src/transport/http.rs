@@ -5,6 +5,7 @@ use crate::contract::{HttpMethod, HttpOperation};
 use crate::identity::{AuthenticatedActorContext, PlantId};
 use crate::menu_supply_window::{
     MenuSupplyPolicy, MenuSupplyWindowError, OrderId, OrderLineItemRequest, OrderMutation,
+    VendorMenuItem,
 };
 use crate::vendor_compliance::{VendorComplianceLifecycle, VendorId};
 use crate::vendor_delivery_mapping::{
@@ -280,6 +281,24 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
             .map_err(HttpOrderExecutionError::MenuSupply)?;
 
         Ok(())
+    }
+}
+
+pub struct HttpVendorMenuExecutionGateway<'a> {
+    menu_supply_policy: &'a MenuSupplyPolicy,
+}
+
+impl<'a> HttpVendorMenuExecutionGateway<'a> {
+    pub fn new(menu_supply_policy: &'a MenuSupplyPolicy) -> Self {
+        Self { menu_supply_policy }
+    }
+
+    pub fn execute_upsert_vendor_menu_item(
+        &self,
+        actor: &AuthenticatedActorContext,
+        menu_item: VendorMenuItem,
+    ) -> Result<(), MenuSupplyWindowError> {
+        self.menu_supply_policy.upsert_menu_item(actor, menu_item)
     }
 }
 

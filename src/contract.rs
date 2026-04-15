@@ -368,6 +368,7 @@ pub fn canonical_openapi_spec() -> Value {
             "operationId": HttpOperation::UpdateEmployeeOrder.operation_id(),
             "x-order-governance": {
               "timezone": "Asia/Taipei",
+              "supportedOperations": ["REPLACE_LINE_ITEMS", "CANCEL"],
               "modifyCancelCutoff": {
                 "defaultRule": {
                   "relativeDayFromDelivery": -1,
@@ -1313,13 +1314,30 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "additionalProperties": false
           },
-          "EmployeeOrderPatchRequest": {
+          "EmployeeOrderReplaceLineItemsPatchRequest": {
             "type": "object",
-            "required": ["status"],
+            "required": ["operation", "lineItems"],
             "properties": {
-              "status": {
+              "operation": {
                 "type": "string",
-                "enum": ["CANCELLED"]
+                "enum": ["REPLACE_LINE_ITEMS"]
+              },
+              "lineItems": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/OrderLineItemRequest" },
+                "minItems": 1,
+                "maxItems": 10
+              }
+            },
+            "additionalProperties": false
+          },
+          "EmployeeOrderCancelPatchRequest": {
+            "type": "object",
+            "required": ["operation", "cancelReason"],
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": ["CANCEL"]
               },
               "cancelReason": {
                 "type": "string",
@@ -1328,6 +1346,13 @@ pub fn canonical_openapi_spec() -> Value {
               }
             },
             "additionalProperties": false
+          },
+          "EmployeeOrderPatchRequest": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/EmployeeOrderReplaceLineItemsPatchRequest" },
+              { "$ref": "#/components/schemas/EmployeeOrderCancelPatchRequest" }
+            ],
+            "description": "Order patch command. Supports line-item replacement and cancellation under the same cutoff governance."
           },
           "OrderLineItem": {
             "type": "object",

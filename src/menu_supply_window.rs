@@ -219,6 +219,8 @@ pub struct VendorMenuItemDraft {
     price: Money,
     max_daily_quantity: u16,
     delivery_epoch_day: i32,
+    preorder_open_days_ahead_override: Option<u16>,
+    modify_cancel_cutoff_minute_of_day_override: Option<u16>,
 }
 
 impl VendorMenuItemDraft {
@@ -251,7 +253,19 @@ impl VendorMenuItemDraft {
             price,
             max_daily_quantity,
             delivery_epoch_day,
+            preorder_open_days_ahead_override: None,
+            modify_cancel_cutoff_minute_of_day_override: None,
         })
+    }
+
+    pub fn with_ordering_policy_overrides(
+        mut self,
+        policy_override: VendorOrderingPolicyOverride,
+    ) -> Self {
+        self.preorder_open_days_ahead_override = policy_override.preorder_open_days_ahead;
+        self.modify_cancel_cutoff_minute_of_day_override =
+            policy_override.modify_cancel_cutoff_minute_of_day;
+        self
     }
 
     pub fn name(&self) -> &str {
@@ -277,6 +291,14 @@ impl VendorMenuItemDraft {
     pub fn delivery_epoch_day(&self) -> i32 {
         self.delivery_epoch_day
     }
+
+    pub fn preorder_open_days_ahead_override(&self) -> Option<u16> {
+        self.preorder_open_days_ahead_override
+    }
+
+    pub fn modify_cancel_cutoff_minute_of_day_override(&self) -> Option<u16> {
+        self.modify_cancel_cutoff_minute_of_day_override
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -289,6 +311,8 @@ pub struct VendorMenuItem {
     price: Money,
     max_daily_quantity: u16,
     delivery_epoch_day: i32,
+    preorder_open_days_ahead_override: Option<u16>,
+    modify_cancel_cutoff_minute_of_day_override: Option<u16>,
 }
 
 impl VendorMenuItem {
@@ -302,6 +326,9 @@ impl VendorMenuItem {
             price: draft.price,
             max_daily_quantity: draft.max_daily_quantity,
             delivery_epoch_day: draft.delivery_epoch_day,
+            preorder_open_days_ahead_override: draft.preorder_open_days_ahead_override,
+            modify_cancel_cutoff_minute_of_day_override: draft
+                .modify_cancel_cutoff_minute_of_day_override,
         }
     }
 
@@ -335,6 +362,40 @@ impl VendorMenuItem {
 
     pub fn delivery_epoch_day(&self) -> i32 {
         self.delivery_epoch_day
+    }
+
+    pub fn preorder_open_days_ahead_override(&self) -> Option<u16> {
+        self.preorder_open_days_ahead_override
+    }
+
+    pub fn modify_cancel_cutoff_minute_of_day_override(&self) -> Option<u16> {
+        self.modify_cancel_cutoff_minute_of_day_override
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VendorMenuItemState {
+    menu_item: VendorMenuItem,
+    remaining_quantity: u16,
+    preorder_open_days_ahead: u16,
+    modify_cancel_cutoff_minute_of_day: u16,
+}
+
+impl VendorMenuItemState {
+    pub fn menu_item(&self) -> &VendorMenuItem {
+        &self.menu_item
+    }
+
+    pub fn remaining_quantity(&self) -> u16 {
+        self.remaining_quantity
+    }
+
+    pub fn preorder_open_days_ahead(&self) -> u16 {
+        self.preorder_open_days_ahead
+    }
+
+    pub fn modify_cancel_cutoff_minute_of_day(&self) -> u16 {
+        self.modify_cancel_cutoff_minute_of_day
     }
 }
 
@@ -591,6 +652,23 @@ impl MenuSupplyPolicy {
             });
         }
 
+        if menu_item.preorder_open_days_ahead_override().is_some()
+            || menu_item
+                .modify_cancel_cutoff_minute_of_day_override()
+                .is_some()
+        {
+            let resolved_policy =
+                self.governance
+                    .resolve_vendor_policy(VendorOrderingPolicyOverride {
+                        preorder_open_days_ahead: menu_item.preorder_open_days_ahead_override(),
+                        modify_cancel_cutoff_minute_of_day: menu_item
+                            .modify_cancel_cutoff_minute_of_day_override(),
+                    })?;
+            state
+                .vendor_ordering_policies
+                .insert(menu_item.vendor_id().clone(), resolved_policy);
+        }
+
         state
             .menu_items
             .insert(menu_item.menu_item_id().clone(), menu_item);
@@ -603,6 +681,28 @@ impl MenuSupplyPolicy {
     ) -> Result<Option<VendorMenuItem>, MenuSupplyWindowError> {
         let state = lock_state(&self.state)?;
         Ok(state.menu_items.get(menu_item_id).cloned())
+    }
+
+    pub fn menu_item_state(
+        &self,
+        menu_item_id: &MenuItemId,
+    ) -> Result<Option<VendorMenuItemState>, MenuSupplyWindowError> {
+        let state = lock_state(&self.state)?;
+        let Some(menu_item) = state.menu_items.get(menu_item_id).cloned() else {
+            return Ok(None);
+        };
+        let allocated = state
+            .allocated_quantity_by_menu_item
+            .get(menu_item_id)
+            .copied()
+            .unwrap_or(0);
+        let policy = self.effective_vendor_policy_locked(&state, menu_item.vendor_id());
+        Ok(Some(VendorMenuItemState {
+            remaining_quantity: menu_item.max_daily_quantity().saturating_sub(allocated),
+            menu_item,
+            preorder_open_days_ahead: policy.preorder_open_days_ahead(),
+            modify_cancel_cutoff_minute_of_day: policy.modify_cancel_cutoff_minute_of_day(),
+        }))
     }
 
     pub fn remaining_quantity(

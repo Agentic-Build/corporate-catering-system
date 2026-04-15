@@ -2,8 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type EmployeeOrderPatchRequest = {
-    cancelReason?: string;
-    status: 'CANCELLED';
-};
+import type { EmployeeOrderCancelPatchRequest } from './EmployeeOrderCancelPatchRequest';
+import type { EmployeeOrderReplaceLineItemsPatchRequest } from './EmployeeOrderReplaceLineItemsPatchRequest';
+/**
+ * Order patch command. Supports line-item replacement and cancellation under the same cutoff governance.
+ */
+export type EmployeeOrderPatchRequest = (EmployeeOrderReplaceLineItemsPatchRequest | EmployeeOrderCancelPatchRequest);
 

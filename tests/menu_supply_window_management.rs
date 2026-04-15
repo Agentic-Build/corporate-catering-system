@@ -67,6 +67,22 @@ fn menu_item(
     max_daily_quantity: u16,
     delivery_epoch_day: i32,
 ) -> VendorMenuItem {
+    menu_item_with_overrides(
+        menu_item_id_value,
+        vendor_id,
+        max_daily_quantity,
+        delivery_epoch_day,
+        VendorOrderingPolicyOverride::default(),
+    )
+}
+
+fn menu_item_with_overrides(
+    menu_item_id_value: &str,
+    vendor_id: &VendorId,
+    max_daily_quantity: u16,
+    delivery_epoch_day: i32,
+    policy_override: VendorOrderingPolicyOverride,
+) -> VendorMenuItem {
     VendorMenuItem::new(
         menu_item_id(menu_item_id_value),
         vendor_id.clone(),
@@ -81,7 +97,8 @@ fn menu_item(
             max_daily_quantity,
             delivery_epoch_day,
         )
-        .expect("menu draft should be valid"),
+        .expect("menu draft should be valid")
+        .with_ordering_policy_overrides(policy_override),
     )
 }
 
@@ -210,22 +227,28 @@ fn preorder_window_and_cutoff_rules_enforce_default_and_bounded_vendor_overrides
     ));
 
     policy
-        .upsert_vendor_ordering_policy(
-            &vendor_operator(),
-            &vendor,
-            VendorOrderingPolicyOverride {
-                preorder_open_days_ahead: Some(3),
-                modify_cancel_cutoff_minute_of_day: Some(16 * 60),
-            },
-        )
-        .expect("vendor override should be accepted within policy bounds");
-
-    policy
         .upsert_menu_item(
             &vendor_operator(),
-            menu_item("menu-supply-c2", &vendor, 30, 17),
+            menu_item_with_overrides(
+                "menu-supply-c2",
+                &vendor,
+                30,
+                17,
+                VendorOrderingPolicyOverride {
+                    preorder_open_days_ahead: Some(3),
+                    modify_cancel_cutoff_minute_of_day: Some(16 * 60),
+                },
+            ),
         )
         .expect("menu item upsert should succeed");
+    let effective_policy = policy
+        .effective_vendor_ordering_policy(&vendor)
+        .expect("state lock should not fail");
+    assert_eq!(effective_policy.preorder_open_days_ahead(), 3);
+    assert_eq!(
+        effective_policy.modify_cancel_cutoff_minute_of_day(),
+        16 * 60
+    );
 
     let overridden_window_error = policy
         .create_order(
@@ -269,13 +292,18 @@ fn preorder_window_and_cutoff_rules_enforce_default_and_bounded_vendor_overrides
     ));
 
     let out_of_bounds_override = policy
-        .upsert_vendor_ordering_policy(
+        .upsert_menu_item(
             &vendor_operator(),
-            &vendor,
-            VendorOrderingPolicyOverride {
-                preorder_open_days_ahead: Some(8),
-                modify_cancel_cutoff_minute_of_day: None,
-            },
+            menu_item_with_overrides(
+                "menu-supply-c4",
+                &vendor,
+                30,
+                18,
+                VendorOrderingPolicyOverride {
+                    preorder_open_days_ahead: Some(8),
+                    modify_cancel_cutoff_minute_of_day: None,
+                },
+            ),
         )
         .expect_err("vendor preorder override above policy max should fail");
     assert!(matches!(

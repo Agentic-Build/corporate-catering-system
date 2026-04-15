@@ -270,6 +270,21 @@ components:
       - lineItems
       - total
       type: object
+    EmployeeOrderCancelPatchRequest:
+      additionalProperties: false
+      properties:
+        cancelReason:
+          maxLength: 200
+          minLength: 5
+          type: string
+        operation:
+          enum:
+          - CANCEL
+          type: string
+      required:
+      - operation
+      - cancelReason
+      type: object
     EmployeeOrderCreateRequest:
       additionalProperties: false
       properties:
@@ -293,18 +308,26 @@ components:
       - lineItems
       type: object
     EmployeeOrderPatchRequest:
+      description: Order patch command. Supports line-item replacement and cancellation under the same cutoff governance.
+      oneOf:
+      - $ref: '#/components/schemas/EmployeeOrderReplaceLineItemsPatchRequest'
+      - $ref: '#/components/schemas/EmployeeOrderCancelPatchRequest'
+    EmployeeOrderReplaceLineItemsPatchRequest:
       additionalProperties: false
       properties:
-        cancelReason:
-          maxLength: 200
-          minLength: 5
-          type: string
-        status:
+        lineItems:
+          items:
+            $ref: '#/components/schemas/OrderLineItemRequest'
+          maxItems: 10
+          minItems: 1
+          type: array
+        operation:
           enum:
-          - CANCELLED
+          - REPLACE_LINE_ITEMS
           type: string
       required:
-      - status
+      - operation
+      - lineItems
       type: object
     EmployeeOrderStatus:
       enum:
@@ -1558,6 +1581,9 @@ paths:
           vendorOverrideBounds:
             maximumMinuteOfDay: 1200
             minimumMinuteOfDay: 900
+        supportedOperations:
+        - REPLACE_LINE_ITEMS
+        - CANCEL
         timezone: Asia/Taipei
   /api/v1/integrations/payroll/deductions:
     get:

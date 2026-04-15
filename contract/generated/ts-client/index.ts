@@ -12,8 +12,10 @@ export type { AdminVendorReviewRequest } from './models/AdminVendorReviewRequest
 export type { AuthenticationSource } from './models/AuthenticationSource';
 export type { CuisineFilterQuery } from './models/CuisineFilterQuery';
 export type { EmployeeOrder } from './models/EmployeeOrder';
+export type { EmployeeOrderCancelPatchRequest } from './models/EmployeeOrderCancelPatchRequest';
 export type { EmployeeOrderCreateRequest } from './models/EmployeeOrderCreateRequest';
 export type { EmployeeOrderPatchRequest } from './models/EmployeeOrderPatchRequest';
+export type { EmployeeOrderReplaceLineItemsPatchRequest } from './models/EmployeeOrderReplaceLineItemsPatchRequest';
 export type { EmployeeOrderStatus } from './models/EmployeeOrderStatus';
 export type { ErrorCode } from './models/ErrorCode';
 export type { ErrorDetail } from './models/ErrorDetail';

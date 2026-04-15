@@ -463,6 +463,40 @@ fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_re
         patch_order_operation["x-order-governance"]["timezone"],
         "Asia/Taipei"
     );
+    let supported_operations = patch_order_operation["x-order-governance"]["supportedOperations"]
+        .as_array()
+        .expect("patch operation should advertise supported operations")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("supported operation must be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        supported_operations,
+        BTreeSet::from(["REPLACE_LINE_ITEMS".to_owned(), "CANCEL".to_owned()])
+    );
+
+    let patch_schema_variants = spec["components"]["schemas"]["EmployeeOrderPatchRequest"]["oneOf"]
+        .as_array()
+        .expect("patch request should be modeled as command union")
+        .iter()
+        .map(|variant| {
+            variant["$ref"]
+                .as_str()
+                .expect("patch variant must be $ref")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        patch_schema_variants,
+        BTreeSet::from([
+            "#/components/schemas/EmployeeOrderReplaceLineItemsPatchRequest".to_owned(),
+            "#/components/schemas/EmployeeOrderCancelPatchRequest".to_owned(),
+        ])
+    );
 
     let order_line_item_properties =
         &spec["components"]["schemas"]["OrderLineItemRequest"]["properties"];
