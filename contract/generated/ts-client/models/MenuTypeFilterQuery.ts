@@ -2,4 +2,5 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type CuisineFilterQuery = string;
+import type { MenuType } from './MenuType';
+export type MenuTypeFilterQuery = MenuType;

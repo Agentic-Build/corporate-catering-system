@@ -1,13 +1,11 @@
 components:
   parameters:
-    CuisineFilterQuery:
+    DiscoveryViewQuery:
       in: query
-      name: cuisine
+      name: view
       required: false
       schema:
-        maxLength: 32
-        minLength: 2
-        type: string
+        $ref: '#/components/schemas/MenuDiscoveryView'
     FromDateQuery:
       in: query
       name: fromDate
@@ -29,9 +27,10 @@ components:
         pattern: ^map-[a-z0-9-]{3,64}$
         type: string
     MenuDateQuery:
+      description: Anchor date for week/calendar discovery windows in Asia/Taipei.
       in: query
       name: menuDate
-      required: true
+      required: false
       schema:
         format: date
         type: string
@@ -42,12 +41,26 @@ components:
       schema:
         pattern: ^menu-[a-z0-9]{8,32}$
         type: string
+    MenuSearchQuery:
+      in: query
+      name: search
+      required: false
+      schema:
+        maxLength: 120
+        minLength: 1
+        type: string
     MenuSortByQuery:
       in: query
       name: sortBy
       required: false
       schema:
         $ref: '#/components/schemas/MenuSortField'
+    MenuTypeFilterQuery:
+      in: query
+      name: menuType
+      required: false
+      schema:
+        $ref: '#/components/schemas/MenuType'
     OrderIdPath:
       in: path
       name: orderId
@@ -106,6 +119,37 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/PlantId'
+    PriceMaxMinorQuery:
+      in: query
+      name: priceMaxMinor
+      required: false
+      schema:
+        minimum: 0
+        type: integer
+    PriceMinMinorQuery:
+      in: query
+      name: priceMinMinor
+      required: false
+      schema:
+        minimum: 0
+        type: integer
+    RecommendationEnabledQuery:
+      description: Recommendation flag is accepted for forward compatibility but deterministic filters remain authoritative in MVP.
+      in: query
+      name: recommendationEnabled
+      required: false
+      schema:
+        default: false
+        type: boolean
+    RemainingQuantityFilterQuery:
+      description: Exact inventory counter filter. Matches only items whose remaining quantity equals this value.
+      in: query
+      name: remainingQuantity
+      required: false
+      schema:
+        maximum: 2000
+        minimum: 0
+        type: integer
     ServiceWindowActiveAtQuery:
       description: Evaluate mappings active at this fixed Asia/Taipei business timestamp.
       in: query
@@ -400,6 +444,26 @@ components:
       - message
       - requestId
       type: object
+    MenuDiscoveryDay:
+      additionalProperties: false
+      properties:
+        deliveryDate:
+          format: date
+          type: string
+        items:
+          items:
+            $ref: '#/components/schemas/MenuListItem'
+          type: array
+      required:
+      - deliveryDate
+      - items
+      type: object
+    MenuDiscoveryView:
+      default: week
+      enum:
+      - week
+      - calendar
+      type: string
     MenuHealthTag:
       enum:
       - LOW_CALORIE
@@ -411,15 +475,17 @@ components:
     MenuListItem:
       additionalProperties: false
       properties:
-        cuisine:
-          maxLength: 32
-          minLength: 2
+        cutoffDate:
+          format: date
           type: string
         deliveryDate:
           format: date
           type: string
         description:
           maxLength: 280
+          type: string
+        earliestDeliveryDate:
+          format: date
           type: string
         healthTags:
           items:
@@ -430,13 +496,28 @@ components:
           format: uri
           maxLength: 512
           type: string
+        latestDeliveryDate:
+          format: date
+          type: string
         menuItemId:
           pattern: ^menu-[a-z0-9]{8,32}$
           type: string
+        menuType:
+          $ref: '#/components/schemas/MenuType'
+        modifyCancelCutoffMinuteOfDay:
+          maximum: 1200
+          minimum: 900
+          type: integer
         name:
           maxLength: 80
           minLength: 1
           type: string
+        preorderOpen:
+          type: boolean
+        preorderOpenDaysAhead:
+          maximum: 7
+          minimum: 1
+          type: integer
         price:
           $ref: '#/components/schemas/Money'
         remainingQuantity:
@@ -450,21 +531,56 @@ components:
       - menuItemId
       - vendorId
       - name
+      - description
+      - menuType
+      - healthTags
       - price
       - remainingQuantity
+      - preorderOpen
+      - preorderOpenDaysAhead
+      - modifyCancelCutoffMinuteOfDay
       - deliveryDate
-      - healthTags
+      - earliestDeliveryDate
+      - latestDeliveryDate
+      - cutoffDate
       type: object
     MenuPage:
       additionalProperties: false
       properties:
+        days:
+          items:
+            $ref: '#/components/schemas/MenuDiscoveryDay'
+          type: array
+        fromDate:
+          format: date
+          type: string
         items:
           items:
             $ref: '#/components/schemas/MenuListItem'
           type: array
         page:
           $ref: '#/components/schemas/PageMeta'
+        recommendationApplied:
+          type: boolean
+        recommendationRequested:
+          type: boolean
+        timezone:
+          enum:
+          - Asia/Taipei
+          type: string
+        toDate:
+          format: date
+          type: string
+        view:
+          $ref: '#/components/schemas/MenuDiscoveryView'
       required:
+      - timezone
+      - view
+      - recommendationRequested
+      - recommendationApplied
+      - fromDate
+      - toDate
+      - days
       - items
       - page
       type: object
@@ -474,6 +590,9 @@ components:
       - priceMinor
       - remainingQuantity
       - deliveryDate
+      type: string
+    MenuType:
+      pattern: ^[A-Z][A-Z0-9_]{0,31}$
       type: string
     Money:
       additionalProperties: false
@@ -978,6 +1097,8 @@ components:
         menuItemId:
           pattern: ^menu-[a-z0-9]{8,32}$
           type: string
+        menuType:
+          $ref: '#/components/schemas/MenuType'
         modifyCancelCutoffMinuteOfDay:
           maximum: 1200
           minimum: 900
@@ -1004,12 +1125,14 @@ components:
       - vendorId
       - name
       - description
+      - menuType
       - price
       - maxDailyQuantity
       - remainingQuantity
       - preorderOpenDaysAhead
       - modifyCancelCutoffMinuteOfDay
       - deliveryDate
+      - healthTags
       type: object
     VendorMenuItemUpsertRequest:
       additionalProperties: false
@@ -1034,6 +1157,8 @@ components:
           maximum: 2000
           minimum: 1
           type: integer
+        menuType:
+          $ref: '#/components/schemas/MenuType'
         modifyCancelCutoffMinuteOfDayOverride:
           description: Optional vendor override minute-of-day (Asia/Taipei) for previous-day modify/cancel cutoff.
           maximum: 1200
@@ -1053,6 +1178,7 @@ components:
       required:
       - name
       - description
+      - menuType
       - price
       - maxDailyQuantity
       - deliveryDate
@@ -1522,20 +1648,28 @@ paths:
       operationId: listEmployeeMenus
       parameters:
       - $ref: '#/components/parameters/PlantIdQuery'
+      - $ref: '#/components/parameters/DiscoveryViewQuery'
       - $ref: '#/components/parameters/MenuDateQuery'
+      - $ref: '#/components/parameters/FromDateQuery'
+      - $ref: '#/components/parameters/ToDateQuery'
       - $ref: '#/components/parameters/PageQuery'
       - $ref: '#/components/parameters/PageSizeQuery'
       - $ref: '#/components/parameters/MenuSortByQuery'
       - $ref: '#/components/parameters/SortOrderQuery'
-      - $ref: '#/components/parameters/CuisineFilterQuery'
+      - $ref: '#/components/parameters/MenuSearchQuery'
+      - $ref: '#/components/parameters/MenuTypeFilterQuery'
       - $ref: '#/components/parameters/HealthTagFilterQuery'
+      - $ref: '#/components/parameters/PriceMinMinorQuery'
+      - $ref: '#/components/parameters/PriceMaxMinorQuery'
+      - $ref: '#/components/parameters/RemainingQuantityFilterQuery'
+      - $ref: '#/components/parameters/RecommendationEnabledQuery'
       responses:
         '200':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MenuPage'
-          description: Paginated menu list
+          description: Deterministic multi-day menu discovery page
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1544,7 +1678,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
       security:
       - corporateSsoBearer: []
-      summary: List available menus
+      summary: List discoverable menus for multi-day preorder
       tags:
       - Employee
       x-deliverability-enforcement:
@@ -1553,6 +1687,15 @@ paths:
         - SEARCH
         enabled: true
         ruleSource: VENDOR_PLANT_DELIVERY_MAPPING
+        timezone: Asia/Taipei
+      x-discovery-governance:
+        deterministicFiltering: true
+        recommendationAppliedInMvp: false
+        recommendationDefaultEnabled: false
+        remainingQuantitySource: MENU_SUPPLY_POLICY_ALLOCATED_COUNTER
+        supportedViews:
+        - week
+        - calendar
         timezone: Asia/Taipei
   /api/v1/employee/orders:
     post:

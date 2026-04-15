@@ -587,6 +587,95 @@ fn mcp_contract_checks_are_wired_for_future_runtime_tools() {
 }
 
 #[test]
+fn employee_discovery_contract_supports_multi_day_preorder_and_deterministic_filters() {
+    let spec = canonical_openapi_spec();
+    let operation = operation_by_path_and_method(&spec, "/api/v1/employee/menus", "get");
+
+    assert_eq!(
+        operation["x-discovery-governance"]["timezone"],
+        "Asia/Taipei"
+    );
+    assert_eq!(
+        operation["x-discovery-governance"]["deterministicFiltering"],
+        true
+    );
+    assert_eq!(
+        operation["x-discovery-governance"]["recommendationAppliedInMvp"],
+        false
+    );
+    assert_eq!(
+        operation["x-discovery-governance"]["remainingQuantitySource"],
+        "MENU_SUPPLY_POLICY_ALLOCATED_COUNTER"
+    );
+
+    let parameter_refs = operation["parameters"]
+        .as_array()
+        .expect("employee discovery parameters should be array")
+        .iter()
+        .map(|parameter| {
+            parameter["$ref"]
+                .as_str()
+                .expect("employee discovery parameter must be a $ref")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        parameter_refs,
+        BTreeSet::from([
+            "#/components/parameters/PlantIdQuery".to_owned(),
+            "#/components/parameters/DiscoveryViewQuery".to_owned(),
+            "#/components/parameters/MenuDateQuery".to_owned(),
+            "#/components/parameters/FromDateQuery".to_owned(),
+            "#/components/parameters/ToDateQuery".to_owned(),
+            "#/components/parameters/PageQuery".to_owned(),
+            "#/components/parameters/PageSizeQuery".to_owned(),
+            "#/components/parameters/MenuSortByQuery".to_owned(),
+            "#/components/parameters/SortOrderQuery".to_owned(),
+            "#/components/parameters/MenuSearchQuery".to_owned(),
+            "#/components/parameters/MenuTypeFilterQuery".to_owned(),
+            "#/components/parameters/HealthTagFilterQuery".to_owned(),
+            "#/components/parameters/PriceMinMinorQuery".to_owned(),
+            "#/components/parameters/PriceMaxMinorQuery".to_owned(),
+            "#/components/parameters/RemainingQuantityFilterQuery".to_owned(),
+            "#/components/parameters/RecommendationEnabledQuery".to_owned(),
+        ])
+    );
+
+    let menu_page_required = spec["components"]["schemas"]["MenuPage"]["required"]
+        .as_array()
+        .expect("menu page required fields should be array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("required field should be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(menu_page_required.contains("view"));
+    assert!(menu_page_required.contains("days"));
+    assert!(menu_page_required.contains("recommendationRequested"));
+    assert!(menu_page_required.contains("recommendationApplied"));
+
+    let menu_item_required = spec["components"]["schemas"]["MenuListItem"]["required"]
+        .as_array()
+        .expect("menu list item required fields should be array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("required field should be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(menu_item_required.contains("menuType"));
+    assert!(menu_item_required.contains("remainingQuantity"));
+    assert!(menu_item_required.contains("preorderOpen"));
+    assert!(menu_item_required.contains("preorderOpenDaysAhead"));
+    assert!(menu_item_required.contains("modifyCancelCutoffMinuteOfDay"));
+}
+
+#[test]
 fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_requests() {
     let spec = canonical_openapi_spec();
 

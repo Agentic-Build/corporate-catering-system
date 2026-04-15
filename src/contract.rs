@@ -273,7 +273,7 @@ pub fn canonical_openapi_spec() -> Value {
         "/api/v1/employee/menus": {
           "get": {
             "tags": ["Employee"],
-            "summary": "List available menus",
+            "summary": "List discoverable menus for multi-day preorder",
             "operationId": HttpOperation::ListEmployeeMenus.operation_id(),
             "x-deliverability-enforcement": {
               "enabled": true,
@@ -281,20 +281,36 @@ pub fn canonical_openapi_spec() -> Value {
               "ruleSource": "VENDOR_PLANT_DELIVERY_MAPPING",
               "timezone": "Asia/Taipei"
             },
+            "x-discovery-governance": {
+              "timezone": "Asia/Taipei",
+              "deterministicFiltering": true,
+              "recommendationDefaultEnabled": false,
+              "recommendationAppliedInMvp": false,
+              "remainingQuantitySource": "MENU_SUPPLY_POLICY_ALLOCATED_COUNTER",
+              "supportedViews": ["week", "calendar"]
+            },
             "security": [{ "corporateSsoBearer": [] }],
             "parameters": [
               { "$ref": "#/components/parameters/PlantIdQuery" },
+              { "$ref": "#/components/parameters/DiscoveryViewQuery" },
               { "$ref": "#/components/parameters/MenuDateQuery" },
+              { "$ref": "#/components/parameters/FromDateQuery" },
+              { "$ref": "#/components/parameters/ToDateQuery" },
               { "$ref": "#/components/parameters/PageQuery" },
               { "$ref": "#/components/parameters/PageSizeQuery" },
               { "$ref": "#/components/parameters/MenuSortByQuery" },
               { "$ref": "#/components/parameters/SortOrderQuery" },
-              { "$ref": "#/components/parameters/CuisineFilterQuery" },
-              { "$ref": "#/components/parameters/HealthTagFilterQuery" }
+              { "$ref": "#/components/parameters/MenuSearchQuery" },
+              { "$ref": "#/components/parameters/MenuTypeFilterQuery" },
+              { "$ref": "#/components/parameters/HealthTagFilterQuery" },
+              { "$ref": "#/components/parameters/PriceMinMinorQuery" },
+              { "$ref": "#/components/parameters/PriceMaxMinorQuery" },
+              { "$ref": "#/components/parameters/RemainingQuantityFilterQuery" },
+              { "$ref": "#/components/parameters/RecommendationEnabledQuery" }
             ],
             "responses": {
               "200": {
-                "description": "Paginated menu list",
+                "description": "Deterministic multi-day menu discovery page",
                 "content": {
                   "application/json": {
                     "schema": { "$ref": "#/components/schemas/MenuPage" }
@@ -838,11 +854,18 @@ pub fn canonical_openapi_spec() -> Value {
           "MenuDateQuery": {
             "name": "menuDate",
             "in": "query",
-            "required": true,
+            "required": false,
+            "description": "Anchor date for week/calendar discovery windows in Asia/Taipei.",
             "schema": {
               "type": "string",
               "format": "date"
             }
+          },
+          "DiscoveryViewQuery": {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/MenuDiscoveryView" }
           },
           "FromDateQuery": {
             "name": "fromDate",
@@ -923,21 +946,66 @@ pub fn canonical_openapi_spec() -> Value {
             "required": false,
             "schema": { "$ref": "#/components/schemas/PayrollSortField" }
           },
-          "CuisineFilterQuery": {
-            "name": "cuisine",
+          "MenuSearchQuery": {
+            "name": "search",
             "in": "query",
             "required": false,
             "schema": {
               "type": "string",
-              "minLength": 2,
-              "maxLength": 32
+              "minLength": 1,
+              "maxLength": 120
             }
+          },
+          "MenuTypeFilterQuery": {
+            "name": "menuType",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/MenuType" }
           },
           "HealthTagFilterQuery": {
             "name": "healthTag",
             "in": "query",
             "required": false,
             "schema": { "$ref": "#/components/schemas/MenuHealthTag" }
+          },
+          "PriceMinMinorQuery": {
+            "name": "priceMinMinor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "PriceMaxMinorQuery": {
+            "name": "priceMaxMinor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "RemainingQuantityFilterQuery": {
+            "name": "remainingQuantity",
+            "in": "query",
+            "required": false,
+            "description": "Exact inventory counter filter. Matches only items whose remaining quantity equals this value.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2000
+            }
+          },
+          "RecommendationEnabledQuery": {
+            "name": "recommendationEnabled",
+            "in": "query",
+            "required": false,
+            "description": "Recommendation flag is accepted for forward compatibility but deterministic filters remain authoritative in MVP.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           },
           "OrderStatusFilterQuery": {
             "name": "status",
@@ -1122,6 +1190,15 @@ pub fn canonical_openapi_spec() -> Value {
           "MenuSortField": {
             "type": "string",
             "enum": ["name", "priceMinor", "remainingQuantity", "deliveryDate"]
+          },
+          "MenuDiscoveryView": {
+            "type": "string",
+            "enum": ["week", "calendar"],
+            "default": "week"
+          },
+          "MenuType": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,31}$"
           },
           "VendorOrderSortField": {
             "type": "string",
@@ -1347,16 +1424,30 @@ pub fn canonical_openapi_spec() -> Value {
               "menuItemId",
               "vendorId",
               "name",
+              "description",
+              "menuType",
+              "healthTags",
               "price",
               "remainingQuantity",
+              "preorderOpen",
+              "preorderOpenDaysAhead",
+              "modifyCancelCutoffMinuteOfDay",
               "deliveryDate",
-              "healthTags"
+              "earliestDeliveryDate",
+              "latestDeliveryDate",
+              "cutoffDate"
             ],
             "properties": {
               "menuItemId": { "type": "string", "pattern": "^menu-[a-z0-9]{8,32}$" },
               "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
               "name": { "type": "string", "minLength": 1, "maxLength": 80 },
               "description": { "type": "string", "maxLength": 280 },
+              "menuType": { "$ref": "#/components/schemas/MenuType" },
+              "healthTags": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/MenuHealthTag" },
+                "uniqueItems": true
+              },
               "imageUrl": {
                 "type": "string",
                 "format": "uri",
@@ -1364,20 +1455,59 @@ pub fn canonical_openapi_spec() -> Value {
               },
               "price": { "$ref": "#/components/schemas/Money" },
               "remainingQuantity": { "type": "integer", "minimum": 0, "maximum": 2000 },
+              "preorderOpen": { "type": "boolean" },
+              "preorderOpenDaysAhead": { "type": "integer", "minimum": 1, "maximum": 7 },
+              "modifyCancelCutoffMinuteOfDay": {
+                "type": "integer",
+                "minimum": 900,
+                "maximum": 1200
+              },
               "deliveryDate": { "type": "string", "format": "date" },
-              "cuisine": { "type": "string", "minLength": 2, "maxLength": 32 },
-              "healthTags": {
+              "earliestDeliveryDate": { "type": "string", "format": "date" },
+              "latestDeliveryDate": { "type": "string", "format": "date" },
+              "cutoffDate": { "type": "string", "format": "date" }
+            },
+            "additionalProperties": false
+          },
+          "MenuDiscoveryDay": {
+            "type": "object",
+            "required": ["deliveryDate", "items"],
+            "properties": {
+              "deliveryDate": { "type": "string", "format": "date" },
+              "items": {
                 "type": "array",
-                "items": { "$ref": "#/components/schemas/MenuHealthTag" },
-                "uniqueItems": true
+                "items": { "$ref": "#/components/schemas/MenuListItem" }
               }
             },
             "additionalProperties": false
           },
           "MenuPage": {
             "type": "object",
-            "required": ["items", "page"],
+            "required": [
+              "timezone",
+              "view",
+              "recommendationRequested",
+              "recommendationApplied",
+              "fromDate",
+              "toDate",
+              "days",
+              "items",
+              "page"
+            ],
             "properties": {
+              "timezone": {
+                "type": "string",
+                "enum": ["Asia/Taipei"]
+              },
+              "view": { "$ref": "#/components/schemas/MenuDiscoveryView" },
+              "recommendationRequested": { "type": "boolean" },
+              "recommendationApplied": { "type": "boolean" },
+              "fromDate": { "type": "string", "format": "date" },
+              "toDate": { "type": "string", "format": "date" },
+              "days": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/MenuDiscoveryDay" }
+              },
               "items": {
                 "type": "array",
                 "items": { "$ref": "#/components/schemas/MenuListItem" }
@@ -1559,6 +1689,7 @@ pub fn canonical_openapi_spec() -> Value {
             "required": [
               "name",
               "description",
+              "menuType",
               "price",
               "maxDailyQuantity",
               "deliveryDate"
@@ -1566,6 +1697,7 @@ pub fn canonical_openapi_spec() -> Value {
             "properties": {
               "name": { "type": "string", "minLength": 1, "maxLength": 80 },
               "description": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "menuType": { "$ref": "#/components/schemas/MenuType" },
               "imageUrl": {
                 "type": "string",
                 "format": "uri",
@@ -1601,18 +1733,21 @@ pub fn canonical_openapi_spec() -> Value {
               "vendorId",
               "name",
               "description",
+              "menuType",
               "price",
               "maxDailyQuantity",
               "remainingQuantity",
               "preorderOpenDaysAhead",
               "modifyCancelCutoffMinuteOfDay",
-              "deliveryDate"
+              "deliveryDate",
+              "healthTags"
             ],
             "properties": {
               "menuItemId": { "type": "string", "pattern": "^menu-[a-z0-9]{8,32}$" },
               "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
               "name": { "type": "string", "minLength": 1, "maxLength": 80 },
               "description": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "menuType": { "$ref": "#/components/schemas/MenuType" },
               "imageUrl": {
                 "type": "string",
                 "format": "uri",

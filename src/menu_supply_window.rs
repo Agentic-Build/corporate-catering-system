@@ -8,6 +8,7 @@ use crate::vendor_delivery_mapping::TaipeiBusinessMoment;
 
 const MAX_MENU_NAME_LENGTH: usize = 80;
 const MAX_MENU_DESCRIPTION_LENGTH: usize = 280;
+const MAX_MENU_TYPE_LENGTH: usize = 32;
 const MAX_MENU_IMAGE_URL_LENGTH: usize = 512;
 const MAX_DAILY_QUANTITY: u16 = 2000;
 const MIN_ORDER_LINE_ITEM_QUANTITY: u16 = 1;
@@ -135,6 +136,44 @@ impl fmt::Display for MenuImageUrl {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MenuHealthTag {
+    LowCalorie,
+    HighProtein,
+    Vegetarian,
+    Vegan,
+    GlutenFree,
+}
+
+impl MenuHealthTag {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, MenuSupplyWindowError> {
+        match value.as_ref() {
+            "LOW_CALORIE" => Ok(Self::LowCalorie),
+            "HIGH_PROTEIN" => Ok(Self::HighProtein),
+            "VEGETARIAN" => Ok(Self::Vegetarian),
+            "VEGAN" => Ok(Self::Vegan),
+            "GLUTEN_FREE" => Ok(Self::GlutenFree),
+            _ => Err(MenuSupplyWindowError::InvalidMenuHealthTag),
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LowCalorie => "LOW_CALORIE",
+            Self::HighProtein => "HIGH_PROTEIN",
+            Self::Vegetarian => "VEGETARIAN",
+            Self::Vegan => "VEGAN",
+            Self::GlutenFree => "GLUTEN_FREE",
+        }
+    }
+}
+
+impl fmt::Display for MenuHealthTag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SpecialRequest {
     LessRice,
     NoGreenOnion,
@@ -215,6 +254,8 @@ impl OrderLineItemRequest {
 pub struct VendorMenuItemDraft {
     name: String,
     description: String,
+    menu_type: String,
+    health_tags: BTreeSet<MenuHealthTag>,
     image_url: Option<MenuImageUrl>,
     price: Money,
     max_daily_quantity: u16,
@@ -227,6 +268,8 @@ impl VendorMenuItemDraft {
     pub fn new(
         name: impl Into<String>,
         description: impl Into<String>,
+        menu_type: impl Into<String>,
+        health_tags: Vec<MenuHealthTag>,
         image_url: Option<MenuImageUrl>,
         price: Money,
         max_daily_quantity: u16,
@@ -238,6 +281,7 @@ impl VendorMenuItemDraft {
             MAX_MENU_DESCRIPTION_LENGTH,
             "menu description",
         )?;
+        let menu_type = normalize_menu_type(menu_type.into())?;
         if !(1..=MAX_DAILY_QUANTITY).contains(&max_daily_quantity) {
             return Err(MenuSupplyWindowError::InvalidMaxDailyQuantity {
                 quantity: max_daily_quantity,
@@ -246,9 +290,18 @@ impl VendorMenuItemDraft {
             });
         }
 
+        let mut deduped_health_tags = BTreeSet::new();
+        for health_tag in health_tags {
+            if !deduped_health_tags.insert(health_tag) {
+                return Err(MenuSupplyWindowError::DuplicateMenuHealthTag(health_tag));
+            }
+        }
+
         Ok(Self {
             name,
             description,
+            menu_type,
+            health_tags: deduped_health_tags,
             image_url,
             price,
             max_daily_quantity,
@@ -274,6 +327,14 @@ impl VendorMenuItemDraft {
 
     pub fn description(&self) -> &str {
         &self.description
+    }
+
+    pub fn menu_type(&self) -> &str {
+        &self.menu_type
+    }
+
+    pub fn health_tags(&self) -> &BTreeSet<MenuHealthTag> {
+        &self.health_tags
     }
 
     pub fn image_url(&self) -> Option<&MenuImageUrl> {
@@ -307,6 +368,8 @@ pub struct VendorMenuItem {
     vendor_id: VendorId,
     name: String,
     description: String,
+    menu_type: String,
+    health_tags: BTreeSet<MenuHealthTag>,
     image_url: Option<MenuImageUrl>,
     price: Money,
     max_daily_quantity: u16,
@@ -322,6 +385,8 @@ impl VendorMenuItem {
             vendor_id,
             name: draft.name,
             description: draft.description,
+            menu_type: draft.menu_type,
+            health_tags: draft.health_tags,
             image_url: draft.image_url,
             price: draft.price,
             max_daily_quantity: draft.max_daily_quantity,
@@ -346,6 +411,14 @@ impl VendorMenuItem {
 
     pub fn description(&self) -> &str {
         &self.description
+    }
+
+    pub fn menu_type(&self) -> &str {
+        &self.menu_type
+    }
+
+    pub fn health_tags(&self) -> &BTreeSet<MenuHealthTag> {
+        &self.health_tags
     }
 
     pub fn image_url(&self) -> Option<&MenuImageUrl> {
@@ -396,6 +469,52 @@ impl VendorMenuItemState {
 
     pub fn modify_cancel_cutoff_minute_of_day(&self) -> u16 {
         self.modify_cancel_cutoff_minute_of_day
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmployeeMenuDiscoveryEntry {
+    menu_item: VendorMenuItem,
+    remaining_quantity: u16,
+    preorder_open_days_ahead: u16,
+    modify_cancel_cutoff_minute_of_day: u16,
+    earliest_delivery_epoch_day: i32,
+    latest_delivery_epoch_day: i32,
+    cutoff_epoch_day: i32,
+    preorder_open: bool,
+}
+
+impl EmployeeMenuDiscoveryEntry {
+    pub fn menu_item(&self) -> &VendorMenuItem {
+        &self.menu_item
+    }
+
+    pub fn remaining_quantity(&self) -> u16 {
+        self.remaining_quantity
+    }
+
+    pub fn preorder_open_days_ahead(&self) -> u16 {
+        self.preorder_open_days_ahead
+    }
+
+    pub fn modify_cancel_cutoff_minute_of_day(&self) -> u16 {
+        self.modify_cancel_cutoff_minute_of_day
+    }
+
+    pub fn earliest_delivery_epoch_day(&self) -> i32 {
+        self.earliest_delivery_epoch_day
+    }
+
+    pub fn latest_delivery_epoch_day(&self) -> i32 {
+        self.latest_delivery_epoch_day
+    }
+
+    pub fn cutoff_epoch_day(&self) -> i32 {
+        self.cutoff_epoch_day
+    }
+
+    pub fn preorder_open(&self) -> bool {
+        self.preorder_open
     }
 }
 
@@ -882,6 +1001,72 @@ impl MenuSupplyPolicy {
         Ok(Some(
             menu_item.max_daily_quantity().saturating_sub(allocated),
         ))
+    }
+
+    pub fn employee_discovery_snapshot(
+        &self,
+        deliverable_vendor_ids: &BTreeSet<VendorId>,
+        at: TaipeiBusinessMoment,
+    ) -> Result<Vec<EmployeeMenuDiscoveryEntry>, MenuSupplyWindowError> {
+        let state = lock_state(&self.state)?;
+        let mut entries = Vec::new();
+        for menu_item in state.menu_items.values() {
+            if !deliverable_vendor_ids.contains(menu_item.vendor_id()) {
+                continue;
+            }
+
+            let allocated = state
+                .allocated_quantity_by_menu_item
+                .get(menu_item.menu_item_id())
+                .copied()
+                .unwrap_or(0);
+            let remaining_quantity = menu_item.max_daily_quantity().saturating_sub(allocated);
+            let policy = self.effective_vendor_policy_locked(&state, menu_item.vendor_id());
+            let earliest_delivery_epoch_day = at.epoch_day();
+            let latest_delivery_epoch_day = at
+                .epoch_day()
+                .saturating_add(i32::from(policy.preorder_open_days_ahead()));
+            let cutoff_epoch_day = menu_item.delivery_epoch_day().saturating_sub(1);
+            let cutoff = TaipeiBusinessMoment::new(
+                cutoff_epoch_day,
+                policy.modify_cancel_cutoff_minute_of_day(),
+            )
+            .map_err(|error| {
+                MenuSupplyWindowError::InvalidGovernanceConfiguration(error.to_string())
+            })?;
+            let preorder_open = menu_item.delivery_epoch_day() >= earliest_delivery_epoch_day
+                && menu_item.delivery_epoch_day() <= latest_delivery_epoch_day
+                && at < cutoff;
+
+            entries.push(EmployeeMenuDiscoveryEntry {
+                menu_item: menu_item.clone(),
+                remaining_quantity,
+                preorder_open_days_ahead: policy.preorder_open_days_ahead(),
+                modify_cancel_cutoff_minute_of_day: policy.modify_cancel_cutoff_minute_of_day(),
+                earliest_delivery_epoch_day,
+                latest_delivery_epoch_day,
+                cutoff_epoch_day,
+                preorder_open,
+            });
+        }
+
+        entries.sort_by(|left, right| {
+            left.menu_item()
+                .delivery_epoch_day()
+                .cmp(&right.menu_item().delivery_epoch_day())
+                .then_with(|| {
+                    left.menu_item()
+                        .vendor_id()
+                        .cmp(right.menu_item().vendor_id())
+                })
+                .then_with(|| left.menu_item().name().cmp(right.menu_item().name()))
+                .then_with(|| {
+                    left.menu_item()
+                        .menu_item_id()
+                        .cmp(right.menu_item().menu_item_id())
+                })
+        });
+        Ok(entries)
     }
 
     pub fn order_snapshot(
@@ -1463,6 +1648,20 @@ fn normalize_non_empty_text(
     Ok(trimmed.to_owned())
 }
 
+fn normalize_menu_type(value: String) -> Result<String, MenuSupplyWindowError> {
+    let normalized = normalize_non_empty_text(value, MAX_MENU_TYPE_LENGTH, "menu type")?;
+    if !normalized
+        .chars()
+        .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_')
+    {
+        return Err(MenuSupplyWindowError::InvalidTextField {
+            field: "menu type",
+            reason: "must be uppercase snake case",
+        });
+    }
+    Ok(normalized)
+}
+
 fn ensure_role(actor: &AuthenticatedActorContext, role: Role) -> Result<(), MenuSupplyWindowError> {
     if actor.role() != role {
         return Err(MenuSupplyWindowError::UnauthorizedRole {
@@ -1505,6 +1704,8 @@ pub enum MenuSupplyWindowError {
         minimum: u16,
         maximum: u16,
     },
+    InvalidMenuHealthTag,
+    DuplicateMenuHealthTag(MenuHealthTag),
     DuplicateSpecialRequest(SpecialRequest),
     TooManySpecialRequests {
         maximum: usize,
@@ -1599,6 +1800,14 @@ impl fmt::Display for MenuSupplyWindowError {
             } => write!(
                 f,
                 "order line-item quantity must be between {minimum} and {maximum}, got {quantity}"
+            ),
+            Self::InvalidMenuHealthTag => f.write_str(
+                "menu health tag must be one of LOW_CALORIE, HIGH_PROTEIN, VEGETARIAN, VEGAN, GLUTEN_FREE",
+            ),
+            Self::DuplicateMenuHealthTag(health_tag) => write!(
+                f,
+                "duplicate menu health tag {} is not allowed",
+                health_tag.as_str()
             ),
             Self::DuplicateSpecialRequest(special_request) => write!(
                 f,

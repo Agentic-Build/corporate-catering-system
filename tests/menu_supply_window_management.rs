@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::sync::{Arc, Barrier};
 use std::thread;
 
@@ -5,8 +6,8 @@ use corporate_catering_system::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
 };
 use corporate_catering_system::menu_supply_window::{
-    MenuImageUrl, MenuItemId, MenuSupplyPolicy, MenuSupplyWindowError, Money, OrderId,
-    OrderLifecycleState, OrderLineItemRequest, OrderMutation, OrderTimelineEventType,
+    MenuHealthTag, MenuImageUrl, MenuItemId, MenuSupplyPolicy, MenuSupplyWindowError, Money,
+    OrderId, OrderLifecycleState, OrderLineItemRequest, OrderMutation, OrderTimelineEventType,
     SpecialRequest, VendorMenuItem, VendorMenuItemDraft, VendorOrderingPolicyOverride,
 };
 use corporate_catering_system::vendor_compliance::VendorId;
@@ -89,6 +90,8 @@ fn menu_item_with_overrides(
         VendorMenuItemDraft::new(
             "Roasted Chicken Bento",
             "Low sodium roasted chicken with mixed vegetables.",
+            "BENTO",
+            vec![MenuHealthTag::HighProtein],
             Some(
                 MenuImageUrl::parse("https://cdn.example.com/menu/roasted-chicken-bento.jpg")
                     .expect("menu image URL should be valid"),
@@ -99,6 +102,34 @@ fn menu_item_with_overrides(
         )
         .expect("menu draft should be valid")
         .with_ordering_policy_overrides(policy_override),
+    )
+}
+
+fn menu_item_with_metadata(
+    menu_item_id_value: &str,
+    vendor_id: &VendorId,
+    max_daily_quantity: u16,
+    delivery_epoch_day: i32,
+    menu_type: &str,
+    health_tags: Vec<MenuHealthTag>,
+) -> VendorMenuItem {
+    VendorMenuItem::new(
+        menu_item_id(menu_item_id_value),
+        vendor_id.clone(),
+        VendorMenuItemDraft::new(
+            "Discovery Menu",
+            "Discovery menu description",
+            menu_type,
+            health_tags,
+            Some(
+                MenuImageUrl::parse("https://cdn.example.com/menu/discovery-menu.jpg")
+                    .expect("menu image URL should be valid"),
+            ),
+            Money::new("TWD", 12000).expect("money should be valid"),
+            max_daily_quantity,
+            delivery_epoch_day,
+        )
+        .expect("menu draft should be valid"),
     )
 }
 
@@ -714,4 +745,108 @@ fn special_requests_are_controlled_and_risk_limited() {
             actual: Role::Employee,
         }
     ));
+}
+
+#[test]
+fn employee_discovery_snapshot_is_multi_day_and_uses_exact_inventory_with_cutoff_context() {
+    let policy = MenuSupplyPolicy::default();
+    let deliverable_vendor = vendor_id("ven-menuwindow-disc-a1");
+    let hidden_vendor = vendor_id("ven-menuwindow-disc-b1");
+
+    policy
+        .upsert_menu_item(
+            &vendor_operator(),
+            menu_item_with_metadata(
+                "menu-disc-a1",
+                &deliverable_vendor,
+                5,
+                81,
+                "BENTO",
+                vec![MenuHealthTag::HighProtein],
+            ),
+        )
+        .expect("deliverable day-1 menu should be upserted");
+    policy
+        .upsert_menu_item(
+            &vendor_operator(),
+            menu_item_with_metadata(
+                "menu-disc-a2",
+                &deliverable_vendor,
+                10,
+                83,
+                "SALAD",
+                vec![MenuHealthTag::Vegan],
+            ),
+        )
+        .expect("deliverable day-3 menu should be upserted");
+    policy
+        .upsert_menu_item(
+            &vendor_operator(),
+            menu_item_with_metadata(
+                "menu-disc-hidden-b1",
+                &hidden_vendor,
+                8,
+                82,
+                "NOODLE",
+                vec![MenuHealthTag::LowCalorie],
+            ),
+        )
+        .expect("hidden vendor menu should be upserted");
+
+    policy
+        .create_order(
+            order_id("ord-disc-001"),
+            &deliverable_vendor,
+            81,
+            vec![
+                OrderLineItemRequest::new(menu_item_id("menu-disc-a1"), 2, vec![])
+                    .expect("line item should be valid"),
+            ],
+            taipei_moment(80, 600),
+        )
+        .expect("order reservation should consume exact inventory");
+
+    let visible_vendors = BTreeSet::from([deliverable_vendor.clone()]);
+    let discovery = policy
+        .employee_discovery_snapshot(&visible_vendors, taipei_moment(80, 600))
+        .expect("discovery snapshot should succeed");
+
+    assert_eq!(
+        discovery.len(),
+        2,
+        "only deliverable vendor items should remain"
+    );
+    assert!(discovery
+        .iter()
+        .all(|entry| entry.menu_item().vendor_id() == &deliverable_vendor));
+    assert_eq!(
+        discovery
+            .iter()
+            .map(|entry| entry.menu_item().delivery_epoch_day())
+            .collect::<Vec<_>>(),
+        vec![81, 83]
+    );
+    assert_eq!(discovery[0].remaining_quantity(), 3);
+    assert_eq!(discovery[1].remaining_quantity(), 10);
+    assert!(discovery.iter().all(|entry| entry.preorder_open()));
+
+    let discovery_after_cutoff = policy
+        .employee_discovery_snapshot(&visible_vendors, taipei_moment(80, 1030))
+        .expect("discovery snapshot should succeed after cutoff");
+    let day_81 = discovery_after_cutoff
+        .iter()
+        .find(|entry| entry.menu_item().delivery_epoch_day() == 81)
+        .expect("day 81 menu should exist");
+    let day_83 = discovery_after_cutoff
+        .iter()
+        .find(|entry| entry.menu_item().delivery_epoch_day() == 83)
+        .expect("day 83 menu should exist");
+    assert!(
+        !day_81.preorder_open(),
+        "day-81 preorder should close after day-80 cutoff"
+    );
+    assert!(
+        day_83.preorder_open(),
+        "farther day should remain preorder-open"
+    );
 }

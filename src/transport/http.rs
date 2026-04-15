@@ -1,11 +1,13 @@
+use std::collections::BTreeSet;
+
 use crate::access::{
     AccessController, Action, AuthorizationError, AuthorizedWriteOperation, TransportLayer,
 };
 use crate::contract::{HttpMethod, HttpOperation};
 use crate::identity::{AuthenticatedActorContext, PlantId};
 use crate::menu_supply_window::{
-    MenuSupplyPolicy, MenuSupplyWindowError, OrderId, OrderLineItemRequest, OrderMutation,
-    VendorMenuItem,
+    EmployeeMenuDiscoveryEntry, MenuSupplyPolicy, MenuSupplyWindowError, OrderId,
+    OrderLineItemRequest, OrderMutation, VendorMenuItem,
 };
 use crate::observability::{TelemetryOutcome, TelemetryService};
 use crate::vendor_compliance::{VendorComplianceLifecycle, VendorId};
@@ -383,6 +385,67 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
     }
 }
 
+pub struct HttpEmployeeDiscoveryExecutionGateway<'a> {
+    compliance_lifecycle: &'a VendorComplianceLifecycle,
+    delivery_policy: &'a VendorPlantDeliveryPolicy,
+    menu_supply_policy: &'a MenuSupplyPolicy,
+}
+
+impl<'a> HttpEmployeeDiscoveryExecutionGateway<'a> {
+    pub fn new(
+        compliance_lifecycle: &'a VendorComplianceLifecycle,
+        delivery_policy: &'a VendorPlantDeliveryPolicy,
+        menu_supply_policy: &'a MenuSupplyPolicy,
+    ) -> Self {
+        Self {
+            compliance_lifecycle,
+            delivery_policy,
+            menu_supply_policy,
+        }
+    }
+
+    pub fn execute_discovery_snapshot(
+        &self,
+        plant_id: &PlantId,
+        at: TaipeiBusinessMoment,
+        for_search: bool,
+    ) -> Result<Vec<EmployeeMenuDiscoveryEntry>, HttpEmployeeDiscoveryError> {
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
+            if for_search {
+                "listEmployeeMenus:search"
+            } else {
+                "listEmployeeMenus:browse"
+            },
+            None,
+            Some(plant_id.as_str()),
+        );
+        let deliverable_vendor_ids = if for_search {
+            self.delivery_policy.employee_visible_vendor_ids_for_search(
+                self.compliance_lifecycle,
+                plant_id,
+                at,
+            )
+        } else {
+            self.delivery_policy.employee_visible_vendor_ids_for_browse(
+                self.compliance_lifecycle,
+                plant_id,
+                at,
+            )
+        };
+        let deliverable_vendor_ids = deliverable_vendor_ids.into_iter().collect::<BTreeSet<_>>();
+        let result = self
+            .menu_supply_policy
+            .employee_discovery_snapshot(&deliverable_vendor_ids, at)
+            .map_err(HttpEmployeeDiscoveryError::MenuSupply);
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
+    }
+}
+
 pub struct HttpVendorMenuExecutionGateway<'a> {
     menu_supply_policy: &'a MenuSupplyPolicy,
 }
@@ -433,3 +496,18 @@ impl std::fmt::Display for HttpOrderExecutionError {
 }
 
 impl std::error::Error for HttpOrderExecutionError {}
+
+#[derive(Debug)]
+pub enum HttpEmployeeDiscoveryError {
+    MenuSupply(MenuSupplyWindowError),
+}
+
+impl std::fmt::Display for HttpEmployeeDiscoveryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MenuSupply(error) => write!(f, "menu supply discovery failed: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for HttpEmployeeDiscoveryError {}

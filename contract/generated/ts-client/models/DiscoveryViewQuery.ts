@@ -2,7 +2,5 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-/**
- * Anchor date for week/calendar discovery windows in Asia/Taipei.
- */
-export type MenuDateQuery = string;
+import type { MenuDiscoveryView } from './MenuDiscoveryView';
+export type DiscoveryViewQuery = MenuDiscoveryView;

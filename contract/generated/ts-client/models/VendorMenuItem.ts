@@ -3,14 +3,16 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { MenuHealthTag } from './MenuHealthTag';
+import type { MenuType } from './MenuType';
 import type { Money } from './Money';
 export type VendorMenuItem = {
     deliveryDate: string;
     description: string;
-    healthTags?: Array<MenuHealthTag>;
+    healthTags: Array<MenuHealthTag>;
     imageUrl?: string;
     maxDailyQuantity: number;
     menuItemId: string;
+    menuType: MenuType;
     modifyCancelCutoffMinuteOfDay: number;
     name: string;
     preorderOpenDaysAhead: number;

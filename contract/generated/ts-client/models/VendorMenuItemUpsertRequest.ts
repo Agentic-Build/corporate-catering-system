@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { MenuHealthTag } from './MenuHealthTag';
+import type { MenuType } from './MenuType';
 import type { Money } from './Money';
 export type VendorMenuItemUpsertRequest = {
     deliveryDate: string;
@@ -10,6 +11,7 @@ export type VendorMenuItemUpsertRequest = {
     healthTags?: Array<MenuHealthTag>;
     imageUrl?: string;
     maxDailyQuantity: number;
+    menuType: MenuType;
     /**
      * Optional vendor override minute-of-day (Asia/Taipei) for previous-day modify/cancel cutoff.
      */

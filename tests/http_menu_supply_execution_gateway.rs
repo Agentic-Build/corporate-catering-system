@@ -2,8 +2,8 @@ use corporate_catering_system::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
 };
 use corporate_catering_system::menu_supply_window::{
-    MenuImageUrl, MenuItemId, MenuSupplyPolicy, Money, OrderId, OrderLineItemRequest,
-    OrderMutation, SpecialRequest, VendorMenuItem, VendorMenuItemDraft,
+    MenuHealthTag, MenuImageUrl, MenuItemId, MenuSupplyPolicy, Money, OrderId,
+    OrderLineItemRequest, OrderMutation, SpecialRequest, VendorMenuItem, VendorMenuItemDraft,
     VendorOrderingPolicyOverride,
 };
 use corporate_catering_system::transport::http::{
@@ -166,6 +166,8 @@ fn menu_item_with_overrides(
         VendorMenuItemDraft::new(
             "Herb Chicken Bowl",
             "Herb chicken bowl with grilled vegetables.",
+            "BOWL",
+            vec![MenuHealthTag::HighProtein],
             Some(
                 MenuImageUrl::parse("https://cdn.example.com/menu/herb-chicken-bowl.jpg")
                     .expect("menu image URL should be valid"),
