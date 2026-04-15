@@ -35,6 +35,8 @@ export type { OrderIdPath } from './models/OrderIdPath';
 export type { OrderLineItem } from './models/OrderLineItem';
 export type { OrderLineItemRequest } from './models/OrderLineItemRequest';
 export type { OrderStatusFilterQuery } from './models/OrderStatusFilterQuery';
+export type { OrderTimelineEvent } from './models/OrderTimelineEvent';
+export type { OrderTimelineEventType } from './models/OrderTimelineEventType';
 export type { PageMeta } from './models/PageMeta';
 export type { PageQuery } from './models/PageQuery';
 export type { PageSizeQuery } from './models/PageSizeQuery';

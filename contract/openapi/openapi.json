@@ -355,6 +355,13 @@
           "status": {
             "$ref": "#/components/schemas/EmployeeOrderStatus"
           },
+          "timeline": {
+            "items": {
+              "$ref": "#/components/schemas/OrderTimelineEvent"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
           "total": {
             "$ref": "#/components/schemas/Money"
           }
@@ -366,7 +373,8 @@
           "deliveryDate",
           "status",
           "lineItems",
-          "total"
+          "total",
+          "timeline"
         ],
         "type": "object"
       },
@@ -459,8 +467,11 @@
       "EmployeeOrderStatus": {
         "enum": [
           "PENDING",
-          "CONFIRMED",
+          "MODIFIED",
           "CANCELLED",
+          "SOLD_OUT",
+          "REFUND_PENDING",
+          "REFUNDED",
           "FULFILLED"
         ],
         "type": "string"
@@ -695,6 +706,38 @@
           "quantity"
         ],
         "type": "object"
+      },
+      "OrderTimelineEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "eventType": {
+            "$ref": "#/components/schemas/OrderTimelineEventType"
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TaipeiBusinessDateTime"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EmployeeOrderStatus"
+          }
+        },
+        "required": [
+          "occurredAt",
+          "eventType",
+          "status"
+        ],
+        "type": "object"
+      },
+      "OrderTimelineEventType": {
+        "enum": [
+          "CREATED",
+          "MODIFIED",
+          "CANCELLED",
+          "SOLD_OUT",
+          "REFUND_PENDING",
+          "REFUNDED",
+          "FULFILLED"
+        ],
+        "type": "string"
       },
       "PageMeta": {
         "additionalProperties": false,
@@ -1359,6 +1402,13 @@
           },
           "status": {
             "$ref": "#/components/schemas/EmployeeOrderStatus"
+          },
+          "timeline": {
+            "items": {
+              "$ref": "#/components/schemas/OrderTimelineEvent"
+            },
+            "minItems": 1,
+            "type": "array"
           }
         },
         "required": [
@@ -1366,7 +1416,8 @@
           "plantId",
           "deliveryDate",
           "status",
-          "lineItems"
+          "lineItems",
+          "timeline"
         ],
         "type": "object"
       },
@@ -2174,6 +2225,7 @@
           "timezone": "Asia/Taipei"
         },
         "x-order-governance": {
+          "inventoryReservationMode": "ATOMIC_IDEMPOTENT",
           "modifyCancelCutoff": {
             "defaultRule": {
               "minuteOfDay": 1020,
@@ -2194,6 +2246,19 @@
           "specialRequestPolicy": {
             "allowFreeText": false,
             "mode": "CONTROLLED_ENUM_ONLY"
+          },
+          "strictLifecycle": true,
+          "timeline": {
+            "includes": [
+              "CREATED",
+              "MODIFIED",
+              "CANCELLED",
+              "SOLD_OUT",
+              "REFUND_PENDING",
+              "REFUNDED",
+              "FULFILLED"
+            ],
+            "required": true
           },
           "timezone": "Asia/Taipei"
         }
@@ -2257,6 +2322,7 @@
           "Employee"
         ],
         "x-order-governance": {
+          "inventoryReservationMode": "ATOMIC_IDEMPOTENT",
           "modifyCancelCutoff": {
             "defaultRule": {
               "minuteOfDay": 1020,
@@ -2267,6 +2333,7 @@
               "minimumMinuteOfDay": 900
             }
           },
+          "strictLifecycle": true,
           "supportedOperations": [
             "REPLACE_LINE_ITEMS",
             "CANCEL"

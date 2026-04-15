@@ -313,6 +313,8 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "x-order-governance": {
               "timezone": "Asia/Taipei",
+              "strictLifecycle": true,
+              "inventoryReservationMode": "ATOMIC_IDEMPOTENT",
               "preorderWindow": {
                 "defaultOpenDaysAhead": 7,
                 "vendorOverrideBounds": {
@@ -333,6 +335,18 @@ pub fn canonical_openapi_spec() -> Value {
               "specialRequestPolicy": {
                 "mode": "CONTROLLED_ENUM_ONLY",
                 "allowFreeText": false
+              },
+              "timeline": {
+                "required": true,
+                "includes": [
+                  "CREATED",
+                  "MODIFIED",
+                  "CANCELLED",
+                  "SOLD_OUT",
+                  "REFUND_PENDING",
+                  "REFUNDED",
+                  "FULFILLED"
+                ]
               }
             },
             "security": [{ "corporateSsoBearer": [] }],
@@ -368,6 +382,8 @@ pub fn canonical_openapi_spec() -> Value {
             "operationId": HttpOperation::UpdateEmployeeOrder.operation_id(),
             "x-order-governance": {
               "timezone": "Asia/Taipei",
+              "strictLifecycle": true,
+              "inventoryReservationMode": "ATOMIC_IDEMPOTENT",
               "supportedOperations": ["REPLACE_LINE_ITEMS", "CANCEL"],
               "modifyCancelCutoff": {
                 "defaultRule": {
@@ -1079,7 +1095,37 @@ pub fn canonical_openapi_spec() -> Value {
           },
           "EmployeeOrderStatus": {
             "type": "string",
-            "enum": ["PENDING", "CONFIRMED", "CANCELLED", "FULFILLED"]
+            "enum": [
+              "PENDING",
+              "MODIFIED",
+              "CANCELLED",
+              "SOLD_OUT",
+              "REFUND_PENDING",
+              "REFUNDED",
+              "FULFILLED"
+            ]
+          },
+          "OrderTimelineEventType": {
+            "type": "string",
+            "enum": [
+              "CREATED",
+              "MODIFIED",
+              "CANCELLED",
+              "SOLD_OUT",
+              "REFUND_PENDING",
+              "REFUNDED",
+              "FULFILLED"
+            ]
+          },
+          "OrderTimelineEvent": {
+            "type": "object",
+            "required": ["occurredAt", "eventType", "status"],
+            "properties": {
+              "occurredAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "eventType": { "$ref": "#/components/schemas/OrderTimelineEventType" },
+              "status": { "$ref": "#/components/schemas/EmployeeOrderStatus" }
+            },
+            "additionalProperties": false
           },
           "VendorStatus": {
             "type": "string",
@@ -1373,7 +1419,8 @@ pub fn canonical_openapi_spec() -> Value {
               "deliveryDate",
               "status",
               "lineItems",
-              "total"
+              "total",
+              "timeline"
             ],
             "properties": {
               "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
@@ -1387,13 +1434,18 @@ pub fn canonical_openapi_spec() -> Value {
                 "minItems": 1
               },
               "total": { "$ref": "#/components/schemas/Money" },
+              "timeline": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/OrderTimelineEvent" },
+                "minItems": 1
+              },
               "createdAt": { "type": "string", "format": "date-time" }
             },
             "additionalProperties": false
           },
           "VendorOrderBoardEntry": {
             "type": "object",
-            "required": ["orderId", "plantId", "deliveryDate", "status", "lineItems"],
+            "required": ["orderId", "plantId", "deliveryDate", "status", "lineItems", "timeline"],
             "properties": {
               "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
               "plantId": { "$ref": "#/components/schemas/PlantId" },
@@ -1402,6 +1454,11 @@ pub fn canonical_openapi_spec() -> Value {
               "lineItems": {
                 "type": "array",
                 "items": { "$ref": "#/components/schemas/OrderLineItem" },
+                "minItems": 1
+              },
+              "timeline": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/OrderTimelineEvent" },
                 "minItems": 1
               }
             },

@@ -562,6 +562,14 @@ fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_re
         "Asia/Taipei"
     );
     assert_eq!(
+        create_order_operation["x-order-governance"]["strictLifecycle"],
+        true
+    );
+    assert_eq!(
+        create_order_operation["x-order-governance"]["inventoryReservationMode"],
+        "ATOMIC_IDEMPOTENT"
+    );
+    assert_eq!(
         create_order_operation["x-order-governance"]["preorderWindow"]["defaultOpenDaysAhead"],
         7
     );
@@ -573,6 +581,29 @@ fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_re
     assert_eq!(
         create_order_operation["x-order-governance"]["specialRequestPolicy"]["allowFreeText"],
         false
+    );
+    let timeline_includes = create_order_operation["x-order-governance"]["timeline"]["includes"]
+        .as_array()
+        .expect("timeline includes must be declared")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("timeline include must be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        timeline_includes,
+        BTreeSet::from([
+            "CREATED".to_owned(),
+            "MODIFIED".to_owned(),
+            "CANCELLED".to_owned(),
+            "SOLD_OUT".to_owned(),
+            "REFUND_PENDING".to_owned(),
+            "REFUNDED".to_owned(),
+            "FULFILLED".to_owned(),
+        ])
     );
 
     let patch_order_operation =
@@ -668,6 +699,47 @@ fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_re
     assert_eq!(
         vendor_menu_schema["properties"]["imageUrl"]["format"],
         "uri"
+    );
+
+    let order_status_values = spec["components"]["schemas"]["EmployeeOrderStatus"]["enum"]
+        .as_array()
+        .expect("order status enum should exist")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("status value must be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        order_status_values,
+        BTreeSet::from([
+            "PENDING".to_owned(),
+            "MODIFIED".to_owned(),
+            "CANCELLED".to_owned(),
+            "SOLD_OUT".to_owned(),
+            "REFUND_PENDING".to_owned(),
+            "REFUNDED".to_owned(),
+            "FULFILLED".to_owned(),
+        ])
+    );
+
+    let employee_order_required = spec["components"]["schemas"]["EmployeeOrder"]["required"]
+        .as_array()
+        .expect("employee order required fields must be array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("required field must be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(employee_order_required.contains("timeline"));
+    assert_eq!(
+        spec["components"]["schemas"]["EmployeeOrder"]["properties"]["timeline"]["items"]["$ref"],
+        "#/components/schemas/OrderTimelineEvent"
     );
 }
 

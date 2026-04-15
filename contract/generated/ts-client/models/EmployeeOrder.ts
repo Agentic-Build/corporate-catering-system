@@ -6,6 +6,7 @@ import type { ActorId } from './ActorId';
 import type { EmployeeOrderStatus } from './EmployeeOrderStatus';
 import type { Money } from './Money';
 import type { OrderLineItem } from './OrderLineItem';
+import type { OrderTimelineEvent } from './OrderTimelineEvent';
 import type { PlantId } from './PlantId';
 export type EmployeeOrder = {
     createdAt?: string;
@@ -15,6 +16,7 @@ export type EmployeeOrder = {
     orderId: string;
     plantId: PlantId;
     status: EmployeeOrderStatus;
+    timeline: Array<OrderTimelineEvent>;
     total: Money;
 };
 

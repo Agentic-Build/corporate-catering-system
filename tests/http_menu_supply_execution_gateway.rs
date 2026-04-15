@@ -268,6 +268,22 @@ fn http_ordering_gateway_enforces_deliverability_and_menu_supply_rules() {
         HttpOrderExecutionError::MenuSupply(_)
     ));
 
+    let unsupported_mutation_error = gateway_before_deny
+        .execute_update_employee_order(
+            &order_id("ord-http-supply-001"),
+            &vendor,
+            &plant_id("fab-a"),
+            OrderMutation::MarkRefundPending,
+            taipei_moment(10, 851),
+        )
+        .expect_err("employee gateway must reject non-employee lifecycle operations");
+    assert!(matches!(
+        unsupported_mutation_error,
+        HttpOrderExecutionError::UnsupportedEmployeeMutation {
+            operation: "MARK_REFUND_PENDING",
+        }
+    ));
+
     delivery_policy
         .upsert_mapping(
             &committee,

@@ -2,9 +2,9 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::{get, post};
+use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use corporate_catering_system::health::{evaluate_probe, HealthProbeKind, HealthState};
 use corporate_catering_system::observability::{
@@ -48,6 +48,22 @@ struct CreateOrderResponse {
     accepted: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateOrderRequest {
+    operation: String,
+    line_items: Option<Vec<OrderLineItemRequest>>,
+    cancel_reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateOrderResponse {
+    order_id: String,
+    accepted: bool,
+    operation: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MenuSummary {
@@ -86,6 +102,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         .route("/health/startup", get(startup_probe))
         .route("/api/v1/employee/menus", get(list_employee_menus))
         .route("/api/v1/employee/orders", post(create_employee_order))
+        .route(
+            "/api/v1/employee/orders/:orderId",
+            patch(update_employee_order),
+        )
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(socket_addr).await?;
@@ -205,6 +225,63 @@ async fn create_employee_order(
                 accepted: true,
             })
             .expect("create order payload serialization should succeed"),
+        ),
+    )
+}
+
+async fn update_employee_order(
+    Path(order_id): Path<String>,
+    Json(request): Json<UpdateOrderRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "updateEmployeeOrder",
+        Some("load-gate"),
+        Some("plant-a"),
+    );
+
+    let valid_operation = match request.operation.as_str() {
+        "REPLACE_LINE_ITEMS" => request
+            .line_items
+            .as_ref()
+            .map(|line_items| {
+                !line_items.is_empty()
+                    && line_items
+                        .iter()
+                        .all(|line| !line.menu_item_id.trim().is_empty() && line.quantity > 0)
+            })
+            .unwrap_or(false),
+        "CANCEL" => request
+            .cancel_reason
+            .as_ref()
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false),
+        _ => false,
+    };
+
+    if order_id.trim().is_empty() || !valid_operation {
+        telemetry.finish_with_http_status(StatusCode::BAD_REQUEST.as_u16());
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(
+                serde_json::to_value(ErrorPayload {
+                    code: "INVALID_ORDER_UPDATE_REQUEST",
+                    message: "order update payload is invalid".to_owned(),
+                })
+                .expect("error payload serialization should succeed"),
+            ),
+        );
+    }
+
+    telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+    (
+        StatusCode::OK,
+        Json(
+            serde_json::to_value(UpdateOrderResponse {
+                order_id,
+                accepted: true,
+                operation: request.operation,
+            })
+            .expect("update order payload serialization should succeed"),
         ),
     )
 }

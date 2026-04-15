@@ -211,6 +211,10 @@ fn hard_slo_policy_blocks_release_without_dashboard_alerts_and_load_thresholds()
         yaml_get(scenario, "name").as_str() == Some("mixed-order-and-menu-reads")
             && yaml_get(scenario, "p95LatencyMsMax").as_i64() == Some(250)
     }));
+    assert!(scenarios.iter().any(|scenario| {
+        yaml_get(scenario, "name").as_str() == Some("peak-order-lifecycle-mutations")
+            && yaml_get(scenario, "p95LatencyMsMax").as_i64() == Some(320)
+    }));
 }
 
 #[test]
@@ -498,6 +502,7 @@ fn prelaunch_load_assets_are_aligned_with_hard_slo_policy() {
         BTreeSet::from([
             "mixed-order-and-menu-reads".to_owned(),
             "peak-order-placement".to_owned(),
+            "peak-order-lifecycle-mutations".to_owned(),
         ])
     );
 
@@ -518,7 +523,9 @@ fn prelaunch_load_assets_are_aligned_with_hard_slo_policy() {
     for required in [
         "peak-order-placement",
         "mixed-order-and-menu-reads",
+        "peak-order-lifecycle-mutations",
         "/api/v1/employee/orders",
+        "/api/v1/employee/orders/",
         "/api/v1/employee/menus",
     ] {
         assert!(

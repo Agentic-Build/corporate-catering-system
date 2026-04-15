@@ -566,13 +566,173 @@ pub enum OrderMutation {
         line_items: Vec<OrderLineItemRequest>,
     },
     Cancel,
+    MarkSoldOut,
+    MarkRefundPending,
+    MarkRefunded,
+    MarkFulfilled,
+}
+
+impl OrderMutation {
+    pub const fn operation_name(&self) -> &'static str {
+        match self {
+            Self::ReplaceLineItems { .. } => "REPLACE_LINE_ITEMS",
+            Self::Cancel => "CANCEL",
+            Self::MarkSoldOut => "MARK_SOLD_OUT",
+            Self::MarkRefundPending => "MARK_REFUND_PENDING",
+            Self::MarkRefunded => "MARK_REFUNDED",
+            Self::MarkFulfilled => "MARK_FULFILLED",
+        }
+    }
+
+    pub const fn is_employee_patch_operation(&self) -> bool {
+        matches!(self, Self::ReplaceLineItems { .. } | Self::Cancel)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrderLifecycleState {
+    Pending,
+    Modified,
+    Cancelled,
+    SoldOut,
+    RefundPending,
+    Refunded,
+    Fulfilled,
+}
+
+impl OrderLifecycleState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "PENDING",
+            Self::Modified => "MODIFIED",
+            Self::Cancelled => "CANCELLED",
+            Self::SoldOut => "SOLD_OUT",
+            Self::RefundPending => "REFUND_PENDING",
+            Self::Refunded => "REFUNDED",
+            Self::Fulfilled => "FULFILLED",
+        }
+    }
+}
+
+impl fmt::Display for OrderLifecycleState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrderTimelineEventType {
+    Created,
+    Modified,
+    Cancelled,
+    SoldOut,
+    RefundPending,
+    Refunded,
+    Fulfilled,
+}
+
+impl OrderTimelineEventType {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Created => "CREATED",
+            Self::Modified => "MODIFIED",
+            Self::Cancelled => "CANCELLED",
+            Self::SoldOut => "SOLD_OUT",
+            Self::RefundPending => "REFUND_PENDING",
+            Self::Refunded => "REFUNDED",
+            Self::Fulfilled => "FULFILLED",
+        }
+    }
+}
+
+impl fmt::Display for OrderTimelineEventType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrderTimelineEvent {
+    occurred_at: TaipeiBusinessMoment,
+    event_type: OrderTimelineEventType,
+    state: OrderLifecycleState,
+}
+
+impl OrderTimelineEvent {
+    fn new(
+        occurred_at: TaipeiBusinessMoment,
+        event_type: OrderTimelineEventType,
+        state: OrderLifecycleState,
+    ) -> Self {
+        Self {
+            occurred_at,
+            event_type,
+            state,
+        }
+    }
+
+    pub fn occurred_at(&self) -> TaipeiBusinessMoment {
+        self.occurred_at
+    }
+
+    pub fn event_type(&self) -> OrderTimelineEventType {
+        self.event_type
+    }
+
+    pub fn state(&self) -> OrderLifecycleState {
+        self.state
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrderSnapshot {
+    order_id: OrderId,
+    vendor_id: VendorId,
+    delivery_epoch_day: i32,
+    state: OrderLifecycleState,
+    line_items: BTreeMap<MenuItemId, u16>,
+    timeline: Vec<OrderTimelineEvent>,
+    inventory_reserved: bool,
+}
+
+impl OrderSnapshot {
+    pub fn order_id(&self) -> &OrderId {
+        &self.order_id
+    }
+
+    pub fn vendor_id(&self) -> &VendorId {
+        &self.vendor_id
+    }
+
+    pub fn delivery_epoch_day(&self) -> i32 {
+        self.delivery_epoch_day
+    }
+
+    pub fn state(&self) -> OrderLifecycleState {
+        self.state
+    }
+
+    pub fn line_items(&self) -> &BTreeMap<MenuItemId, u16> {
+        &self.line_items
+    }
+
+    pub fn timeline(&self) -> &[OrderTimelineEvent] {
+        &self.timeline
+    }
+
+    pub fn inventory_reserved(&self) -> bool {
+        self.inventory_reserved
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct StoredOrder {
     vendor_id: VendorId,
     delivery_epoch_day: i32,
+    state: OrderLifecycleState,
     line_items: BTreeMap<MenuItemId, u16>,
+    timeline: Vec<OrderTimelineEvent>,
+    inventory_reserved: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -724,6 +884,34 @@ impl MenuSupplyPolicy {
         ))
     }
 
+    pub fn order_snapshot(
+        &self,
+        order_id: &OrderId,
+    ) -> Result<Option<OrderSnapshot>, MenuSupplyWindowError> {
+        let state = lock_state(&self.state)?;
+        Ok(state
+            .orders
+            .get(order_id)
+            .map(|stored_order| OrderSnapshot {
+                order_id: order_id.clone(),
+                vendor_id: stored_order.vendor_id.clone(),
+                delivery_epoch_day: stored_order.delivery_epoch_day,
+                state: stored_order.state,
+                line_items: stored_order.line_items.clone(),
+                timeline: stored_order.timeline.clone(),
+                inventory_reserved: stored_order.inventory_reserved,
+            }))
+    }
+
+    pub fn order_timeline(
+        &self,
+        order_id: &OrderId,
+    ) -> Result<Option<Vec<OrderTimelineEvent>>, MenuSupplyWindowError> {
+        Ok(self
+            .order_snapshot(order_id)?
+            .map(|snapshot| snapshot.timeline))
+    }
+
     pub fn create_order(
         &self,
         order_id: OrderId,
@@ -733,33 +921,50 @@ impl MenuSupplyPolicy {
         placed_at: TaipeiBusinessMoment,
     ) -> Result<(), MenuSupplyWindowError> {
         let mut state = lock_state(&self.state)?;
-        if state.orders.contains_key(&order_id) {
-            return Err(MenuSupplyWindowError::OrderAlreadyExists(order_id));
-        }
-
-        self.enforce_create_window_locked(&state, vendor_id, delivery_epoch_day, placed_at)?;
         let aggregated_line_items = self.validate_and_aggregate_line_items_locked(
             &state,
             vendor_id,
             delivery_epoch_day,
             &line_items,
         )?;
-        self.ensure_quota_capacity_locked(&state, &aggregated_line_items)?;
-
-        for (menu_item_id, quantity) in &aggregated_line_items {
-            let allocated = state
-                .allocated_quantity_by_menu_item
-                .entry(menu_item_id.clone())
-                .or_insert(0);
-            *allocated = allocated.saturating_add(*quantity);
+        if let Some(existing_order) = state.orders.get(&order_id) {
+            if existing_order.vendor_id == *vendor_id
+                && existing_order.delivery_epoch_day == delivery_epoch_day
+                && existing_order.line_items == aggregated_line_items
+                && existing_order.state == OrderLifecycleState::Pending
+                && existing_order.inventory_reserved
+            {
+                return Ok(());
+            }
+            return Err(MenuSupplyWindowError::OrderAlreadyExists(order_id));
         }
+
+        self.enforce_create_window_locked(&state, vendor_id, delivery_epoch_day, placed_at)?;
+        let current_allocations = BTreeMap::new();
+        self.ensure_quota_capacity_for_transition_locked(
+            &state,
+            &current_allocations,
+            &aggregated_line_items,
+        )?;
+        self.apply_allocation_transition_locked(
+            &mut state,
+            &current_allocations,
+            &aggregated_line_items,
+        )?;
 
         state.orders.insert(
             order_id,
             StoredOrder {
                 vendor_id: vendor_id.clone(),
                 delivery_epoch_day,
+                state: OrderLifecycleState::Pending,
                 line_items: aggregated_line_items,
+                timeline: vec![OrderTimelineEvent::new(
+                    placed_at,
+                    OrderTimelineEventType::Created,
+                    OrderLifecycleState::Pending,
+                )],
+                inventory_reserved: true,
             },
         );
 
@@ -779,49 +984,228 @@ impl MenuSupplyPolicy {
             .cloned()
             .ok_or_else(|| MenuSupplyWindowError::OrderNotFound(order_id.clone()))?;
 
-        self.enforce_modify_cancel_cutoff_locked(
-            &state,
-            &stored_order.vendor_id,
-            stored_order.delivery_epoch_day,
-            requested_at,
-        )?;
-
         match mutation {
             OrderMutation::Cancel => {
-                self.release_allocations_locked(&mut state, &stored_order.line_items);
-                state.orders.remove(order_id);
+                if stored_order.state == OrderLifecycleState::Cancelled {
+                    return Ok(());
+                }
+                if !matches!(
+                    stored_order.state,
+                    OrderLifecycleState::Pending | OrderLifecycleState::Modified
+                ) {
+                    return Err(MenuSupplyWindowError::InvalidOrderLifecycleTransition {
+                        order_id: order_id.clone(),
+                        current_state: stored_order.state,
+                        operation: "CANCEL",
+                    });
+                }
+
+                self.enforce_modify_cancel_cutoff_locked(
+                    &state,
+                    &stored_order.vendor_id,
+                    stored_order.delivery_epoch_day,
+                    requested_at,
+                )?;
+                if !stored_order.inventory_reserved {
+                    return Err(MenuSupplyWindowError::InventoryLedgerCorrupted {
+                        menu_item_id: None,
+                        reason: "cancel transition expected reserved inventory",
+                    });
+                }
+
+                let mut next_order = stored_order.clone();
+                self.ensure_quota_capacity_for_transition_locked(
+                    &state,
+                    &next_order.line_items,
+                    &BTreeMap::new(),
+                )?;
+                self.apply_allocation_transition_locked(
+                    &mut state,
+                    &next_order.line_items,
+                    &BTreeMap::new(),
+                )?;
+                next_order.inventory_reserved = false;
+                next_order.state = OrderLifecycleState::Cancelled;
+                next_order.timeline.push(OrderTimelineEvent::new(
+                    requested_at,
+                    OrderTimelineEventType::Cancelled,
+                    OrderLifecycleState::Cancelled,
+                ));
+                state.orders.insert(order_id.clone(), next_order);
                 Ok(())
             }
             OrderMutation::ReplaceLineItems { line_items } => {
+                if !matches!(
+                    stored_order.state,
+                    OrderLifecycleState::Pending | OrderLifecycleState::Modified
+                ) {
+                    return Err(MenuSupplyWindowError::InvalidOrderLifecycleTransition {
+                        order_id: order_id.clone(),
+                        current_state: stored_order.state,
+                        operation: "REPLACE_LINE_ITEMS",
+                    });
+                }
                 let next_line_items = self.validate_and_aggregate_line_items_locked(
                     &state,
                     &stored_order.vendor_id,
                     stored_order.delivery_epoch_day,
                     &line_items,
                 )?;
-                self.ensure_quota_capacity_for_update_locked(
+
+                if stored_order.line_items == next_line_items {
+                    return Ok(());
+                }
+                if !stored_order.inventory_reserved {
+                    return Err(MenuSupplyWindowError::InventoryLedgerCorrupted {
+                        menu_item_id: None,
+                        reason: "line-item replacement expected reserved inventory",
+                    });
+                }
+
+                self.enforce_modify_cancel_cutoff_locked(
+                    &state,
+                    &stored_order.vendor_id,
+                    stored_order.delivery_epoch_day,
+                    requested_at,
+                )?;
+                self.ensure_quota_capacity_for_transition_locked(
                     &state,
                     &stored_order.line_items,
                     &next_line_items,
                 )?;
+                self.apply_allocation_transition_locked(
+                    &mut state,
+                    &stored_order.line_items,
+                    &next_line_items,
+                )?;
 
-                self.release_allocations_locked(&mut state, &stored_order.line_items);
-                for (menu_item_id, quantity) in &next_line_items {
-                    let allocated = state
-                        .allocated_quantity_by_menu_item
-                        .entry(menu_item_id.clone())
-                        .or_insert(0);
-                    *allocated = allocated.saturating_add(*quantity);
+                let mut next_order = stored_order.clone();
+                next_order.line_items = next_line_items;
+                next_order.state = OrderLifecycleState::Modified;
+                next_order.timeline.push(OrderTimelineEvent::new(
+                    requested_at,
+                    OrderTimelineEventType::Modified,
+                    OrderLifecycleState::Modified,
+                ));
+                state.orders.insert(order_id.clone(), next_order);
+                Ok(())
+            }
+            OrderMutation::MarkSoldOut => {
+                if stored_order.state == OrderLifecycleState::SoldOut {
+                    return Ok(());
+                }
+                if !matches!(
+                    stored_order.state,
+                    OrderLifecycleState::Pending | OrderLifecycleState::Modified
+                ) {
+                    return Err(MenuSupplyWindowError::InvalidOrderLifecycleTransition {
+                        order_id: order_id.clone(),
+                        current_state: stored_order.state,
+                        operation: "MARK_SOLD_OUT",
+                    });
                 }
 
-                state.orders.insert(
-                    order_id.clone(),
-                    StoredOrder {
-                        vendor_id: stored_order.vendor_id,
-                        delivery_epoch_day: stored_order.delivery_epoch_day,
-                        line_items: next_line_items,
-                    },
-                );
+                let mut next_order = stored_order.clone();
+                if next_order.inventory_reserved {
+                    self.ensure_quota_capacity_for_transition_locked(
+                        &state,
+                        &next_order.line_items,
+                        &BTreeMap::new(),
+                    )?;
+                    self.apply_allocation_transition_locked(
+                        &mut state,
+                        &next_order.line_items,
+                        &BTreeMap::new(),
+                    )?;
+                    next_order.inventory_reserved = false;
+                }
+                next_order.state = OrderLifecycleState::SoldOut;
+                next_order.timeline.push(OrderTimelineEvent::new(
+                    requested_at,
+                    OrderTimelineEventType::SoldOut,
+                    OrderLifecycleState::SoldOut,
+                ));
+                state.orders.insert(order_id.clone(), next_order);
+                Ok(())
+            }
+            OrderMutation::MarkRefundPending => {
+                if stored_order.state == OrderLifecycleState::RefundPending {
+                    return Ok(());
+                }
+                if !matches!(
+                    stored_order.state,
+                    OrderLifecycleState::Cancelled
+                        | OrderLifecycleState::SoldOut
+                        | OrderLifecycleState::Fulfilled
+                ) {
+                    return Err(MenuSupplyWindowError::InvalidOrderLifecycleTransition {
+                        order_id: order_id.clone(),
+                        current_state: stored_order.state,
+                        operation: "MARK_REFUND_PENDING",
+                    });
+                }
+
+                let mut next_order = stored_order.clone();
+                next_order.state = OrderLifecycleState::RefundPending;
+                next_order.timeline.push(OrderTimelineEvent::new(
+                    requested_at,
+                    OrderTimelineEventType::RefundPending,
+                    OrderLifecycleState::RefundPending,
+                ));
+                state.orders.insert(order_id.clone(), next_order);
+                Ok(())
+            }
+            OrderMutation::MarkRefunded => {
+                if stored_order.state == OrderLifecycleState::Refunded {
+                    return Ok(());
+                }
+                if stored_order.state != OrderLifecycleState::RefundPending {
+                    return Err(MenuSupplyWindowError::InvalidOrderLifecycleTransition {
+                        order_id: order_id.clone(),
+                        current_state: stored_order.state,
+                        operation: "MARK_REFUNDED",
+                    });
+                }
+
+                let mut next_order = stored_order.clone();
+                next_order.state = OrderLifecycleState::Refunded;
+                next_order.timeline.push(OrderTimelineEvent::new(
+                    requested_at,
+                    OrderTimelineEventType::Refunded,
+                    OrderLifecycleState::Refunded,
+                ));
+                state.orders.insert(order_id.clone(), next_order);
+                Ok(())
+            }
+            OrderMutation::MarkFulfilled => {
+                if stored_order.state == OrderLifecycleState::Fulfilled {
+                    return Ok(());
+                }
+                if !matches!(
+                    stored_order.state,
+                    OrderLifecycleState::Pending | OrderLifecycleState::Modified
+                ) {
+                    return Err(MenuSupplyWindowError::InvalidOrderLifecycleTransition {
+                        order_id: order_id.clone(),
+                        current_state: stored_order.state,
+                        operation: "MARK_FULFILLED",
+                    });
+                }
+                if !stored_order.inventory_reserved {
+                    return Err(MenuSupplyWindowError::InventoryLedgerCorrupted {
+                        menu_item_id: None,
+                        reason: "fulfillment transition expected reserved inventory",
+                    });
+                }
+
+                let mut next_order = stored_order.clone();
+                next_order.state = OrderLifecycleState::Fulfilled;
+                next_order.timeline.push(OrderTimelineEvent::new(
+                    requested_at,
+                    OrderTimelineEventType::Fulfilled,
+                    OrderLifecycleState::Fulfilled,
+                ));
+                state.orders.insert(order_id.clone(), next_order);
                 Ok(())
             }
         }
@@ -941,38 +1325,7 @@ impl MenuSupplyPolicy {
         Ok(aggregated_line_items)
     }
 
-    fn ensure_quota_capacity_locked(
-        &self,
-        state: &MenuSupplyState,
-        requested_line_items: &BTreeMap<MenuItemId, u16>,
-    ) -> Result<(), MenuSupplyWindowError> {
-        for (menu_item_id, requested_quantity) in requested_line_items {
-            let menu_item = state.menu_items.get(menu_item_id).ok_or_else(|| {
-                MenuSupplyWindowError::MenuItemNotFound {
-                    menu_item_id: menu_item_id.clone(),
-                }
-            })?;
-            let allocated_quantity = state
-                .allocated_quantity_by_menu_item
-                .get(menu_item_id)
-                .copied()
-                .unwrap_or(0);
-            let remaining_quantity = menu_item
-                .max_daily_quantity()
-                .saturating_sub(allocated_quantity);
-            if *requested_quantity > remaining_quantity {
-                return Err(MenuSupplyWindowError::QuotaExceeded {
-                    menu_item_id: menu_item_id.clone(),
-                    requested_quantity: *requested_quantity,
-                    remaining_quantity,
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    fn ensure_quota_capacity_for_update_locked(
+    fn ensure_quota_capacity_for_transition_locked(
         &self,
         state: &MenuSupplyState,
         current_line_items: &BTreeMap<MenuItemId, u16>,
@@ -1000,13 +1353,27 @@ impl MenuSupplyPolicy {
             let next_order_quantity = next_line_items.get(&menu_item_id).copied().unwrap_or(0);
 
             let projected_allocated = currently_allocated
-                .saturating_sub(current_order_quantity)
-                .saturating_add(next_order_quantity);
+                .checked_sub(current_order_quantity)
+                .ok_or_else(|| MenuSupplyWindowError::InventoryLedgerCorrupted {
+                    menu_item_id: Some(menu_item_id.clone()),
+                    reason: "allocated quantity is smaller than currently reserved quantity",
+                })?
+                .checked_add(next_order_quantity)
+                .ok_or_else(|| MenuSupplyWindowError::InventoryLedgerCorrupted {
+                    menu_item_id: Some(menu_item_id.clone()),
+                    reason: "allocated quantity overflow while projecting transition",
+                })?;
 
             if projected_allocated > menu_item.max_daily_quantity() {
-                let remaining_quantity = menu_item
-                    .max_daily_quantity()
-                    .saturating_sub(currently_allocated.saturating_sub(current_order_quantity));
+                let remaining_quantity = menu_item.max_daily_quantity().saturating_sub(
+                    currently_allocated
+                        .checked_sub(current_order_quantity)
+                        .ok_or_else(|| MenuSupplyWindowError::InventoryLedgerCorrupted {
+                            menu_item_id: Some(menu_item_id.clone()),
+                            reason:
+                                "allocated quantity is smaller than currently reserved quantity",
+                        })?,
+                );
                 return Err(MenuSupplyWindowError::QuotaExceeded {
                     menu_item_id,
                     requested_quantity: next_order_quantity,
@@ -1018,19 +1385,59 @@ impl MenuSupplyPolicy {
         Ok(())
     }
 
-    fn release_allocations_locked(
+    fn apply_allocation_transition_locked(
         &self,
         state: &mut MenuSupplyState,
-        line_items: &BTreeMap<MenuItemId, u16>,
-    ) {
-        for (menu_item_id, quantity) in line_items {
-            if let Some(allocated) = state.allocated_quantity_by_menu_item.get_mut(menu_item_id) {
-                *allocated = allocated.saturating_sub(*quantity);
+        current_line_items: &BTreeMap<MenuItemId, u16>,
+        next_line_items: &BTreeMap<MenuItemId, u16>,
+    ) -> Result<(), MenuSupplyWindowError> {
+        let affected_menu_items = current_line_items
+            .keys()
+            .chain(next_line_items.keys())
+            .cloned()
+            .collect::<BTreeSet<_>>();
+
+        for menu_item_id in affected_menu_items {
+            let current_quantity = current_line_items.get(&menu_item_id).copied().unwrap_or(0);
+            let next_quantity = next_line_items.get(&menu_item_id).copied().unwrap_or(0);
+            if current_quantity == next_quantity {
+                continue;
+            }
+
+            if next_quantity > current_quantity {
+                let add = next_quantity - current_quantity;
+                let allocated = state
+                    .allocated_quantity_by_menu_item
+                    .entry(menu_item_id.clone())
+                    .or_insert(0);
+                *allocated = allocated.checked_add(add).ok_or_else(|| {
+                    MenuSupplyWindowError::InventoryLedgerCorrupted {
+                        menu_item_id: Some(menu_item_id.clone()),
+                        reason: "allocated quantity overflow while reserving inventory",
+                    }
+                })?;
+            } else {
+                let remove = current_quantity - next_quantity;
+                let allocated = state
+                    .allocated_quantity_by_menu_item
+                    .get_mut(&menu_item_id)
+                    .ok_or_else(|| MenuSupplyWindowError::InventoryLedgerCorrupted {
+                        menu_item_id: Some(menu_item_id.clone()),
+                        reason: "missing allocated quantity while releasing inventory",
+                    })?;
+                *allocated = allocated.checked_sub(remove).ok_or_else(|| {
+                    MenuSupplyWindowError::InventoryLedgerCorrupted {
+                        menu_item_id: Some(menu_item_id.clone()),
+                        reason: "allocated quantity underflow while releasing inventory",
+                    }
+                })?;
                 if *allocated == 0 {
-                    state.allocated_quantity_by_menu_item.remove(menu_item_id);
+                    state.allocated_quantity_by_menu_item.remove(&menu_item_id);
                 }
             }
         }
+
+        Ok(())
     }
 }
 
@@ -1154,6 +1561,15 @@ pub enum MenuSupplyWindowError {
         requested_epoch_day: i32,
         requested_minute_of_day: u16,
     },
+    InvalidOrderLifecycleTransition {
+        order_id: OrderId,
+        current_state: OrderLifecycleState,
+        operation: &'static str,
+    },
+    InventoryLedgerCorrupted {
+        menu_item_id: Option<MenuItemId>,
+        reason: &'static str,
+    },
     OrderAlreadyExists(OrderId),
     OrderNotFound(OrderId),
 }
@@ -1270,6 +1686,27 @@ impl fmt::Display for MenuSupplyWindowError {
                 f,
                 "delivery day {delivery_epoch_day} is past modify/cancel cutoff ({cutoff_epoch_day} minute {cutoff_minute_of_day}); current Taipei business moment is day {requested_epoch_day} minute {requested_minute_of_day}"
             ),
+            Self::InvalidOrderLifecycleTransition {
+                order_id,
+                current_state,
+                operation,
+            } => write!(
+                f,
+                "order {order_id} cannot perform operation {operation} from lifecycle state {current_state}"
+            ),
+            Self::InventoryLedgerCorrupted {
+                menu_item_id,
+                reason,
+            } => {
+                if let Some(menu_item_id) = menu_item_id {
+                    write!(
+                        f,
+                        "inventory ledger for menu item {menu_item_id} is corrupted: {reason}"
+                    )
+                } else {
+                    write!(f, "inventory ledger is corrupted: {reason}")
+                }
+            }
             Self::OrderAlreadyExists(order_id) => {
                 write!(f, "order {order_id} already exists in quota ledger")
             }

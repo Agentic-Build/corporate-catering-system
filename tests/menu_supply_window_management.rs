@@ -6,8 +6,8 @@ use corporate_catering_system::identity::{
 };
 use corporate_catering_system::menu_supply_window::{
     MenuImageUrl, MenuItemId, MenuSupplyPolicy, MenuSupplyWindowError, Money, OrderId,
-    OrderLineItemRequest, OrderMutation, SpecialRequest, VendorMenuItem, VendorMenuItemDraft,
-    VendorOrderingPolicyOverride,
+    OrderLifecycleState, OrderLineItemRequest, OrderMutation, OrderTimelineEventType,
+    SpecialRequest, VendorMenuItem, VendorMenuItemDraft, VendorOrderingPolicyOverride,
 };
 use corporate_catering_system::vendor_compliance::VendorId;
 use corporate_catering_system::vendor_delivery_mapping::TaipeiBusinessMoment;
@@ -404,6 +404,266 @@ fn update_and_cancel_respect_cutoff_and_release_allocated_quota() {
     assert!(matches!(
         update_after_cutoff_error,
         MenuSupplyWindowError::ModifyCancelCutoffPassed { .. }
+    ));
+}
+
+#[test]
+fn lifecycle_timeline_covers_modification_cancel_sold_out_and_refund_states() {
+    let policy = MenuSupplyPolicy::default();
+    let vendor = vendor_id("ven-menuwindow-life-01");
+
+    policy
+        .upsert_menu_item(
+            &vendor_operator(),
+            menu_item("menu-supply-life-a1", &vendor, 6, 55),
+        )
+        .expect("menu item upsert should succeed");
+
+    policy
+        .create_order(
+            order_id("ord-life-001"),
+            &vendor,
+            55,
+            vec![
+                OrderLineItemRequest::new(menu_item_id("menu-supply-life-a1"), 2, vec![])
+                    .expect("line item should be valid"),
+            ],
+            taipei_moment(54, 900),
+        )
+        .expect("order create should reserve inventory");
+
+    policy
+        .update_order(
+            &order_id("ord-life-001"),
+            OrderMutation::ReplaceLineItems {
+                line_items: vec![OrderLineItemRequest::new(
+                    menu_item_id("menu-supply-life-a1"),
+                    3,
+                    vec![],
+                )
+                .expect("line item should be valid")],
+            },
+            taipei_moment(54, 901),
+        )
+        .expect("replace line items should succeed before cutoff");
+    policy
+        .update_order(
+            &order_id("ord-life-001"),
+            OrderMutation::Cancel,
+            taipei_moment(54, 902),
+        )
+        .expect("cancel should succeed before cutoff");
+    policy
+        .update_order(
+            &order_id("ord-life-001"),
+            OrderMutation::MarkRefundPending,
+            taipei_moment(54, 903),
+        )
+        .expect("refund pending transition should succeed");
+    policy
+        .update_order(
+            &order_id("ord-life-001"),
+            OrderMutation::MarkRefunded,
+            taipei_moment(54, 904),
+        )
+        .expect("refunded transition should succeed");
+
+    let refunded_snapshot = policy
+        .order_snapshot(&order_id("ord-life-001"))
+        .expect("snapshot query should succeed")
+        .expect("order must exist after cancellation for audit timeline");
+    assert_eq!(refunded_snapshot.state(), OrderLifecycleState::Refunded);
+    assert_eq!(
+        refunded_snapshot
+            .timeline()
+            .iter()
+            .map(|event| event.event_type())
+            .collect::<Vec<_>>(),
+        vec![
+            OrderTimelineEventType::Created,
+            OrderTimelineEventType::Modified,
+            OrderTimelineEventType::Cancelled,
+            OrderTimelineEventType::RefundPending,
+            OrderTimelineEventType::Refunded,
+        ]
+    );
+    assert!(!refunded_snapshot.inventory_reserved());
+    assert_eq!(
+        policy
+            .remaining_quantity(&menu_item_id("menu-supply-life-a1"))
+            .expect("remaining quantity query should succeed"),
+        Some(6)
+    );
+
+    policy
+        .create_order(
+            order_id("ord-life-002"),
+            &vendor,
+            55,
+            vec![
+                OrderLineItemRequest::new(menu_item_id("menu-supply-life-a1"), 2, vec![])
+                    .expect("line item should be valid"),
+            ],
+            taipei_moment(54, 905),
+        )
+        .expect("second order create should reserve inventory");
+    policy
+        .update_order(
+            &order_id("ord-life-002"),
+            OrderMutation::MarkSoldOut,
+            taipei_moment(55, 700),
+        )
+        .expect("sold-out transition should release inventory once");
+
+    let sold_out_snapshot = policy
+        .order_snapshot(&order_id("ord-life-002"))
+        .expect("snapshot query should succeed")
+        .expect("order must exist for sold-out audit");
+    assert_eq!(sold_out_snapshot.state(), OrderLifecycleState::SoldOut);
+    assert_eq!(
+        sold_out_snapshot
+            .timeline()
+            .iter()
+            .map(|event| event.event_type())
+            .collect::<Vec<_>>(),
+        vec![
+            OrderTimelineEventType::Created,
+            OrderTimelineEventType::SoldOut
+        ]
+    );
+    assert!(!sold_out_snapshot.inventory_reserved());
+    assert_eq!(
+        policy
+            .remaining_quantity(&menu_item_id("menu-supply-life-a1"))
+            .expect("remaining quantity query should succeed"),
+        Some(6)
+    );
+}
+
+#[test]
+fn inventory_reservation_release_and_create_are_idempotent() {
+    let policy = MenuSupplyPolicy::default();
+    let vendor = vendor_id("ven-menuwindow-idemp-01");
+
+    policy
+        .upsert_menu_item(
+            &vendor_operator(),
+            menu_item("menu-supply-idemp-a1", &vendor, 4, 66),
+        )
+        .expect("menu item upsert should succeed");
+
+    let create_line_items =
+        vec![
+            OrderLineItemRequest::new(menu_item_id("menu-supply-idemp-a1"), 2, vec![])
+                .expect("line item should be valid"),
+        ];
+
+    policy
+        .create_order(
+            order_id("ord-idemp-001"),
+            &vendor,
+            66,
+            create_line_items.clone(),
+            taipei_moment(65, 900),
+        )
+        .expect("first create should succeed");
+    policy
+        .create_order(
+            order_id("ord-idemp-001"),
+            &vendor,
+            66,
+            create_line_items,
+            taipei_moment(65, 901),
+        )
+        .expect("duplicate create with same payload should be idempotent");
+    assert_eq!(
+        policy
+            .remaining_quantity(&menu_item_id("menu-supply-idemp-a1"))
+            .expect("remaining quantity query should succeed"),
+        Some(2)
+    );
+
+    let create_conflict = policy
+        .create_order(
+            order_id("ord-idemp-001"),
+            &vendor,
+            66,
+            vec![
+                OrderLineItemRequest::new(menu_item_id("menu-supply-idemp-a1"), 1, vec![])
+                    .expect("line item should be valid"),
+            ],
+            taipei_moment(65, 902),
+        )
+        .expect_err("same order id with different payload must be rejected");
+    assert!(matches!(
+        create_conflict,
+        MenuSupplyWindowError::OrderAlreadyExists(_)
+    ));
+
+    policy
+        .update_order(
+            &order_id("ord-idemp-001"),
+            OrderMutation::Cancel,
+            taipei_moment(65, 903),
+        )
+        .expect("cancel should release inventory");
+    policy
+        .update_order(
+            &order_id("ord-idemp-001"),
+            OrderMutation::Cancel,
+            taipei_moment(65, 904),
+        )
+        .expect("duplicate cancel should be idempotent");
+    assert_eq!(
+        policy
+            .remaining_quantity(&menu_item_id("menu-supply-idemp-a1"))
+            .expect("remaining quantity query should succeed"),
+        Some(4)
+    );
+}
+
+#[test]
+fn invalid_lifecycle_transition_returns_explicit_domain_error() {
+    let policy = MenuSupplyPolicy::default();
+    let vendor = vendor_id("ven-menuwindow-life-02");
+
+    policy
+        .upsert_menu_item(
+            &vendor_operator(),
+            menu_item("menu-supply-life-b1", &vendor, 3, 70),
+        )
+        .expect("menu item upsert should succeed");
+
+    policy
+        .create_order(
+            order_id("ord-life-003"),
+            &vendor,
+            70,
+            vec![
+                OrderLineItemRequest::new(menu_item_id("menu-supply-life-b1"), 1, vec![])
+                    .expect("line item should be valid"),
+            ],
+            taipei_moment(69, 800),
+        )
+        .expect("order should be created");
+    policy
+        .update_order(
+            &order_id("ord-life-003"),
+            OrderMutation::MarkFulfilled,
+            taipei_moment(70, 721),
+        )
+        .expect("fulfillment transition should succeed");
+
+    let transition_error = policy
+        .update_order(
+            &order_id("ord-life-003"),
+            OrderMutation::Cancel,
+            taipei_moment(70, 722),
+        )
+        .expect_err("cancel after fulfillment must be rejected");
+    assert!(matches!(
+        transition_error,
+        MenuSupplyWindowError::InvalidOrderLifecycleTransition { .. }
     ));
 }
 

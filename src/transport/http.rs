@@ -348,6 +348,12 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
             Some(plant_id.as_str()),
         );
         let result = (|| {
+            if !mutation.is_employee_patch_operation() {
+                return Err(HttpOrderExecutionError::UnsupportedEmployeeMutation {
+                    operation: mutation.operation_name(),
+                });
+            }
+
             self.delivery_policy
                 .ensure_vendor_deliverable_for_order(
                     self.compliance_lifecycle,
@@ -405,6 +411,7 @@ impl<'a> HttpVendorMenuExecutionGateway<'a> {
 pub enum HttpOrderExecutionError {
     Deliverability(VendorPlantDeliveryError),
     MenuSupply(MenuSupplyWindowError),
+    UnsupportedEmployeeMutation { operation: &'static str },
 }
 
 impl std::fmt::Display for HttpOrderExecutionError {
@@ -412,6 +419,10 @@ impl std::fmt::Display for HttpOrderExecutionError {
         match self {
             Self::Deliverability(error) => write!(f, "deliverability enforcement failed: {error}"),
             Self::MenuSupply(error) => write!(f, "menu supply enforcement failed: {error}"),
+            Self::UnsupportedEmployeeMutation { operation } => write!(
+                f,
+                "employee HTTP update path does not allow lifecycle operation {operation}"
+            ),
         }
     }
 }

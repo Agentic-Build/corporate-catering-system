@@ -2,4 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type EmployeeOrderStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'FULFILLED';
+export type EmployeeOrderStatus = 'PENDING' | 'MODIFIED' | 'CANCELLED' | 'SOLD_OUT' | 'REFUND_PENDING' | 'REFUNDED' | 'FULFILLED';

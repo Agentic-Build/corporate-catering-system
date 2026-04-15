@@ -47,3 +47,8 @@ spec:
         p95LatencyMsMax: 250
         errorRateMax: 0.001
         readinessSuccessRateMin: 0.999
+      - name: peak-order-lifecycle-mutations
+        minRps: 140
+        p95LatencyMsMax: 320
+        errorRateMax: 0.002
+        readinessSuccessRateMin: 0.999

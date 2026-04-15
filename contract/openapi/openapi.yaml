@@ -259,6 +259,11 @@ components:
           $ref: '#/components/schemas/PlantId'
         status:
           $ref: '#/components/schemas/EmployeeOrderStatus'
+        timeline:
+          items:
+            $ref: '#/components/schemas/OrderTimelineEvent'
+          minItems: 1
+          type: array
         total:
           $ref: '#/components/schemas/Money'
       required:
@@ -269,6 +274,7 @@ components:
       - status
       - lineItems
       - total
+      - timeline
       type: object
     EmployeeOrderCancelPatchRequest:
       additionalProperties: false
@@ -332,8 +338,11 @@ components:
     EmployeeOrderStatus:
       enum:
       - PENDING
-      - CONFIRMED
+      - MODIFIED
       - CANCELLED
+      - SOLD_OUT
+      - REFUND_PENDING
+      - REFUNDED
       - FULFILLED
       type: string
     ErrorCode:
@@ -509,6 +518,30 @@ components:
       - menuItemId
       - quantity
       type: object
+    OrderTimelineEvent:
+      additionalProperties: false
+      properties:
+        eventType:
+          $ref: '#/components/schemas/OrderTimelineEventType'
+        occurredAt:
+          $ref: '#/components/schemas/TaipeiBusinessDateTime'
+        status:
+          $ref: '#/components/schemas/EmployeeOrderStatus'
+      required:
+      - occurredAt
+      - eventType
+      - status
+      type: object
+    OrderTimelineEventType:
+      enum:
+      - CREATED
+      - MODIFIED
+      - CANCELLED
+      - SOLD_OUT
+      - REFUND_PENDING
+      - REFUNDED
+      - FULFILLED
+      type: string
     PageMeta:
       additionalProperties: false
       properties:
@@ -1011,12 +1044,18 @@ components:
           $ref: '#/components/schemas/PlantId'
         status:
           $ref: '#/components/schemas/EmployeeOrderStatus'
+        timeline:
+          items:
+            $ref: '#/components/schemas/OrderTimelineEvent'
+          minItems: 1
+          type: array
       required:
       - orderId
       - plantId
       - deliveryDate
       - status
       - lineItems
+      - timeline
       type: object
     VendorOrderPage:
       additionalProperties: false
@@ -1522,6 +1561,7 @@ paths:
         ruleSource: VENDOR_PLANT_DELIVERY_MAPPING
         timezone: Asia/Taipei
       x-order-governance:
+        inventoryReservationMode: ATOMIC_IDEMPOTENT
         modifyCancelCutoff:
           defaultRule:
             minuteOfDay: 1020
@@ -1537,6 +1577,17 @@ paths:
         specialRequestPolicy:
           allowFreeText: false
           mode: CONTROLLED_ENUM_ONLY
+        strictLifecycle: true
+        timeline:
+          includes:
+          - CREATED
+          - MODIFIED
+          - CANCELLED
+          - SOLD_OUT
+          - REFUND_PENDING
+          - REFUNDED
+          - FULFILLED
+          required: true
         timezone: Asia/Taipei
   /api/v1/employee/orders/{orderId}:
     patch:
@@ -1574,6 +1625,7 @@ paths:
       tags:
       - Employee
       x-order-governance:
+        inventoryReservationMode: ATOMIC_IDEMPOTENT
         modifyCancelCutoff:
           defaultRule:
             minuteOfDay: 1020
@@ -1581,6 +1633,7 @@ paths:
           vendorOverrideBounds:
             maximumMinuteOfDay: 1200
             minimumMinuteOfDay: 900
+        strictLifecycle: true
         supportedOperations:
         - REPLACE_LINE_ITEMS
         - CANCEL

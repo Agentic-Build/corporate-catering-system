@@ -25,15 +25,28 @@ export const options = {
       preAllocatedVUs: 140,
       maxVUs: 500,
       startTime: "10s"
+    },
+    "peak-order-lifecycle-mutations": {
+      executor: "constant-arrival-rate",
+      exec: "peakOrderLifecycleMutations",
+      rate: 140,
+      timeUnit: "1s",
+      duration: "60s",
+      preAllocatedVUs: 160,
+      maxVUs: 520,
+      startTime: "20s"
     }
   },
   thresholds: {
     "http_reqs{scenario:peak-order-placement}": ["rate>120"],
     "http_reqs{scenario:mixed-order-and-menu-reads}": ["rate>180"],
+    "http_reqs{scenario:peak-order-lifecycle-mutations}": ["rate>140"],
     "http_req_duration{scenario:peak-order-placement}": ["p(95)<350"],
     "http_req_failed{scenario:peak-order-placement}": ["rate<0.002"],
     "http_req_duration{scenario:mixed-order-and-menu-reads}": ["p(95)<250"],
     "http_req_failed{scenario:mixed-order-and-menu-reads}": ["rate<0.001"],
+    "http_req_duration{scenario:peak-order-lifecycle-mutations}": ["p(95)<320"],
+    "http_req_failed{scenario:peak-order-lifecycle-mutations}": ["rate<0.002"],
     "checks{check_type:readiness}": ["rate>0.999"]
   }
 };
@@ -95,5 +108,39 @@ export function mixedOrderAndMenuReads() {
     checkReadiness();
   }
 
+  sleep(0.03);
+}
+
+function buildOrderPatchPayload(iteration) {
+  if (iteration % 2 === 0) {
+    return JSON.stringify({
+      operation: "REPLACE_LINE_ITEMS",
+      lineItems: [
+        { menuItemId: `menu-${(iteration % 12) + 1}`, quantity: 2 }
+      ]
+    });
+  }
+  return JSON.stringify({
+    operation: "CANCEL",
+    cancelReason: "load-test lifecycle mutation"
+  });
+}
+
+export function peakOrderLifecycleMutations() {
+  const syntheticOrderId = `order-lifecycle-${__VU}-${__ITER}`;
+  const patchResponse = http.patch(
+    `${BASE_URL}/api/v1/employee/orders/${syntheticOrderId}`,
+    buildOrderPatchPayload(__ITER),
+    {
+      headers: { "Content-Type": "application/json" },
+      tags: { operation: "updateEmployeeOrder" }
+    }
+  );
+  check(patchResponse, {
+    "update order endpoint accepted request": (res) =>
+      res.status === 200 || res.status === 202
+  });
+
+  checkReadiness();
   sleep(0.03);
 }
