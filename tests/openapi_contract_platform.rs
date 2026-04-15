@@ -161,7 +161,7 @@ fn openapi_spec_covers_all_official_http_operations() {
 }
 
 #[test]
-fn vendor_compliance_contract_exposes_request_fix_templates_and_lifecycle_execution() {
+fn admin_contract_exposes_vendor_compliance_and_delivery_mapping_capabilities() {
     let spec = canonical_openapi_spec();
     let decision_enum = spec["components"]["schemas"]["VendorReviewDecision"]["enum"]
         .as_array()
@@ -188,6 +188,10 @@ fn vendor_compliance_contract_exposes_request_fix_templates_and_lifecycle_execut
     assert!(paths
         .contains_key("/api/v1/admin/compliance/document-templates/{vendorCategory}/{templateId}"));
     assert!(paths.contains_key("/api/v1/admin/compliance/lifecycle/executions"));
+    assert!(paths.contains_key("/api/v1/admin/vendor-plant-delivery-mappings"));
+    assert!(
+        paths.contains_key("/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}")
+    );
 }
 
 #[test]

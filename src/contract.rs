@@ -19,6 +19,7 @@ pub enum HttpMethod {
     Post,
     Patch,
     Put,
+    Delete,
 }
 
 impl HttpMethod {
@@ -28,6 +29,7 @@ impl HttpMethod {
             Self::Post => "post",
             Self::Patch => "patch",
             Self::Put => "put",
+            Self::Delete => "delete",
         }
     }
 }
@@ -40,23 +42,29 @@ pub enum HttpOperation {
     ListVendorOrders,
     UpsertVendorMenuItem,
     ListAdminVendors,
+    ListVendorPlantDeliveryMappings,
     ListComplianceDocumentTemplates,
     UpsertComplianceDocumentTemplate,
+    UpsertVendorPlantDeliveryMapping,
+    DeleteVendorPlantDeliveryMapping,
     ReviewVendorApplication,
     RunVendorComplianceLifecycle,
     ExportPayrollDeductions,
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 14] = [
         Self::ListEmployeeMenus,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
         Self::ListVendorOrders,
         Self::UpsertVendorMenuItem,
         Self::ListAdminVendors,
+        Self::ListVendorPlantDeliveryMappings,
         Self::ListComplianceDocumentTemplates,
         Self::UpsertComplianceDocumentTemplate,
+        Self::UpsertVendorPlantDeliveryMapping,
+        Self::DeleteVendorPlantDeliveryMapping,
         Self::ReviewVendorApplication,
         Self::RunVendorComplianceLifecycle,
         Self::ExportPayrollDeductions,
@@ -70,8 +78,11 @@ impl HttpOperation {
             Self::ListVendorOrders => "listVendorOrders",
             Self::UpsertVendorMenuItem => "upsertVendorMenuItem",
             Self::ListAdminVendors => "listAdminVendors",
+            Self::ListVendorPlantDeliveryMappings => "listVendorPlantDeliveryMappings",
             Self::ListComplianceDocumentTemplates => "listComplianceDocumentTemplates",
             Self::UpsertComplianceDocumentTemplate => "upsertComplianceDocumentTemplate",
+            Self::UpsertVendorPlantDeliveryMapping => "upsertVendorPlantDeliveryMapping",
+            Self::DeleteVendorPlantDeliveryMapping => "deleteVendorPlantDeliveryMapping",
             Self::ReviewVendorApplication => "reviewVendorApplication",
             Self::RunVendorComplianceLifecycle => "runVendorComplianceLifecycle",
             Self::ExportPayrollDeductions => "exportPayrollDeductions",
@@ -83,13 +94,17 @@ impl HttpOperation {
             Self::ListEmployeeMenus
             | Self::ListVendorOrders
             | Self::ListAdminVendors
+            | Self::ListVendorPlantDeliveryMappings
             | Self::ListComplianceDocumentTemplates
             | Self::ExportPayrollDeductions => HttpMethod::Get,
             Self::CreateEmployeeOrder
             | Self::ReviewVendorApplication
             | Self::RunVendorComplianceLifecycle => HttpMethod::Post,
             Self::UpdateEmployeeOrder => HttpMethod::Patch,
-            Self::UpsertVendorMenuItem | Self::UpsertComplianceDocumentTemplate => HttpMethod::Put,
+            Self::UpsertVendorMenuItem
+            | Self::UpsertComplianceDocumentTemplate
+            | Self::UpsertVendorPlantDeliveryMapping => HttpMethod::Put,
+            Self::DeleteVendorPlantDeliveryMapping => HttpMethod::Delete,
         }
     }
 
@@ -101,9 +116,16 @@ impl HttpOperation {
             Self::ListVendorOrders => "/api/v1/vendor/orders",
             Self::UpsertVendorMenuItem => "/api/v1/vendor/menu-items/{menuItemId}",
             Self::ListAdminVendors => "/api/v1/admin/vendors",
+            Self::ListVendorPlantDeliveryMappings => "/api/v1/admin/vendor-plant-delivery-mappings",
             Self::ListComplianceDocumentTemplates => "/api/v1/admin/compliance/document-templates",
             Self::UpsertComplianceDocumentTemplate => {
                 "/api/v1/admin/compliance/document-templates/{vendorCategory}/{templateId}"
+            }
+            Self::UpsertVendorPlantDeliveryMapping => {
+                "/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}"
+            }
+            Self::DeleteVendorPlantDeliveryMapping => {
+                "/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}"
             }
             Self::ReviewVendorApplication => "/api/v1/admin/vendors/{vendorId}/reviews",
             Self::RunVendorComplianceLifecycle => "/api/v1/admin/compliance/lifecycle/executions",
@@ -118,8 +140,11 @@ impl HttpOperation {
             }
             Self::ListVendorOrders | Self::UpsertVendorMenuItem => HttpAudience::Vendor,
             Self::ListAdminVendors
+            | Self::ListVendorPlantDeliveryMappings
             | Self::ListComplianceDocumentTemplates
             | Self::UpsertComplianceDocumentTemplate
+            | Self::UpsertVendorPlantDeliveryMapping
+            | Self::DeleteVendorPlantDeliveryMapping
             | Self::ReviewVendorApplication
             | Self::RunVendorComplianceLifecycle => HttpAudience::Admin,
             Self::ExportPayrollDeductions => HttpAudience::Integration,
@@ -133,11 +158,14 @@ impl HttpOperation {
             }
             Self::UpsertVendorMenuItem => Some(Action::ManageVendorMenu),
             Self::UpsertComplianceDocumentTemplate
+            | Self::UpsertVendorPlantDeliveryMapping
+            | Self::DeleteVendorPlantDeliveryMapping
             | Self::ReviewVendorApplication
             | Self::RunVendorComplianceLifecycle => Some(Action::ManageVendorComplianceLifecycle),
             Self::ListEmployeeMenus
             | Self::ListVendorOrders
             | Self::ListAdminVendors
+            | Self::ListVendorPlantDeliveryMappings
             | Self::ListComplianceDocumentTemplates
             | Self::ExportPayrollDeductions => None,
         }
@@ -155,8 +183,11 @@ impl HttpOperation {
             "listVendorOrders" => Some(Self::ListVendorOrders),
             "upsertVendorMenuItem" => Some(Self::UpsertVendorMenuItem),
             "listAdminVendors" => Some(Self::ListAdminVendors),
+            "listVendorPlantDeliveryMappings" => Some(Self::ListVendorPlantDeliveryMappings),
             "listComplianceDocumentTemplates" => Some(Self::ListComplianceDocumentTemplates),
             "upsertComplianceDocumentTemplate" => Some(Self::UpsertComplianceDocumentTemplate),
+            "upsertVendorPlantDeliveryMapping" => Some(Self::UpsertVendorPlantDeliveryMapping),
+            "deleteVendorPlantDeliveryMapping" => Some(Self::DeleteVendorPlantDeliveryMapping),
             "reviewVendorApplication" => Some(Self::ReviewVendorApplication),
             "runVendorComplianceLifecycle" => Some(Self::RunVendorComplianceLifecycle),
             "exportPayrollDeductions" => Some(Self::ExportPayrollDeductions),
@@ -237,6 +268,12 @@ pub fn canonical_openapi_spec() -> Value {
             "tags": ["Employee"],
             "summary": "List available menus",
             "operationId": HttpOperation::ListEmployeeMenus.operation_id(),
+            "x-deliverability-enforcement": {
+              "enabled": true,
+              "apiContexts": ["BROWSE", "SEARCH"],
+              "ruleSource": "VENDOR_PLANT_DELIVERY_MAPPING",
+              "timezone": "Asia/Taipei"
+            },
             "security": [{ "corporateSsoBearer": [] }],
             "parameters": [
               { "$ref": "#/components/parameters/PlantIdQuery" },
@@ -268,6 +305,12 @@ pub fn canonical_openapi_spec() -> Value {
             "tags": ["Employee"],
             "summary": "Create a meal order",
             "operationId": HttpOperation::CreateEmployeeOrder.operation_id(),
+            "x-deliverability-enforcement": {
+              "enabled": true,
+              "apiContexts": ["ORDER"],
+              "ruleSource": "VENDOR_PLANT_DELIVERY_MAPPING",
+              "timezone": "Asia/Taipei"
+            },
             "security": [{ "corporateSsoBearer": [] }],
             "requestBody": {
               "required": true,
@@ -418,6 +461,88 @@ pub fn canonical_openapi_spec() -> Value {
               "400": { "$ref": "#/components/responses/BadRequest" },
               "401": { "$ref": "#/components/responses/Unauthorized" },
               "403": { "$ref": "#/components/responses/Forbidden" }
+            }
+          }
+        },
+        "/api/v1/admin/vendor-plant-delivery-mappings": {
+          "get": {
+            "tags": ["Admin"],
+            "summary": "List vendor plant delivery mappings and their audit history",
+            "operationId": HttpOperation::ListVendorPlantDeliveryMappings.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/VendorIdFilterQuery" },
+              { "$ref": "#/components/parameters/PlantIdFilterQuery" },
+              { "$ref": "#/components/parameters/ServiceWindowActiveAtQuery" },
+              { "$ref": "#/components/parameters/PageQuery" },
+              { "$ref": "#/components/parameters/PageSizeQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Paginated vendor plant delivery mappings",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/VendorPlantDeliveryMappingPage" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" }
+            }
+          }
+        },
+        "/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}": {
+          "put": {
+            "tags": ["Admin"],
+            "summary": "Create or update a vendor plant delivery mapping",
+            "operationId": HttpOperation::UpsertVendorPlantDeliveryMapping.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/VendorIdPath" },
+              { "$ref": "#/components/parameters/MappingIdPath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/VendorPlantDeliveryMappingUpsertRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Vendor plant delivery mapping upserted",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/VendorPlantDeliveryMapping" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "422": { "$ref": "#/components/responses/ValidationFailed" }
+            }
+          },
+          "delete": {
+            "tags": ["Admin"],
+            "summary": "Delete a vendor plant delivery mapping",
+            "operationId": HttpOperation::DeleteVendorPlantDeliveryMapping.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/VendorIdPath" },
+              { "$ref": "#/components/parameters/MappingIdPath" }
+            ],
+            "responses": {
+              "204": {
+                "description": "Vendor plant delivery mapping deleted"
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" }
             }
           }
         },
@@ -729,6 +854,28 @@ pub fn canonical_openapi_spec() -> Value {
             "required": false,
             "schema": { "$ref": "#/components/schemas/VendorCategory" }
           },
+          "VendorIdFilterQuery": {
+            "name": "vendorId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^ven-[a-z0-9]{8,32}$"
+            }
+          },
+          "PlantIdFilterQuery": {
+            "name": "plantId",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/PlantId" }
+          },
+          "ServiceWindowActiveAtQuery": {
+            "name": "activeAt",
+            "in": "query",
+            "required": false,
+            "description": "Evaluate mappings active at this fixed Asia/Taipei business timestamp.",
+            "schema": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" }
+          },
           "OrderIdPath": {
             "name": "orderId",
             "in": "path",
@@ -769,6 +916,15 @@ pub fn canonical_openapi_spec() -> Value {
             "schema": {
               "type": "string",
               "pattern": "^tmpl-[a-z0-9-]{3,64}$"
+            }
+          },
+          "MappingIdPath": {
+            "name": "mappingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^map-[a-z0-9-]{3,64}$"
             }
           }
         },
@@ -912,6 +1068,106 @@ pub fn canonical_openapi_spec() -> Value {
           "VendorComplianceDocumentStatus": {
             "type": "string",
             "enum": ["VALID", "EXPIRING_SOON", "EXPIRED", "MISSING"]
+          },
+          "TaipeiBusinessDateTime": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\+08:00$",
+            "description": "Fixed Asia/Taipei business timestamp. Always serialize with +08:00 offset."
+          },
+          "VendorPlantDeliveryRuleEffect": {
+            "type": "string",
+            "enum": ["ALLOW", "DENY"]
+          },
+          "VendorPlantDeliveryServiceWindow": {
+            "type": "object",
+            "required": ["startsAt", "endsAt"],
+            "properties": {
+              "startsAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "endsAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" }
+            },
+            "additionalProperties": false
+          },
+          "VendorPlantDeliveryMappingUpsertRequest": {
+            "type": "object",
+            "required": ["plantId", "serviceWindow", "effect", "precedence"],
+            "properties": {
+              "plantId": { "$ref": "#/components/schemas/PlantId" },
+              "serviceWindow": {
+                "$ref": "#/components/schemas/VendorPlantDeliveryServiceWindow"
+              },
+              "effect": { "$ref": "#/components/schemas/VendorPlantDeliveryRuleEffect" },
+              "precedence": { "type": "integer", "minimum": 0, "maximum": 65535 }
+            },
+            "additionalProperties": false
+          },
+          "VendorPlantDeliveryMapping": {
+            "type": "object",
+            "required": [
+              "mappingId",
+              "vendorId",
+              "plantId",
+              "serviceWindow",
+              "effect",
+              "precedence",
+              "updatedAt",
+              "updatedByActorId"
+            ],
+            "properties": {
+              "mappingId": { "type": "string", "pattern": "^map-[a-z0-9-]{3,64}$" },
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "plantId": { "$ref": "#/components/schemas/PlantId" },
+              "serviceWindow": {
+                "$ref": "#/components/schemas/VendorPlantDeliveryServiceWindow"
+              },
+              "effect": { "$ref": "#/components/schemas/VendorPlantDeliveryRuleEffect" },
+              "precedence": { "type": "integer", "minimum": 0, "maximum": 65535 },
+              "updatedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "updatedByActorId": { "$ref": "#/components/schemas/ActorId" }
+            },
+            "additionalProperties": false
+          },
+          "VendorPlantDeliveryMappingAuditEventType": {
+            "type": "string",
+            "enum": ["UPSERTED", "REMOVED"]
+          },
+          "VendorPlantDeliveryMappingAuditEntry": {
+            "type": "object",
+            "required": [
+              "occurredAt",
+              "actorId",
+              "actorRole",
+              "operationId",
+              "eventType",
+              "mapping"
+            ],
+            "properties": {
+              "occurredAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "actorId": { "$ref": "#/components/schemas/ActorId" },
+              "actorRole": { "$ref": "#/components/schemas/Role" },
+              "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "eventType": {
+                "$ref": "#/components/schemas/VendorPlantDeliveryMappingAuditEventType"
+              },
+              "mapping": { "$ref": "#/components/schemas/VendorPlantDeliveryMapping" }
+            },
+            "additionalProperties": false
+          },
+          "VendorPlantDeliveryMappingPage": {
+            "type": "object",
+            "required": ["items", "auditTrail", "page"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorPlantDeliveryMapping" }
+              },
+              "auditTrail": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorPlantDeliveryMappingAuditEntry" }
+              },
+              "page": { "$ref": "#/components/schemas/PageMeta" }
+            },
+            "additionalProperties": false
           },
           "PageMeta": {
             "type": "object",

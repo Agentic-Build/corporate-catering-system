@@ -33,7 +33,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 11] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 14] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -58,6 +58,11 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 11] = [
     RuntimeHttpRoute::new(HttpMethod::Get, "/api/v1/admin/vendors", "listAdminVendors"),
     RuntimeHttpRoute::new(
         HttpMethod::Get,
+        "/api/v1/admin/vendor-plant-delivery-mappings",
+        "listVendorPlantDeliveryMappings",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
         "/api/v1/admin/compliance/document-templates",
         "listComplianceDocumentTemplates",
     ),
@@ -65,6 +70,16 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 11] = [
         HttpMethod::Put,
         "/api/v1/admin/compliance/document-templates/{vendorCategory}/{templateId}",
         "upsertComplianceDocumentTemplate",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Put,
+        "/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}",
+        "upsertVendorPlantDeliveryMapping",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Delete,
+        "/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}",
+        "deleteVendorPlantDeliveryMapping",
     ),
     RuntimeHttpRoute::new(
         HttpMethod::Post,

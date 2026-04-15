@@ -28,6 +28,15 @@
           "$ref": "#/components/schemas/MenuHealthTag"
         }
       },
+      "MappingIdPath": {
+        "in": "path",
+        "name": "mappingId",
+        "required": true,
+        "schema": {
+          "pattern": "^map-[a-z0-9-]{3,64}$",
+          "type": "string"
+        }
+      },
       "MenuDateQuery": {
         "in": "query",
         "name": "menuDate",
@@ -112,6 +121,14 @@
           "$ref": "#/components/schemas/PayrollSortField"
         }
       },
+      "PlantIdFilterQuery": {
+        "in": "query",
+        "name": "plantId",
+        "required": false,
+        "schema": {
+          "$ref": "#/components/schemas/PlantId"
+        }
+      },
       "PlantIdQuery": {
         "description": "Target plant for scoping.",
         "in": "query",
@@ -119,6 +136,15 @@
         "required": true,
         "schema": {
           "$ref": "#/components/schemas/PlantId"
+        }
+      },
+      "ServiceWindowActiveAtQuery": {
+        "description": "Evaluate mappings active at this fixed Asia/Taipei business timestamp.",
+        "in": "query",
+        "name": "activeAt",
+        "required": false,
+        "schema": {
+          "$ref": "#/components/schemas/TaipeiBusinessDateTime"
         }
       },
       "SortOrderQuery": {
@@ -161,6 +187,15 @@
         "required": true,
         "schema": {
           "$ref": "#/components/schemas/VendorCategory"
+        }
+      },
+      "VendorIdFilterQuery": {
+        "in": "query",
+        "name": "vendorId",
+        "required": false,
+        "schema": {
+          "pattern": "^ven-[a-z0-9]{8,32}$",
+          "type": "string"
         }
       },
       "VendorIdPath": {
@@ -742,6 +777,12 @@
         ],
         "type": "string"
       },
+      "TaipeiBusinessDateTime": {
+        "description": "Fixed Asia/Taipei business timestamp. Always serialize with +08:00 offset.",
+        "format": "date-time",
+        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\+08:00$",
+        "type": "string"
+      },
       "VendorCategory": {
         "enum": [
           "RESTAURANT",
@@ -1288,6 +1329,166 @@
         ],
         "type": "string"
       },
+      "VendorPlantDeliveryMapping": {
+        "additionalProperties": false,
+        "properties": {
+          "effect": {
+            "$ref": "#/components/schemas/VendorPlantDeliveryRuleEffect"
+          },
+          "mappingId": {
+            "pattern": "^map-[a-z0-9-]{3,64}$",
+            "type": "string"
+          },
+          "plantId": {
+            "$ref": "#/components/schemas/PlantId"
+          },
+          "precedence": {
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "serviceWindow": {
+            "$ref": "#/components/schemas/VendorPlantDeliveryServiceWindow"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/TaipeiBusinessDateTime"
+          },
+          "updatedByActorId": {
+            "$ref": "#/components/schemas/ActorId"
+          },
+          "vendorId": {
+            "pattern": "^ven-[a-z0-9]{8,32}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mappingId",
+          "vendorId",
+          "plantId",
+          "serviceWindow",
+          "effect",
+          "precedence",
+          "updatedAt",
+          "updatedByActorId"
+        ],
+        "type": "object"
+      },
+      "VendorPlantDeliveryMappingAuditEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "actorId": {
+            "$ref": "#/components/schemas/ActorId"
+          },
+          "actorRole": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "eventType": {
+            "$ref": "#/components/schemas/VendorPlantDeliveryMappingAuditEventType"
+          },
+          "mapping": {
+            "$ref": "#/components/schemas/VendorPlantDeliveryMapping"
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TaipeiBusinessDateTime"
+          },
+          "operationId": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "occurredAt",
+          "actorId",
+          "actorRole",
+          "operationId",
+          "eventType",
+          "mapping"
+        ],
+        "type": "object"
+      },
+      "VendorPlantDeliveryMappingAuditEventType": {
+        "enum": [
+          "UPSERTED",
+          "REMOVED"
+        ],
+        "type": "string"
+      },
+      "VendorPlantDeliveryMappingPage": {
+        "additionalProperties": false,
+        "properties": {
+          "auditTrail": {
+            "items": {
+              "$ref": "#/components/schemas/VendorPlantDeliveryMappingAuditEntry"
+            },
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VendorPlantDeliveryMapping"
+            },
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "items",
+          "auditTrail",
+          "page"
+        ],
+        "type": "object"
+      },
+      "VendorPlantDeliveryMappingUpsertRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "effect": {
+            "$ref": "#/components/schemas/VendorPlantDeliveryRuleEffect"
+          },
+          "plantId": {
+            "$ref": "#/components/schemas/PlantId"
+          },
+          "precedence": {
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "serviceWindow": {
+            "$ref": "#/components/schemas/VendorPlantDeliveryServiceWindow"
+          }
+        },
+        "required": [
+          "plantId",
+          "serviceWindow",
+          "effect",
+          "precedence"
+        ],
+        "type": "object"
+      },
+      "VendorPlantDeliveryRuleEffect": {
+        "enum": [
+          "ALLOW",
+          "DENY"
+        ],
+        "type": "string"
+      },
+      "VendorPlantDeliveryServiceWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "endsAt": {
+            "$ref": "#/components/schemas/TaipeiBusinessDateTime"
+          },
+          "startsAt": {
+            "$ref": "#/components/schemas/TaipeiBusinessDateTime"
+          }
+        },
+        "required": [
+          "startsAt",
+          "endsAt"
+        ],
+        "type": "object"
+      },
       "VendorReviewDecision": {
         "enum": [
           "APPROVED",
@@ -1520,6 +1721,58 @@
         ]
       }
     },
+    "/api/v1/admin/vendor-plant-delivery-mappings": {
+      "get": {
+        "operationId": "listVendorPlantDeliveryMappings",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/VendorIdFilterQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PlantIdFilterQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ServiceWindowActiveAtQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VendorPlantDeliveryMappingPage"
+                }
+              }
+            },
+            "description": "Paginated vendor plant delivery mappings"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "security": [
+          {
+            "corporateSsoBearer": []
+          }
+        ],
+        "summary": "List vendor plant delivery mappings and their audit history",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/api/v1/admin/vendors": {
       "get": {
         "operationId": "listAdminVendors",
@@ -1567,6 +1820,102 @@
           }
         ],
         "summary": "List vendor enrollments",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}": {
+      "delete": {
+        "operationId": "deleteVendorPlantDeliveryMapping",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/VendorIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/MappingIdPath"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Vendor plant delivery mapping deleted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "security": [
+          {
+            "corporateSsoBearer": []
+          }
+        ],
+        "summary": "Delete a vendor plant delivery mapping",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "put": {
+        "operationId": "upsertVendorPlantDeliveryMapping",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/VendorIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/MappingIdPath"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VendorPlantDeliveryMappingUpsertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VendorPlantDeliveryMapping"
+                }
+              }
+            },
+            "description": "Vendor plant delivery mapping upserted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        },
+        "security": [
+          {
+            "corporateSsoBearer": []
+          }
+        ],
+        "summary": "Create or update a vendor plant delivery mapping",
         "tags": [
           "Admin"
         ]
@@ -1686,7 +2035,16 @@
         "summary": "List available menus",
         "tags": [
           "Employee"
-        ]
+        ],
+        "x-deliverability-enforcement": {
+          "apiContexts": [
+            "BROWSE",
+            "SEARCH"
+          ],
+          "enabled": true,
+          "ruleSource": "VENDOR_PLANT_DELIVERY_MAPPING",
+          "timezone": "Asia/Taipei"
+        }
       }
     },
     "/api/v1/employee/orders": {
@@ -1737,7 +2095,15 @@
         "summary": "Create a meal order",
         "tags": [
           "Employee"
-        ]
+        ],
+        "x-deliverability-enforcement": {
+          "apiContexts": [
+            "ORDER"
+          ],
+          "enabled": true,
+          "ruleSource": "VENDOR_PLANT_DELIVERY_MAPPING",
+          "timezone": "Asia/Taipei"
+        }
       }
     },
     "/api/v1/employee/orders/{orderId}": {

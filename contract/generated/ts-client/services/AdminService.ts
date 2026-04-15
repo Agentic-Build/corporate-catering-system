@@ -3,7 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AdminVendorReviewRequest } from '../models/AdminVendorReviewRequest';
+import type { PlantId } from '../models/PlantId';
 import type { SortOrder } from '../models/SortOrder';
+import type { TaipeiBusinessDateTime } from '../models/TaipeiBusinessDateTime';
 import type { VendorCategory } from '../models/VendorCategory';
 import type { VendorComplianceDocumentTemplate } from '../models/VendorComplianceDocumentTemplate';
 import type { VendorComplianceDocumentTemplatePage } from '../models/VendorComplianceDocumentTemplatePage';
@@ -12,6 +14,9 @@ import type { VendorComplianceLifecycleExecutionRequest } from '../models/Vendor
 import type { VendorComplianceLifecycleExecutionResult } from '../models/VendorComplianceLifecycleExecutionResult';
 import type { VendorEnrollment } from '../models/VendorEnrollment';
 import type { VendorEnrollmentPage } from '../models/VendorEnrollmentPage';
+import type { VendorPlantDeliveryMapping } from '../models/VendorPlantDeliveryMapping';
+import type { VendorPlantDeliveryMappingPage } from '../models/VendorPlantDeliveryMappingPage';
+import type { VendorPlantDeliveryMappingUpsertRequest } from '../models/VendorPlantDeliveryMappingUpsertRequest';
 import type { VendorSortField } from '../models/VendorSortField';
 import type { VendorStatus } from '../models/VendorStatus';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -93,6 +98,40 @@ export class AdminService {
         });
     }
     /**
+     * List vendor plant delivery mappings and their audit history
+     * @param vendorId
+     * @param plantId
+     * @param activeAt Evaluate mappings active at this fixed Asia/Taipei business timestamp.
+     * @param page
+     * @param pageSize
+     * @returns VendorPlantDeliveryMappingPage Paginated vendor plant delivery mappings
+     * @throws ApiError
+     */
+    public static listVendorPlantDeliveryMappings(
+        vendorId?: string,
+        plantId?: PlantId,
+        activeAt?: TaipeiBusinessDateTime,
+        page: number = 1,
+        pageSize: number = 20,
+    ): CancelablePromise<VendorPlantDeliveryMappingPage> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/vendor-plant-delivery-mappings',
+            query: {
+                'vendorId': vendorId,
+                'plantId': plantId,
+                'activeAt': activeAt,
+                'page': page,
+                'pageSize': pageSize,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+            },
+        });
+    }
+    /**
      * List vendor enrollments
      * @param page
      * @param pageSize
@@ -123,6 +162,63 @@ export class AdminService {
                 400: `Request payload or query is invalid.`,
                 401: `Authentication token is missing or invalid.`,
                 403: `Authenticated actor is not authorized to perform this operation.`,
+            },
+        });
+    }
+    /**
+     * Delete a vendor plant delivery mapping
+     * @param vendorId
+     * @param mappingId
+     * @returns void
+     * @throws ApiError
+     */
+    public static deleteVendorPlantDeliveryMapping(
+        vendorId: string,
+        mappingId: string,
+    ): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}',
+            path: {
+                'vendorId': vendorId,
+                'mappingId': mappingId,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+            },
+        });
+    }
+    /**
+     * Create or update a vendor plant delivery mapping
+     * @param vendorId
+     * @param mappingId
+     * @param requestBody
+     * @returns VendorPlantDeliveryMapping Vendor plant delivery mapping upserted
+     * @throws ApiError
+     */
+    public static upsertVendorPlantDeliveryMapping(
+        vendorId: string,
+        mappingId: string,
+        requestBody: VendorPlantDeliveryMappingUpsertRequest,
+    ): CancelablePromise<VendorPlantDeliveryMapping> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}',
+            path: {
+                'vendorId': vendorId,
+                'mappingId': mappingId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                422: `Request is syntactically valid but violates business validation rules.`,
             },
         });
     }
