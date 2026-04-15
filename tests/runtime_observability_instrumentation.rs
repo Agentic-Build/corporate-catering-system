@@ -64,6 +64,7 @@ fn telemetry_runtime_bootstrap_is_idempotent() {
         .expect("tokio runtime should be created");
 
     runtime.block_on(async {
+        std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
         initialize_telemetry_runtime_from_env("catering-http-api")
             .expect("telemetry runtime bootstrap should initialize");
         initialize_telemetry_runtime_from_env("catering-http-api")

@@ -52,9 +52,18 @@ pub struct TelemetryBootstrapConfig {
 }
 
 impl TelemetryBootstrapConfig {
-    pub fn from_env(default_service_name: &str) -> Self {
-        let exporter_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
-            .unwrap_or_else(|_| "http://127.0.0.1:4317".to_owned());
+    pub fn from_env(
+        default_service_name: &str,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
+        let exporter_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").map_err(|_| {
+            "OTEL_EXPORTER_OTLP_ENDPOINT must be set for hard-enforced observability bootstrap"
+        })?;
+        if exporter_endpoint.trim().is_empty() {
+            return Err(
+                "OTEL_EXPORTER_OTLP_ENDPOINT must be non-empty for hard-enforced observability bootstrap"
+                    .into(),
+            );
+        }
         let service_name = std::env::var("OTEL_SERVICE_NAME")
             .ok()
             .filter(|value| !value.trim().is_empty())
@@ -68,12 +77,12 @@ impl TelemetryBootstrapConfig {
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| "production".to_owned());
 
-        Self {
+        Ok(Self {
             exporter_endpoint,
             service_name,
             service_namespace,
             deployment_environment,
-        }
+        })
     }
 }
 
@@ -168,7 +177,7 @@ impl TelemetryBootstrap {
 pub fn initialize_telemetry_runtime_from_env(
     default_service_name: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    initialize_telemetry_runtime(TelemetryBootstrapConfig::from_env(default_service_name))
+    initialize_telemetry_runtime(TelemetryBootstrapConfig::from_env(default_service_name)?)
 }
 
 pub fn initialize_telemetry_runtime(

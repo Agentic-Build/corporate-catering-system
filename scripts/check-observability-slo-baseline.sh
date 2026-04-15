@@ -67,9 +67,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
+collector_endpoint="$(awk '
+  /^collector:/ { in_collector=1; next }
+  in_collector && /^[[:space:]]+endpoint:/ { gsub(/^[[:space:]]+endpoint:[[:space:]]*/, "", $0); print $0; exit }
+  in_collector && /^[^[:space:]]/ { in_collector=0 }
+' ops/observability/otel/instrumentation-baseline.yaml)"
+if [[ -z "${collector_endpoint}" ]]; then
+  echo "failed to resolve collector.endpoint from ops/observability/otel/instrumentation-baseline.yaml"
+  exit 1
+fi
+
 PORT="${LOAD_GATE_PORT:-18080}"
 PRELAUNCH_BIND_ADDR="127.0.0.1:${PORT}" \
 OTEL_SERVICE_NAME="catering-http-api" \
+OTEL_EXPORTER_OTLP_ENDPOINT="${collector_endpoint}" \
 cargo run --quiet --bin observability_runtime_service >"${service_log_file}" 2>&1 &
 service_pid=$!
 

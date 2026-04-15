@@ -564,6 +564,10 @@ fn ci_workflow_enforces_observability_hard_slo_gate() {
         !gate_script.contains("mock-prelaunch-server.js"),
         "hard-SLO gate must not target a mock prelaunch server"
     );
+    assert!(
+        !repo_path("ops/observability/load/mock-prelaunch-server.js").exists(),
+        "legacy mock prelaunch server artifact must be removed"
+    );
 }
 
 #[test]
