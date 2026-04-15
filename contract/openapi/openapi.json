@@ -508,14 +508,6 @@
             "minLength": 2,
             "type": "string"
           },
-          "deliverablePlantIds": {
-            "items": {
-              "$ref": "#/components/schemas/PlantId"
-            },
-            "minItems": 1,
-            "type": "array",
-            "uniqueItems": true
-          },
           "deliveryDate": {
             "format": "date",
             "type": "string"
@@ -560,7 +552,6 @@
           "price",
           "remainingQuantity",
           "deliveryDate",
-          "deliverablePlantIds",
           "healthTags"
         ],
         "type": "object"
@@ -1158,14 +1149,6 @@
       "VendorMenuItem": {
         "additionalProperties": false,
         "properties": {
-          "deliverablePlantIds": {
-            "items": {
-              "$ref": "#/components/schemas/PlantId"
-            },
-            "minItems": 1,
-            "type": "array",
-            "uniqueItems": true
-          },
           "deliveryDate": {
             "format": "date",
             "type": "string"
@@ -1211,22 +1194,13 @@
           "description",
           "price",
           "maxDailyQuantity",
-          "deliveryDate",
-          "deliverablePlantIds"
+          "deliveryDate"
         ],
         "type": "object"
       },
       "VendorMenuItemUpsertRequest": {
         "additionalProperties": false,
         "properties": {
-          "deliverablePlantIds": {
-            "items": {
-              "$ref": "#/components/schemas/PlantId"
-            },
-            "minItems": 1,
-            "type": "array",
-            "uniqueItems": true
-          },
           "deliveryDate": {
             "format": "date",
             "type": "string"
@@ -1262,8 +1236,7 @@
           "description",
           "price",
           "maxDailyQuantity",
-          "deliveryDate",
-          "deliverablePlantIds"
+          "deliveryDate"
         ],
         "type": "object"
       },

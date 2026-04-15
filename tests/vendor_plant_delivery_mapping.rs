@@ -1,3 +1,6 @@
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use corporate_catering_system::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
 };
@@ -136,6 +139,14 @@ fn mapping(
         effect,
         precedence,
     )
+}
+
+fn unique_temp_file_path(prefix: &str) -> std::path::PathBuf {
+    let unique_suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock must be after unix epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("{prefix}-{unique_suffix}.json"))
 }
 
 #[test]
@@ -492,6 +503,52 @@ fn taipei_business_time_is_evaluated_with_fixed_plus_8_offset() {
     assert!(!service_window.is_active_at(
         TaipeiBusinessMoment::from_utc_unix_seconds(3600).expect("timestamp should convert")
     ));
+}
+
+#[test]
+fn json_storage_persists_mappings_and_audit_history_across_reloads() {
+    let committee = committee_admin();
+    let vendor = vendor_id("ven-deliveryg1");
+    let storage_path = unique_temp_file_path("vendor-delivery-policy");
+
+    let mut policy = VendorPlantDeliveryPolicy::with_json_storage(&storage_path)
+        .expect("policy should initialize with json storage");
+    policy
+        .upsert_mapping(
+            &committee,
+            taipei_moment(200, 600),
+            mapping(
+                "map-persist-primary",
+                &vendor,
+                "fab-a",
+                taipei_moment(200, 660),
+                taipei_moment(200, 780),
+                DeliveryRuleEffect::Allow,
+                5,
+            ),
+        )
+        .expect("mapping should be persisted");
+    policy
+        .remove_mapping(
+            &committee,
+            taipei_moment(200, 601),
+            &vendor,
+            &mapping_id("map-persist-primary"),
+        )
+        .expect("mapping removal should be persisted");
+
+    let reloaded_policy = VendorPlantDeliveryPolicy::with_json_storage(&storage_path)
+        .expect("policy should reload from json storage");
+    assert!(reloaded_policy.mappings_for_vendor(&vendor).is_empty());
+    assert_eq!(reloaded_policy.audit_log().len(), 2);
+    assert_eq!(
+        reloaded_policy.audit_log()[1]
+            .audit_identity()
+            .operation_id(),
+        "deleteVendorPlantDeliveryMapping"
+    );
+
+    fs::remove_file(&storage_path).expect("temporary persisted policy file should be removable");
 }
 
 #[test]

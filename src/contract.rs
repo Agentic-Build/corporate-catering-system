@@ -1198,7 +1198,6 @@ pub fn canonical_openapi_spec() -> Value {
               "price",
               "remainingQuantity",
               "deliveryDate",
-              "deliverablePlantIds",
               "healthTags"
             ],
             "properties": {
@@ -1209,12 +1208,6 @@ pub fn canonical_openapi_spec() -> Value {
               "price": { "$ref": "#/components/schemas/Money" },
               "remainingQuantity": { "type": "integer", "minimum": 0, "maximum": 2000 },
               "deliveryDate": { "type": "string", "format": "date" },
-              "deliverablePlantIds": {
-                "type": "array",
-                "items": { "$ref": "#/components/schemas/PlantId" },
-                "minItems": 1,
-                "uniqueItems": true
-              },
               "cuisine": { "type": "string", "minLength": 2, "maxLength": 32 },
               "healthTags": {
                 "type": "array",
@@ -1350,8 +1343,7 @@ pub fn canonical_openapi_spec() -> Value {
               "description",
               "price",
               "maxDailyQuantity",
-              "deliveryDate",
-              "deliverablePlantIds"
+              "deliveryDate"
             ],
             "properties": {
               "name": { "type": "string", "minLength": 1, "maxLength": 80 },
@@ -1359,12 +1351,6 @@ pub fn canonical_openapi_spec() -> Value {
               "price": { "$ref": "#/components/schemas/Money" },
               "maxDailyQuantity": { "type": "integer", "minimum": 1, "maximum": 2000 },
               "deliveryDate": { "type": "string", "format": "date" },
-              "deliverablePlantIds": {
-                "type": "array",
-                "items": { "$ref": "#/components/schemas/PlantId" },
-                "minItems": 1,
-                "uniqueItems": true
-              },
               "healthTags": {
                 "type": "array",
                 "items": { "$ref": "#/components/schemas/MenuHealthTag" },
@@ -1382,8 +1368,7 @@ pub fn canonical_openapi_spec() -> Value {
               "description",
               "price",
               "maxDailyQuantity",
-              "deliveryDate",
-              "deliverablePlantIds"
+              "deliveryDate"
             ],
             "properties": {
               "menuItemId": { "type": "string", "pattern": "^menu-[a-z0-9]{8,32}$" },
@@ -1393,12 +1378,6 @@ pub fn canonical_openapi_spec() -> Value {
               "price": { "$ref": "#/components/schemas/Money" },
               "maxDailyQuantity": { "type": "integer", "minimum": 1, "maximum": 2000 },
               "deliveryDate": { "type": "string", "format": "date" },
-              "deliverablePlantIds": {
-                "type": "array",
-                "items": { "$ref": "#/components/schemas/PlantId" },
-                "minItems": 1,
-                "uniqueItems": true
-              },
               "healthTags": {
                 "type": "array",
                 "items": { "$ref": "#/components/schemas/MenuHealthTag" },

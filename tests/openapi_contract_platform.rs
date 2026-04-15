@@ -75,6 +75,22 @@ fn collect_openapi_routes(spec: &Value) -> BTreeSet<(String, String, String)> {
     routes
 }
 
+fn operation_by_path_and_method<'a>(spec: &'a Value, path: &str, method: &str) -> &'a Value {
+    let operation = &spec["paths"][path][method];
+    assert!(
+        operation.is_object(),
+        "operation {method} {path} must exist"
+    );
+    operation
+}
+
+fn assert_error_response_ref(operation: &Value, status_code: &str, expected_ref: &str) {
+    let actual_ref = operation["responses"][status_code]["$ref"]
+        .as_str()
+        .unwrap_or_else(|| panic!("response {status_code} should be a $ref"));
+    assert_eq!(actual_ref, expected_ref);
+}
+
 fn different_action(action: Action) -> Action {
     match action {
         Action::PlaceEmployeeOrder => Action::ManageVendorMenu,
@@ -192,6 +208,113 @@ fn admin_contract_exposes_vendor_compliance_and_delivery_mapping_capabilities() 
     assert!(
         paths.contains_key("/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}")
     );
+}
+
+#[test]
+fn delivery_mapping_endpoints_have_tested_error_code_to_schema_refs() {
+    let spec = canonical_openapi_spec();
+
+    let list_mapping_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/vendor-plant-delivery-mappings", "get");
+    assert_error_response_ref(
+        list_mapping_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        list_mapping_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        list_mapping_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+
+    let upsert_mapping_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}",
+        "put",
+    );
+    assert_error_response_ref(
+        upsert_mapping_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        upsert_mapping_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        upsert_mapping_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        upsert_mapping_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+    assert_error_response_ref(
+        upsert_mapping_operation,
+        "422",
+        "#/components/responses/ValidationFailed",
+    );
+
+    let delete_mapping_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}",
+        "delete",
+    );
+    assert_error_response_ref(
+        delete_mapping_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        delete_mapping_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        delete_mapping_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        delete_mapping_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+
+    for response_name in [
+        "BadRequest",
+        "Unauthorized",
+        "Forbidden",
+        "NotFound",
+        "ValidationFailed",
+    ] {
+        let response_schema_ref = spec["components"]["responses"][response_name]["content"]
+            ["application/json"]["schema"]["$ref"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{response_name} response should reference a schema"));
+        assert_eq!(response_schema_ref, "#/components/schemas/ErrorResponse");
+    }
+
+    let error_codes = spec["components"]["schemas"]["ErrorCode"]["enum"]
+        .as_array()
+        .expect("error code enum must be present");
+    let as_set = error_codes
+        .iter()
+        .map(|value| value.as_str().expect("error code values must be strings"))
+        .collect::<BTreeSet<_>>();
+    assert!(as_set.contains("BAD_REQUEST"));
+    assert!(as_set.contains("UNAUTHORIZED"));
+    assert!(as_set.contains("FORBIDDEN"));
+    assert!(as_set.contains("NOT_FOUND"));
+    assert!(as_set.contains("VALIDATION_FAILED"));
 }
 
 #[test]

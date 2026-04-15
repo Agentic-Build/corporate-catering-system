@@ -1,9 +1,15 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
 
 use crate::audit::AuditIdentityLink;
-use crate::identity::{AuthenticatedActorContext, PlantId, Role};
+use crate::identity::{
+    ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
+};
 use crate::vendor_compliance::{VendorComplianceLifecycle, VendorId};
 
 const MINUTES_PER_DAY: u16 = 24 * 60;
@@ -221,16 +227,54 @@ struct VersionedMapping {
     revision: u64,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct VendorPlantDeliveryPolicy {
+#[derive(Debug, Clone)]
+enum StorageBackend {
+    InMemory,
+    JsonFile(PathBuf),
+}
+
+impl Default for StorageBackend {
+    fn default() -> Self {
+        Self::InMemory
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PolicyStateSnapshot {
     mappings_by_vendor: BTreeMap<VendorId, BTreeMap<DeliveryMappingId, VersionedMapping>>,
     audit_log: Vec<DeliveryMappingAuditEntry>,
     next_revision: u64,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct VendorPlantDeliveryPolicy {
+    mappings_by_vendor: BTreeMap<VendorId, BTreeMap<DeliveryMappingId, VersionedMapping>>,
+    audit_log: Vec<DeliveryMappingAuditEntry>,
+    next_revision: u64,
+    storage_backend: StorageBackend,
+}
+
 impl VendorPlantDeliveryPolicy {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_json_storage(path: impl Into<PathBuf>) -> Result<Self, VendorPlantDeliveryError> {
+        let path = path.into();
+        let persisted_snapshot = load_snapshot_from_json_file(&path)?;
+        let policy = match persisted_snapshot {
+            Some(snapshot) => {
+                Self::from_persisted_snapshot(snapshot, StorageBackend::JsonFile(path.clone()))?
+            }
+            None => Self {
+                storage_backend: StorageBackend::JsonFile(path.clone()),
+                ..Self::default()
+            },
+        };
+        if !path.exists() {
+            policy.persist_if_needed()?;
+        }
+        Ok(policy)
     }
 
     pub fn upsert_mapping(
@@ -240,6 +284,7 @@ impl VendorPlantDeliveryPolicy {
         mapping: VendorPlantDeliveryMapping,
     ) -> Result<(), VendorPlantDeliveryError> {
         ensure_role(actor, Role::CommitteeAdmin)?;
+        let previous_state = self.capture_state();
         let revision = self.next_revision();
         let vendor_id = mapping.vendor_id().clone();
         let mapping_id = mapping.mapping_id().clone();
@@ -259,6 +304,10 @@ impl VendorPlantDeliveryPolicy {
             kind: DeliveryMappingAuditKind::Upserted,
             mapping,
         });
+        if let Err(error) = self.persist_if_needed() {
+            self.restore_state(previous_state);
+            return Err(error);
+        }
         Ok(())
     }
 
@@ -270,6 +319,7 @@ impl VendorPlantDeliveryPolicy {
         mapping_id: &DeliveryMappingId,
     ) -> Result<(), VendorPlantDeliveryError> {
         ensure_role(actor, Role::CommitteeAdmin)?;
+        let previous_state = self.capture_state();
 
         let (removed_mapping, remove_vendor_entry) = {
             let vendor_mappings = self.mappings_by_vendor.get_mut(vendor_id).ok_or_else(|| {
@@ -297,6 +347,10 @@ impl VendorPlantDeliveryPolicy {
             kind: DeliveryMappingAuditKind::Removed,
             mapping: removed_mapping,
         });
+        if let Err(error) = self.persist_if_needed() {
+            self.restore_state(previous_state);
+            return Err(error);
+        }
         Ok(())
     }
 
@@ -459,6 +513,377 @@ impl VendorPlantDeliveryPolicy {
         self.next_revision = self.next_revision.saturating_add(1);
         self.next_revision
     }
+
+    fn capture_state(&self) -> PolicyStateSnapshot {
+        PolicyStateSnapshot {
+            mappings_by_vendor: self.mappings_by_vendor.clone(),
+            audit_log: self.audit_log.clone(),
+            next_revision: self.next_revision,
+        }
+    }
+
+    fn restore_state(&mut self, snapshot: PolicyStateSnapshot) {
+        self.mappings_by_vendor = snapshot.mappings_by_vendor;
+        self.audit_log = snapshot.audit_log;
+        self.next_revision = snapshot.next_revision;
+    }
+
+    fn persist_if_needed(&self) -> Result<(), VendorPlantDeliveryError> {
+        let StorageBackend::JsonFile(path) = &self.storage_backend else {
+            return Ok(());
+        };
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| VendorPlantDeliveryError::PersistenceIo(error.to_string()))?;
+        }
+
+        let snapshot = self.to_persisted_snapshot();
+        let serialized = serde_json::to_string_pretty(&snapshot)
+            .map_err(|error| VendorPlantDeliveryError::PersistenceSerde(error.to_string()))?;
+        fs::write(path, serialized)
+            .map_err(|error| VendorPlantDeliveryError::PersistenceIo(error.to_string()))?;
+        Ok(())
+    }
+
+    fn to_persisted_snapshot(&self) -> PersistedPolicySnapshot {
+        let mappings = self
+            .mappings_by_vendor
+            .iter()
+            .flat_map(|(_vendor_id, mappings)| mappings.values())
+            .map(|versioned| PersistedVersionedMapping {
+                mapping: persisted_mapping_from_domain(&versioned.mapping),
+                revision: versioned.revision,
+            })
+            .collect();
+        let audit_log = self
+            .audit_log
+            .iter()
+            .map(|entry| PersistedAuditEntry {
+                occurred_at: PersistedBusinessMoment::from_domain(entry.occurred_at()),
+                kind: match entry.kind() {
+                    DeliveryMappingAuditKind::Upserted => {
+                        PersistedDeliveryMappingAuditKind::Upserted
+                    }
+                    DeliveryMappingAuditKind::Removed => PersistedDeliveryMappingAuditKind::Removed,
+                },
+                mapping: persisted_mapping_from_domain(entry.mapping()),
+                audit_identity: persisted_audit_identity_from_domain(entry.audit_identity()),
+            })
+            .collect();
+
+        PersistedPolicySnapshot {
+            next_revision: self.next_revision,
+            mappings,
+            audit_log,
+        }
+    }
+
+    fn from_persisted_snapshot(
+        snapshot: PersistedPolicySnapshot,
+        storage_backend: StorageBackend,
+    ) -> Result<Self, VendorPlantDeliveryError> {
+        let mut mappings_by_vendor: BTreeMap<
+            VendorId,
+            BTreeMap<DeliveryMappingId, VersionedMapping>,
+        > = BTreeMap::new();
+        for versioned in snapshot.mappings {
+            let mapping = domain_mapping_from_persisted(&versioned.mapping)?;
+            mappings_by_vendor
+                .entry(mapping.vendor_id().clone())
+                .or_default()
+                .insert(
+                    mapping.mapping_id().clone(),
+                    VersionedMapping {
+                        mapping,
+                        revision: versioned.revision,
+                    },
+                );
+        }
+
+        let mut audit_log = Vec::with_capacity(snapshot.audit_log.len());
+        for persisted_audit_entry in snapshot.audit_log {
+            let actor_context =
+                actor_context_from_persisted(&persisted_audit_entry.audit_identity)?;
+            let audit_identity = AuditIdentityLink::from_actor(
+                &actor_context,
+                persisted_audit_entry.audit_identity.operation_id,
+            );
+            let kind = match persisted_audit_entry.kind {
+                PersistedDeliveryMappingAuditKind::Upserted => DeliveryMappingAuditKind::Upserted,
+                PersistedDeliveryMappingAuditKind::Removed => DeliveryMappingAuditKind::Removed,
+            };
+            audit_log.push(DeliveryMappingAuditEntry {
+                occurred_at: persisted_audit_entry.occurred_at.to_domain()?,
+                audit_identity,
+                kind,
+                mapping: domain_mapping_from_persisted(&persisted_audit_entry.mapping)?,
+            });
+        }
+
+        Ok(Self {
+            mappings_by_vendor,
+            audit_log,
+            next_revision: snapshot.next_revision,
+            storage_backend,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedPolicySnapshot {
+    next_revision: u64,
+    mappings: Vec<PersistedVersionedMapping>,
+    audit_log: Vec<PersistedAuditEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedVersionedMapping {
+    mapping: PersistedMapping,
+    revision: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedMapping {
+    mapping_id: String,
+    vendor_id: String,
+    plant_id: String,
+    service_window: PersistedServiceWindow,
+    effect: PersistedDeliveryRuleEffect,
+    precedence: u16,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PersistedDeliveryRuleEffect {
+    Allow,
+    Deny,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct PersistedBusinessMoment {
+    epoch_day: i32,
+    minute_of_day: u16,
+}
+
+impl PersistedBusinessMoment {
+    fn from_domain(moment: TaipeiBusinessMoment) -> Self {
+        Self {
+            epoch_day: moment.epoch_day(),
+            minute_of_day: moment.minute_of_day(),
+        }
+    }
+
+    fn to_domain(self) -> Result<TaipeiBusinessMoment, VendorPlantDeliveryError> {
+        TaipeiBusinessMoment::new(self.epoch_day, self.minute_of_day)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedServiceWindow {
+    starts_at: PersistedBusinessMoment,
+    ends_at: PersistedBusinessMoment,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedAuditEntry {
+    occurred_at: PersistedBusinessMoment,
+    audit_identity: PersistedAuditIdentity,
+    kind: PersistedDeliveryMappingAuditKind,
+    mapping: PersistedMapping,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PersistedDeliveryMappingAuditKind {
+    Upserted,
+    Removed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedAuditIdentity {
+    actor_id: String,
+    role: PersistedRole,
+    authentication_source: PersistedAuthenticationSource,
+    plant_scope: PersistedPlantScope,
+    operation_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PersistedRole {
+    Employee,
+    VendorOperator,
+    CommitteeAdmin,
+    PayrollOperator,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PersistedAuthenticationSource {
+    CorporateSso,
+    VendorAccountMfa,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedPlantScope {
+    all_plants: bool,
+    plant_ids: Vec<String>,
+}
+
+fn load_snapshot_from_json_file(
+    path: &Path,
+) -> Result<Option<PersistedPolicySnapshot>, VendorPlantDeliveryError> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(path)
+        .map_err(|error| VendorPlantDeliveryError::PersistenceIo(error.to_string()))?;
+    if content.trim().is_empty() {
+        return Ok(None);
+    }
+    let snapshot = serde_json::from_str(&content)
+        .map_err(|error| VendorPlantDeliveryError::PersistenceSerde(error.to_string()))?;
+    Ok(Some(snapshot))
+}
+
+fn persisted_mapping_from_domain(mapping: &VendorPlantDeliveryMapping) -> PersistedMapping {
+    PersistedMapping {
+        mapping_id: mapping.mapping_id().as_str().to_owned(),
+        vendor_id: mapping.vendor_id().as_str().to_owned(),
+        plant_id: mapping.plant_id().as_str().to_owned(),
+        service_window: PersistedServiceWindow {
+            starts_at: PersistedBusinessMoment::from_domain(mapping.service_window().starts_at()),
+            ends_at: PersistedBusinessMoment::from_domain(mapping.service_window().ends_at()),
+        },
+        effect: match mapping.effect() {
+            DeliveryRuleEffect::Allow => PersistedDeliveryRuleEffect::Allow,
+            DeliveryRuleEffect::Deny => PersistedDeliveryRuleEffect::Deny,
+        },
+        precedence: mapping.precedence(),
+    }
+}
+
+fn domain_mapping_from_persisted(
+    mapping: &PersistedMapping,
+) -> Result<VendorPlantDeliveryMapping, VendorPlantDeliveryError> {
+    let starts_at = mapping.service_window.starts_at.to_domain()?;
+    let ends_at = mapping.service_window.ends_at.to_domain()?;
+    let effect = match mapping.effect {
+        PersistedDeliveryRuleEffect::Allow => DeliveryRuleEffect::Allow,
+        PersistedDeliveryRuleEffect::Deny => DeliveryRuleEffect::Deny,
+    };
+    Ok(VendorPlantDeliveryMapping::new(
+        DeliveryMappingId::parse(mapping.mapping_id.clone())?,
+        VendorId::parse(mapping.vendor_id.clone()).map_err(|error| {
+            VendorPlantDeliveryError::PersistenceDataCorrupted(error.to_string())
+        })?,
+        PlantId::parse(mapping.plant_id.clone()).map_err(|error| {
+            VendorPlantDeliveryError::PersistenceDataCorrupted(error.to_string())
+        })?,
+        ServiceWindow::new(starts_at, ends_at)?,
+        effect,
+        mapping.precedence,
+    ))
+}
+
+fn persisted_audit_identity_from_domain(
+    audit_identity: &AuditIdentityLink,
+) -> PersistedAuditIdentity {
+    PersistedAuditIdentity {
+        actor_id: audit_identity.actor_id().as_str().to_owned(),
+        role: persisted_role_from_domain(audit_identity.role()),
+        authentication_source: persisted_authentication_source_from_domain(
+            audit_identity.authentication_source(),
+        ),
+        plant_scope: persisted_plant_scope_from_domain(audit_identity.plant_scope()),
+        operation_id: audit_identity.operation_id().to_owned(),
+    }
+}
+
+fn actor_context_from_persisted(
+    persisted: &PersistedAuditIdentity,
+) -> Result<AuthenticatedActorContext, VendorPlantDeliveryError> {
+    let actor_id = ActorId::parse(persisted.actor_id.clone())
+        .map_err(|error| VendorPlantDeliveryError::PersistenceDataCorrupted(error.to_string()))?;
+    let role = domain_role_from_persisted(persisted.role.clone());
+    let authentication_source =
+        domain_authentication_source_from_persisted(persisted.authentication_source.clone());
+    let plant_scope = domain_plant_scope_from_persisted(&persisted.plant_scope)?;
+    AuthenticatedActorContext::new(actor_id, role, plant_scope, authentication_source)
+        .map_err(|error| VendorPlantDeliveryError::PersistenceDataCorrupted(error.to_string()))
+}
+
+fn persisted_role_from_domain(role: Role) -> PersistedRole {
+    match role {
+        Role::Employee => PersistedRole::Employee,
+        Role::VendorOperator => PersistedRole::VendorOperator,
+        Role::CommitteeAdmin => PersistedRole::CommitteeAdmin,
+        Role::PayrollOperator => PersistedRole::PayrollOperator,
+    }
+}
+
+fn domain_role_from_persisted(role: PersistedRole) -> Role {
+    match role {
+        PersistedRole::Employee => Role::Employee,
+        PersistedRole::VendorOperator => Role::VendorOperator,
+        PersistedRole::CommitteeAdmin => Role::CommitteeAdmin,
+        PersistedRole::PayrollOperator => Role::PayrollOperator,
+    }
+}
+
+fn persisted_authentication_source_from_domain(
+    source: AuthenticationSource,
+) -> PersistedAuthenticationSource {
+    match source {
+        AuthenticationSource::CorporateSso => PersistedAuthenticationSource::CorporateSso,
+        AuthenticationSource::VendorAccountMfa => PersistedAuthenticationSource::VendorAccountMfa,
+    }
+}
+
+fn domain_authentication_source_from_persisted(
+    source: PersistedAuthenticationSource,
+) -> AuthenticationSource {
+    match source {
+        PersistedAuthenticationSource::CorporateSso => AuthenticationSource::CorporateSso,
+        PersistedAuthenticationSource::VendorAccountMfa => AuthenticationSource::VendorAccountMfa,
+    }
+}
+
+fn persisted_plant_scope_from_domain(scope: &PlantScope) -> PersistedPlantScope {
+    match scope {
+        PlantScope::AllPlants => PersistedPlantScope {
+            all_plants: true,
+            plant_ids: Vec::new(),
+        },
+        PlantScope::Restricted(plants) => PersistedPlantScope {
+            all_plants: false,
+            plant_ids: plants
+                .iter()
+                .map(|plant_id| plant_id.as_str().to_owned())
+                .collect(),
+        },
+    }
+}
+
+fn domain_plant_scope_from_persisted(
+    scope: &PersistedPlantScope,
+) -> Result<PlantScope, VendorPlantDeliveryError> {
+    if scope.all_plants {
+        return Ok(PlantScope::all());
+    }
+
+    let plants = scope
+        .plant_ids
+        .iter()
+        .map(|plant_id| {
+            PlantId::parse(plant_id.clone()).map_err(|error| {
+                VendorPlantDeliveryError::PersistenceDataCorrupted(error.to_string())
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    PlantScope::restricted(plants)
+        .map_err(|error| VendorPlantDeliveryError::PersistenceDataCorrupted(error.to_string()))
 }
 
 fn compare_versioned_mapping(left: &VersionedMapping, right: &VersionedMapping) -> Ordering {
@@ -516,6 +941,9 @@ pub enum VendorPlantDeliveryError {
         mapping_id: DeliveryMappingId,
         api: DeliverabilityApi,
     },
+    PersistenceIo(String),
+    PersistenceSerde(String),
+    PersistenceDataCorrupted(String),
 }
 
 impl fmt::Display for VendorPlantDeliveryError {
@@ -568,6 +996,15 @@ impl fmt::Display for VendorPlantDeliveryError {
                 "vendor {vendor_id} is denied for plant {plant_id} by mapping {mapping_id} during {} API evaluation",
                 api.as_str()
             ),
+            Self::PersistenceIo(message) => {
+                write!(f, "delivery mapping persistence I/O error: {message}")
+            }
+            Self::PersistenceSerde(message) => {
+                write!(f, "delivery mapping persistence serialization error: {message}")
+            }
+            Self::PersistenceDataCorrupted(message) => {
+                write!(f, "delivery mapping persisted state is corrupted: {message}")
+            }
         }
     }
 }

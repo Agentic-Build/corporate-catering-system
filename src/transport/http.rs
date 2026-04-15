@@ -3,6 +3,10 @@ use crate::access::{
 };
 use crate::contract::{HttpMethod, HttpOperation};
 use crate::identity::{AuthenticatedActorContext, PlantId};
+use crate::vendor_compliance::{VendorComplianceLifecycle, VendorId};
+use crate::vendor_delivery_mapping::{
+    TaipeiBusinessMoment, VendorPlantDeliveryError, VendorPlantDeliveryPolicy,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RuntimeHttpRoute {
@@ -144,6 +148,75 @@ impl HttpAuthorizationGateway {
             target_plant,
             TransportLayer::Http,
             operation.operation_id(),
+        )
+    }
+}
+
+pub struct HttpDeliveryExecutionGateway<'a> {
+    compliance_lifecycle: &'a VendorComplianceLifecycle,
+    delivery_policy: &'a VendorPlantDeliveryPolicy,
+}
+
+impl<'a> HttpDeliveryExecutionGateway<'a> {
+    pub fn new(
+        compliance_lifecycle: &'a VendorComplianceLifecycle,
+        delivery_policy: &'a VendorPlantDeliveryPolicy,
+    ) -> Self {
+        Self {
+            compliance_lifecycle,
+            delivery_policy,
+        }
+    }
+
+    pub fn execute_list_employee_menus_for_browse(
+        &self,
+        plant_id: &PlantId,
+        at: TaipeiBusinessMoment,
+    ) -> Vec<VendorId> {
+        self.delivery_policy.employee_visible_vendor_ids_for_browse(
+            self.compliance_lifecycle,
+            plant_id,
+            at,
+        )
+    }
+
+    pub fn execute_list_employee_menus_for_search(
+        &self,
+        plant_id: &PlantId,
+        at: TaipeiBusinessMoment,
+    ) -> Vec<VendorId> {
+        self.delivery_policy.employee_visible_vendor_ids_for_search(
+            self.compliance_lifecycle,
+            plant_id,
+            at,
+        )
+    }
+
+    pub fn execute_create_employee_order_deliverability_check(
+        &self,
+        vendor_id: &VendorId,
+        plant_id: &PlantId,
+        at: TaipeiBusinessMoment,
+    ) -> Result<(), VendorPlantDeliveryError> {
+        self.delivery_policy.ensure_vendor_deliverable_for_order(
+            self.compliance_lifecycle,
+            vendor_id,
+            plant_id,
+            at,
+        )
+    }
+
+    pub fn execute_update_employee_order_deliverability_check(
+        &self,
+        vendor_id: &VendorId,
+        plant_id: &PlantId,
+        at: TaipeiBusinessMoment,
+    ) -> Result<(), VendorPlantDeliveryError> {
+        self.delivery_policy.ensure_vendor_deliverable_for_order(
+            self.compliance_lifecycle,
+            vendor_id,
+            plant_id,
+            at,
         )
     }
 }

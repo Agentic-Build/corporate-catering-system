@@ -374,12 +374,6 @@ components:
           maxLength: 32
           minLength: 2
           type: string
-        deliverablePlantIds:
-          items:
-            $ref: '#/components/schemas/PlantId'
-          minItems: 1
-          type: array
-          uniqueItems: true
         deliveryDate:
           format: date
           type: string
@@ -414,7 +408,6 @@ components:
       - price
       - remainingQuantity
       - deliveryDate
-      - deliverablePlantIds
       - healthTags
       type: object
     MenuPage:
@@ -859,12 +852,6 @@ components:
     VendorMenuItem:
       additionalProperties: false
       properties:
-        deliverablePlantIds:
-          items:
-            $ref: '#/components/schemas/PlantId'
-          minItems: 1
-          type: array
-          uniqueItems: true
         deliveryDate:
           format: date
           type: string
@@ -901,17 +888,10 @@ components:
       - price
       - maxDailyQuantity
       - deliveryDate
-      - deliverablePlantIds
       type: object
     VendorMenuItemUpsertRequest:
       additionalProperties: false
       properties:
-        deliverablePlantIds:
-          items:
-            $ref: '#/components/schemas/PlantId'
-          minItems: 1
-          type: array
-          uniqueItems: true
         deliveryDate:
           format: date
           type: string
@@ -940,7 +920,6 @@ components:
       - price
       - maxDailyQuantity
       - deliveryDate
-      - deliverablePlantIds
       type: object
     VendorOrderBoardEntry:
       additionalProperties: false

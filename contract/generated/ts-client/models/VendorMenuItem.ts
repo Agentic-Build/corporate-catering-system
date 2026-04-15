@@ -4,9 +4,7 @@
 /* eslint-disable */
 import type { MenuHealthTag } from './MenuHealthTag';
 import type { Money } from './Money';
-import type { PlantId } from './PlantId';
 export type VendorMenuItem = {
-    deliverablePlantIds: Array<PlantId>;
     deliveryDate: string;
     description: string;
     healthTags?: Array<MenuHealthTag>;
