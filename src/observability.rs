@@ -520,6 +520,10 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
         "updateEmployeeOrder" | "updateEmployeeOrder:deliverability" => {
             ("/api/v1/employee/orders/{orderId}", "PATCH")
         }
+        "verifyPickupOrder" => (
+            "/api/v1/employee/orders/{orderId}/pickup-verifications",
+            "POST",
+        ),
         "listVendorOrders" => ("/api/v1/vendor/orders", "GET"),
         "upsertVendorMenuItem" => ("/api/v1/vendor/menu-items/{menuItemId}", "PUT"),
         "listAdminVendors" => ("/api/v1/admin/vendors", "GET"),

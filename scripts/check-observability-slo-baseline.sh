@@ -34,6 +34,19 @@ rg -q "p99LatencyMsMax" ops/observability/load/prelaunch-thresholds.yaml
 rg -q --fixed-strings "p(99)<" ops/observability/load/k6-prelaunch.js
 rg -q "peak-order-and-pickup-verification" ops/observability/load/k6-prelaunch.js
 rg -q "/api/v1/employee/orders/.*/pickup-verifications" ops/observability/load/k6-prelaunch.js
+rg -q "specialRequests" ops/observability/load/k6-prelaunch.js
+if rg -q "(parseOrderIdOrFallback|fallbackOrderId|specialRequestOption)" ops/observability/load/k6-prelaunch.js; then
+  echo "legacy fallback or special-request payload shape detected in k6-prelaunch.js"
+  exit 1
+fi
+rg -q "special_requests" src/bin/observability_runtime_service.rs
+if rg -q "special_request_option" src/bin/observability_runtime_service.rs; then
+  echo "legacy special_request_option field detected in observability runtime service"
+  exit 1
+fi
+rg -q "HttpOrderingExecutionGateway::new" src/bin/observability_runtime_service.rs
+rg -q "execute_create_employee_order" src/bin/observability_runtime_service.rs
+rg -q "execute_update_employee_order" src/bin/observability_runtime_service.rs
 rg -q "readinessProbe:" ops/kubernetes/base/deployment.yaml
 rg -q "livenessProbe:" ops/kubernetes/base/deployment.yaml
 rg -q "OTEL_EXPORTER_OTLP_ENDPOINT" ops/kubernetes/base/deployment.yaml
@@ -54,9 +67,6 @@ if [[ -z "${collector_endpoint}" ]]; then
   echo "failed to resolve collector.endpoint from ops/observability/otel/instrumentation-baseline.yaml"
   exit 1
 fi
-
-OTEL_EXPORTER_OTLP_ENDPOINT="${collector_endpoint}" \
-cargo test --test observability_k8s_slo_baseline --test runtime_observability_instrumentation
 
 if ! command -v cargo >/dev/null 2>&1; then
   echo "cargo is required to run the prelaunch load gate"
@@ -80,6 +90,21 @@ retained_report="ops/observability/load/reports/prelaunch-slo-report.json"
 reports_dir="$(dirname "${retained_summary}")"
 mkdir -p "${reports_dir}"
 
+prelaunch_vendor_id="${PRELAUNCH_VENDOR_ID:-ven-load-gate-a}"
+prelaunch_plant_id="${PRELAUNCH_PLANT_ID:-fab-a}"
+prelaunch_menu_variant_count="${PRELAUNCH_MENU_VARIANT_COUNT:-64}"
+prelaunch_delivery_day_offset="${PRELAUNCH_DELIVERY_DAY_OFFSET:-2}"
+delivery_epoch_day="$(node - "${prelaunch_delivery_day_offset}" <<'NODE'
+const offsetRaw = Number(process.argv[2]);
+if (!Number.isInteger(offsetRaw) || offsetRaw < 1 || offsetRaw > 7) {
+  throw new Error("PRELAUNCH_DELIVERY_DAY_OFFSET must be an integer between 1 and 7");
+}
+const unixSeconds = Math.floor(Date.now() / 1000);
+const taipeiEpochDay = Math.floor((unixSeconds + 8 * 60 * 60) / 86400);
+process.stdout.write(String(taipeiEpochDay + offsetRaw));
+NODE
+)"
+
 cleanup() {
   if [[ -n "${service_pid}" ]]; then
     kill "${service_pid}" >/dev/null 2>&1 || true
@@ -91,6 +116,10 @@ trap cleanup EXIT
 
 PORT="${LOAD_GATE_PORT:-18080}"
 PRELAUNCH_BIND_ADDR="127.0.0.1:${PORT}" \
+PRELAUNCH_VENDOR_ID="${prelaunch_vendor_id}" \
+PRELAUNCH_PLANT_ID="${prelaunch_plant_id}" \
+PRELAUNCH_MENU_VARIANT_COUNT="${prelaunch_menu_variant_count}" \
+PRELAUNCH_DELIVERY_EPOCH_DAY="${delivery_epoch_day}" \
 OTEL_SERVICE_NAME="catering-http-api" \
 OTEL_EXPORTER_OTLP_ENDPOINT="${collector_endpoint}" \
 cargo run --quiet --bin observability_runtime_service >"${service_log_file}" 2>&1 &
@@ -110,7 +139,10 @@ if ! curl --silent --fail --show-error "http://127.0.0.1:${PORT}/health/ready" >
 fi
 
 BASE_URL="http://127.0.0.1:${PORT}" \
-  k6 run --summary-export "${summary_file}" ops/observability/load/k6-prelaunch.js
+  VENDOR_ID="${prelaunch_vendor_id}" \
+  MENU_VARIANT_COUNT="${prelaunch_menu_variant_count}" \
+  DELIVERY_EPOCH_DAY="${delivery_epoch_day}" \
+  k6 run --quiet --summary-trend-stats "avg,min,med,max,p(90),p(95),p(99)" --summary-export "${summary_file}" ops/observability/load/k6-prelaunch.js
 
 cp "${summary_file}" "${retained_summary}"
 
@@ -229,18 +261,24 @@ for (const scenarioSpec of policyScenarios) {
   const observedRate = Number(
     requestMetric.metric?.rate ?? requestMetric.metric?.values?.rate ?? 0
   );
-  const observedP95 = Number(
+  const observedP95Raw =
     durationMetric.metric?.values?.["p(95)"] ??
     durationMetric.metric?.["p(95)"] ??
-    durationMetric.metric?.p95 ??
-    0
-  );
-  const observedP99 = Number(
+    durationMetric.metric?.p95;
+  const observedP99Raw =
     durationMetric.metric?.values?.["p(99)"] ??
     durationMetric.metric?.["p(99)"] ??
-    durationMetric.metric?.p99 ??
-    0
-  );
+    durationMetric.metric?.p99;
+  if (observedP95Raw === undefined || observedP95Raw === null) {
+    addViolation(`missing p95 latency quantile in summary metrics for scenario ${scenario}`);
+    continue;
+  }
+  if (observedP99Raw === undefined || observedP99Raw === null) {
+    addViolation(`missing p99 latency quantile in summary metrics for scenario ${scenario}`);
+    continue;
+  }
+  const observedP95 = Number(observedP95Raw);
+  const observedP99 = Number(observedP99Raw);
   const observedErrorRate = Number(
     failedMetric.metric?.rate ?? failedMetric.metric?.values?.rate ?? 0
   );
@@ -320,6 +358,9 @@ if [[ ! -s "${retained_report}" ]]; then
   echo "retained SLO evaluation artifact is missing: ${retained_report}"
   exit 1
 fi
+
+OTEL_EXPORTER_OTLP_ENDPOINT="${collector_endpoint}" \
+cargo test --test observability_k8s_slo_baseline --test runtime_observability_instrumentation
 
 echo "observability hard-SLO baseline checks passed"
 echo "retained artifacts:"

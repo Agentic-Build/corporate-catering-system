@@ -1,9 +1,80 @@
 {
-  "generatedAt": null,
+  "generatedAt": "2026-04-15T22:22:39.845Z",
   "summaryPath": "ops/observability/load/reports/prelaunch-k6-summary.json",
-  "scenarios": [],
-  "readiness": null,
+  "scenarios": [
+    {
+      "name": "peak-order-placement",
+      "observed": {
+        "requestRate": 183.6639271526236,
+        "p95LatencyMs": 1.6208999999999962,
+        "p99LatencyMs": 3.28306,
+        "errorRate": 0
+      },
+      "thresholds": {
+        "name": "peak-order-placement",
+        "minRps": 120,
+        "p95LatencyMsMax": 350,
+        "p99LatencyMsMax": 500,
+        "errorRateMax": 0.002,
+        "readinessSuccessRateMin": 0.999
+      }
+    },
+    {
+      "name": "mixed-order-and-menu-reads",
+      "observed": {
+        "requestRate": 315.42011492628416,
+        "p95LatencyMs": 1.242,
+        "p99LatencyMs": 1.709,
+        "errorRate": 0
+      },
+      "thresholds": {
+        "name": "mixed-order-and-menu-reads",
+        "minRps": 180,
+        "p95LatencyMsMax": 250,
+        "p99LatencyMsMax": 400,
+        "errorRateMax": 0.001,
+        "readinessSuccessRateMin": 0.999
+      }
+    },
+    {
+      "name": "peak-order-lifecycle-mutations",
+      "observed": {
+        "requestRate": 314.8952894438777,
+        "p95LatencyMs": 0.967,
+        "p99LatencyMs": 1.331,
+        "errorRate": 0
+      },
+      "thresholds": {
+        "name": "peak-order-lifecycle-mutations",
+        "minRps": 140,
+        "p95LatencyMsMax": 320,
+        "p99LatencyMsMax": 480,
+        "errorRateMax": 0.002,
+        "readinessSuccessRateMin": 0.999
+      }
+    },
+    {
+      "name": "peak-order-and-pickup-verification",
+      "observed": {
+        "requestRate": 359.88033079300305,
+        "p95LatencyMs": 0.853,
+        "p99LatencyMs": 1.2580099999999999,
+        "errorRate": 0
+      },
+      "thresholds": {
+        "name": "peak-order-and-pickup-verification",
+        "minRps": 160,
+        "p95LatencyMsMax": 300,
+        "p99LatencyMsMax": 450,
+        "errorRateMax": 0.002,
+        "readinessSuccessRateMin": 0.999
+      }
+    }
+  ],
+  "readiness": {
+    "observedRate": 1,
+    "minimumRequired": 0.999
+  },
   "violations": [],
-  "status": "pending-prelaunch-run",
-  "note": "Overwritten by scripts/check-observability-slo-baseline.sh after policy evaluation."
+  "status": "pass"
 }

@@ -548,6 +548,20 @@ fn prelaunch_load_assets_are_aligned_with_hard_slo_policy() {
             "k6 prelaunch script must include `{required}`"
         );
     }
+    for forbidden in [
+        "parseOrderIdOrFallback",
+        "fallbackOrderId",
+        "specialRequestOption",
+    ] {
+        assert!(
+            !k6_script.contains(forbidden),
+            "k6 prelaunch script must not contain legacy fallback or DTO path `{forbidden}`"
+        );
+    }
+    assert!(
+        k6_script.contains("specialRequests"),
+        "k6 prelaunch script must use controlled specialRequests schema"
+    );
 }
 
 #[test]
@@ -609,6 +623,26 @@ fn ci_workflow_enforces_observability_hard_slo_gate() {
     assert!(
         repo_path("ops/observability/load/reports/prelaunch-k6-summary.json").exists(),
         "retained k6 summary artifact must exist"
+    );
+
+    let retained_slo_report = read_text("ops/observability/load/reports/prelaunch-slo-report.json");
+    assert!(
+        !retained_slo_report.contains("pending-prelaunch-run"),
+        "retained SLO report must contain completed gate evidence, not placeholder status"
+    );
+    assert!(
+        !retained_slo_report.contains("\"generatedAt\": null"),
+        "retained SLO report must include generated timestamp from an executed gate run"
+    );
+
+    let retained_k6_summary = read_text("ops/observability/load/reports/prelaunch-k6-summary.json");
+    assert!(
+        !retained_k6_summary.contains("pending-prelaunch-run"),
+        "retained k6 summary must contain completed run output, not placeholder status"
+    );
+    assert!(
+        !retained_k6_summary.contains("\"generatedAt\": null"),
+        "retained k6 summary must include generated timestamp from an executed gate run"
     );
 }
 
@@ -680,10 +714,18 @@ fn runtime_http_handlers_emit_actual_http_status_dimensions() {
         "finish_with_http_status(StatusCode::CREATED.as_u16())",
         "verifyPickupOrder",
         "/pickup-verifications",
+        "HttpOrderingExecutionGateway::new",
+        "execute_create_employee_order",
+        "execute_update_employee_order",
+        "special_requests",
     ] {
         assert!(
             source.contains(required),
             "runtime service must emit concrete HTTP status codes via telemetry: missing `{required}`"
         );
     }
+    assert!(
+        !source.contains("special_request_option"),
+        "runtime service must not keep legacy special_request_option DTO field"
+    );
 }

@@ -65,6 +65,23 @@ export const options = {
 };
 
 const BASE_URL = __ENV.BASE_URL || "http://127.0.0.1:18080";
+const VENDOR_ID = (__ENV.VENDOR_ID || "").trim();
+const DELIVERY_EPOCH_DAY = Number(__ENV.DELIVERY_EPOCH_DAY || "");
+const MENU_VARIANT_COUNT = Number(__ENV.MENU_VARIANT_COUNT || "64");
+
+if (!VENDOR_ID) {
+  throw new Error("VENDOR_ID must be set for prelaunch load verification");
+}
+if (!Number.isInteger(DELIVERY_EPOCH_DAY) || DELIVERY_EPOCH_DAY <= 0) {
+  throw new Error("DELIVERY_EPOCH_DAY must be a positive integer");
+}
+if (!Number.isInteger(MENU_VARIANT_COUNT) || MENU_VARIANT_COUNT < 1) {
+  throw new Error("MENU_VARIANT_COUNT must be a positive integer");
+}
+
+function menuItemIdForIteration(iteration) {
+  return `menu-${(iteration % MENU_VARIANT_COUNT) + 1}`;
+}
 
 function checkReadiness() {
   const readiness = http.get(`${BASE_URL}/health/ready`, {
@@ -79,12 +96,16 @@ function checkReadiness() {
   );
 }
 
-function buildOrderPayload() {
+function buildOrderPayload(iteration) {
   return JSON.stringify({
-    vendorId: `vendor-${(__VU % 4) + 1}`,
-    deliveryEpochDay: 21100 + (__ITER % 5),
+    vendorId: VENDOR_ID,
+    deliveryEpochDay: DELIVERY_EPOCH_DAY,
     lineItems: [
-      { menuItemId: `menu-${(__ITER % 12) + 1}`, quantity: 1, specialRequestOption: "NO_ICE" }
+      {
+        menuItemId: menuItemIdForIteration(iteration),
+        quantity: 1,
+        specialRequests: ["NO_UTENSILS"]
+      }
     ]
   });
 }
@@ -92,7 +113,7 @@ function buildOrderPayload() {
 export function peakOrderPlacement() {
   const orderResponse = http.post(
     `${BASE_URL}/api/v1/employee/orders`,
-    buildOrderPayload(),
+    buildOrderPayload(__ITER),
     {
       headers: { "Content-Type": "application/json" },
       tags: { operation: "createEmployeeOrder" }
@@ -107,19 +128,20 @@ export function peakOrderPlacement() {
   sleep(0.05);
 }
 
-function parseOrderIdOrFallback(response, fallbackOrderId) {
+function parseOrderIdStrict(response) {
   if (!response || (response.status !== 200 && response.status !== 201 && response.status !== 202)) {
-    return fallbackOrderId;
+    throw new Error(`create order request failed with status ${response ? response.status : "unknown"}`);
   }
+  let payload;
   try {
-    const payload = response.json();
-    if (payload && typeof payload === "object" && payload.orderId) {
-      return payload.orderId;
-    }
-    return fallbackOrderId;
+    payload = response.json();
   } catch (_error) {
-    return fallbackOrderId;
+    throw new Error("create order response is not valid JSON");
   }
+  if (payload && typeof payload === "object" && typeof payload.orderId === "string" && payload.orderId.trim().length > 0) {
+    return payload.orderId;
+  }
+  throw new Error("create order response missing required `orderId`");
 }
 
 export function mixedOrderAndMenuReads() {
@@ -144,7 +166,11 @@ function buildOrderPatchPayload(iteration) {
     return JSON.stringify({
       operation: "REPLACE_LINE_ITEMS",
       lineItems: [
-        { menuItemId: `menu-${(iteration % 12) + 1}`, quantity: 2 }
+        {
+          menuItemId: menuItemIdForIteration(iteration + 1),
+          quantity: 1,
+          specialRequests: ["NO_UTENSILS"]
+        }
       ]
     });
   }
@@ -155,9 +181,22 @@ function buildOrderPatchPayload(iteration) {
 }
 
 export function peakOrderLifecycleMutations() {
-  const syntheticOrderId = `order-lifecycle-${__VU}-${__ITER}`;
+  const createResponse = http.post(
+    `${BASE_URL}/api/v1/employee/orders`,
+    buildOrderPayload(__ITER),
+    {
+      headers: { "Content-Type": "application/json" },
+      tags: { operation: "createEmployeeOrder" }
+    }
+  );
+  check(createResponse, {
+    "create order endpoint accepted request for lifecycle flow": (res) =>
+      res.status === 200 || res.status === 201 || res.status === 202
+  });
+
+  const orderId = parseOrderIdStrict(createResponse);
   const patchResponse = http.patch(
-    `${BASE_URL}/api/v1/employee/orders/${syntheticOrderId}`,
+    `${BASE_URL}/api/v1/employee/orders/${orderId}`,
     buildOrderPatchPayload(__ITER),
     {
       headers: { "Content-Type": "application/json" },
@@ -187,7 +226,7 @@ function buildPickupVerificationPayload() {
 export function peakOrderAndPickupVerification() {
   const createResponse = http.post(
     `${BASE_URL}/api/v1/employee/orders`,
-    buildOrderPayload(),
+    buildOrderPayload(__ITER),
     {
       headers: { "Content-Type": "application/json" },
       tags: { operation: "createEmployeeOrder" }
@@ -198,8 +237,7 @@ export function peakOrderAndPickupVerification() {
       res.status === 200 || res.status === 201 || res.status === 202
   });
 
-  const fallbackOrderId = `order-pickup-${__VU}-${__ITER}`;
-  const orderId = parseOrderIdOrFallback(createResponse, fallbackOrderId);
+  const orderId = parseOrderIdStrict(createResponse);
   const pickupResponse = http.post(
     `${BASE_URL}/api/v1/employee/orders/${orderId}/pickup-verifications`,
     buildPickupVerificationPayload(),
