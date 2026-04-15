@@ -318,6 +318,124 @@ fn delivery_mapping_endpoints_have_tested_error_code_to_schema_refs() {
 }
 
 #[test]
+fn ordering_and_menu_endpoints_have_tested_error_code_to_schema_refs() {
+    let spec = canonical_openapi_spec();
+
+    let create_order_operation =
+        operation_by_path_and_method(&spec, "/api/v1/employee/orders", "post");
+    assert_error_response_ref(
+        create_order_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        create_order_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        create_order_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        create_order_operation,
+        "409",
+        "#/components/responses/Conflict",
+    );
+    assert_error_response_ref(
+        create_order_operation,
+        "422",
+        "#/components/responses/ValidationFailed",
+    );
+
+    let update_order_operation =
+        operation_by_path_and_method(&spec, "/api/v1/employee/orders/{orderId}", "patch");
+    assert_error_response_ref(
+        update_order_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        update_order_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        update_order_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        update_order_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+    assert_error_response_ref(
+        update_order_operation,
+        "409",
+        "#/components/responses/Conflict",
+    );
+    assert_error_response_ref(
+        update_order_operation,
+        "422",
+        "#/components/responses/ValidationFailed",
+    );
+
+    let upsert_menu_operation =
+        operation_by_path_and_method(&spec, "/api/v1/vendor/menu-items/{menuItemId}", "put");
+    assert_error_response_ref(
+        upsert_menu_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        upsert_menu_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        upsert_menu_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        upsert_menu_operation,
+        "422",
+        "#/components/responses/ValidationFailed",
+    );
+
+    for response_name in [
+        "BadRequest",
+        "Unauthorized",
+        "Forbidden",
+        "NotFound",
+        "Conflict",
+        "ValidationFailed",
+    ] {
+        let response_schema_ref = spec["components"]["responses"][response_name]["content"]
+            ["application/json"]["schema"]["$ref"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{response_name} response should reference a schema"));
+        assert_eq!(response_schema_ref, "#/components/schemas/ErrorResponse");
+    }
+
+    let error_codes = spec["components"]["schemas"]["ErrorCode"]["enum"]
+        .as_array()
+        .expect("error code enum must be present");
+    let as_set = error_codes
+        .iter()
+        .map(|value| value.as_str().expect("error code values must be strings"))
+        .collect::<BTreeSet<_>>();
+    assert!(as_set.contains("BAD_REQUEST"));
+    assert!(as_set.contains("UNAUTHORIZED"));
+    assert!(as_set.contains("FORBIDDEN"));
+    assert!(as_set.contains("NOT_FOUND"));
+    assert!(as_set.contains("CONFLICT"));
+    assert!(as_set.contains("VALIDATION_FAILED"));
+}
+
+#[test]
 fn runtime_http_route_catalog_matches_openapi_contract() {
     let spec = canonical_openapi_spec();
     let openapi_routes = collect_openapi_routes(&spec);
