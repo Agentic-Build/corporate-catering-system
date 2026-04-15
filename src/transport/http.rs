@@ -33,7 +33,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 8] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 11] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -57,9 +57,24 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 8] = [
     ),
     RuntimeHttpRoute::new(HttpMethod::Get, "/api/v1/admin/vendors", "listAdminVendors"),
     RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/admin/compliance/document-templates",
+        "listComplianceDocumentTemplates",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Put,
+        "/api/v1/admin/compliance/document-templates/{vendorCategory}/{templateId}",
+        "upsertComplianceDocumentTemplate",
+    ),
+    RuntimeHttpRoute::new(
         HttpMethod::Post,
-        "/api/v1/admin/vendors/{vendorId}/approvals",
-        "approveVendorEnrollment",
+        "/api/v1/admin/vendors/{vendorId}/reviews",
+        "reviewVendorApplication",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/admin/compliance/lifecycle/executions",
+        "runVendorComplianceLifecycle",
     ),
     RuntimeHttpRoute::new(
         HttpMethod::Get,

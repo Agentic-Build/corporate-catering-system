@@ -159,7 +159,7 @@ fn rbac_allows_and_denies_expected_actions_for_all_roles() {
     assert!(policy
         .authorize(
             &committee_actor(),
-            Action::ApproveVendorEnrollment,
+            Action::ManageVendorComplianceLifecycle,
             Some(&target_plant),
         )
         .is_ok());
@@ -185,12 +185,12 @@ fn rbac_allows_and_denies_expected_actions_for_all_roles() {
     assert!(matches!(
         policy.authorize(
             &vendor_actor(),
-            Action::ApproveVendorEnrollment,
+            Action::ManageVendorComplianceLifecycle,
             Some(&target_plant),
         ),
         Err(AuthorizationError::RoleNotPermitted {
             role: Role::VendorOperator,
-            action: Action::ApproveVendorEnrollment,
+            action: Action::ManageVendorComplianceLifecycle,
         })
     ));
     assert!(matches!(

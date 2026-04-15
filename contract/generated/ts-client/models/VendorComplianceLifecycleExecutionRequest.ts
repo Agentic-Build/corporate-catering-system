@@ -2,4 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type VendorSortField = 'createdAt' | 'status' | 'displayName' | 'vendorCategory';
+export type VendorComplianceLifecycleExecutionRequest = {
+    dryRun?: boolean;
+    runDate: string;
+};
+

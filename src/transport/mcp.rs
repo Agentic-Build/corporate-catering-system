@@ -9,7 +9,7 @@ use crate::identity::{AuthenticatedActorContext, PlantId};
 pub enum McpOperation {
     PlaceEmployeeOrder,
     ManageVendorMenu,
-    ApproveVendorEnrollment,
+    ManageVendorComplianceLifecycle,
     ExportPayrollDeductions,
 }
 
@@ -17,7 +17,7 @@ impl McpOperation {
     pub const ALL: [Self; 4] = [
         Self::PlaceEmployeeOrder,
         Self::ManageVendorMenu,
-        Self::ApproveVendorEnrollment,
+        Self::ManageVendorComplianceLifecycle,
         Self::ExportPayrollDeductions,
     ];
 
@@ -25,7 +25,7 @@ impl McpOperation {
         match self {
             Self::PlaceEmployeeOrder => "placeEmployeeOrder",
             Self::ManageVendorMenu => "manageVendorMenu",
-            Self::ApproveVendorEnrollment => "approveVendorEnrollment",
+            Self::ManageVendorComplianceLifecycle => "manageVendorComplianceLifecycle",
             Self::ExportPayrollDeductions => "exportPayrollDeductions",
         }
     }
@@ -34,7 +34,7 @@ impl McpOperation {
         match self {
             Self::PlaceEmployeeOrder => Action::PlaceEmployeeOrder,
             Self::ManageVendorMenu => Action::ManageVendorMenu,
-            Self::ApproveVendorEnrollment => Action::ApproveVendorEnrollment,
+            Self::ManageVendorComplianceLifecycle => Action::ManageVendorComplianceLifecycle,
             Self::ExportPayrollDeductions => Action::ExportPayrollDeductions,
         }
     }
@@ -43,7 +43,7 @@ impl McpOperation {
         match value {
             "placeEmployeeOrder" => Some(Self::PlaceEmployeeOrder),
             "manageVendorMenu" => Some(Self::ManageVendorMenu),
-            "approveVendorEnrollment" => Some(Self::ApproveVendorEnrollment),
+            "manageVendorComplianceLifecycle" => Some(Self::ManageVendorComplianceLifecycle),
             "exportPayrollDeductions" => Some(Self::ExportPayrollDeductions),
             _ => None,
         }
@@ -53,7 +53,7 @@ impl McpOperation {
         match action {
             Action::PlaceEmployeeOrder => Some(Self::PlaceEmployeeOrder),
             Action::ManageVendorMenu => Some(Self::ManageVendorMenu),
-            Action::ApproveVendorEnrollment => Some(Self::ApproveVendorEnrollment),
+            Action::ManageVendorComplianceLifecycle => Some(Self::ManageVendorComplianceLifecycle),
             Action::ExportPayrollDeductions => Some(Self::ExportPayrollDeductions),
         }
     }

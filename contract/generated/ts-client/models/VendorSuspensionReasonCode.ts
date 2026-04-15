@@ -2,4 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type VendorSortField = 'createdAt' | 'status' | 'displayName' | 'vendorCategory';
+export type VendorSuspensionReasonCode = 'MISSING_REQUIRED_DOCUMENT' | 'EXPIRED_REQUIRED_DOCUMENT';

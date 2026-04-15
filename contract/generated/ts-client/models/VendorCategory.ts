@@ -2,8 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type AdminVendorApprovalRequest = {
-    comment: string;
-    decision: 'APPROVED' | 'REJECTED';
-};
-
+export type VendorCategory = 'RESTAURANT' | 'BEVERAGE' | 'DESSERT' | 'HEALTHY_MEAL' | 'SNACK';

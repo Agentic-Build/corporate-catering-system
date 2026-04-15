@@ -78,8 +78,8 @@ fn collect_openapi_routes(spec: &Value) -> BTreeSet<(String, String, String)> {
 fn different_action(action: Action) -> Action {
     match action {
         Action::PlaceEmployeeOrder => Action::ManageVendorMenu,
-        Action::ManageVendorMenu => Action::ApproveVendorEnrollment,
-        Action::ApproveVendorEnrollment => Action::ExportPayrollDeductions,
+        Action::ManageVendorMenu => Action::ManageVendorComplianceLifecycle,
+        Action::ManageVendorComplianceLifecycle => Action::ExportPayrollDeductions,
         Action::ExportPayrollDeductions => Action::PlaceEmployeeOrder,
     }
 }
@@ -158,6 +158,36 @@ fn openapi_spec_covers_all_official_http_operations() {
         .map(|operation| operation.operation_id().to_owned())
         .collect::<BTreeSet<_>>();
     assert_eq!(openapi_operation_ids, expected_operation_ids);
+}
+
+#[test]
+fn vendor_compliance_contract_exposes_request_fix_templates_and_lifecycle_execution() {
+    let spec = canonical_openapi_spec();
+    let decision_enum = spec["components"]["schemas"]["VendorReviewDecision"]["enum"]
+        .as_array()
+        .expect("vendor review decision enum must be array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("enum values must be strings")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        decision_enum,
+        BTreeSet::from([
+            "APPROVED".to_owned(),
+            "REJECTED".to_owned(),
+            "REQUEST_FIX".to_owned(),
+        ])
+    );
+
+    let paths = spec["paths"].as_object().expect("paths must be object");
+    assert!(paths.contains_key("/api/v1/admin/compliance/document-templates"));
+    assert!(paths
+        .contains_key("/api/v1/admin/compliance/document-templates/{vendorCategory}/{templateId}"));
+    assert!(paths.contains_key("/api/v1/admin/compliance/lifecycle/executions"));
 }
 
 #[test]

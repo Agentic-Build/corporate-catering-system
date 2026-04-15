@@ -99,6 +99,13 @@ components:
       required: false
       schema:
         $ref: '#/components/schemas/SortOrder'
+    TemplateIdPath:
+      in: path
+      name: templateId
+      required: true
+      schema:
+        pattern: ^tmpl-[a-z0-9-]{3,64}$
+        type: string
     ToDateQuery:
       in: query
       name: toDate
@@ -106,6 +113,18 @@ components:
       schema:
         format: date
         type: string
+    VendorCategoryFilterQuery:
+      in: query
+      name: vendorCategory
+      required: false
+      schema:
+        $ref: '#/components/schemas/VendorCategory'
+    VendorCategoryPath:
+      in: path
+      name: vendorCategory
+      required: true
+      schema:
+        $ref: '#/components/schemas/VendorCategory'
     VendorIdPath:
       in: path
       name: vendorId
@@ -172,7 +191,7 @@ components:
     ActorId:
       pattern: ^[a-z0-9][a-z0-9-]{2,63}$
       type: string
-    AdminVendorApprovalRequest:
+    AdminVendorReviewRequest:
       additionalProperties: false
       properties:
         comment:
@@ -180,10 +199,7 @@ components:
           minLength: 5
           type: string
         decision:
-          enum:
-          - APPROVED
-          - REJECTED
-          type: string
+          $ref: '#/components/schemas/VendorReviewDecision'
       required:
       - decision
       - comment
@@ -530,25 +546,232 @@ components:
       - asc
       - desc
       type: string
-    VendorEnrollment:
+    VendorCategory:
+      enum:
+      - RESTAURANT
+      - BEVERAGE
+      - DESSERT
+      - HEALTHY_MEAL
+      - SNACK
+      type: string
+    VendorComplianceDocumentRecord:
+      additionalProperties: false
+      properties:
+        documentRef:
+          maxLength: 128
+          minLength: 1
+          type: string
+        expiresOn:
+          format: date
+          type: string
+        status:
+          $ref: '#/components/schemas/VendorComplianceDocumentStatus'
+        submittedAt:
+          format: date-time
+          type: string
+        templateId:
+          pattern: ^tmpl-[a-z0-9-]{3,64}$
+          type: string
+      required:
+      - templateId
+      - documentRef
+      - submittedAt
+      - expiresOn
+      - status
+      type: object
+    VendorComplianceDocumentStatus:
+      enum:
+      - VALID
+      - EXPIRING_SOON
+      - EXPIRED
+      - MISSING
+      type: string
+    VendorComplianceDocumentTemplate:
       additionalProperties: false
       properties:
         displayName:
           maxLength: 120
           minLength: 1
           type: string
+        maxValidityDays:
+          maximum: 3650
+          minimum: 1
+          type: integer
+        reminderDaysBeforeExpiry:
+          items:
+            maximum: 3650
+            minimum: 1
+            type: integer
+          type: array
+          uniqueItems: true
+        required:
+          type: boolean
+        suspensionGraceDays:
+          maximum: 365
+          minimum: 0
+          type: integer
+        templateId:
+          pattern: ^tmpl-[a-z0-9-]{3,64}$
+          type: string
+        updatedAt:
+          format: date-time
+          type: string
+        vendorCategory:
+          $ref: '#/components/schemas/VendorCategory'
+      required:
+      - templateId
+      - vendorCategory
+      - displayName
+      - required
+      - maxValidityDays
+      - reminderDaysBeforeExpiry
+      - suspensionGraceDays
+      type: object
+    VendorComplianceDocumentTemplatePage:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/VendorComplianceDocumentTemplate'
+          type: array
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - page
+      type: object
+    VendorComplianceDocumentTemplateUpsertRequest:
+      additionalProperties: false
+      properties:
+        displayName:
+          maxLength: 120
+          minLength: 1
+          type: string
+        maxValidityDays:
+          maximum: 3650
+          minimum: 1
+          type: integer
+        reminderDaysBeforeExpiry:
+          items:
+            maximum: 3650
+            minimum: 1
+            type: integer
+          type: array
+          uniqueItems: true
+        required:
+          type: boolean
+        suspensionGraceDays:
+          maximum: 365
+          minimum: 0
+          type: integer
+      required:
+      - displayName
+      - required
+      - maxValidityDays
+      - reminderDaysBeforeExpiry
+      - suspensionGraceDays
+      type: object
+    VendorComplianceLifecycleExecutionRequest:
+      additionalProperties: false
+      properties:
+        dryRun:
+          default: false
+          type: boolean
+        runDate:
+          format: date
+          type: string
+      required:
+      - runDate
+      type: object
+    VendorComplianceLifecycleExecutionResult:
+      additionalProperties: false
+      properties:
+        reinstatementCount:
+          minimum: 0
+          type: integer
+        reminderCount:
+          minimum: 0
+          type: integer
+        runDate:
+          format: date
+          type: string
+        suspensionCount:
+          minimum: 0
+          type: integer
+      required:
+      - runDate
+      - reminderCount
+      - suspensionCount
+      - reinstatementCount
+      type: object
+    VendorComplianceRetentionPolicy:
+      additionalProperties: false
+      properties:
+        lifecycleHistoryDays:
+          maximum: 36500
+          minimum: 1
+          type: integer
+        rejectedVendorDeletionDays:
+          maximum: 3650
+          minimum: 1
+          type: integer
+        reviewHistoryDays:
+          maximum: 36500
+          minimum: 1
+          type: integer
+      required:
+      - reviewHistoryDays
+      - lifecycleHistoryDays
+      - rejectedVendorDeletionDays
+      type: object
+    VendorComplianceSummary:
+      additionalProperties: false
+      properties:
+        documents:
+          items:
+            $ref: '#/components/schemas/VendorComplianceDocumentRecord'
+          type: array
+        lifecycleHistory:
+          items:
+            $ref: '#/components/schemas/VendorLifecycleEvent'
+          type: array
+        retentionPolicy:
+          $ref: '#/components/schemas/VendorComplianceRetentionPolicy'
+      required:
+      - documents
+      - lifecycleHistory
+      - retentionPolicy
+      type: object
+    VendorEnrollment:
+      additionalProperties: false
+      properties:
+        compliance:
+          $ref: '#/components/schemas/VendorComplianceSummary'
+        displayName:
+          maxLength: 120
+          minLength: 1
+          type: string
+        reviewHistory:
+          items:
+            $ref: '#/components/schemas/VendorReviewHistoryEntry'
+          type: array
         status:
           $ref: '#/components/schemas/VendorStatus'
         updatedAt:
           format: date-time
           type: string
+        vendorCategory:
+          $ref: '#/components/schemas/VendorCategory'
         vendorId:
           pattern: ^ven-[a-z0-9]{8,32}$
           type: string
       required:
       - vendorId
       - displayName
+      - vendorCategory
       - status
+      - reviewHistory
+      - compliance
       - updatedAt
       type: object
     VendorEnrollmentPage:
@@ -564,6 +787,43 @@ components:
       - items
       - page
       type: object
+    VendorLifecycleEvent:
+      additionalProperties: false
+      properties:
+        actorId:
+          $ref: '#/components/schemas/ActorId'
+        actorRole:
+          $ref: '#/components/schemas/Role'
+        eventType:
+          $ref: '#/components/schemas/VendorLifecycleEventType'
+        occurredAt:
+          format: date-time
+          type: string
+        summary:
+          maxLength: 280
+          minLength: 1
+          type: string
+        suspensionReasonCode:
+          $ref: '#/components/schemas/VendorSuspensionReasonCode'
+        templateId:
+          pattern: ^tmpl-[a-z0-9-]{3,64}$
+          type: string
+      required:
+      - occurredAt
+      - eventType
+      - actorId
+      - actorRole
+      - summary
+      type: object
+    VendorLifecycleEventType:
+      enum:
+      - APPLICATION_SUBMITTED
+      - DOCUMENT_SUBMITTED
+      - REVIEW_DECISION
+      - EXPIRY_REMINDER_ISSUED
+      - SUSPENDED
+      - REINSTATED
+      type: string
     VendorMenuItem:
       additionalProperties: false
       properties:
@@ -695,18 +955,51 @@ components:
       - status
       - createdAt
       type: string
+    VendorReviewDecision:
+      enum:
+      - APPROVED
+      - REJECTED
+      - REQUEST_FIX
+      type: string
+    VendorReviewHistoryEntry:
+      additionalProperties: false
+      properties:
+        comment:
+          maxLength: 280
+          minLength: 5
+          type: string
+        decidedAt:
+          format: date-time
+          type: string
+        decidedByActorId:
+          $ref: '#/components/schemas/ActorId'
+        decision:
+          $ref: '#/components/schemas/VendorReviewDecision'
+      required:
+      - decidedAt
+      - decidedByActorId
+      - decision
+      - comment
+      type: object
     VendorSortField:
       enum:
       - createdAt
       - status
       - displayName
+      - vendorCategory
       type: string
     VendorStatus:
       enum:
       - PENDING_REVIEW
+      - FIX_REQUESTED
       - APPROVED
       - REJECTED
       - SUSPENDED
+      type: string
+    VendorSuspensionReasonCode:
+      enum:
+      - MISSING_REQUIRED_DOCUMENT
+      - EXPIRED_REQUIRED_DOCUMENT
       type: string
   securitySchemes:
     corporateSsoBearer:
@@ -729,6 +1022,90 @@ info:
 jsonSchemaDialect: https://spec.openapis.org/oas/3.1/dialect/base
 openapi: 3.1.0
 paths:
+  /api/v1/admin/compliance/document-templates:
+    get:
+      operationId: listComplianceDocumentTemplates
+      parameters:
+      - $ref: '#/components/parameters/VendorCategoryFilterQuery'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorComplianceDocumentTemplatePage'
+          description: Compliance document templates
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      security:
+      - corporateSsoBearer: []
+      summary: List vendor compliance document templates by category
+      tags:
+      - Admin
+  /api/v1/admin/compliance/document-templates/{vendorCategory}/{templateId}:
+    put:
+      operationId: upsertComplianceDocumentTemplate
+      parameters:
+      - $ref: '#/components/parameters/VendorCategoryPath'
+      - $ref: '#/components/parameters/TemplateIdPath'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorComplianceDocumentTemplateUpsertRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorComplianceDocumentTemplate'
+          description: Template upserted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      security:
+      - corporateSsoBearer: []
+      summary: Create or update a compliance document template for a vendor category
+      tags:
+      - Admin
+  /api/v1/admin/compliance/lifecycle/executions:
+    post:
+      operationId: runVendorComplianceLifecycle
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorComplianceLifecycleExecutionRequest'
+        required: true
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorComplianceLifecycleExecutionResult'
+          description: Lifecycle evaluation accepted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      security:
+      - corporateSsoBearer: []
+      summary: Run automated compliance lifecycle evaluation
+      tags:
+      - Admin
   /api/v1/admin/vendors:
     get:
       operationId: listAdminVendors
@@ -756,16 +1133,16 @@ paths:
       summary: List vendor enrollments
       tags:
       - Admin
-  /api/v1/admin/vendors/{vendorId}/approvals:
+  /api/v1/admin/vendors/{vendorId}/reviews:
     post:
-      operationId: approveVendorEnrollment
+      operationId: reviewVendorApplication
       parameters:
       - $ref: '#/components/parameters/VendorIdPath'
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AdminVendorApprovalRequest'
+              $ref: '#/components/schemas/AdminVendorReviewRequest'
         required: true
       responses:
         '202':
@@ -786,7 +1163,7 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
       security:
       - corporateSsoBearer: []
-      summary: Approve or reject vendor enrollment
+      summary: Approve, reject, or request fixes for vendor application
       tags:
       - Admin
   /api/v1/employee/menus:

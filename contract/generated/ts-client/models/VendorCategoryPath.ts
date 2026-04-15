@@ -2,4 +2,5 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type VendorSortField = 'createdAt' | 'status' | 'displayName' | 'vendorCategory';
+import type { VendorCategory } from './VendorCategory';
+export type VendorCategoryPath = VendorCategory;

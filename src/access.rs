@@ -8,7 +8,7 @@ use crate::identity::{AuthenticatedActorContext, PlantId, Role};
 pub enum Action {
     PlaceEmployeeOrder,
     ManageVendorMenu,
-    ApproveVendorEnrollment,
+    ManageVendorComplianceLifecycle,
     ExportPayrollDeductions,
 }
 
@@ -68,7 +68,10 @@ fn role_can_execute(role: Role, action: Action) -> bool {
         (role, action),
         (Role::Employee, Action::PlaceEmployeeOrder)
             | (Role::VendorOperator, Action::ManageVendorMenu)
-            | (Role::CommitteeAdmin, Action::ApproveVendorEnrollment)
+            | (
+                Role::CommitteeAdmin,
+                Action::ManageVendorComplianceLifecycle
+            )
             | (Role::PayrollOperator, Action::ExportPayrollDeductions)
     )
 }

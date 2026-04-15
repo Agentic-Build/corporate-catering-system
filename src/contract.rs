@@ -40,19 +40,25 @@ pub enum HttpOperation {
     ListVendorOrders,
     UpsertVendorMenuItem,
     ListAdminVendors,
-    ApproveVendorEnrollment,
+    ListComplianceDocumentTemplates,
+    UpsertComplianceDocumentTemplate,
+    ReviewVendorApplication,
+    RunVendorComplianceLifecycle,
     ExportPayrollDeductions,
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 11] = [
         Self::ListEmployeeMenus,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
         Self::ListVendorOrders,
         Self::UpsertVendorMenuItem,
         Self::ListAdminVendors,
-        Self::ApproveVendorEnrollment,
+        Self::ListComplianceDocumentTemplates,
+        Self::UpsertComplianceDocumentTemplate,
+        Self::ReviewVendorApplication,
+        Self::RunVendorComplianceLifecycle,
         Self::ExportPayrollDeductions,
     ];
 
@@ -64,7 +70,10 @@ impl HttpOperation {
             Self::ListVendorOrders => "listVendorOrders",
             Self::UpsertVendorMenuItem => "upsertVendorMenuItem",
             Self::ListAdminVendors => "listAdminVendors",
-            Self::ApproveVendorEnrollment => "approveVendorEnrollment",
+            Self::ListComplianceDocumentTemplates => "listComplianceDocumentTemplates",
+            Self::UpsertComplianceDocumentTemplate => "upsertComplianceDocumentTemplate",
+            Self::ReviewVendorApplication => "reviewVendorApplication",
+            Self::RunVendorComplianceLifecycle => "runVendorComplianceLifecycle",
             Self::ExportPayrollDeductions => "exportPayrollDeductions",
         }
     }
@@ -74,10 +83,13 @@ impl HttpOperation {
             Self::ListEmployeeMenus
             | Self::ListVendorOrders
             | Self::ListAdminVendors
+            | Self::ListComplianceDocumentTemplates
             | Self::ExportPayrollDeductions => HttpMethod::Get,
-            Self::CreateEmployeeOrder | Self::ApproveVendorEnrollment => HttpMethod::Post,
+            Self::CreateEmployeeOrder
+            | Self::ReviewVendorApplication
+            | Self::RunVendorComplianceLifecycle => HttpMethod::Post,
             Self::UpdateEmployeeOrder => HttpMethod::Patch,
-            Self::UpsertVendorMenuItem => HttpMethod::Put,
+            Self::UpsertVendorMenuItem | Self::UpsertComplianceDocumentTemplate => HttpMethod::Put,
         }
     }
 
@@ -89,7 +101,12 @@ impl HttpOperation {
             Self::ListVendorOrders => "/api/v1/vendor/orders",
             Self::UpsertVendorMenuItem => "/api/v1/vendor/menu-items/{menuItemId}",
             Self::ListAdminVendors => "/api/v1/admin/vendors",
-            Self::ApproveVendorEnrollment => "/api/v1/admin/vendors/{vendorId}/approvals",
+            Self::ListComplianceDocumentTemplates => "/api/v1/admin/compliance/document-templates",
+            Self::UpsertComplianceDocumentTemplate => {
+                "/api/v1/admin/compliance/document-templates/{vendorCategory}/{templateId}"
+            }
+            Self::ReviewVendorApplication => "/api/v1/admin/vendors/{vendorId}/reviews",
+            Self::RunVendorComplianceLifecycle => "/api/v1/admin/compliance/lifecycle/executions",
             Self::ExportPayrollDeductions => "/api/v1/integrations/payroll/deductions",
         }
     }
@@ -100,7 +117,11 @@ impl HttpOperation {
                 HttpAudience::Employee
             }
             Self::ListVendorOrders | Self::UpsertVendorMenuItem => HttpAudience::Vendor,
-            Self::ListAdminVendors | Self::ApproveVendorEnrollment => HttpAudience::Admin,
+            Self::ListAdminVendors
+            | Self::ListComplianceDocumentTemplates
+            | Self::UpsertComplianceDocumentTemplate
+            | Self::ReviewVendorApplication
+            | Self::RunVendorComplianceLifecycle => HttpAudience::Admin,
             Self::ExportPayrollDeductions => HttpAudience::Integration,
         }
     }
@@ -111,10 +132,13 @@ impl HttpOperation {
                 Some(Action::PlaceEmployeeOrder)
             }
             Self::UpsertVendorMenuItem => Some(Action::ManageVendorMenu),
-            Self::ApproveVendorEnrollment => Some(Action::ApproveVendorEnrollment),
+            Self::UpsertComplianceDocumentTemplate
+            | Self::ReviewVendorApplication
+            | Self::RunVendorComplianceLifecycle => Some(Action::ManageVendorComplianceLifecycle),
             Self::ListEmployeeMenus
             | Self::ListVendorOrders
             | Self::ListAdminVendors
+            | Self::ListComplianceDocumentTemplates
             | Self::ExportPayrollDeductions => None,
         }
     }
@@ -131,7 +155,10 @@ impl HttpOperation {
             "listVendorOrders" => Some(Self::ListVendorOrders),
             "upsertVendorMenuItem" => Some(Self::UpsertVendorMenuItem),
             "listAdminVendors" => Some(Self::ListAdminVendors),
-            "approveVendorEnrollment" => Some(Self::ApproveVendorEnrollment),
+            "listComplianceDocumentTemplates" => Some(Self::ListComplianceDocumentTemplates),
+            "upsertComplianceDocumentTemplate" => Some(Self::UpsertComplianceDocumentTemplate),
+            "reviewVendorApplication" => Some(Self::ReviewVendorApplication),
+            "runVendorComplianceLifecycle" => Some(Self::RunVendorComplianceLifecycle),
             "exportPayrollDeductions" => Some(Self::ExportPayrollDeductions),
             _ => None,
         }
@@ -394,11 +421,75 @@ pub fn canonical_openapi_spec() -> Value {
             }
           }
         },
-        "/api/v1/admin/vendors/{vendorId}/approvals": {
+        "/api/v1/admin/compliance/document-templates": {
+          "get": {
+            "tags": ["Admin"],
+            "summary": "List vendor compliance document templates by category",
+            "operationId": HttpOperation::ListComplianceDocumentTemplates.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/VendorCategoryFilterQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Compliance document templates",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/VendorComplianceDocumentTemplatePage"
+                    }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" }
+            }
+          }
+        },
+        "/api/v1/admin/compliance/document-templates/{vendorCategory}/{templateId}": {
+          "put": {
+            "tags": ["Admin"],
+            "summary": "Create or update a compliance document template for a vendor category",
+            "operationId": HttpOperation::UpsertComplianceDocumentTemplate.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/VendorCategoryPath" },
+              { "$ref": "#/components/parameters/TemplateIdPath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/VendorComplianceDocumentTemplateUpsertRequest"
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Template upserted",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/VendorComplianceDocumentTemplate"
+                    }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "422": { "$ref": "#/components/responses/ValidationFailed" }
+            }
+          }
+        },
+        "/api/v1/admin/vendors/{vendorId}/reviews": {
           "post": {
             "tags": ["Admin"],
-            "summary": "Approve or reject vendor enrollment",
-            "operationId": HttpOperation::ApproveVendorEnrollment.operation_id(),
+            "summary": "Approve, reject, or request fixes for vendor application",
+            "operationId": HttpOperation::ReviewVendorApplication.operation_id(),
             "security": [{ "corporateSsoBearer": [] }],
             "parameters": [
               { "$ref": "#/components/parameters/VendorIdPath" }
@@ -407,7 +498,7 @@ pub fn canonical_openapi_spec() -> Value {
               "required": true,
               "content": {
                 "application/json": {
-                  "schema": { "$ref": "#/components/schemas/AdminVendorApprovalRequest" }
+                  "schema": { "$ref": "#/components/schemas/AdminVendorReviewRequest" }
                 }
               }
             },
@@ -424,6 +515,40 @@ pub fn canonical_openapi_spec() -> Value {
               "401": { "$ref": "#/components/responses/Unauthorized" },
               "403": { "$ref": "#/components/responses/Forbidden" },
               "404": { "$ref": "#/components/responses/NotFound" },
+              "422": { "$ref": "#/components/responses/ValidationFailed" }
+            }
+          }
+        },
+        "/api/v1/admin/compliance/lifecycle/executions": {
+          "post": {
+            "tags": ["Admin"],
+            "summary": "Run automated compliance lifecycle evaluation",
+            "operationId": HttpOperation::RunVendorComplianceLifecycle.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/VendorComplianceLifecycleExecutionRequest"
+                  }
+                }
+              }
+            },
+            "responses": {
+              "202": {
+                "description": "Lifecycle evaluation accepted",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/VendorComplianceLifecycleExecutionResult"
+                    }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
               "422": { "$ref": "#/components/responses/ValidationFailed" }
             }
           }
@@ -598,6 +723,12 @@ pub fn canonical_openapi_spec() -> Value {
             "required": false,
             "schema": { "$ref": "#/components/schemas/VendorStatus" }
           },
+          "VendorCategoryFilterQuery": {
+            "name": "vendorCategory",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/VendorCategory" }
+          },
           "OrderIdPath": {
             "name": "orderId",
             "in": "path",
@@ -623,6 +754,21 @@ pub fn canonical_openapi_spec() -> Value {
             "schema": {
               "type": "string",
               "pattern": "^ven-[a-z0-9]{8,32}$"
+            }
+          },
+          "VendorCategoryPath": {
+            "name": "vendorCategory",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/VendorCategory" }
+          },
+          "TemplateIdPath": {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^tmpl-[a-z0-9-]{3,64}$"
             }
           }
         },
@@ -716,7 +862,7 @@ pub fn canonical_openapi_spec() -> Value {
           },
           "VendorSortField": {
             "type": "string",
-            "enum": ["createdAt", "status", "displayName"]
+            "enum": ["createdAt", "status", "displayName", "vendorCategory"]
           },
           "PayrollSortField": {
             "type": "string",
@@ -732,7 +878,40 @@ pub fn canonical_openapi_spec() -> Value {
           },
           "VendorStatus": {
             "type": "string",
-            "enum": ["PENDING_REVIEW", "APPROVED", "REJECTED", "SUSPENDED"]
+            "enum": [
+              "PENDING_REVIEW",
+              "FIX_REQUESTED",
+              "APPROVED",
+              "REJECTED",
+              "SUSPENDED"
+            ]
+          },
+          "VendorCategory": {
+            "type": "string",
+            "enum": ["RESTAURANT", "BEVERAGE", "DESSERT", "HEALTHY_MEAL", "SNACK"]
+          },
+          "VendorReviewDecision": {
+            "type": "string",
+            "enum": ["APPROVED", "REJECTED", "REQUEST_FIX"]
+          },
+          "VendorLifecycleEventType": {
+            "type": "string",
+            "enum": [
+              "APPLICATION_SUBMITTED",
+              "DOCUMENT_SUBMITTED",
+              "REVIEW_DECISION",
+              "EXPIRY_REMINDER_ISSUED",
+              "SUSPENDED",
+              "REINSTATED"
+            ]
+          },
+          "VendorSuspensionReasonCode": {
+            "type": "string",
+            "enum": ["MISSING_REQUIRED_DOCUMENT", "EXPIRED_REQUIRED_DOCUMENT"]
+          },
+          "VendorComplianceDocumentStatus": {
+            "type": "string",
+            "enum": ["VALID", "EXPIRING_SOON", "EXPIRED", "MISSING"]
           },
           "PageMeta": {
             "type": "object",
@@ -972,14 +1151,11 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "additionalProperties": false
           },
-          "AdminVendorApprovalRequest": {
+          "AdminVendorReviewRequest": {
             "type": "object",
             "required": ["decision", "comment"],
             "properties": {
-              "decision": {
-                "type": "string",
-                "enum": ["APPROVED", "REJECTED"]
-              },
+              "decision": { "$ref": "#/components/schemas/VendorReviewDecision" },
               "comment": {
                 "type": "string",
                 "minLength": 5,
@@ -988,13 +1164,159 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "additionalProperties": false
           },
+          "VendorComplianceDocumentTemplateUpsertRequest": {
+            "type": "object",
+            "required": [
+              "displayName",
+              "required",
+              "maxValidityDays",
+              "reminderDaysBeforeExpiry",
+              "suspensionGraceDays"
+            ],
+            "properties": {
+              "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "required": { "type": "boolean" },
+              "maxValidityDays": { "type": "integer", "minimum": 1, "maximum": 3650 },
+              "reminderDaysBeforeExpiry": {
+                "type": "array",
+                "items": { "type": "integer", "minimum": 1, "maximum": 3650 },
+                "uniqueItems": true
+              },
+              "suspensionGraceDays": { "type": "integer", "minimum": 0, "maximum": 365 }
+            },
+            "additionalProperties": false
+          },
+          "VendorComplianceDocumentTemplate": {
+            "type": "object",
+            "required": [
+              "templateId",
+              "vendorCategory",
+              "displayName",
+              "required",
+              "maxValidityDays",
+              "reminderDaysBeforeExpiry",
+              "suspensionGraceDays"
+            ],
+            "properties": {
+              "templateId": { "type": "string", "pattern": "^tmpl-[a-z0-9-]{3,64}$" },
+              "vendorCategory": { "$ref": "#/components/schemas/VendorCategory" },
+              "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "required": { "type": "boolean" },
+              "maxValidityDays": { "type": "integer", "minimum": 1, "maximum": 3650 },
+              "reminderDaysBeforeExpiry": {
+                "type": "array",
+                "items": { "type": "integer", "minimum": 1, "maximum": 3650 },
+                "uniqueItems": true
+              },
+              "suspensionGraceDays": { "type": "integer", "minimum": 0, "maximum": 365 },
+              "updatedAt": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          },
+          "VendorComplianceDocumentTemplatePage": {
+            "type": "object",
+            "required": ["items", "page"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorComplianceDocumentTemplate" }
+              },
+              "page": { "$ref": "#/components/schemas/PageMeta" }
+            },
+            "additionalProperties": false
+          },
+          "VendorComplianceDocumentRecord": {
+            "type": "object",
+            "required": ["templateId", "documentRef", "submittedAt", "expiresOn", "status"],
+            "properties": {
+              "templateId": { "type": "string", "pattern": "^tmpl-[a-z0-9-]{3,64}$" },
+              "documentRef": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "submittedAt": { "type": "string", "format": "date-time" },
+              "expiresOn": { "type": "string", "format": "date" },
+              "status": { "$ref": "#/components/schemas/VendorComplianceDocumentStatus" }
+            },
+            "additionalProperties": false
+          },
+          "VendorReviewHistoryEntry": {
+            "type": "object",
+            "required": ["decidedAt", "decidedByActorId", "decision", "comment"],
+            "properties": {
+              "decidedAt": { "type": "string", "format": "date-time" },
+              "decidedByActorId": { "$ref": "#/components/schemas/ActorId" },
+              "decision": { "$ref": "#/components/schemas/VendorReviewDecision" },
+              "comment": { "type": "string", "minLength": 5, "maxLength": 280 }
+            },
+            "additionalProperties": false
+          },
+          "VendorLifecycleEvent": {
+            "type": "object",
+            "required": ["occurredAt", "eventType", "actorId", "actorRole", "summary"],
+            "properties": {
+              "occurredAt": { "type": "string", "format": "date-time" },
+              "eventType": { "$ref": "#/components/schemas/VendorLifecycleEventType" },
+              "actorId": { "$ref": "#/components/schemas/ActorId" },
+              "actorRole": { "$ref": "#/components/schemas/Role" },
+              "summary": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "templateId": { "type": "string", "pattern": "^tmpl-[a-z0-9-]{3,64}$" },
+              "suspensionReasonCode": {
+                "$ref": "#/components/schemas/VendorSuspensionReasonCode"
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorComplianceRetentionPolicy": {
+            "type": "object",
+            "required": [
+              "reviewHistoryDays",
+              "lifecycleHistoryDays",
+              "rejectedVendorDeletionDays"
+            ],
+            "properties": {
+              "reviewHistoryDays": { "type": "integer", "minimum": 1, "maximum": 36500 },
+              "lifecycleHistoryDays": { "type": "integer", "minimum": 1, "maximum": 36500 },
+              "rejectedVendorDeletionDays": { "type": "integer", "minimum": 1, "maximum": 3650 }
+            },
+            "additionalProperties": false
+          },
+          "VendorComplianceSummary": {
+            "type": "object",
+            "required": ["documents", "lifecycleHistory", "retentionPolicy"],
+            "properties": {
+              "documents": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorComplianceDocumentRecord" }
+              },
+              "lifecycleHistory": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorLifecycleEvent" }
+              },
+              "retentionPolicy": {
+                "$ref": "#/components/schemas/VendorComplianceRetentionPolicy"
+              }
+            },
+            "additionalProperties": false
+          },
           "VendorEnrollment": {
             "type": "object",
-            "required": ["vendorId", "displayName", "status", "updatedAt"],
+            "required": [
+              "vendorId",
+              "displayName",
+              "vendorCategory",
+              "status",
+              "reviewHistory",
+              "compliance",
+              "updatedAt"
+            ],
             "properties": {
               "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
               "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "vendorCategory": { "$ref": "#/components/schemas/VendorCategory" },
               "status": { "$ref": "#/components/schemas/VendorStatus" },
+              "reviewHistory": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorReviewHistoryEntry" }
+              },
+              "compliance": { "$ref": "#/components/schemas/VendorComplianceSummary" },
               "updatedAt": { "type": "string", "format": "date-time" }
             },
             "additionalProperties": false
@@ -1008,6 +1330,31 @@ pub fn canonical_openapi_spec() -> Value {
                 "items": { "$ref": "#/components/schemas/VendorEnrollment" }
               },
               "page": { "$ref": "#/components/schemas/PageMeta" }
+            },
+            "additionalProperties": false
+          },
+          "VendorComplianceLifecycleExecutionRequest": {
+            "type": "object",
+            "required": ["runDate"],
+            "properties": {
+              "runDate": { "type": "string", "format": "date" },
+              "dryRun": { "type": "boolean", "default": false }
+            },
+            "additionalProperties": false
+          },
+          "VendorComplianceLifecycleExecutionResult": {
+            "type": "object",
+            "required": [
+              "runDate",
+              "reminderCount",
+              "suspensionCount",
+              "reinstatementCount"
+            ],
+            "properties": {
+              "runDate": { "type": "string", "format": "date" },
+              "reminderCount": { "type": "integer", "minimum": 0 },
+              "suspensionCount": { "type": "integer", "minimum": 0 },
+              "reinstatementCount": { "type": "integer", "minimum": 0 }
             },
             "additionalProperties": false
           },
