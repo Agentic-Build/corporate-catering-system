@@ -1,0 +1,49 @@
+apiVersion: observability.corporate-catering/v1
+kind: HardSloPolicy
+metadata:
+  name: corporate-catering-hard-slo
+spec:
+  decisionIssueId: issue-pickup-throughput-slo
+  releaseGate:
+    mode: blocking
+    dashboardRef: ops/observability/slo/grafana-dashboard-hard-slo.json
+    alertsRef: ops/observability/slo/alerts.yaml
+    loadThresholdsRef: ops/observability/load/prelaunch-thresholds.yaml
+    requiredForEnvironments:
+      - staging
+      - production
+  objectives:
+    - id: order-api-availability
+      description: Employee order placement must stay available during peak windows.
+      indicator: success_rate(createEmployeeOrder)
+      target: 99.90
+      unit: percent
+      window: 28d
+      alertRule: OrderApiAvailabilityBurnRateFast
+    - id: order-api-latency-p95
+      description: Create order p95 latency must remain below user tolerance.
+      indicator: p95_latency_ms(createEmployeeOrder)
+      target: 350
+      unit: milliseconds
+      window: 1h
+      alertRule: OrderApiLatencyP95Breach
+    - id: order-api-error-budget-burn
+      description: Error budget burn cannot exceed safe release pace.
+      indicator: burn_rate(order-api-availability)
+      target: 2.00
+      unit: ratio
+      window: 1h
+      alertRule: OrderApiErrorBudgetBurnTooFast
+  preLaunchLoadAcceptance:
+    minimumDuration: 15m
+    requiredScenarios:
+      - name: peak-order-placement
+        minRps: 180
+        p95LatencyMsMax: 350
+        errorRateMax: 0.002
+        readinessSuccessRateMin: 0.999
+      - name: mixed-order-and-menu-reads
+        minRps: 300
+        p95LatencyMsMax: 250
+        errorRateMax: 0.001
+        readinessSuccessRateMin: 0.999

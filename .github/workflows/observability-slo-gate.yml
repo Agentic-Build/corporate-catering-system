@@ -1,0 +1,21 @@
+name: Observability Hard SLO Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  hard-slo-gate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Hard-SLO baseline gate
+        run: ./scripts/check-observability-slo-baseline.sh

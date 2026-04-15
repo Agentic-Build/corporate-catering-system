@@ -1,0 +1,83 @@
+groups:
+  - name: hard-slo-release-gate
+    interval: 30s
+    rules:
+      - alert: OrderApiAvailabilityBurnRateFast
+        expr: |
+          (
+            1 - (
+              sum(rate(http_server_requests_total{service_name="catering-http-api",operation_id="createEmployeeOrder",status_code!~"5.."}[5m]))
+              /
+              sum(rate(http_server_requests_total{service_name="catering-http-api",operation_id="createEmployeeOrder"}[5m]))
+            )
+          ) > (1 - 0.999) * 14
+        for: 5m
+        labels:
+          severity: critical
+          gate: hard-slo
+          slo: order-api-availability
+        annotations:
+          summary: "Order API availability is burning error budget too fast"
+          runbook: "Escalate and block release until burn rate recovers"
+      - alert: OrderApiLatencyP95Breach
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(http_server_request_duration_ms_bucket{service_name="catering-http-api",operation_id="createEmployeeOrder"}[5m])
+            )
+          ) > 350
+        for: 10m
+        labels:
+          severity: critical
+          gate: hard-slo
+          slo: order-api-latency-p95
+        annotations:
+          summary: "Order API p95 latency exceeded hard limit"
+          runbook: "Block release and scale pods or reduce hot-path latency"
+      - alert: OrderApiErrorBudgetBurnTooFast
+        expr: |
+          (
+            (
+              1 - (
+                sum(rate(http_server_requests_total{service_name="catering-http-api",operation_id="createEmployeeOrder",status_code!~"5.."}[1h]))
+                /
+                sum(rate(http_server_requests_total{service_name="catering-http-api",operation_id="createEmployeeOrder"}[1h]))
+              )
+            ) / (1 - 0.999)
+          ) > 2
+        for: 10m
+        labels:
+          severity: critical
+          gate: hard-slo
+          slo: order-api-error-budget-burn
+        annotations:
+          summary: "Order API error budget burn ratio above hard policy"
+          runbook: "Pause rollout until burn ratio stays below 2x"
+      - alert: KubernetesReadinessDrop
+        expr: |
+          avg_over_time(
+            kube_pod_status_ready{namespace="catering-prod",condition="true",pod=~"corporate-catering-api-.*"}[10m]
+          ) < 0.99
+        for: 10m
+        labels:
+          severity: critical
+          gate: hard-slo
+          slo: kubernetes-readiness
+        annotations:
+          summary: "Readiness success rate dropped below hard threshold"
+          runbook: "Stop release and investigate failing pods"
+      - alert: KubernetesHpaSaturation
+        expr: |
+          max(kube_horizontalpodautoscaler_status_current_replicas{namespace="catering-prod",horizontalpodautoscaler="corporate-catering-api"})
+          /
+          max(kube_horizontalpodautoscaler_spec_max_replicas{namespace="catering-prod",horizontalpodautoscaler="corporate-catering-api"})
+          > 0.90
+        for: 15m
+        labels:
+          severity: warning
+          gate: hard-slo
+          slo: kubernetes-scaling-headroom
+        annotations:
+          summary: "HPA is near max replicas during sustained load"
+          runbook: "Increase capacity before next peak release"

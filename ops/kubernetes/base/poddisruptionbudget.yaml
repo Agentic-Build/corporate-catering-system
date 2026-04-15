@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: corporate-catering-api
+spec:
+  minAvailable: 75%
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: corporate-catering-api

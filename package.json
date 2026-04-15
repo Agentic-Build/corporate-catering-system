@@ -9,7 +9,9 @@
     "contract:sync": "pnpm run contract:export && pnpm run contract:generate-client",
     "contract:check-client": "tsc --project tsconfig.contract.json",
     "contract:check-drift": "./scripts/check-contract-drift.sh",
-    "contract:verify": "pnpm run contract:sync && pnpm run contract:check-client && pnpm run contract:check-drift"
+    "contract:verify": "pnpm run contract:sync && pnpm run contract:check-client && pnpm run contract:check-drift",
+    "observability:verify": "./scripts/check-observability-slo-baseline.sh",
+    "release:verify": "pnpm run contract:verify && pnpm run observability:verify"
   },
   "devDependencies": {
     "openapi-typescript-codegen": "0.29.0",

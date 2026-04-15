@@ -1,0 +1,67 @@
+version: 1
+decisionIssueId: issue-pickup-throughput-slo
+defaultBehavior: hard-enforced
+collector:
+  endpoint: http://otel-collector.observability.svc.cluster.local:4317
+  protocol: grpc
+requiredCorrelationContext:
+  - trace_id
+  - span_id
+  - request_id
+  - operation_id
+  - actor_id
+  - plant_id
+  - service.name
+  - service.namespace
+  - deployment.environment
+services:
+  - name: catering-http-api
+    language: rust
+    otelServiceName: catering-http-api
+    signals:
+      traces: required
+      metrics: required
+      logs: required
+    requiredAttributes:
+      - http.route
+      - http.method
+      - http.status_code
+      - operation_id
+      - actor_id
+      - plant_id
+  - name: catering-mcp-gateway
+    language: rust
+    otelServiceName: catering-mcp-gateway
+    signals:
+      traces: required
+      metrics: required
+      logs: required
+    requiredAttributes:
+      - rpc.system
+      - rpc.method
+      - operation_id
+      - actor_id
+      - plant_id
+  - name: catering-compliance-worker
+    language: rust
+    otelServiceName: catering-compliance-worker
+    signals:
+      traces: required
+      metrics: required
+      logs: required
+    requiredAttributes:
+      - operation_id
+      - actor_id
+      - compliance_state
+correlationRules:
+  logsMustCarry:
+    - trace_id
+    - span_id
+    - request_id
+    - operation_id
+  metricsMustBeDimensionedBy:
+    - service.name
+    - operation_id
+  tracesMustContainEvents:
+    - authorization.checked
+    - domain.policy.applied

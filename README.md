@@ -18,3 +18,27 @@ CI (`.github/workflows/openapi-contract.yml`) enforces:
 - runtime HTTP route parity vs OpenAPI contract
 - generated artifact drift detection
 - MCP contract parity checks (auto-activated once runtime MCP tools are declared)
+
+## Observability and Kubernetes SLO Baseline
+
+Baseline artifacts are committed and release-gated under `ops/`:
+
+- OpenTelemetry + Victoria stack wiring:
+  - `ops/observability/otel/collector.yaml`
+  - `ops/observability/otel/instrumentation-baseline.yaml`
+- Hard-SLO policy, dashboard, and alerts:
+  - `ops/observability/slo/hard-slo-policy.yaml`
+  - `ops/observability/slo/grafana-dashboard-hard-slo.json`
+  - `ops/observability/slo/alerts.yaml`
+- Pre-launch load-test thresholds:
+  - `ops/observability/load/prelaunch-thresholds.yaml`
+  - `ops/observability/load/k6-prelaunch.js`
+- Kubernetes baseline with health/scaling signals:
+  - `ops/kubernetes/base/*.yaml`
+
+Verification commands:
+
+- `pnpm run observability:verify` (runs baseline gate checks + integration tests)
+- `pnpm run release:verify` (contract conformance + observability hard-SLO gates)
+
+CI (`.github/workflows/observability-slo-gate.yml`) blocks merges if hard-SLO release-gate assets are missing or weakened.

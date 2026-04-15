@@ -1,0 +1,15 @@
+version: 1
+name: prelaunch-hard-slo-thresholds
+scenarios:
+  peak-order-placement:
+    minRps: 180
+    thresholds:
+      p95LatencyMsMax: 350
+      errorRateMax: 0.002
+      readinessSuccessRateMin: 0.999
+  mixed-order-and-menu-reads:
+    minRps: 300
+    thresholds:
+      p95LatencyMsMax: 250
+      errorRateMax: 0.001
+      readinessSuccessRateMin: 0.999
