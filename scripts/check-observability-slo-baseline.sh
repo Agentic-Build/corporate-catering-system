@@ -139,7 +139,7 @@ if ! curl --silent --fail --show-error "http://127.0.0.1:${PORT}/health/ready" >
 fi
 
 BASE_URL="http://127.0.0.1:${PORT}" \
-  VENDOR_ID="${prelaunch_vendor_id}" \
+  PLANT_ID="${prelaunch_plant_id}" \
   MENU_VARIANT_COUNT="${prelaunch_menu_variant_count}" \
   DELIVERY_EPOCH_DAY="${delivery_epoch_day}" \
   k6 run --quiet --summary-trend-stats "avg,min,med,max,p(90),p(95),p(99)" --summary-export "${summary_file}" ops/observability/load/k6-prelaunch.js

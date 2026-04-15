@@ -15,7 +15,7 @@ use corporate_catering_system::identity::{
 };
 use corporate_catering_system::menu_supply_window::{
     EmployeeMenuDiscoveryEntry, MenuHealthTag, MenuImageUrl, MenuItemId, MenuSupplyPolicy, Money,
-    OrderId, OrderLineItemRequest, OrderMutation, SpecialRequest, VendorMenuItem,
+    OrderId, OrderLineItemRequest, OrderMutation, OrderSnapshot, SpecialRequest, VendorMenuItem,
     VendorMenuItemDraft,
 };
 use corporate_catering_system::observability::{
@@ -40,11 +40,11 @@ const DEFAULT_VENDOR_ID: &str = "ven-load-gate-a";
 const DEFAULT_PLANT_ID: &str = "fab-a";
 const DEFAULT_MENU_VARIANT_COUNT: u16 = 64;
 const DEFAULT_DELIVERY_DAY_OFFSET: i32 = 2;
+const LOAD_GATE_EMPLOYEE_ACTOR_ID: &str = "emp-load-gate";
 
 #[derive(Debug, Clone)]
 struct AppState {
     next_order_sequence: Arc<AtomicU64>,
-    vendor_id: VendorId,
     plant_id: PlantId,
     compliance_lifecycle: Arc<VendorComplianceLifecycle>,
     delivery_policy: Arc<VendorPlantDeliveryPolicy>,
@@ -52,15 +52,16 @@ struct AppState {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CreateOrderRequest {
-    vendor_id: String,
-    delivery_epoch_day: i32,
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EmployeeOrderCreateRequestPayload {
+    plant_id: String,
+    delivery_date: String,
     line_items: Vec<OrderLineItemRequestPayload>,
+    employee_note: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct OrderLineItemRequestPayload {
     menu_item_id: String,
     quantity: u16,
@@ -92,13 +93,14 @@ impl SpecialRequestOption {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateOrderResponse {
-    order_id: String,
-    accepted: bool,
+struct EmployeeOrderLineItemPayload {
+    menu_item_id: String,
+    quantity: u16,
+    price_per_unit: MenuPricePayload,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateOrderRequest {
     operation: String,
     line_items: Option<Vec<OrderLineItemRequestPayload>>,
@@ -107,14 +109,28 @@ struct UpdateOrderRequest {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct UpdateOrderResponse {
+struct OrderTimelineEventPayload {
+    occurred_at: String,
+    event_type: String,
+    status: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EmployeeOrderPayload {
     order_id: String,
-    accepted: bool,
-    operation: String,
+    employee_actor_id: String,
+    plant_id: String,
+    delivery_date: String,
+    status: String,
+    line_items: Vec<EmployeeOrderLineItemPayload>,
+    total: MenuPricePayload,
+    timeline: Vec<OrderTimelineEventPayload>,
+    created_at: String,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PickupVerificationRequest {
     verification_code: String,
 }
@@ -499,7 +515,6 @@ fn bootstrap_runtime_state(
 
     Ok(AppState {
         next_order_sequence: Arc::new(AtomicU64::new(1)),
-        vendor_id,
         plant_id,
         compliance_lifecycle: Arc::new(compliance_lifecycle),
         delivery_policy: Arc::new(delivery_policy),
@@ -988,6 +1003,23 @@ fn epoch_day_to_iso_date(epoch_day: i32) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
+fn parse_contract_order_id(value: &str) -> Result<OrderId, String> {
+    let trimmed = value.trim();
+    let Some(suffix) = trimmed.strip_prefix("ord-") else {
+        return Err("must start with `ord-`".to_owned());
+    };
+    if !(8..=32).contains(&suffix.len()) {
+        return Err("suffix length must be between 8 and 32 characters".to_owned());
+    }
+    if !suffix
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit())
+    {
+        return Err("suffix must contain only lowercase letters and digits".to_owned());
+    }
+    OrderId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
+}
+
 fn days_in_month(year: i32, month: u32) -> u32 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
@@ -1039,7 +1071,7 @@ fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
 
 async fn create_employee_order(
     State(state): State<AppState>,
-    Json(request): Json<CreateOrderRequest>,
+    Json(request): Json<EmployeeOrderCreateRequestPayload>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "createEmployeeOrder",
@@ -1075,24 +1107,41 @@ async fn create_employee_order(
 
 fn handle_create_employee_order(
     state: &AppState,
-    request: CreateOrderRequest,
-) -> Result<CreateOrderResponse, (StatusCode, ErrorPayload)> {
-    let request_vendor_id = VendorId::parse(request.vendor_id).map_err(|error| {
-        domain_error(
-            StatusCode::BAD_REQUEST,
-            "INVALID_ORDER_REQUEST",
-            format!("vendorId is invalid: {error}"),
-        )
-    })?;
-    if request_vendor_id != state.vendor_id {
+    request: EmployeeOrderCreateRequestPayload,
+) -> Result<EmployeeOrderPayload, (StatusCode, ErrorPayload)> {
+    if let Some(employee_note) = request.employee_note.as_deref() {
+        if employee_note.chars().count() > 200 {
+            return Err(domain_error(
+                StatusCode::BAD_REQUEST,
+                "INVALID_ORDER_REQUEST",
+                "employeeNote must be at most 200 characters".to_owned(),
+            ));
+        }
+    }
+
+    if request.plant_id.as_str() != state.plant_id.as_str() {
         return Err(domain_error(
             StatusCode::BAD_REQUEST,
-            "UNSUPPORTED_VENDOR_ID",
-            "order request targets a vendor that is not configured in prelaunch runtime".to_owned(),
+            "UNSUPPORTED_PLANT_ID",
+            format!(
+                "plantId `{}` is unsupported by this runtime, expected `{}`",
+                request.plant_id,
+                state.plant_id.as_str()
+            ),
         ));
     }
 
+    let delivery_epoch_day =
+        parse_iso_date_to_epoch_day(&request.delivery_date).map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "INVALID_ORDER_REQUEST",
+                format!("deliveryDate is invalid: {error}"),
+            )
+        })?;
+
     let line_items = parse_domain_line_items(request.line_items)?;
+    let request_vendor_id = resolve_vendor_for_line_items(state, &line_items)?;
     let requested_at = current_taipei_business_moment().map_err(|error| {
         domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1101,19 +1150,7 @@ fn handle_create_employee_order(
         )
     })?;
 
-    let order_id = OrderId::parse(format!(
-        "ord-load-gate-{}",
-        state
-            .next_order_sequence
-            .fetch_add(1, AtomicOrdering::Relaxed)
-    ))
-    .map_err(|error| {
-        domain_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ORDER_ID_GENERATION_FAILED",
-            format!("generated order id is invalid: {error}"),
-        )
-    })?;
+    let order_id = generate_contract_order_id(state)?;
 
     let ordering_gateway = HttpOrderingExecutionGateway::new(
         state.compliance_lifecycle.as_ref(),
@@ -1126,16 +1163,14 @@ fn handle_create_employee_order(
             order_id.clone(),
             &request_vendor_id,
             &state.plant_id,
-            request.delivery_epoch_day,
+            delivery_epoch_day,
             line_items,
             requested_at,
         )
         .map_err(map_http_order_execution_error)?;
 
-    Ok(CreateOrderResponse {
-        order_id: order_id.as_str().to_owned(),
-        accepted: true,
-    })
+    let snapshot = load_order_snapshot_or_policy_error(state, &order_id)?;
+    build_employee_order_payload(state, &snapshot)
 }
 
 async fn update_employee_order(
@@ -1179,16 +1214,16 @@ fn handle_update_employee_order(
     state: &AppState,
     order_id_raw: String,
     request: UpdateOrderRequest,
-) -> Result<UpdateOrderResponse, (StatusCode, ErrorPayload)> {
-    let order_id = OrderId::parse(order_id_raw).map_err(|error| {
+) -> Result<EmployeeOrderPayload, (StatusCode, ErrorPayload)> {
+    let order_id = parse_contract_order_id(&order_id_raw).map_err(|error| {
         domain_error(
             StatusCode::BAD_REQUEST,
             "INVALID_ORDER_UPDATE_REQUEST",
             format!("orderId path parameter is invalid: {error}"),
         )
     })?;
-
     let mutation = parse_order_mutation(request)?;
+    let current_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
     let requested_at = current_taipei_business_moment().map_err(|error| {
         domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1203,22 +1238,272 @@ fn handle_update_employee_order(
         &state.menu_supply_policy,
     );
 
-    let operation = mutation.operation_name().to_owned();
     ordering_gateway
         .execute_update_employee_order(
             &order_id,
-            &state.vendor_id,
+            current_snapshot.vendor_id(),
             &state.plant_id,
             mutation,
             requested_at,
         )
         .map_err(map_http_order_execution_error)?;
 
-    Ok(UpdateOrderResponse {
-        order_id: order_id.as_str().to_owned(),
-        accepted: true,
-        operation,
+    let updated_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
+    build_employee_order_payload(state, &updated_snapshot)
+}
+
+fn generate_contract_order_id(state: &AppState) -> Result<OrderId, (StatusCode, ErrorPayload)> {
+    let sequence = state
+        .next_order_sequence
+        .fetch_add(1, AtomicOrdering::Relaxed);
+    OrderId::parse(format!("ord-{sequence:016x}")).map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ORDER_ID_GENERATION_FAILED",
+            format!("generated order id is invalid: {error}"),
+        )
     })
+}
+
+fn resolve_vendor_for_line_items(
+    state: &AppState,
+    line_items: &[OrderLineItemRequest],
+) -> Result<VendorId, (StatusCode, ErrorPayload)> {
+    let mut resolved_vendor_id: Option<VendorId> = None;
+    for line_item in line_items {
+        let menu_item = state
+            .menu_supply_policy
+            .menu_item(line_item.menu_item_id())
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::CONFLICT,
+                    "ORDER_POLICY_VIOLATION",
+                    error.to_string(),
+                )
+            })?
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_ORDER_REQUEST",
+                    format!(
+                        "menuItemId `{}` is unknown for preorder",
+                        line_item.menu_item_id().as_str()
+                    ),
+                )
+            })?;
+
+        match resolved_vendor_id.as_ref() {
+            Some(existing_vendor_id) if existing_vendor_id != menu_item.vendor_id() => {
+                return Err(domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_ORDER_REQUEST",
+                    "lineItems must belong to one vendor".to_owned(),
+                ));
+            }
+            Some(_) => {}
+            None => resolved_vendor_id = Some(menu_item.vendor_id().clone()),
+        }
+    }
+
+    resolved_vendor_id.ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_ORDER_REQUEST",
+            "lineItems must include at least one item".to_owned(),
+        )
+    })
+}
+
+fn load_order_snapshot_or_policy_error(
+    state: &AppState,
+    order_id: &OrderId,
+) -> Result<OrderSnapshot, (StatusCode, ErrorPayload)> {
+    state
+        .menu_supply_policy
+        .order_snapshot(order_id)
+        .map_err(|error| {
+            domain_error(
+                StatusCode::CONFLICT,
+                "ORDER_POLICY_VIOLATION",
+                error.to_string(),
+            )
+        })?
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::CONFLICT,
+                "ORDER_POLICY_VIOLATION",
+                format!(
+                    "order `{}` is missing after successful mutation",
+                    order_id.as_str()
+                ),
+            )
+        })
+}
+
+fn load_order_snapshot_or_not_found(
+    state: &AppState,
+    order_id: &OrderId,
+) -> Result<OrderSnapshot, (StatusCode, ErrorPayload)> {
+    state
+        .menu_supply_policy
+        .order_snapshot(order_id)
+        .map_err(|error| {
+            domain_error(
+                StatusCode::CONFLICT,
+                "ORDER_POLICY_VIOLATION",
+                error.to_string(),
+            )
+        })?
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::NOT_FOUND,
+                "ORDER_NOT_FOUND",
+                format!("order `{}` was not found", order_id.as_str()),
+            )
+        })
+}
+
+fn build_employee_order_payload(
+    state: &AppState,
+    snapshot: &OrderSnapshot,
+) -> Result<EmployeeOrderPayload, (StatusCode, ErrorPayload)> {
+    let mut line_items = Vec::with_capacity(snapshot.line_items().len());
+    let mut total_minor: u64 = 0;
+    let mut order_currency: Option<String> = None;
+
+    for (menu_item_id, quantity) in snapshot.line_items() {
+        let menu_item = state
+            .menu_supply_policy
+            .menu_item(menu_item_id)
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::CONFLICT,
+                    "ORDER_POLICY_VIOLATION",
+                    error.to_string(),
+                )
+            })?
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::CONFLICT,
+                    "ORDER_POLICY_VIOLATION",
+                    format!(
+                        "order `{}` references missing menu item `{}`",
+                        snapshot.order_id().as_str(),
+                        menu_item_id.as_str()
+                    ),
+                )
+            })?;
+
+        if menu_item.vendor_id() != snapshot.vendor_id() {
+            return Err(domain_error(
+                StatusCode::CONFLICT,
+                "ORDER_POLICY_VIOLATION",
+                format!(
+                    "order `{}` has vendor mismatch for menu item `{}`",
+                    snapshot.order_id().as_str(),
+                    menu_item_id.as_str()
+                ),
+            ));
+        }
+
+        let unit_price = menu_item.price();
+        match order_currency.as_deref() {
+            Some(existing_currency) if existing_currency != unit_price.currency() => {
+                return Err(domain_error(
+                    StatusCode::CONFLICT,
+                    "ORDER_POLICY_VIOLATION",
+                    format!(
+                        "order `{}` mixes currencies `{existing_currency}` and `{}`",
+                        snapshot.order_id().as_str(),
+                        unit_price.currency()
+                    ),
+                ));
+            }
+            Some(_) => {}
+            None => order_currency = Some(unit_price.currency().to_owned()),
+        }
+
+        total_minor = total_minor
+            .checked_add(u64::from(unit_price.amount_minor()) * u64::from(*quantity))
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::CONFLICT,
+                    "ORDER_POLICY_VIOLATION",
+                    format!(
+                        "order `{}` total overflowed supported range",
+                        snapshot.order_id().as_str()
+                    ),
+                )
+            })?;
+
+        line_items.push(EmployeeOrderLineItemPayload {
+            menu_item_id: menu_item_id.as_str().to_owned(),
+            quantity: *quantity,
+            price_per_unit: MenuPricePayload {
+                currency: unit_price.currency().to_owned(),
+                amount_minor: unit_price.amount_minor(),
+            },
+        });
+    }
+
+    let order_currency = order_currency.ok_or_else(|| {
+        domain_error(
+            StatusCode::CONFLICT,
+            "ORDER_POLICY_VIOLATION",
+            format!("order `{}` has no line items", snapshot.order_id().as_str()),
+        )
+    })?;
+    let total_minor = u32::try_from(total_minor).map_err(|_| {
+        domain_error(
+            StatusCode::CONFLICT,
+            "ORDER_POLICY_VIOLATION",
+            format!(
+                "order `{}` total exceeded the maximum supported amount",
+                snapshot.order_id().as_str()
+            ),
+        )
+    })?;
+    let timeline = snapshot
+        .timeline()
+        .iter()
+        .map(|event| OrderTimelineEventPayload {
+            occurred_at: taipei_moment_to_iso_datetime(event.occurred_at()),
+            event_type: event.event_type().as_str().to_owned(),
+            status: event.state().as_str().to_owned(),
+        })
+        .collect::<Vec<_>>();
+    let created_at = timeline
+        .first()
+        .map(|event| event.occurred_at.clone())
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::CONFLICT,
+                "ORDER_POLICY_VIOLATION",
+                format!("order `{}` has no timeline", snapshot.order_id().as_str()),
+            )
+        })?;
+
+    Ok(EmployeeOrderPayload {
+        order_id: snapshot.order_id().as_str().to_owned(),
+        employee_actor_id: LOAD_GATE_EMPLOYEE_ACTOR_ID.to_owned(),
+        plant_id: state.plant_id.as_str().to_owned(),
+        delivery_date: epoch_day_to_iso_date(snapshot.delivery_epoch_day()),
+        status: snapshot.state().as_str().to_owned(),
+        line_items,
+        total: MenuPricePayload {
+            currency: order_currency,
+            amount_minor: total_minor,
+        },
+        timeline,
+        created_at,
+    })
+}
+
+fn taipei_moment_to_iso_datetime(moment: TaipeiBusinessMoment) -> String {
+    let (year, month, day) = civil_from_days(i64::from(moment.epoch_day()));
+    let hour = moment.minute_of_day() / 60;
+    let minute = moment.minute_of_day() % 60;
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:00+08:00")
 }
 
 fn parse_domain_line_items(
@@ -1347,7 +1632,7 @@ async fn verify_order_pickup(
         );
     }
 
-    let order_id = match OrderId::parse(order_id) {
+    let order_id = match parse_contract_order_id(&order_id) {
         Ok(value) => value,
         Err(error) => {
             telemetry.finish_with_http_status(StatusCode::BAD_REQUEST.as_u16());
@@ -1630,12 +1915,105 @@ mod tests {
 
         AppState {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
-            vendor_id: vendor_visible,
             plant_id: plant,
             compliance_lifecycle: Arc::new(compliance_lifecycle),
             delivery_policy: Arc::new(delivery_policy),
             menu_supply_policy,
         }
+    }
+
+    #[test]
+    fn create_order_returns_canonical_employee_order_payload() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![SpecialRequestOption::NoUtensils],
+            }],
+            employee_note: Some("no utensils please".to_owned()),
+        };
+
+        let response =
+            handle_create_employee_order(&state, request).expect("create order should succeed");
+
+        assert!(response.order_id.starts_with("ord-"));
+        assert_eq!(response.employee_actor_id, LOAD_GATE_EMPLOYEE_ACTOR_ID);
+        assert_eq!(response.plant_id, "fab-a");
+        assert_eq!(
+            response.delivery_date,
+            epoch_day_to_iso_date(now_epoch_day + 1)
+        );
+        assert_eq!(response.status, "PENDING");
+        assert_eq!(response.line_items.len(), 1);
+        assert_eq!(response.line_items[0].menu_item_id, "menu-discoverytsta1");
+        assert_eq!(response.line_items[0].quantity, 1);
+        assert_eq!(response.line_items[0].price_per_unit.currency, "TWD");
+        assert_eq!(response.line_items[0].price_per_unit.amount_minor, 12000);
+        assert_eq!(response.total.currency, "TWD");
+        assert_eq!(response.total.amount_minor, 12000);
+        assert_eq!(
+            response
+                .timeline
+                .first()
+                .map(|event| event.event_type.as_str()),
+            Some("CREATED")
+        );
+        assert!(response.created_at.ends_with("+08:00"));
+
+        let serialized =
+            serde_json::to_value(&response).expect("employee order payload should serialize");
+        assert!(serialized.get("accepted").is_none());
+        assert!(serialized.get("vendorId").is_none());
+        assert!(serialized.get("deliveryEpochDay").is_none());
+    }
+
+    #[test]
+    fn update_order_returns_canonical_employee_order_payload() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(3)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta2".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order = handle_create_employee_order(&state, create_request)
+            .expect("create order should succeed");
+
+        let update_request = UpdateOrderRequest {
+            operation: "CANCEL".to_owned(),
+            line_items: None,
+            cancel_reason: Some("schedule changed".to_owned()),
+        };
+        let updated_order =
+            handle_update_employee_order(&state, created_order.order_id.clone(), update_request)
+                .expect("update order should succeed");
+
+        assert_eq!(updated_order.order_id, created_order.order_id);
+        assert_eq!(updated_order.status, "CANCELLED");
+        assert_eq!(
+            updated_order
+                .timeline
+                .last()
+                .map(|event| event.event_type.as_str()),
+            Some("CANCELLED")
+        );
+
+        let serialized =
+            serde_json::to_value(&updated_order).expect("employee order payload should serialize");
+        assert!(serialized.get("accepted").is_none());
     }
 
     #[test]

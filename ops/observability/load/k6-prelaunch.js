@@ -65,12 +65,12 @@ export const options = {
 };
 
 const BASE_URL = __ENV.BASE_URL || "http://127.0.0.1:18080";
-const VENDOR_ID = (__ENV.VENDOR_ID || "").trim();
+const PLANT_ID = (__ENV.PLANT_ID || "fab-a").trim();
 const DELIVERY_EPOCH_DAY = Number(__ENV.DELIVERY_EPOCH_DAY || "");
 const MENU_VARIANT_COUNT = Number(__ENV.MENU_VARIANT_COUNT || "64");
 
-if (!VENDOR_ID) {
-  throw new Error("VENDOR_ID must be set for prelaunch load verification");
+if (!PLANT_ID) {
+  throw new Error("PLANT_ID must be set for prelaunch load verification");
 }
 if (!Number.isInteger(DELIVERY_EPOCH_DAY) || DELIVERY_EPOCH_DAY <= 0) {
   throw new Error("DELIVERY_EPOCH_DAY must be a positive integer");
@@ -82,6 +82,31 @@ if (!Number.isInteger(MENU_VARIANT_COUNT) || MENU_VARIANT_COUNT < 1) {
 function menuItemIdForIteration(iteration) {
   return `menu-${(iteration % MENU_VARIANT_COUNT) + 1}`;
 }
+
+function civilFromDays(daysSinceEpoch) {
+  const shiftedDays = daysSinceEpoch + 719468;
+  const era = Math.floor((shiftedDays >= 0 ? shiftedDays : shiftedDays - 146096) / 146097);
+  const dayOfEra = shiftedDays - era * 146097;
+  const yearOfEra =
+    Math.floor(
+      (dayOfEra - Math.floor(dayOfEra / 1460) + Math.floor(dayOfEra / 36524) - Math.floor(dayOfEra / 146096)) /
+        365
+    );
+  const year = yearOfEra + era * 400;
+  const dayOfYear = dayOfEra - (365 * yearOfEra + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100));
+  const monthPiece = Math.floor((5 * dayOfYear + 2) / 153);
+  const day = dayOfYear - Math.floor((153 * monthPiece + 2) / 5) + 1;
+  const month = monthPiece + (monthPiece < 10 ? 3 : -9);
+  const adjustedYear = year + (month <= 2 ? 1 : 0);
+  return { year: adjustedYear, month, day };
+}
+
+function epochDayToIsoDate(epochDay) {
+  const { year, month, day } = civilFromDays(epochDay);
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+const DELIVERY_DATE = epochDayToIsoDate(DELIVERY_EPOCH_DAY);
 
 function checkReadiness() {
   const readiness = http.get(`${BASE_URL}/health/ready`, {
@@ -98,8 +123,8 @@ function checkReadiness() {
 
 function buildOrderPayload(iteration) {
   return JSON.stringify({
-    vendorId: VENDOR_ID,
-    deliveryEpochDay: DELIVERY_EPOCH_DAY,
+    plantId: PLANT_ID,
+    deliveryDate: DELIVERY_DATE,
     lineItems: [
       {
         menuItemId: menuItemIdForIteration(iteration),
@@ -120,8 +145,7 @@ export function peakOrderPlacement() {
     }
   );
   check(orderResponse, {
-    "create order endpoint accepted request": (res) =>
-      res.status === 200 || res.status === 201 || res.status === 202
+    "create order endpoint accepted request": (res) => res.status === 201
   });
 
   checkReadiness();
@@ -129,7 +153,7 @@ export function peakOrderPlacement() {
 }
 
 function parseOrderIdStrict(response) {
-  if (!response || (response.status !== 200 && response.status !== 201 && response.status !== 202)) {
+  if (!response || response.status !== 201) {
     throw new Error(`create order request failed with status ${response ? response.status : "unknown"}`);
   }
   let payload;
@@ -145,9 +169,14 @@ function parseOrderIdStrict(response) {
 }
 
 export function mixedOrderAndMenuReads() {
-  const menuResponse = http.get(`${BASE_URL}/api/v1/employee/menus`, {
-    tags: { operation: "listEmployeeMenus" }
-  });
+  const menuResponse = http.get(
+    `${BASE_URL}/api/v1/employee/menus?plantId=${encodeURIComponent(PLANT_ID)}&view=week&menuDate=${encodeURIComponent(
+      DELIVERY_DATE
+    )}`,
+    {
+      tags: { operation: "listEmployeeMenus" }
+    }
+  );
   check(menuResponse, {
     "menu endpoint healthy": (res) => res.status === 200
   });
@@ -190,8 +219,7 @@ export function peakOrderLifecycleMutations() {
     }
   );
   check(createResponse, {
-    "create order endpoint accepted request for lifecycle flow": (res) =>
-      res.status === 200 || res.status === 201 || res.status === 202
+    "create order endpoint accepted request for lifecycle flow": (res) => res.status === 201
   });
 
   const orderId = parseOrderIdStrict(createResponse);
@@ -233,8 +261,7 @@ export function peakOrderAndPickupVerification() {
     }
   );
   check(createResponse, {
-    "create order endpoint accepted request for pickup flow": (res) =>
-      res.status === 200 || res.status === 201 || res.status === 202
+    "create order endpoint accepted request for pickup flow": (res) => res.status === 201
   });
 
   const orderId = parseOrderIdStrict(createResponse);
