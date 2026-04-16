@@ -3498,6 +3498,7 @@ pub fn canonical_openapi_spec() -> Value {
               "fileName": { "type": "string", "minLength": 1, "maxLength": 128 },
               "mimeType": { "type": "string", "minLength": 1, "maxLength": 128 },
               "sizeBytes": { "type": "integer", "minimum": 1 },
+              "thumbnailSizeBytes": { "type": "integer", "minimum": 1 },
               "locale": { "type": "string", "minLength": 2, "maxLength": 32 }
             },
             "additionalProperties": false

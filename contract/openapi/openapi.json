@@ -2325,6 +2325,10 @@
           "sizeBytes": {
             "minimum": 1,
             "type": "integer"
+          },
+          "thumbnailSizeBytes": {
+            "minimum": 1,
+            "type": "integer"
           }
         },
         "required": [

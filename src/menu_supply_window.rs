@@ -121,7 +121,7 @@ impl Money {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MenuImageUrl(String);
 
 impl MenuImageUrl {
@@ -173,6 +173,16 @@ impl MenuImageUrl {
 impl fmt::Display for MenuImageUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for MenuImageUrl {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::parse(value).map_err(serde::de::Error::custom)
     }
 }
 
@@ -1036,13 +1046,36 @@ impl MenuSupplyPolicy {
     pub fn from_snapshot(
         snapshot: MenuSupplyPolicySnapshot,
         audit_trail: ImmutableAuditTrail,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, MenuSupplyWindowError> {
+        Self::validate_snapshot_state(&snapshot.state)?;
+        Ok(Self {
             governance: snapshot.governance,
             retention_policy: snapshot.retention_policy,
             state: Arc::new(Mutex::new(snapshot.state)),
             audit_trail,
+        })
+    }
+
+    fn validate_snapshot_state(state: &MenuSupplyState) -> Result<(), MenuSupplyWindowError> {
+        for menu_item in state.menu_items.values() {
+            if let Some(image_url) = menu_item.image_url() {
+                let object_ref =
+                    ObjectStorageReference::parse(image_url.as_str()).map_err(|error| {
+                        MenuSupplyWindowError::InvalidMenuImageUrl(error.to_string())
+                    })?;
+                let (_, key) = object_ref.split_parts();
+                if !object_key_matches_vendor_owner_scope(
+                    key,
+                    MENU_IMAGE_OBJECT_KEY_PREFIX,
+                    menu_item.vendor_id().as_str(),
+                ) {
+                    return Err(MenuSupplyWindowError::InvalidMenuImageUrl(
+                        "menu image reference is not owned by the vendor scope".to_owned(),
+                    ));
+                }
+            }
         }
+        Ok(())
     }
 
     pub fn upsert_vendor_ordering_policy(

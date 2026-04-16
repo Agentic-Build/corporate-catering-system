@@ -341,7 +341,8 @@ async fn runtime_order_payroll_anomaly_flows_persist_on_real_postgres_with_trans
     let forced_order_rollback = menu_repo
         .mutate_snapshot::<MenuSupplyPolicySnapshot, (), String, _>(|snapshot| {
             let snapshot = snapshot.ok_or("missing menu supply snapshot".to_owned())?;
-            let policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail.clone());
+            let policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail.clone())
+                .map_err(|error| error.to_string())?;
             let gateway =
                 HttpOrderingExecutionGateway::new(&compliance_lifecycle, &delivery_policy, &policy);
             gateway
@@ -378,7 +379,8 @@ async fn runtime_order_payroll_anomaly_flows_persist_on_real_postgres_with_trans
             .expect("menu snapshot load should succeed")
             .expect("menu snapshot should exist"),
         audit_trail.clone(),
-    );
+    )
+    .expect("menu snapshot should deserialize into policy");
     assert!(
         menu_after_rollback
             .order_snapshot(&order_id)
@@ -390,7 +392,8 @@ async fn runtime_order_payroll_anomaly_flows_persist_on_real_postgres_with_trans
     let (_menu_snapshot, created_order) = menu_repo
         .mutate_snapshot::<MenuSupplyPolicySnapshot, _, String, _>(|snapshot| {
             let snapshot = snapshot.ok_or("missing menu supply snapshot".to_owned())?;
-            let policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail.clone());
+            let policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail.clone())
+                .map_err(|error| error.to_string())?;
             let gateway =
                 HttpOrderingExecutionGateway::new(&compliance_lifecycle, &delivery_policy, &policy);
             gateway

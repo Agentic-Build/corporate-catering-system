@@ -9,5 +9,6 @@ export type ObjectStorageUploadPlanRequest = {
     locale?: string;
     mimeType: string;
     sizeBytes: number;
+    thumbnailSizeBytes?: number;
 };
 

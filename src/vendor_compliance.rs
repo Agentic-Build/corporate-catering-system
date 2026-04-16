@@ -203,7 +203,7 @@ impl ComplianceDocumentTemplate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct VendorDocumentSubmission {
     document_ref: String,
     submitted_on: ComplianceDate,
@@ -258,6 +258,24 @@ impl VendorDocumentSubmission {
 
     pub fn expires_on(&self) -> ComplianceDate {
         self.expires_on
+    }
+}
+
+impl<'de> Deserialize<'de> for VendorDocumentSubmission {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct VendorDocumentSubmissionRepr {
+            document_ref: String,
+            submitted_on: ComplianceDate,
+            expires_on: ComplianceDate,
+        }
+
+        let repr = VendorDocumentSubmissionRepr::deserialize(deserializer)?;
+        Self::new(repr.document_ref, repr.submitted_on, repr.expires_on)
+            .map_err(serde::de::Error::custom)
     }
 }
 
@@ -715,6 +733,56 @@ impl VendorComplianceLifecycle {
                     vendor_id_key.as_str(),
                     vendor.vendor_id().as_str()
                 )));
+            }
+            let templates_for_category = snapshot
+                .templates_by_category
+                .get(vendor.category())
+                .ok_or_else(|| {
+                    VendorComplianceError::PersistenceDataCorrupted(format!(
+                        "vendor `{}` category `{}` has no template set",
+                        vendor_id_key.as_str(),
+                        vendor.category().as_str()
+                    ))
+                })?;
+            for (template_id, submission) in vendor.documents() {
+                let template = templates_for_category.get(template_id).ok_or_else(|| {
+                    VendorComplianceError::PersistenceDataCorrupted(format!(
+                        "vendor `{}` references unknown template `{}` for category `{}`",
+                        vendor_id_key.as_str(),
+                        template_id.as_str(),
+                        vendor.category().as_str()
+                    ))
+                })?;
+                let object_ref =
+                    ObjectStorageReference::parse(submission.document_ref()).map_err(|error| {
+                        VendorComplianceError::PersistenceDataCorrupted(format!(
+                            "vendor `{}` template `{}` has invalid document reference: {error}",
+                            vendor_id_key.as_str(),
+                            template_id.as_str()
+                        ))
+                    })?;
+                let (_, key) = object_ref.split_parts();
+                if !object_key_matches_vendor_owner_scope(
+                    key,
+                    COMPLIANCE_DOCUMENT_OBJECT_KEY_PREFIX,
+                    vendor_id_key.as_str(),
+                ) {
+                    return Err(VendorComplianceError::PersistenceDataCorrupted(format!(
+                        "vendor `{}` template `{}` document reference is outside vendor scope",
+                        vendor_id_key.as_str(),
+                        template_id.as_str()
+                    )));
+                }
+                let max_allowed_expiry = submission
+                    .submitted_on()
+                    .add_days(i32::from(template.max_validity_days()));
+                if submission.expires_on() > max_allowed_expiry {
+                    return Err(VendorComplianceError::PersistenceDataCorrupted(format!(
+                        "vendor `{}` template `{}` expiry exceeds template max validity",
+                        vendor_id_key.as_str(),
+                        template_id.as_str()
+                    )));
+                }
             }
         }
 

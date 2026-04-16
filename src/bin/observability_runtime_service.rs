@@ -1244,6 +1244,7 @@ struct ObjectStorageUploadRequestPayload {
     file_name: String,
     mime_type: String,
     size_bytes: u64,
+    thumbnail_size_bytes: Option<u64>,
     locale: Option<String>,
 }
 
@@ -1550,6 +1551,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         load_or_seed_compliance_lifecycle(
             compliance_repository.as_ref(),
             audit_trail.clone(),
+            object_storage_upload_pipeline.as_ref(),
             vendor_id.clone(),
             plant_id.clone(),
             delivery_epoch_day,
@@ -3217,7 +3219,15 @@ where
                 )
             })?;
             let menu_supply_policy =
-                MenuSupplyPolicy::from_snapshot(snapshot, state.audit_trail.clone());
+                MenuSupplyPolicy::from_snapshot(snapshot, state.audit_trail.clone()).map_err(
+                    |error| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ORDER_POLICY_VIOLATION",
+                            format!("failed to restore menu supply state: {error}"),
+                        )
+                    },
+                )?;
             reader(&menu_supply_policy)
         }
         #[cfg(test)]
@@ -3247,7 +3257,8 @@ where
                     _,
                 >(move |snapshot| {
                     let snapshot = snapshot.ok_or(MenuSupplyWindowError::StatePoisoned)?;
-                    let menu_supply_policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail);
+                    let menu_supply_policy =
+                        MenuSupplyPolicy::from_snapshot(snapshot, audit_trail)?;
                     let value = mutator(&menu_supply_policy)?;
                     let snapshot = menu_supply_policy.snapshot()?;
                     Ok((snapshot, value))
@@ -3296,7 +3307,8 @@ where
                     let snapshot = snapshot.ok_or_else(|| {
                         HttpOrderExecutionError::MenuSupply(MenuSupplyWindowError::StatePoisoned)
                     })?;
-                    let menu_supply_policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail);
+                    let menu_supply_policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail)
+                        .map_err(HttpOrderExecutionError::MenuSupply)?;
                     let value = mutator(&menu_supply_policy)?;
                     let snapshot = menu_supply_policy
                         .snapshot()
@@ -3901,6 +3913,7 @@ fn seeded_menu_type(index: u16) -> &'static str {
     MENU_TYPES[usize::from((index - 1) % (MENU_TYPES.len() as u16))]
 }
 
+#[cfg(test)]
 fn seeded_menu_image_ref(vendor_id: &VendorId, file_name: &str) -> String {
     let menu_bucket = configured_menu_object_bucket();
     let namespace = configured_object_storage_key_namespace();
@@ -3914,6 +3927,7 @@ fn seeded_menu_image_ref(vendor_id: &VendorId, file_name: &str) -> String {
     format!("s3://{menu_bucket}/{key_prefix}/{object_file_name}")
 }
 
+#[cfg(test)]
 fn seeded_compliance_document_ref(vendor_id: &VendorId, file_name: &str) -> String {
     let compliance_bucket = configured_compliance_object_bucket();
     let namespace = configured_object_storage_key_namespace();
@@ -3927,8 +3941,144 @@ fn seeded_compliance_document_ref(vendor_id: &VendorId, file_name: &str) -> Stri
     format!("s3://{compliance_bucket}/{key_prefix}/{object_file_name}")
 }
 
+#[cfg(test)]
 fn seeded_object_file_name(size_bytes: u64, file_name: &str) -> String {
     format!("{size_bytes}-deadbeef-{file_name}")
+}
+
+#[cfg(not(test))]
+const SEEDED_MENU_IMAGE_PAYLOAD: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB1, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+#[cfg(not(test))]
+const SEEDED_MENU_IMAGE_THUMBNAIL_PAYLOAD: &[u8] = b"RIFF\x1a\x00\x00\x00WEBPVP8 \x0e\x00\x00\x00\x30\x01\x00\x9d\x01*\x01\x00\x01\x00\x00\x02\x00\x34\x25\xa4";
+#[cfg(not(test))]
+const SEEDED_COMPLIANCE_DOCUMENT_PAYLOAD: &[u8] =
+    b"%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n";
+
+fn provision_seeded_menu_image_ref(
+    object_storage_upload_pipeline: &ObjectStorageUploadPipeline,
+    vendor_id: &VendorId,
+    file_name: &str,
+) -> Result<String, String> {
+    #[cfg(test)]
+    {
+        let _ = object_storage_upload_pipeline;
+        Ok(seeded_menu_image_ref(vendor_id, file_name))
+    }
+    #[cfg(not(test))]
+    {
+        upload_seeded_object_reference(
+            object_storage_upload_pipeline,
+            StorageArtifactClass::MenuImage,
+            vendor_id,
+            file_name,
+            "image/png",
+            SEEDED_MENU_IMAGE_PAYLOAD,
+            Some(SEEDED_MENU_IMAGE_THUMBNAIL_PAYLOAD),
+        )
+    }
+}
+
+fn provision_seeded_compliance_document_ref(
+    object_storage_upload_pipeline: &ObjectStorageUploadPipeline,
+    vendor_id: &VendorId,
+    file_name: &str,
+) -> Result<String, String> {
+    #[cfg(test)]
+    {
+        let _ = object_storage_upload_pipeline;
+        Ok(seeded_compliance_document_ref(vendor_id, file_name))
+    }
+    #[cfg(not(test))]
+    {
+        upload_seeded_object_reference(
+            object_storage_upload_pipeline,
+            StorageArtifactClass::ComplianceDocument,
+            vendor_id,
+            file_name,
+            "application/pdf",
+            SEEDED_COMPLIANCE_DOCUMENT_PAYLOAD,
+            None,
+        )
+    }
+}
+
+#[cfg(not(test))]
+fn upload_seeded_object_reference(
+    object_storage_upload_pipeline: &ObjectStorageUploadPipeline,
+    artifact_class: StorageArtifactClass,
+    vendor_id: &VendorId,
+    file_name: &str,
+    mime_type: &str,
+    payload: &[u8],
+    thumbnail_payload: Option<&[u8]>,
+) -> Result<String, String> {
+    let size_bytes = u64::try_from(payload.len())
+        .map_err(|_| "seeded payload length overflowed u64".to_owned())?;
+    let thumbnail_size_bytes = thumbnail_payload
+        .map(|bytes| {
+            u64::try_from(bytes.len())
+                .map_err(|_| "seeded thumbnail payload length overflowed u64".to_owned())
+        })
+        .transpose()?;
+    let upload_plan = object_storage_upload_pipeline
+        .create_upload_plan(
+            ObjectUploadIntent {
+                artifact_class,
+                owner_scope: Some(vendor_id.as_str().to_owned()),
+                file_name: file_name.to_owned(),
+                mime_type: mime_type.to_owned(),
+                size_bytes,
+                thumbnail_size_bytes,
+            },
+            SystemTime::now(),
+        )
+        .map_err(|error| format!("failed to create seeded upload plan: {error}"))?;
+    upload_seeded_payload(&upload_plan.primary, payload)
+        .map_err(|error| format!("failed to upload seeded primary object: {error}"))?;
+    match (&upload_plan.thumbnail, thumbnail_payload) {
+        (Some(target), Some(payload)) => upload_seeded_payload(target, payload)
+            .map_err(|error| format!("failed to upload seeded thumbnail object: {error}"))?,
+        (Some(_), None) => {
+            return Err(
+                "seeded upload plan required thumbnail payload but none provided".to_owned(),
+            )
+        }
+        (None, Some(_)) => {
+            return Err(
+                "seeded upload plan omitted thumbnail target but payload was provided".to_owned(),
+            )
+        }
+        (None, None) => {}
+    }
+    Ok(upload_plan.primary.object_ref.as_str().to_owned())
+}
+
+#[cfg(not(test))]
+fn upload_seeded_payload(target: &PresignedUploadTarget, payload: &[u8]) -> Result<(), String> {
+    let client = reqwest::blocking::Client::builder()
+        .build()
+        .map_err(|error| error.to_string())?;
+    let mut request = client.put(target.upload_url.as_str());
+    for (name, value) in &target.required_headers {
+        request = request.header(name.as_str(), value.as_str());
+    }
+    let response = request
+        .body(payload.to_vec())
+        .send()
+        .map_err(|error| error.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "object storage upload failed with status {}",
+            response.status()
+        ));
+    }
+    Ok(())
 }
 
 fn seeded_menu_health_tags(index: u16) -> Vec<MenuHealthTag> {
@@ -3944,6 +4094,7 @@ fn seeded_menu_health_tags(index: u16) -> Vec<MenuHealthTag> {
 async fn load_or_seed_compliance_lifecycle(
     repository: &VendorComplianceSqlRepository,
     audit_trail: ImmutableAuditTrail,
+    object_storage_upload_pipeline: &ObjectStorageUploadPipeline,
     vendor_id: VendorId,
     plant_id: PlantId,
     delivery_epoch_day: i32,
@@ -3960,6 +4111,7 @@ async fn load_or_seed_compliance_lifecycle(
     let seeded = build_seeded_load_gate_compliance_lifecycle(
         audit_trail,
         retention_policy,
+        object_storage_upload_pipeline,
         vendor_id,
         plant_id,
         delivery_epoch_day,
@@ -3974,6 +4126,7 @@ async fn load_or_seed_compliance_lifecycle(
 fn build_seeded_load_gate_compliance_lifecycle(
     audit_trail: ImmutableAuditTrail,
     retention_policy: HistoryRetentionPolicy,
+    object_storage_upload_pipeline: &ObjectStorageUploadPipeline,
     vendor_id: VendorId,
     plant_id: PlantId,
     delivery_epoch_day: i32,
@@ -4026,7 +4179,11 @@ fn build_seeded_load_gate_compliance_lifecycle(
             &vendor_id,
             &template_id,
             VendorDocumentSubmission::new(
-                seeded_compliance_document_ref(&vendor_id, "load-gate-license.pdf"),
+                provision_seeded_compliance_document_ref(
+                    object_storage_upload_pipeline,
+                    &vendor_id,
+                    "load-gate-license.pdf",
+                )?,
                 submitted_on,
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(300)),
             )
@@ -4156,8 +4313,13 @@ fn bootstrap_runtime_state(
                     .map_err(|error| {
                         format!("failed to restore delivery policy from SQL snapshot: {error}")
                     })?;
-                    menu_supply_policy =
-                        MenuSupplyPolicy::from_snapshot(menu_snapshot, audit_trail.clone());
+                    menu_supply_policy = MenuSupplyPolicy::from_snapshot(
+                        menu_snapshot,
+                        audit_trail.clone(),
+                    )
+                    .map_err(|error| {
+                        format!("failed to restore menu supply policy from SQL snapshot: {error}")
+                    })?;
                     payroll_ledger_service =
                         PayrollLedgerService::from_snapshot(payroll_snapshot, audit_trail.clone());
                     anomaly_alert_workflow =
@@ -4239,8 +4401,11 @@ fn bootstrap_runtime_state(
             let menu_item_id =
                 MenuItemId::parse(format!("menu-{index}")).map_err(|error| error.to_string())?;
             let delivery_epoch_day = delivery_epoch_day.saturating_add(i32::from((index - 1) % 7));
-            let image_ref =
-                seeded_menu_image_ref(&vendor_id, format!("load-gate-{index}.jpg").as_str());
+            let image_ref = provision_seeded_menu_image_ref(
+                object_storage_upload_pipeline.as_ref(),
+                &vendor_id,
+                format!("load-gate-{index}.png").as_str(),
+            )?;
             let image_url = MenuImageUrl::parse(image_ref).map_err(|error| error.to_string())?;
             let menu_item = VendorMenuItem::new(
                 menu_item_id.clone(),
@@ -4266,6 +4431,7 @@ fn bootstrap_runtime_state(
         seed_runtime_baseline_scenarios(
             &committee_actor,
             &vendor_actor,
+            object_storage_upload_pipeline.as_ref(),
             &vendor_id,
             &plant_id,
             delivery_epoch_day,
@@ -4414,6 +4580,7 @@ fn bootstrap_runtime_state(
 fn seed_runtime_baseline_scenarios(
     committee_actor: &AuthenticatedActorContext,
     vendor_actor: &AuthenticatedActorContext,
+    object_storage_upload_pipeline: &ObjectStorageUploadPipeline,
     vendor_id: &VendorId,
     plant_id: &PlantId,
     delivery_epoch_day: i32,
@@ -4428,6 +4595,7 @@ fn seed_runtime_baseline_scenarios(
         seed_lifecycle_and_mapping_scenarios(
             committee_actor,
             vendor_actor,
+            object_storage_upload_pipeline,
             vendor_id,
             plant_id,
             delivery_epoch_day,
@@ -4459,6 +4627,7 @@ fn seed_runtime_baseline_scenarios(
 fn seed_lifecycle_and_mapping_scenarios(
     committee_actor: &AuthenticatedActorContext,
     vendor_actor: &AuthenticatedActorContext,
+    object_storage_upload_pipeline: &ObjectStorageUploadPipeline,
     vendor_id: &VendorId,
     plant_id: &PlantId,
     delivery_epoch_day: i32,
@@ -4507,7 +4676,11 @@ fn seed_lifecycle_and_mapping_scenarios(
             &lifecycle_vendor_id,
             &lifecycle_template_id,
             VendorDocumentSubmission::new(
-                seeded_compliance_document_ref(&lifecycle_vendor_id, "lifecycle-seed-license.pdf"),
+                provision_seeded_compliance_document_ref(
+                    object_storage_upload_pipeline,
+                    &lifecycle_vendor_id,
+                    "lifecycle-seed-license.pdf",
+                )?,
                 lifecycle_submitted_on,
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(7)),
             )
@@ -4542,10 +4715,11 @@ fn seed_lifecycle_and_mapping_scenarios(
             &lifecycle_vendor_id,
             &lifecycle_template_id,
             VendorDocumentSubmission::new(
-                seeded_compliance_document_ref(
+                provision_seeded_compliance_document_ref(
+                    object_storage_upload_pipeline,
                     &lifecycle_vendor_id,
                     "lifecycle-seed-license-renewed.pdf",
-                ),
+                )?,
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(8)),
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(365)),
             )
@@ -5349,6 +5523,17 @@ fn handle_create_vendor_object_storage_upload_plan(
             ),
         ));
     }
+    if !vendor_actor.plant_scope().contains(&state.plant_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not authorized for plant `{}`",
+                vendor_actor.actor_id().as_str(),
+                state.plant_id.as_str()
+            ),
+        ));
+    }
 
     let locale = StorageLocale::from_language_tag(request.locale.as_deref());
     let artifact_class = parse_storage_artifact_class_label(request.artifact_class.as_str())
@@ -5368,6 +5553,7 @@ fn handle_create_vendor_object_storage_upload_plan(
                 file_name: request.file_name,
                 mime_type: request.mime_type,
                 size_bytes: request.size_bytes,
+                thumbnail_size_bytes: request.thumbnail_size_bytes,
             },
             SystemTime::now(),
         )
@@ -5627,6 +5813,7 @@ fn configured_fulfillment_object_bucket() -> String {
         .unwrap_or_else(|| DEFAULT_FULFILLMENT_BUCKET.to_owned())
 }
 
+#[cfg(test)]
 fn configured_object_storage_key_namespace() -> String {
     std::env::var(OBJECT_STORAGE_KEY_NAMESPACE_ENV)
         .ok()
@@ -11645,9 +11832,11 @@ mod tests {
             .epoch_day();
         let delivery_epoch_day = now_epoch_day.saturating_add(2);
         let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
+        let object_storage_upload_pipeline = test_object_storage_upload_pipeline();
         let compliance_lifecycle = build_seeded_load_gate_compliance_lifecycle(
             audit_trail.clone(),
             HistoryRetentionPolicy::default(),
+            object_storage_upload_pipeline.as_ref(),
             vendor_id(DEFAULT_VENDOR_ID),
             plant_id(DEFAULT_PLANT_ID),
             delivery_epoch_day,
@@ -11663,7 +11852,7 @@ mod tests {
             false,
             false,
             RushReminderPolicy::default(),
-            test_object_storage_upload_pipeline(),
+            object_storage_upload_pipeline,
             PayrollRetentionPolicy::default(),
             OrderRetentionPolicy::default(),
             payroll_export_field_encryptor(),
@@ -11845,6 +12034,7 @@ mod tests {
                 file_name: "lunch-bento.png".to_owned(),
                 mime_type: "image/png".to_owned(),
                 size_bytes: 180_000,
+                thumbnail_size_bytes: Some(72_000),
                 locale: None,
             },
         )
@@ -11889,6 +12079,54 @@ mod tests {
     }
 
     #[test]
+    fn object_storage_vendor_upload_plan_rejects_out_of_scope_vendor_actor() {
+        let state = build_state(20_000);
+        let out_of_scope_vendor = AuthenticatedActorContext::new(
+            actor_id("vendor-out-of-scope"),
+            Role::VendorOperator,
+            PlantScope::restricted(vec![plant_id("fab-b")]).expect("scope should be valid"),
+            AuthenticationSource::VendorAccountMfa,
+        )
+        .expect("vendor actor should be valid");
+        let (status, error) = handle_create_vendor_object_storage_upload_plan(
+            &state,
+            &out_of_scope_vendor,
+            ObjectStorageUploadRequestPayload {
+                artifact_class: "MENU_IMAGE".to_owned(),
+                file_name: "lunch-bento.png".to_owned(),
+                mime_type: "image/png".to_owned(),
+                size_bytes: 180_000,
+                thumbnail_size_bytes: Some(72_000),
+                locale: None,
+            },
+        )
+        .expect_err("out-of-scope vendor should be rejected");
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(error.code, "FORBIDDEN");
+    }
+
+    #[test]
+    fn object_storage_upload_rejects_missing_thumbnail_size_for_menu_image() {
+        let state = build_state(20_000);
+        let vendor_actor = vendor_operator();
+        let (status, error) = handle_create_vendor_object_storage_upload_plan(
+            &state,
+            &vendor_actor,
+            ObjectStorageUploadRequestPayload {
+                artifact_class: "MENU_IMAGE".to_owned(),
+                file_name: "lunch-bento.png".to_owned(),
+                mime_type: "image/png".to_owned(),
+                size_bytes: 180_000,
+                thumbnail_size_bytes: None,
+                locale: Some("zh-TW".to_owned()),
+            },
+        )
+        .expect_err("missing thumbnail size should be rejected");
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.code, "OBJECT_STORAGE_SIZE_EXCEEDED");
+    }
+
+    #[test]
     fn object_storage_upload_rejects_invalid_mime_with_localized_message() {
         let state = build_state(20_000);
         let vendor_actor = vendor_operator();
@@ -11900,6 +12138,7 @@ mod tests {
                 file_name: "not-allowed.bin".to_owned(),
                 mime_type: "application/octet-stream".to_owned(),
                 size_bytes: 1024,
+                thumbnail_size_bytes: None,
                 locale: Some("zh-TW".to_owned()),
             },
         )
@@ -11925,6 +12164,7 @@ mod tests {
                 file_name: "oversized.pdf".to_owned(),
                 mime_type: "application/pdf".to_owned(),
                 size_bytes: 25 * 1024 * 1024,
+                thumbnail_size_bytes: None,
                 locale: Some("zh-TW".to_owned()),
             },
         )

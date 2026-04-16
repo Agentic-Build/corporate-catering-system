@@ -648,6 +648,7 @@ impl FulfillmentArtifactStore for ObjectStorageFulfillmentArtifactStore {
                     mime_type: "application/json".to_owned(),
                     size_bytes: u64::try_from(payload.len())
                         .expect("artifact payload length should fit"),
+                    thumbnail_size_bytes: None,
                 },
                 SystemTime::now(),
             )

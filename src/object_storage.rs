@@ -162,6 +162,7 @@ pub struct ObjectUploadIntent {
     pub file_name: String,
     pub mime_type: String,
     pub size_bytes: u64,
+    pub thumbnail_size_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -301,6 +302,22 @@ impl ObjectStorageUploadPipeline {
         now: SystemTime,
     ) -> Result<PresignedUploadPlan, ObjectStorageError> {
         let policy = intent.artifact_class.policy();
+        let thumbnail_size_bytes = if policy.include_thumbnail_plan {
+            let thumbnail_policy = StorageArtifactClass::MenuImageThumbnail.policy();
+            let resolved_thumbnail_size_bytes = intent.thumbnail_size_bytes.unwrap_or(0);
+            if resolved_thumbnail_size_bytes == 0
+                || resolved_thumbnail_size_bytes > thumbnail_policy.max_size_bytes
+            {
+                return Err(ObjectStorageError::SizeLimitExceeded {
+                    artifact_class: StorageArtifactClass::MenuImageThumbnail,
+                    size_bytes: resolved_thumbnail_size_bytes,
+                    max_size_bytes: thumbnail_policy.max_size_bytes,
+                });
+            }
+            Some(resolved_thumbnail_size_bytes)
+        } else {
+            None
+        };
         let normalized_mime = normalize_mime(intent.mime_type.as_str(), intent.artifact_class)?;
         if !policy
             .allowed_mime_types
@@ -372,10 +389,8 @@ impl ObjectStorageUploadPipeline {
 
         let thumbnail = if policy.include_thumbnail_plan {
             let thumbnail_mime = "image/webp".to_owned();
-            let thumbnail_size_bytes = intent.size_bytes.min(
-                StorageArtifactClass::MenuImageThumbnail
-                    .policy()
-                    .max_size_bytes,
+            let thumbnail_size_bytes = thumbnail_size_bytes.expect(
+                "thumbnail size bytes should be prevalidated for artifact classes with thumbnail plans",
             );
             let thumbnail_key = self.build_object_key(
                 StorageArtifactClass::MenuImageThumbnail,
@@ -1065,6 +1080,7 @@ mod tests {
                     file_name: "menu-photo.jpg".to_owned(),
                     mime_type: "image/jpeg".to_owned(),
                     size_bytes: 128_000,
+                    thumbnail_size_bytes: Some(64_000),
                 },
                 UNIX_EPOCH + std::time::Duration::from_secs(1_712_000_000),
             )
@@ -1088,14 +1104,14 @@ mod tests {
             plan.thumbnail
                 .as_ref()
                 .and_then(|target| target.required_headers.get("content-length")),
-            Some(&"128000".to_owned())
+            Some(&"64000".to_owned())
         );
     }
 
     #[test]
-    fn thumbnail_content_length_is_capped_by_thumbnail_policy_limit() {
+    fn thumbnail_size_limit_is_enforced() {
         let pipeline = pipeline();
-        let plan = pipeline
+        let error = pipeline
             .create_upload_plan(
                 ObjectUploadIntent {
                     artifact_class: StorageArtifactClass::MenuImage,
@@ -1103,16 +1119,31 @@ mod tests {
                     file_name: "menu-photo.jpg".to_owned(),
                     mime_type: "image/jpeg".to_owned(),
                     size_bytes: 10 * 1024 * 1024,
+                    thumbnail_size_bytes: Some(3 * 1024 * 1024),
                 },
                 UNIX_EPOCH + std::time::Duration::from_secs(1_712_000_000),
             )
-            .expect("upload plan should be generated");
-        assert_eq!(
-            plan.thumbnail
-                .as_ref()
-                .and_then(|target| target.required_headers.get("content-length")),
-            Some(&"2097152".to_owned())
-        );
+            .expect_err("thumbnail size above class limit should fail");
+        assert_eq!(error.error_code(), "OBJECT_STORAGE_SIZE_EXCEEDED");
+    }
+
+    #[test]
+    fn thumbnail_size_is_required_for_menu_image_upload_plan() {
+        let pipeline = pipeline();
+        let error = pipeline
+            .create_upload_plan(
+                ObjectUploadIntent {
+                    artifact_class: StorageArtifactClass::MenuImage,
+                    owner_scope: None,
+                    file_name: "menu-photo.jpg".to_owned(),
+                    mime_type: "image/jpeg".to_owned(),
+                    size_bytes: 128_000,
+                    thumbnail_size_bytes: None,
+                },
+                UNIX_EPOCH + std::time::Duration::from_secs(1_712_000_000),
+            )
+            .expect_err("thumbnail size must be provided for menu image upload plans");
+        assert_eq!(error.error_code(), "OBJECT_STORAGE_SIZE_EXCEEDED");
     }
 
     #[test]
@@ -1126,6 +1157,7 @@ mod tests {
                     file_name: "safety-cert.exe".to_owned(),
                     mime_type: "application/octet-stream".to_owned(),
                     size_bytes: 64,
+                    thumbnail_size_bytes: None,
                 },
                 SystemTime::now(),
             )
@@ -1147,6 +1179,7 @@ mod tests {
                     file_name: "oversized-menu.jpg".to_owned(),
                     mime_type: "image/jpeg".to_owned(),
                     size_bytes: 11 * 1024 * 1024,
+                    thumbnail_size_bytes: Some(64_000),
                 },
                 SystemTime::now(),
             )
@@ -1196,6 +1229,7 @@ mod tests {
                     file_name: "menu-photo.jpg".to_owned(),
                     mime_type: "image/jpeg".to_owned(),
                     size_bytes: 128_000,
+                    thumbnail_size_bytes: Some(64_000),
                 },
                 now,
             )
@@ -1208,6 +1242,7 @@ mod tests {
                     file_name: "menu-photo.jpg".to_owned(),
                     mime_type: "image/jpeg".to_owned(),
                     size_bytes: 128_000,
+                    thumbnail_size_bytes: Some(64_000),
                 },
                 now,
             )
@@ -1231,6 +1266,7 @@ mod tests {
                     file_name: "license.pdf".to_owned(),
                     mime_type: "application/pdf".to_owned(),
                     size_bytes: 65_536,
+                    thumbnail_size_bytes: None,
                 },
                 now,
             )
