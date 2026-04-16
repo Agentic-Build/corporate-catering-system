@@ -1,0 +1,94 @@
+{
+  "acceptanceSignals": [
+    "Monthly close generates immutable cycle snapshots with deterministic totals.",
+    "HR export includes required exception classes and reconciliation metadata.",
+    "Re-run behavior for same cycle is idempotent unless authorized unlock occurs."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260415-153033-corporate-catering-system-f013-monthly-settlement-and-hr-export-a1",
+      "outcome": "completed",
+      "startedAt": "2026-04-16T04:04:10.388Z",
+      "lastStage": "completed",
+      "latestEventSummary": "feature completed: Monthly Settlement and HR Export in 0 attempts",
+      "lastCommit": {
+        "hash": "277e91792df42e406b5bd716e5e3e8e12bbf1178",
+        "message": "feat: implement Monthly Settlement and HR Export (attempt 5)"
+      },
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "HTTP Contract Sync Gate",
+          "summary": "The current feature satisfies the active HTTP contract policy: new/changed formal routes are synchronized across runtime route catalog, OpenAPI (`contract/openapi/openapi.yaml`/`.json`), and generated TS client artifacts (`contract/generated/ts-client/...`), and contract tests were updated to enforce route-to-spec parity plus error response/schema expectations for the new monthly settlement and retention endpoints.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "High-Risk Write Audit Discipline",
+          "summary": "Monthly settlement and HR export satisfy the active policy: close/export/lock/unlock/sync write paths append immutable audit evidence with actorId, role, entityId, reason, timestamp, and correlationId; monthly close uses fixed Taipei cycle boundaries; SFTP batch is the mandatory close output path with HR API as adjunct; and same-cycle reruns are idempotent unless an authorized unlock with explicit reason occurs.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No Legacy Path Rule",
+          "summary": "The current implementation satisfies this feature’s active policy: monthly close is derived from fixed Asia/Taipei boundaries, settlement output is SFTP batch with reconciliation and required exception-class metadata, same-cycle reruns are idempotent while locked, and recomputation requires authorized unlock with explicit audit reason. No manual CSV close channel or fallback close path is present in the active contract/handlers for this feature.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Financial Close Integrity Gate",
+          "summary": "The current workspace satisfies the active settlement policy for this feature: monthly close uses Asia/Taipei cycle boundaries and defaults to previous month; settlement outputs are SFTP-batch based with cycle key plus snapshot checksum and reconciliation metadata; required exception classes are included (refund, deduction failure, terminated employee, plus disputed); same-cycle reruns are idempotent; and recomputation requires explicit committee-authorized unlock reason with audit-linked lock/unlock receipts.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Data Retention Enforcement",
+          "summary": "The current feature satisfies the active policy: monthly settlement closes on Taipei cycle boundaries with mandatory SFTP snapshot output, deterministic/idempotent cycle behavior with reasoned lock/unlock governance, and implemented payroll/order/audit retention purge workflows (including scheduled jobs and audit-query traceability). Sensitive payroll export and audit snapshot fields are encrypted, and role-based access control plus purge/encryption behavior are covered by tests.",
+          "verdict": "pass"
+        }
+      ],
+      "finishedAt": "2026-04-16T05:55:31.259Z",
+      "resultStatus": "passed"
+    }
+  ],
+  "decisionIssueIds": [
+    "issue-hr-payroll-interface",
+    "issue-timezone-and-business-calendar"
+  ],
+  "dependsOn": [
+    "identity-access-governance",
+    "order-state-inventory-engine",
+    "payroll-ledger-dispute-tracking",
+    "audit-trail-and-investigation-query"
+  ],
+  "excludedApproaches": [
+    "Using manual CSV ingestion as official close channel.",
+    "Using non-Taipei date boundaries for monthly cycle calculations.",
+    "Allowing unlocked recomputation without audit reason."
+  ],
+  "executionConstraints": [
+    "Run monthly settlement on fixed Asia/Taipei cycle boundaries.",
+    "Use SFTP batch export as mandatory settlement output path; API sync can complement.",
+    "Support lock/unlock with explicit reason and immutable close snapshots."
+  ],
+  "featureId": "monthly-settlement-and-hr-export",
+  "name": "Monthly Settlement and HR Export",
+  "order": 13,
+  "phase": "completed",
+  "priority": "core",
+  "rationale": "Automated close and exception handling are first-phase governance requirements.",
+  "summary": "Automate monthly financial close, export, and exception processing.",
+  "completedAt": "2026-04-16T05:55:31.376Z"
+}

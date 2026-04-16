@@ -1,0 +1,1654 @@
+{
+  "features": [
+    {
+      "acceptanceSignals": [
+        "RBAC tests cover allow/deny for employee, vendor operator, committee admin, and payroll operator.",
+        "Authenticated context always carries actorId, role, and scoped plant info.",
+        "HTTP and MCP paths use the same authorization policy engine."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f000-identity-access-governance-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-15T17:03:20.183Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Identity and Access Governance in 0 attempts",
+          "lastCommit": {
+            "hash": "ab48ac927d85bebab44becc44e1741c13eed29c6",
+            "message": "feat: implement Identity and Access Governance (attempt 1)"
+          },
+          "reinforcementResults": [],
+          "finishedAt": "2026-04-15T17:08:45.061Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-auth-source-of-truth"
+      ],
+      "dependsOn": [],
+      "excludedApproaches": [
+        "Using a single unified corporate IdP for all roles.",
+        "Using local accounts for all roles.",
+        "Maintaining separate auth logic stacks for HTTP and MCP."
+      ],
+      "executionConstraints": [
+        "Use employee/committee corporate SSO plus vendor account with MFA as the only identity model.",
+        "All write operations require authenticated actor context and auditable identity linkage.",
+        "Authorization policy must be centralized and reused across transport layers."
+      ],
+      "featureId": "identity-access-governance",
+      "name": "Identity and Access Governance",
+      "order": 0,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Every business flow depends on correct identity boundaries and role enforcement.",
+      "summary": "Establish unified authentication, authorization, and actor-context foundations.",
+      "completedAt": "2026-04-15T17:08:45.178Z"
+    },
+    {
+      "acceptanceSignals": [
+        "All official external HTTP endpoints are present in OpenAPI 3.1.",
+        "CI publishes machine-readable spec and browsable API docs artifacts.",
+        "Generated client/types build without manual type patching."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f001-openapi-contract-platform-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-15T17:08:45.206Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: OpenAPI Contract Platform in 0 attempts",
+          "lastCommit": {
+            "hash": "70c25a52588ab914263e7070604f6dadca36308b",
+            "message": "feat: implement OpenAPI Contract Platform (attempt 1)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "Pass based on workspace evidence: the code defines a canonical OpenAPI 3.1 contract for employee/vendor/admin/integration APIs, includes explicit schemas/errors/auth/pagination-sort-filter/enums/validation constraints, enforces operation/auth-model consistency in tests, and CI exports machine-readable spec plus browsable docs artifacts while validating generated TypeScript client/types via contract generation and compile checks. No legacy/fallback compatibility path evidence was found in current source/tests for this feature scope.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-15T17:24:52.469Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-auth-source-of-truth"
+      ],
+      "dependsOn": [
+        "identity-access-governance"
+      ],
+      "excludedApproaches": [
+        "Shipping externally used endpoints that are absent from OpenAPI.",
+        "Treating handwritten API interfaces as primary contract source.",
+        "Deferring contract updates to later releases."
+      ],
+      "executionConstraints": [
+        "OpenAPI 3.1 is the formal contract for employee, vendor, admin, and integration HTTP APIs.",
+        "Contract must define schemas, errors, auth, pagination/sort/filter, enums, and validation constraints.",
+        "Auth declarations in the spec must match the locked SSO+vendor-MFA model."
+      ],
+      "featureId": "openapi-contract-platform",
+      "name": "OpenAPI Contract Platform",
+      "order": 1,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Contract-first control is required to prevent implementation and integration drift.",
+      "summary": "Build and enforce the canonical machine-verifiable HTTP contract.",
+      "completedAt": "2026-04-15T17:24:52.571Z"
+    },
+    {
+      "acceptanceSignals": [
+        "CI fails when runtime HTTP routes drift from OpenAPI.",
+        "CI fails when generated API artifacts drift from the committed contract.",
+        "MCP contract checks are wired and automatically enforced once MCP endpoints/tools are present."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f002-contract-conformance-ci-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-15T17:24:52.598Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Contract Conformance CI in 0 attempts",
+          "lastCommit": {
+            "hash": "df46802741140776bf6e5e0a80d7da8e788a0555",
+            "message": "feat: implement Contract Conformance CI (attempt 2)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "The current feature satisfies the active policy: CI enforces contract conformance via the pull-request workflow gate (`cargo test --test openapi_contract_platform` plus `pnpm run contract:verify`), runtime HTTP route parity vs OpenAPI is asserted in tests, generated OpenAPI/client artifact drift is enforced by the drift check script against committed `contract/` outputs, and MCP contract checks are wired into the same gate with no legacy compatibility path retained for superseded contract locations.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-15T17:48:27.975Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [],
+      "dependsOn": [
+        "openapi-contract-platform"
+      ],
+      "excludedApproaches": [
+        "Manual periodic contract review as the primary drift defense.",
+        "Allowing runtime behavior changes without synchronized contract updates.",
+        "Schema-only snapshot checks without behavior verification."
+      ],
+      "executionConstraints": [
+        "Introduce merge-time contract conformance gates early in implementation.",
+        "Require synchronized updates to spec, generated artifacts, tests, and implementation.",
+        "Enable MCP parity checks in the same CI pipeline when `mcp-server-domain-parity` lands."
+      ],
+      "featureId": "contract-conformance-ci",
+      "name": "Contract Conformance CI",
+      "order": 2,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Early contract gates reduce architectural retries and integration churn.",
+      "summary": "Establish automated contract drift prevention for the delivery stream.",
+      "completedAt": "2026-04-15T17:48:28.078Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Committee admin can approve/reject/request-fix vendor applications with full history.",
+        "Expiry reminders and suspension triggers run from configured document templates.",
+        "Suspended vendors are automatically hidden from ordering surfaces."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f003-vendor-compliance-lifecycle-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-15T17:48:28.103Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Vendor Compliance Lifecycle in 0 attempts",
+          "lastCommit": {
+            "hash": "4472804c5806ce29cdd306c6c92a93cb8def0449",
+            "message": "feat: implement Vendor Compliance Lifecycle (attempt 1)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The current feature satisfies the active policy: externally visible HTTP changes for vendor compliance (new/updated admin endpoints) are reflected in `contract/openapi` and synchronized `contract/generated/ts-client` artifacts in the same change set, with route-to-spec conformance checks present in the contract test suite/CI gate.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "Static review of this workspace indicates the feature satisfies the active policy: superseded approval contract/action paths were removed (old approval route/DTO/action absent), configurable per-category templates and review decisions (approve/reject/request-fix) are implemented with full history, lifecycle automation covers reminder/suspension/reinstatement, suspended vendors are filtered from ordering visibility, and retention/deletion policy logic is implemented with current-flow tests.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-15T18:09:33.555Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-vendor-document-policy",
+        "issue-data-retention-compliance"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "openapi-contract-platform"
+      ],
+      "excludedApproaches": [
+        "Using one fixed mandatory document set for all vendor types.",
+        "Relying on manual expiry tracking as the operating model.",
+        "Deferring retention/deletion policy definition until after launch."
+      ],
+      "executionConstraints": [
+        "Implement configurable compliance document templates by vendor category.",
+        "Apply automated expiry reminders and suspension/reinstatement workflow.",
+        "Persist review and lifecycle history under the defined retention/deletion policy."
+      ],
+      "featureId": "vendor-compliance-lifecycle",
+      "name": "Vendor Compliance Lifecycle",
+      "order": 3,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Vendor legality and governance directly affect service safety and eligibility.",
+      "summary": "Implement onboarding, document governance, and compliance lifecycle controls.",
+      "completedAt": "2026-04-15T18:09:33.666Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Employee-visible vendor list is always filtered by plant and active service window.",
+        "Admin mapping changes take effect immediately and are auditable.",
+        "Deliverability checks are enforced server-side for browse/search/order APIs."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f004-vendor-plant-delivery-mapping-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-15T18:09:33.690Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Vendor Plant Delivery Mapping in 0 attempts",
+          "lastCommit": {
+            "hash": "7ed9023d5294d9aa4e852d9af5cf77e247ee8ad2",
+            "message": "feat: implement Vendor Plant Delivery Mapping (attempt 2)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The current feature satisfies the active HTTP contract policy: formal vendor-plant delivery mapping endpoints are declared in OpenAPI, runtime route-to-spec parity is enforced by test/CI, generated TypeScript client artifacts are present with drift gating, and error-code/error-schema mappings for delivery-mapping endpoints are explicitly test-verified.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "Static review indicates the feature meets the active policy: vendor-plant-time mappings are enforced server-side in the delivery policy and HTTP execution gateway for browse/search/order paths, Asia/Taipei fixed business-time semantics are implemented, deterministic precedence for overlaps is defined (precedence -> revision -> mapping id), admin upsert/delete mutations are immediately effective with audit entries, and no legacy/fallback compatibility branches for the superseded deliverability model were found in current routes/DTOs/tests.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-15T18:48:18.514Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-timezone-and-business-calendar"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "vendor-compliance-lifecycle"
+      ],
+      "excludedApproaches": [
+        "Per-plant independent timezone evaluation.",
+        "Internal UTC-only business boundary logic for cutoff/availability.",
+        "Client-only deliverability filtering."
+      ],
+      "executionConstraints": [
+        "Evaluate service windows with fixed Asia/Taipei business-time semantics.",
+        "Store and enforce vendor-plant-time mappings as authoritative backend constraints.",
+        "Define deterministic precedence for overlapping mapping rules."
+      ],
+      "featureId": "vendor-plant-delivery-mapping",
+      "name": "Vendor Plant Delivery Mapping",
+      "order": 4,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Incorrect mapping causes non-deliverable exposure and operational failure.",
+      "summary": "Control where and when each vendor can serve and enforce those rules globally.",
+      "completedAt": "2026-04-15T18:48:18.620Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Vendors can manage menu items, prices, images, and daily quotas.",
+        "Quota accounting prevents oversell under concurrent ordering.",
+        "Configured preorder window and cutoff rules are enforced in ordering APIs."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f005-menu-supply-window-management-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-15T18:48:18.645Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Menu Supply and Window Management in 0 attempts",
+          "lastCommit": {
+            "hash": "bddd6f605ee4ed596c94aea84041285ccc29de86",
+            "message": "feat: implement Menu Supply and Window Management (attempt 3)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The active policy is satisfied for this feature. The workspace shows synchronized HTTP-contract changes in the same change set (`src/contract.rs`, `contract/openapi/openapi.json`, `contract/openapi/openapi.yaml`, and `contract/generated/ts-client/*`), route-to-spec parity coverage via `runtime_http_route_catalog_matches_openapi_contract` in `tests/openapi_contract_platform.rs`, CI enforcement in `.github/workflows/openapi-contract.yml` (`cargo test --test openapi_contract_platform` + `pnpm run contract:verify`), and explicit tests validating error-code to error-schema mappings for the ordering/menu endpoints.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "Current workspace satisfies the active policy for this feature: vendor menu management includes price/image/daily quota, quota accounting is atomic under concurrency, ordering APIs enforce Taipei-based preorder and cutoff governance with bounded vendor overrides, and special requests remain controlled enum-only with bounded size. No legacy/fallback branch preserving superseded behavior was found in this feature surface.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-15T19:27:03.752Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-timezone-and-business-calendar",
+        "issue-special-request-controls"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "openapi-contract-platform",
+        "vendor-plant-delivery-mapping"
+      ],
+      "excludedApproaches": [
+        "Using non-atomic quota updates that allow oversell.",
+        "Using non-Taipei business-time boundary calculations.",
+        "Defaulting to unrestricted free-text special requests."
+      ],
+      "executionConstraints": [
+        "Default preorder open window supports up to 7 days ahead with policy-bounded vendor overrides.",
+        "Default modify/cancel cutoff is previous day 17:00 Asia/Taipei with bounded vendor override.",
+        "Special-request schema must remain controlled and risk-limited pending final clarification."
+      ],
+      "featureId": "menu-supply-window-management",
+      "name": "Menu Supply and Window Management",
+      "order": 5,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Supply and time-window correctness is central to order predictability.",
+      "summary": "Enable safe menu management, quota control, and cutoff governance.",
+      "completedAt": "2026-04-15T19:27:03.861Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Tracing, metrics, and logs are correlated via OpenTelemetry across services.",
+        "Hard-SLO dashboards and alert rules are published for release gating and can be extended per domain.",
+        "Kubernetes manifests include readiness/liveness and scaling signals tied to load."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f006-observability-k8s-slo-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-15T19:27:03.890Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Observability and Kubernetes SLO Baseline in 0 attempts",
+          "lastCommit": {
+            "hash": "1dd9c7b18f26f7da508ff5cbfeaf42577fb6a38c",
+            "message": "feat: implement Observability and Kubernetes SLO Baseline (attempt 6)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The workspace satisfies the active policy for this feature: observability/SLO baseline artifacts and gates are present, and no new formal externally used HTTP contract surface was introduced without synchronized OpenAPI/generated artifacts. CI still enforces route-to-spec parity and contract artifact drift checks.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "The current workspace satisfies this feature’s active policy: OpenTelemetry correlation is hard-enforced across HTTP/MCP/compliance paths, VictoriaMetrics/VictoriaLogs/VictoriaTraces + Grafana hard-SLO artifacts are published and CI-gated, Kubernetes manifests include readiness/liveness/startup probes plus load-tied HPA signals, prelaunch load-test thresholds are policy-driven, and superseded fallback/legacy paths for this scope are explicitly removed/blocked.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-15T21:19:59.329Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-pickup-throughput-slo"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "openapi-contract-platform",
+        "contract-conformance-ci"
+      ],
+      "excludedApproaches": [
+        "Operating without hard SLO definitions before production.",
+        "Relying on unstructured logs without correlation context.",
+        "Shipping without production alert thresholds for peak periods."
+      ],
+      "executionConstraints": [
+        "Instrument services with OpenTelemetry to VictoriaMetrics/VictoriaLogs/VictoriaTraces and Grafana.",
+        "Define and publish hard SLO dashboards used by release gates.",
+        "Set pre-launch load-test acceptance thresholds required by hard SLO policy."
+      ],
+      "featureId": "observability-k8s-slo",
+      "name": "Observability and Kubernetes SLO Baseline",
+      "order": 6,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "High-scale reliability and release safety depend on measurable runtime signals.",
+      "summary": "Establish reusable observability and SLO-governed deployment controls before peak-risk flows ship.",
+      "completedAt": "2026-04-15T21:19:59.436Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Order state transitions enforce cutoff and validation rules with explicit domain errors.",
+        "Inventory reservation/release is idempotent and concurrency-safe.",
+        "Order timeline includes modification, cancel, sold-out, and refund-related states."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f007-order-state-inventory-engine-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-15T21:19:59.464Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Order State and Inventory Engine in 0 attempts",
+          "lastCommit": {
+            "hash": "a574032989ff7a276fb6f0afb65e809546e1abcc",
+            "message": "feat: implement Order State and Inventory Engine (attempt 5)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The feature’s externally visible HTTP changes (new pickup-verification route plus order/timeline schema updates) are synchronized in the same change set across runtime route catalog, OpenAPI (`contract/openapi/openapi.yaml`/`.json`), and generated TypeScript client artifacts (`contract/generated/ts-client/*`). Contract conformance coverage is present for route-to-spec parity and error-response schema references, and the drift gate (`pnpm run contract:check-drift`) passes in this workspace.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "The workspace satisfies the feature and active policy: strict order lifecycle transitions with explicit domain errors, fixed Asia/Taipei cutoff enforcement, atomic/idempotent inventory reservation-release with concurrency protection, timeline coverage for modified/cancelled/sold-out/refund states, and hard prelaunch throughput/latency SLO gate artifacts with no retained legacy/fallback execution paths.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Peak Load SLO Gate",
+              "summary": "The current workspace satisfies the active policy for this feature: strict order lifecycle and cutoff enforcement are implemented with explicit domain errors, inventory reservation/release behavior is idempotent and concurrency-safe in the engine, timeline states cover modification/cancel/sold-out/refund flows, Asia/Taipei fixed business-time evaluation is enforced, and hard pre-launch SLO gate artifacts and retained peak-load evidence (including order + pickup scenario and Grafana SLO dashboard) are present with passing status.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-15T22:49:41.395Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-timezone-and-business-calendar",
+        "issue-pickup-throughput-slo",
+        "issue-special-request-controls"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "menu-supply-window-management",
+        "vendor-plant-delivery-mapping",
+        "observability-k8s-slo"
+      ],
+      "excludedApproaches": [
+        "Best-effort inventory mutation without transactional guarantees.",
+        "Allowing post-cutoff modifications without hard denial.",
+        "Operating without hard performance gate definitions."
+      ],
+      "executionConstraints": [
+        "Implement a strict order lifecycle with atomic reservation and release behavior.",
+        "Evaluate cutoff with fixed Asia/Taipei business-time rules.",
+        "Satisfy hard, pre-launch SLO gate for peak ordering throughput and latency.",
+        "Keep special-request handling in controlled schema boundaries."
+      ],
+      "featureId": "order-state-inventory-engine",
+      "name": "Order State and Inventory Engine",
+      "order": 7,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Transaction correctness prevents count drift and downstream reconciliation errors.",
+      "summary": "Implement robust order lifecycle and inventory integrity controls.",
+      "completedAt": "2026-04-15T22:49:41.506Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Employees can preorder across multiple future dates in calendar/week views.",
+        "Search and filters cover price, type, health tags, deliverability, and exact remaining quantity.",
+        "Core discovery remains fully functional with recommendation flags disabled."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f008-employee-discovery-preorder-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-15T22:49:41.547Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Employee Discovery and Preorder in 0 attempts",
+          "lastCommit": {
+            "hash": "e9c52c7f619879a0a9888f346a4f7baaecc7cddf",
+            "message": "feat: implement Employee Discovery and Preorder (attempt 4)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The feature’s HTTP behavior changes are contract-synchronized: OpenAPI specs and generated TypeScript artifacts were updated in the same change set, and contract tests cover route-to-spec parity plus error-code/error-schema mapping for the employee discovery and preorder paths.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "The current workspace satisfies this feature and active policy: employee discovery/preorder supports multi-day week/calendar windows, deterministic search/filter (price, type, health tags, deliverability, exact remaining quantity), consistent Asia/Taipei window/cutoff handling, and backend authoritative remaining-quantity counters, with legacy/fallback paths removed and covered by current-flow tests.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-15T23:47:43.626Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-timezone-and-business-calendar"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "vendor-plant-delivery-mapping",
+        "menu-supply-window-management",
+        "order-state-inventory-engine"
+      ],
+      "excludedApproaches": [
+        "Recommendation-first UI that weakens deterministic filtering.",
+        "Showing non-deliverable vendors or items to users.",
+        "Coarse inventory ranges instead of exact remaining counts."
+      ],
+      "executionConstraints": [
+        "Prioritize deterministic search/filter over recommendation behavior for MVP.",
+        "Apply Asia/Taipei window/cutoff semantics consistently in UI and API results.",
+        "Use backend authoritative inventory counters for remaining quantity display."
+      ],
+      "featureId": "employee-discovery-preorder",
+      "name": "Employee Discovery and Preorder",
+      "order": 8,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Employee-side usability and transparency are required for adoption at scale.",
+      "summary": "Deliver multi-day discovery and preorder entry with accurate availability context.",
+      "completedAt": "2026-04-15T23:47:43.738Z"
+    },
+    {
+      "acceptanceSignals": [
+        "TOTP QR verification is single-use and replay-protected.",
+        "Invalid or expired code scans are rejected with auditable events.",
+        "Peak verification load tests meet locked SLO targets before release."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f009-pickup-totp-checkin-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-15T23:47:43.762Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Pickup TOTP Check-in in 0 attempts",
+          "lastCommit": {
+            "hash": "c0fb8500661a9745bc69e979f6ba8ff747d9702d",
+            "message": "feat: implement Pickup TOTP Check-in (attempt 2)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The current Pickup TOTP Check-in workspace satisfies the active HTTP contract policy: externally visible pickup verification behavior changes are reflected in `contract/openapi` (JSON+YAML), synchronized generated TypeScript client artifacts, and contract guardrails (route-to-spec coverage plus error-code/schema assertions). Contract drift check passes in this workspace.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "The current workspace satisfies the Pickup TOTP Check-in policy: pickup verification is TOTP-QR-only, replay is blocked via single-use fulfillment state transitions, invalid/expired scans emit auditable rejection events, Asia/Taipei fixed-time semantics are enforced for token steps, and release is gated by blocking hard-SLO load checks (including peak pickup verification) wired into CI. No active legacy/fallback pickup route/DTO/handler path was found.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Peak Load SLO Gate",
+              "summary": "The feature satisfies the active policy: pickup verification is implemented as TOTP QR-only with replay protection via single-use fulfillment state transitions, invalid/expired scans are rejected and emitted as audit events, and hard pre-launch SLO gating is enforced with committed peak order+pickup load evidence and Grafana/alert artifacts.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-16T00:28:53.143Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-pickup-throughput-slo",
+        "issue-timezone-and-business-calendar"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "order-state-inventory-engine",
+        "observability-k8s-slo"
+      ],
+      "excludedApproaches": [
+        "Fallback production flow using manual PIN/name check as primary path.",
+        "Long-lived static QR payloads.",
+        "Operating without hard performance acceptance thresholds."
+      ],
+      "executionConstraints": [
+        "Use TOTP QR as the sole production pickup verification mechanism.",
+        "Apply fixed Asia/Taipei time semantics for token validity boundaries.",
+        "Block release until hard throughput/latency/error-rate SLO checks pass."
+      ],
+      "featureId": "pickup-totp-checkin",
+      "name": "Pickup TOTP Check-in",
+      "order": 9,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Pickup speed and correctness are critical frontline operational risks.",
+      "summary": "Provide secure high-throughput on-site verification and meal claim updates.",
+      "completedAt": "2026-04-16T00:28:53.256Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Vendor operations board shows per-plant counts, special needs, and delivery status in near real-time.",
+        "System exports daily summary, plant partition sheet, labels, and basket list.",
+        "Export artifacts are generated from immutable batch snapshots."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f010-vendor-fulfillment-board-exports-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-16T00:28:53.283Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Vendor Fulfillment Board and Exports in 0 attempts",
+          "lastCommit": {
+            "hash": "d71f3e1e23f00325589fbe09afd539741fcb0734",
+            "message": "feat: implement Vendor Fulfillment Board and Exports (attempt 1)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The current feature satisfies the active HTTP contract policy: newly introduced vendor fulfillment HTTP operations are reflected in the formal OpenAPI contract (`contract/openapi/openapi.yaml` and `contract/openapi/openapi.json`) and synchronized generated artifacts (`contract/generated/ts-client/**`) within the same change set, with contract tests in place for route-to-spec parity and error-response schema references.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "The current Vendor Fulfillment Board and Exports implementation satisfies the active policy for this feature: immutable deterministic batch snapshots are implemented, operational board data and auditable status transitions are present, special-request output is constrained to controlled enum structure, and no legacy/fallback compatibility branches or superseded fulfillment DTO/route/handler paths were found in this feature slice.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-16T01:01:20.942Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-special-request-controls"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "menu-supply-window-management",
+        "vendor-plant-delivery-mapping",
+        "order-state-inventory-engine"
+      ],
+      "excludedApproaches": [
+        "Manual spreadsheet consolidation as the primary fulfillment workflow.",
+        "Generating packing artifacts from mutable live query state.",
+        "Unrestricted free-text modifier printing in labels by default."
+      ],
+      "executionConstraints": [
+        "Generate fulfillment outputs from deterministic snapshot batches.",
+        "Expose real-time operational board with auditable status transitions.",
+        "Render special-request data only through controlled, low-risk structure."
+      ],
+      "featureId": "vendor-fulfillment-board-exports",
+      "name": "Vendor Fulfillment Board and Exports",
+      "order": 10,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Fulfillment quality directly affects leakage, mispack, and wrong-delivery incidents.",
+      "summary": "Support vendor prep and delivery execution with structured operational outputs.",
+      "completedAt": "2026-04-16T01:01:21.053Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Audit query supports filtering by actor, action, entity, and time.",
+        "Cross-flow correlation IDs link order, verification, review, and settlement events.",
+        "Audit retention and purge jobs follow policy and are test-verified."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f011-audit-trail-and-investigation-query-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-16T01:01:21.079Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Audit Trail and Investigation Query in 0 attempts",
+          "lastCommit": {
+            "hash": "c156fe15d91888321377b11d6221d520a00bea52",
+            "message": "feat: implement Audit Trail and Investigation Query (attempt 4)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The current feature satisfies the active policy: new audit HTTP routes are mirrored in the OpenAPI contract and generated TS client artifacts, route-to-spec parity and error-schema mapping checks are present, and the implementation includes immutable audit evidence, actor/action/entity/time investigation filters, cross-flow correlation, and retention/purge with committee-admin investigation capabilities.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "Static review indicates this feature satisfies the active policy: immutable audit evidence is emitted on high-risk write paths with locked actor context, investigation queries support actor/action/entity/time (plus correlation), committee-admin responsibility attribution and retention-purge flows are implemented, and retention/purge behavior is covered by dedicated tests without legacy/fallback audit paths in the current feature area.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-16T02:32:30.588Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-auth-source-of-truth",
+        "issue-data-retention-compliance"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "order-state-inventory-engine",
+        "vendor-compliance-lifecycle"
+      ],
+      "excludedApproaches": [
+        "Anonymous actor records for high-risk operations.",
+        "Using only transient service logs as audit evidence.",
+        "Deferring retention/deletion implementation after launch."
+      ],
+      "executionConstraints": [
+        "All high-risk writes must emit immutable audit events with actor identity from locked auth model.",
+        "Audit storage/query lifecycle must follow defined retention/deletion policy.",
+        "Provide committee-admin investigation queries for responsibility attribution."
+      ],
+      "featureId": "audit-trail-and-investigation-query",
+      "name": "Audit Trail and Investigation Query",
+      "order": 11,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Governance, compliance, and dispute handling require durable accountability records.",
+      "summary": "Implement immutable audit evidence and admin investigation capabilities.",
+      "completedAt": "2026-04-16T02:32:30.701Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Employees can view per-order deductions, refunds, and dispute statuses.",
+        "Ledger entries are append-only with source event references.",
+        "Dispute workflow has owner, timestamps, and resolution trace."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f012-payroll-ledger-dispute-tracking-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-16T02:32:30.727Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Payroll Ledger and Dispute Tracking in 0 attempts",
+          "lastCommit": {
+            "hash": "618b82cf41c3b07dad74ac533811320cb1b77051",
+            "message": "feat: implement Payroll Ledger and Dispute Tracking (attempt 4)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The active policy is satisfied for this feature: the new payroll/dispute external HTTP operations are synchronized with OpenAPI (`contract/openapi/openapi.yaml` and `openapi.json`), generated TypeScript client artifacts were updated in the same change set (`contract/generated/ts-client/**`), and contract tests include route-to-spec parity plus payroll endpoint error-response/schema validation.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "High-Risk Write Audit Discipline",
+              "summary": "The current Payroll Ledger and Dispute Tracking implementation satisfies the active audit policy: high-risk payroll/dispute writes append immutable audit evidence with attributable identity (`actorId`, `role`), `entityId`, `reason`, `timestamp`, and `correlationId`; audit storage uses append-only evidence sequencing with investigation-by-correlation support; and the feature ships with SFTP-first exchange, optional HR API adjunct sync, append-only ledger adjustment lineage, and retention purge controls.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "Static review indicates this feature satisfies the active policy in scope: per-order employee payroll view includes deductions/refunds/disputes, ledger/dispute records are append-only with source-event traceability, SFTP batch is the core exchange path with HR API as adjunct, and payroll/dispute retention purge controls are implemented. No legacy/fallback payroll handler/DTO/route was found as an active official path for this feature. Test execution was not possible in this read-only sandbox.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Financial Close Integrity Gate",
+              "summary": "Workspace implementation satisfies the active payroll policy: employee per-order ledger/dispute visibility, append-only ledger with source event references, dispute owner/timestamp/resolution trace, SFTP-core exchange with optional HR API adjunct sync, cycle-key + snapshot checksum with same-cycle idempotent replay, exception coverage for refunded/deduction-failed/terminated employees, and payroll/dispute retention purge controls.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-16T04:04:10.249Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-hr-payroll-interface",
+        "issue-data-retention-compliance"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "order-state-inventory-engine",
+        "audit-trail-and-investigation-query"
+      ],
+      "excludedApproaches": [
+        "Using manual CSV upload as official payroll interface path.",
+        "Overwriting financial records in place without adjustment lineage.",
+        "Keeping payroll/PII indefinitely without policy controls."
+      ],
+      "executionConstraints": [
+        "Use SFTP batch as core payroll exchange path; support HR API sync as optional adjunct.",
+        "Implement immutable per-order payroll ledger with traceable adjustments.",
+        "Apply defined retention/deletion policy to payroll and dispute data."
+      ],
+      "featureId": "payroll-ledger-dispute-tracking",
+      "name": "Payroll Ledger and Dispute Tracking",
+      "order": 12,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Employee trust and finance control require transparent and traceable deductions.",
+      "summary": "Deliver transparent payroll accounting and dispute lifecycle visibility.",
+      "completedAt": "2026-04-16T04:04:10.364Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Monthly close generates immutable cycle snapshots with deterministic totals.",
+        "HR export includes required exception classes and reconciliation metadata.",
+        "Re-run behavior for same cycle is idempotent unless authorized unlock occurs."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f013-monthly-settlement-and-hr-export-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-16T04:04:10.388Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Monthly Settlement and HR Export in 0 attempts",
+          "lastCommit": {
+            "hash": "277e91792df42e406b5bd716e5e3e8e12bbf1178",
+            "message": "feat: implement Monthly Settlement and HR Export (attempt 5)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The current feature satisfies the active HTTP contract policy: new/changed formal routes are synchronized across runtime route catalog, OpenAPI (`contract/openapi/openapi.yaml`/`.json`), and generated TS client artifacts (`contract/generated/ts-client/...`), and contract tests were updated to enforce route-to-spec parity plus error response/schema expectations for the new monthly settlement and retention endpoints.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "High-Risk Write Audit Discipline",
+              "summary": "Monthly settlement and HR export satisfy the active policy: close/export/lock/unlock/sync write paths append immutable audit evidence with actorId, role, entityId, reason, timestamp, and correlationId; monthly close uses fixed Taipei cycle boundaries; SFTP batch is the mandatory close output path with HR API as adjunct; and same-cycle reruns are idempotent unless an authorized unlock with explicit reason occurs.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "The current implementation satisfies this feature’s active policy: monthly close is derived from fixed Asia/Taipei boundaries, settlement output is SFTP batch with reconciliation and required exception-class metadata, same-cycle reruns are idempotent while locked, and recomputation requires authorized unlock with explicit audit reason. No manual CSV close channel or fallback close path is present in the active contract/handlers for this feature.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Financial Close Integrity Gate",
+              "summary": "The current workspace satisfies the active settlement policy for this feature: monthly close uses Asia/Taipei cycle boundaries and defaults to previous month; settlement outputs are SFTP-batch based with cycle key plus snapshot checksum and reconciliation metadata; required exception classes are included (refund, deduction failure, terminated employee, plus disputed); same-cycle reruns are idempotent; and recomputation requires explicit committee-authorized unlock reason with audit-linked lock/unlock receipts.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Data Retention Enforcement",
+              "summary": "The current feature satisfies the active policy: monthly settlement closes on Taipei cycle boundaries with mandatory SFTP snapshot output, deterministic/idempotent cycle behavior with reasoned lock/unlock governance, and implemented payroll/order/audit retention purge workflows (including scheduled jobs and audit-query traceability). Sensitive payroll export and audit snapshot fields are encrypted, and role-based access control plus purge/encryption behavior are covered by tests.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-16T05:55:31.259Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-hr-payroll-interface",
+        "issue-timezone-and-business-calendar"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "order-state-inventory-engine",
+        "payroll-ledger-dispute-tracking",
+        "audit-trail-and-investigation-query"
+      ],
+      "excludedApproaches": [
+        "Using manual CSV ingestion as official close channel.",
+        "Using non-Taipei date boundaries for monthly cycle calculations.",
+        "Allowing unlocked recomputation without audit reason."
+      ],
+      "executionConstraints": [
+        "Run monthly settlement on fixed Asia/Taipei cycle boundaries.",
+        "Use SFTP batch export as mandatory settlement output path; API sync can complement.",
+        "Support lock/unlock with explicit reason and immutable close snapshots."
+      ],
+      "featureId": "monthly-settlement-and-hr-export",
+      "name": "Monthly Settlement and HR Export",
+      "order": 13,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Automated close and exception handling are first-phase governance requirements.",
+      "summary": "Automate monthly financial close, export, and exception processing.",
+      "completedAt": "2026-04-16T05:55:31.376Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Rules trigger alerts for expiry risk, on-time degradation, satisfaction drop, and complaint spikes.",
+        "Each alert has owner, status lifecycle, and closure note.",
+        "Escalation and SLA status are queryable and auditable."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f014-anomaly-alert-workflow-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-16T05:55:31.406Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Anomaly Alert Workflow in 0 attempts",
+          "lastCommit": {
+            "hash": "0f27ec61a8706332cdd04c2ad842bfe7d242bfce",
+            "message": "feat: implement Anomaly Alert Workflow (attempt 6)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The Anomaly Alert Workflow in this workspace satisfies the active policy: it delivers rule-based anomaly detection (expiry risk, on-time degradation, satisfaction drop, complaint spike), tracked owner/lifecycle/closure evidence, and queryable SLA/escalation with audit traceability; formal HTTP behavior is synchronized with OpenAPI and generated TypeScript client artifacts, with contract conformance checks (including route-to-spec parity and drift gating) present.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "High-Risk Write Audit Discipline",
+              "summary": "The anomaly alert workflow satisfies the active policy: rule-based alerts cover the four required anomaly signals, remediation lifecycle enforces owner/status/closure evidence, escalation and SLA are queryable, and associated high-risk writes emit immutable audit evidence with actor identity, role, entity, reason, timestamp, and correlationId for investigation chaining.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "The current anomaly alert implementation satisfies the active policy for this feature: it provides rule-based detection for expiry risk, on-time degradation, satisfaction drop, and complaint spikes; enforces owner assignment and lifecycle transitions with mandatory closure note/evidence for close; exposes escalation and SLA state as query filters/fields; and records anomaly lifecycle actions in auditable trail entities/actions without retaining anomaly-specific legacy/fallback routes or DTO branches.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Data Retention Enforcement",
+              "summary": "The workspace satisfies this feature review: anomaly rules cover expiry risk/on-time degradation/satisfaction drop/complaint spike, alerts enforce owner/lifecycle/closure evidence, escalation and SLA state are queryable and backed by immutable audit events, and the active payroll/order/audit retention policy is technically enforced via purge workflows (including scheduled runtime jobs), encryption and role-access test coverage, and audit-investigation traceability for purge outcomes.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-16T07:38:52.920Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-anomaly-governance-playbook"
+      ],
+      "dependsOn": [
+        "vendor-compliance-lifecycle",
+        "vendor-fulfillment-board-exports",
+        "monthly-settlement-and-hr-export",
+        "audit-trail-and-investigation-query"
+      ],
+      "excludedApproaches": [
+        "Alert-only notifications with no owner/workflow tracking.",
+        "Closing alerts without accountable disposition records.",
+        "Hardcoding non-configurable thresholds with no governance metadata."
+      ],
+      "executionConstraints": [
+        "Provide rule-based anomaly detection and tracked remediation workflow.",
+        "Support owner assignment, SLA timing, and closure evidence in alert lifecycle.",
+        "Finalize ticket-integration depth per remaining clarification without blocking baseline workflow."
+      ],
+      "featureId": "anomaly-alert-workflow",
+      "name": "Anomaly Alert Workflow",
+      "order": 14,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Committee governance requires actionable anomaly handling, not passive reporting.",
+      "summary": "Deliver anomaly detection with ownership and remediation tracking.",
+      "completedAt": "2026-04-16T07:38:53.043Z"
+    },
+    {
+      "acceptanceSignals": [
+        "MCP tools/resources cover ordering, verification, compliance review, settlement query/export, and anomaly operations.",
+        "Parity tests confirm MCP and HTTP share validation, authz, and error behavior.",
+        "High-risk MCP writes are authorization-checked and fully audited."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f015-mcp-server-domain-parity-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-16T07:38:53.087Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: MCP Server Domain Parity in 0 attempts",
+          "lastCommit": {
+            "hash": "1a5738f429067d126d633169a55333628c34036f",
+            "message": "feat: implement MCP Server Domain Parity (attempt 4)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The MCP Server Domain Parity feature satisfies the active policy in this workspace: MCP tools/resources cover the required domains, OAuth service-account plus tool-level RBAC is enforced with strict optional bridge-key controls and auditable write authorization, MCP invocation reuses shared HTTP/domain handlers, and OpenAPI plus generated TypeScript artifacts are synchronized with route/spec and error-schema conformance checks wired in CI.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "MCP Domain Parity Gate",
+              "summary": "Pass based on static workspace review: MCP endpoints enforce OAuth service-account authentication with tool-level RBAC, optional bridge keys are guarded by TTL/rotation/registry checks and audit metadata, MCP write invocations are authorization-checked and audited, MCP tools/resources cover ordering/verification/compliance/settlement/anomaly domains, and MCP invocation paths reuse the same handler/domain execution used by HTTP with paired MCP/HTTP parity tests present for validation/error/authz behavior.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "High-Risk Write Audit Discipline",
+              "summary": "The current MCP Server Domain Parity workspace satisfies the active policy: MCP uses OAuth service-account auth with tool-level RBAC, optional bridge keys are constrained by TTL/rotation/registry checks and audited, MCP invokes shared HTTP/domain execution paths (not MCP-only logic), and high-risk MCP writes are authorization-gated and recorded through the unified immutable audit trail with attributable fields (actorId, role, entityId, reason, timestamp) plus correlationId.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "The current workspace satisfies the MCP Server Domain Parity policy: MCP tools/resources cover ordering, verification, compliance review, settlement query/export, and anomaly operations; MCP auth uses OAuth service-account grants with tool-level RBAC plus strict short-lived bridge-key rotation/registry/audit controls; MCP write paths are authorization-gated and emit audit evidence; and MCP execution routes through the same domain handlers/services used by HTTP paths with parity-focused tests present for validation/authz/error behavior. (Targeted test execution could not be re-run in this read-only sandbox, but the committed implementation and test coverage evidence align with the active policy.)",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Data Retention Enforcement",
+              "summary": "Based on the current workspace code and test artifacts, this feature satisfies the active policy: MCP uses OAuth service-account authentication with tool-level RBAC (plus strictly validated short-lived bridge keys), MCP write authorization is audited, MCP execution reuses shared HTTP/domain handlers, and payroll/order/audit retention-deletion workflows are implemented with schedulable jobs, encryption and access-control test coverage, and audit-query traceability of purge outcomes.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-16T09:58:19.766Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [
+        "issue-mcp-authz-model",
+        "issue-auth-source-of-truth"
+      ],
+      "dependsOn": [
+        "identity-access-governance",
+        "openapi-contract-platform",
+        "contract-conformance-ci",
+        "vendor-compliance-lifecycle",
+        "order-state-inventory-engine",
+        "pickup-totp-checkin",
+        "monthly-settlement-and-hr-export",
+        "audit-trail-and-investigation-query",
+        "anomaly-alert-workflow"
+      ],
+      "excludedApproaches": [
+        "Network-trust-only authentication for MCP access.",
+        "A separate MCP-only domain logic implementation.",
+        "Unscoped broad MCP credentials without tool-level RBAC."
+      ],
+      "executionConstraints": [
+        "Use OAuth service-account + tool-level RBAC as the core MCP authz model.",
+        "Support optional short-lived key bridging only under strict rotation and audit controls.",
+        "MCP must call the same domain services used by HTTP APIs."
+      ],
+      "featureId": "mcp-server-domain-parity",
+      "name": "MCP Server Domain Parity",
+      "order": 15,
+      "phase": "completed",
+      "priority": "core",
+      "rationale": "Agent integration is a required first-class surface with strict security parity needs.",
+      "summary": "Implement secure MCP access over shared domain logic and permission controls.",
+      "completedAt": "2026-04-16T09:58:19.886Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Feature is disabled by default in MVP environments.",
+        "Enabling recommendations does not remove deterministic search/filter behavior.",
+        "Recommendation failures do not block ordering flows."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f016-recommendation-engine-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-16T09:58:19.921Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Recommendation Engine in 0 attempts",
+          "lastCommit": {
+            "hash": "fa04f9fff50cbde90b9923aa9b070225659a6f68",
+            "message": "feat: implement Recommendation Engine (attempt 2)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The recommendation feature is correctly behind a runtime flag (`PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED`) that defaults to OFF, is implemented as an additive ranking layer on top of existing deterministic filtering/sorting, and degrades gracefully when ranking fails without blocking ordering. The externally visible API changes are synchronized across canonical contract (`src/contract.rs`), published OpenAPI artifacts, generated TypeScript client models, and contract-conformance CI checks (including route-to-spec coverage and contract verification).",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "High-Risk Write Audit Discipline",
+              "summary": "Recommendation capability is implemented behind a runtime feature flag that defaults OFF (`PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED` parses to `false` when unset), applied only as an additive ranking layer after deterministic filtering/sorting, and guarded so recommendation errors degrade gracefully without blocking ordering. This feature adds no new high-risk write path, while the existing immutable audit model in the workspace already enforces actorId/role/entityId/reason/timestamp/correlationId capture with append-only evidence sequencing.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "The recommendation engine feature satisfies the active policy: it is gated by a runtime flag defaulting to OFF, recommendation is applied as an additive ranking step after deterministic filtering/sorting, recommendation failures degrade to deterministic ordering without blocking order creation, and superseded compatibility paths (recommendation query DTO/parameter) were removed in the same feature batch.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Optional Feature Flag Discipline",
+              "summary": "The current recommendation feature satisfies the active policy: it is gated by a runtime flag (`PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED`) parsed with default `false`, recommendation is applied only as an additive ranking step after deterministic filtering/sorting, and recommendation failures explicitly degrade to deterministic ordering without blocking ordering flows (covered by dedicated tests for flag-off behavior, deterministic ranking, and failure isolation).",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Data Retention Enforcement",
+              "summary": "The workspace satisfies the Recommendation Engine feature requirements and the active retention/deletion policy: recommendation is runtime-gated default OFF, applied only as additive ranking with deterministic fallback, failures do not block ordering, and payroll/order/audit retention workflows (scheduled purge paths, encryption/access-control coverage, and audit-query traceability of purge outcomes) are implemented with test evidence.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-16T10:22:21.250Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [],
+      "dependsOn": [
+        "employee-discovery-preorder",
+        "contract-conformance-ci"
+      ],
+      "excludedApproaches": [
+        "Always-on recommendation in MVP rollout.",
+        "Replacing core filtering with recommendation-only ranking.",
+        "Introducing separate source-of-truth state for recommendation outputs."
+      ],
+      "executionConstraints": [
+        "Ship behind runtime feature flag default OFF.",
+        "Treat recommendation as additive ranking layer only.",
+        "Preserve deterministic discovery behavior when flag is OFF."
+      ],
+      "featureId": "recommendation-engine",
+      "name": "Recommendation Engine",
+      "order": 16,
+      "phase": "completed",
+      "priority": "optional",
+      "rationale": "Recommendations are phase-2 value add and must not destabilize MVP.",
+      "summary": "Provide optional recommendation capability behind controlled rollout.",
+      "completedAt": "2026-04-16T10:22:21.355Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Reminder scheduling supports preorder-open and demand-spike scenarios.",
+        "Users can opt out and preferences are enforced.",
+        "Reminder delivery failures do not impact ordering correctness."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f017-rush-reminder-notifications-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-16T10:22:21.385Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Rush Reminder Notifications in 0 attempts",
+          "lastCommit": {
+            "hash": "3b199ed51ce8059d069abfbe84ce089c4499fcc9",
+            "message": "feat: implement Rush Reminder Notifications (attempt 3)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The new HTTP behavior (`PUT /api/v1/employee/rush-reminder-preferences`) is synchronized with OpenAPI (`contract/openapi/openapi.yaml` and `openapi.json`) and generated client artifacts (`contract/generated/ts-client/*`) in the same change set, and contract tests include route-to-spec coverage plus explicit error-response schema assertions for the new operation.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "High-Risk Write Audit Discipline",
+              "summary": "Rush Reminder Notifications are correctly gated behind a runtime feature flag defaulting to OFF, scheduling is policy-driven (preorder-open and demand-spike) with throttling and preference opt-out enforcement, and reminder delivery failures are handled best-effort without impacting ordering correctness. The feature does not introduce a new high-risk write path that bypasses the existing immutable audit-trail model.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "Pass. The workspace implements Rush Reminder Notifications behind `PRELAUNCH_RUSH_REMINDER_ENABLED` (default OFF), adds policy-driven scheduling for preorder-open and demand-spike scenarios with throttling and opt-out preference enforcement, and isolates reminder scheduling/delivery as best-effort so delivery failures do not affect ordering correctness. The feature diff shows new contracts/routes/models without retaining superseded legacy/fallback reminder paths.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Optional Feature Flag Discipline",
+              "summary": "The current feature satisfies the active policy: rush reminders are controlled by a runtime flag (`PRELAUNCH_RUSH_REMINDER_ENABLED`) that defaults to OFF, reminder API exposure is disabled when the flag is OFF (route not mounted and handler returns 404), scheduling is policy-driven with preorder-open and demand-spike scenarios plus throttling and preference opt-out enforcement, and delivery is best-effort/isolated so failures do not affect ordering correctness.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Data Retention Enforcement",
+              "summary": "Rush Reminder Notifications in this workspace is feature-flagged at runtime with default OFF, supports preorder-open and demand-spike scheduling with policy throttling and opt-out preference enforcement, and keeps reminder delivery best-effort/isolated from ordering paths. The active payroll/order/audit data policy is also technically enforced via retention+purge workflows (including scheduled purge jobs), sensitive payroll field encryption with access-control coverage, and audit-query traceability for purge outcomes.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-16T11:17:52.911Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [],
+      "dependsOn": [
+        "menu-supply-window-management",
+        "employee-discovery-preorder",
+        "contract-conformance-ci"
+      ],
+      "excludedApproaches": [
+        "Making reminder delivery a prerequisite for successful ordering.",
+        "Sending unthrottled notifications without preference controls.",
+        "Hardcoding one static reminder strategy for all contexts."
+      ],
+      "executionConstraints": [
+        "Ship behind runtime feature flag default OFF.",
+        "Use policy-driven scheduling with throttling and preference checks.",
+        "Keep reminder workflows operationally isolated from transaction paths."
+      ],
+      "featureId": "rush-reminder-notifications",
+      "name": "Rush Reminder Notifications",
+      "order": 17,
+      "phase": "completed",
+      "priority": "optional",
+      "rationale": "Reminder capability is phase-2 and should remain non-critical to MVP flow.",
+      "summary": "Add optional notification support for open-window and rush cases.",
+      "completedAt": "2026-04-16T11:17:53.028Z"
+    },
+    {
+      "acceptanceSignals": [
+        "Dashboards provide vendor/plant/time breakdown with metric definitions.",
+        "Feature-off state removes dashboard UI/API exposure.",
+        "Analytics queries run on governed aggregates without harming transactional workloads."
+      ],
+      "attemptCount": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "branch": "a-build-20260415-153033-corporate-catering-system-f018-advanced-analytics-dashboard-a1",
+          "outcome": "completed",
+          "startedAt": "2026-04-16T11:17:53.059Z",
+          "lastStage": "completed",
+          "latestEventSummary": "feature completed: Advanced Analytics Dashboard in 0 attempts",
+          "lastCommit": {
+            "hash": "0f89042f999fc7853f1f8e4d3f52f02eaaa7ed5b",
+            "message": "feat: implement Advanced Analytics Dashboard (attempt 3)"
+          },
+          "reinforcementResults": [
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "HTTP Contract Sync Gate",
+              "summary": "The active policy is satisfied for this feature: the new analytics HTTP endpoints are synchronized across runtime route contracts and OpenAPI (`openapi.yaml`/`openapi.json`), generated TypeScript client artifacts are updated in the same change set, and contract tests validate route-to-spec coverage plus error response schema mappings for the new endpoints. The feature is runtime-flagged default OFF and implemented on pre-aggregated, versioned analytics models.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "High-Risk Write Audit Discipline",
+              "summary": "The Advanced Analytics Dashboard implementation satisfies the active policy for this feature: it is runtime-flagged default OFF, dashboard endpoints are unavailable when disabled, analytics reads use a pre-aggregated warehouse with versioned metric definitions, and high-risk operational writes remain covered by immutable audit evidence containing actorId/role/entityId/reason/timestamp with correlationId linkage.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "No Legacy Path Rule",
+              "summary": "The Advanced Analytics Dashboard implementation satisfies the active policy for this feature: it is runtime-gated by `PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED` with default OFF, dashboard routes are not mounted when disabled (and handler-level access returns 404), responses include vendor/plant/time breakdowns plus versioned metric definitions (`key/displayName/unit/formula/source/version`), and query execution reads pre-aggregated warehouse state rather than transactional tables while governance workflows remain the authoritative action path.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Optional Feature Flag Discipline",
+              "summary": "The current Advanced Analytics Dashboard implementation satisfies the active optional-phase policy: it is gated by runtime flag `PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED` with default OFF, dashboard routes are not registered when disabled (and handler-level access also returns `404`), metric outputs are versioned and include formula/source definitions, and query reads come from a pre-aggregated `OperationsAnalyticsWarehouse` model rather than direct transactional-table analytics paths.",
+              "verdict": "pass"
+            },
+            {
+              "blocking": true,
+              "blockingIssueCount": 0,
+              "blockingIssueTitles": [],
+              "name": "Data Retention Enforcement",
+              "summary": "The current feature satisfies the active policy: advanced analytics is behind a runtime flag default OFF with endpoint gating, uses versioned metric definitions over pre-aggregated analytical state, and does not bypass existing enforced payroll/order/audit retention-purge workflows, encryption/access-control coverage, or audit-query traceability for deletion outcomes.",
+              "verdict": "pass"
+            }
+          ],
+          "finishedAt": "2026-04-16T12:08:25.411Z",
+          "resultStatus": "passed"
+        }
+      ],
+      "decisionIssueIds": [],
+      "dependsOn": [
+        "vendor-fulfillment-board-exports",
+        "monthly-settlement-and-hr-export",
+        "anomaly-alert-workflow",
+        "contract-conformance-ci",
+        "observability-k8s-slo"
+      ],
+      "excludedApproaches": [
+        "Replacing governance workflow actions with dashboard-only monitoring.",
+        "Querying hot transactional tables directly for interactive analytics.",
+        "Publishing KPI views without formula/source documentation."
+      ],
+      "executionConstraints": [
+        "Ship behind runtime feature flag default OFF.",
+        "Use versioned metric definitions and pre-aggregated analytical models.",
+        "Keep operational governance workflow as primary action path."
+      ],
+      "featureId": "advanced-analytics-dashboard",
+      "name": "Advanced Analytics Dashboard",
+      "order": 18,
+      "phase": "completed",
+      "priority": "optional",
+      "rationale": "Deep analytics is phase-2 and should build on stable MVP data contracts.",
+      "summary": "Provide optional advanced operations analytics for admin and vendor views.",
+      "completedAt": "2026-04-16T12:08:25.514Z"
+    }
+  ],
+  "generatedAt": "2026-04-15T16:45:45.220Z",
+  "reinforcements": [
+    {
+      "activation": {
+        "featureIds": [],
+        "mode": "always",
+        "rationale": "正式 HTTP 契約與契約測試基礎完成後，所有後續 API 變更都必須受同一門檻約束。",
+        "requiresFeatureIds": [
+          "openapi-contract-platform",
+          "contract-conformance-ci"
+        ]
+      },
+      "blocking": true,
+      "evidence": {
+        "checks": [
+          "CI route-to-spec diff 無未登錄正式 endpoint。",
+          "OpenAPI 變更與生成型別/SDK 同 PR 提交。",
+          "錯誤碼與錯誤 schema 對應可被測試驗證。"
+        ]
+      },
+      "influencedBy": [
+        "issue-auth-source-of-truth"
+      ],
+      "instructions": "新增或修改正式 HTTP 行為時，必須同步更新契約與生成產物，否則拒絕合併。",
+      "name": "HTTP Contract Sync Gate",
+      "policy": "No externally used HTTP behavior may ship unless OpenAPI and generated artifacts are synchronized in the same change set.",
+      "scope": "engineering"
+    },
+    {
+      "activation": {
+        "featureIds": [
+          "mcp-server-domain-parity"
+        ],
+        "mode": "feature",
+        "rationale": "MCP 功能啟用時最容易發生規則分叉，需立即強制同源邏輯檢查。",
+        "requiresFeatureIds": [
+          "identity-access-governance",
+          "openapi-contract-platform",
+          "contract-conformance-ci"
+        ]
+      },
+      "blocking": true,
+      "evidence": {
+        "checks": [
+          "每個 MCP write tool 可映射到共享 domain service。",
+          "MCP/HTTP 配對測試顯示驗證與錯誤行為一致。",
+          "不存在 MCP 專屬權限繞過路徑。"
+        ]
+      },
+      "influencedBy": [
+        "issue-mcp-authz-model"
+      ],
+      "instructions": "PR review 必須附 MCP tool-to-service 對照與權限驗證證據。",
+      "name": "MCP Domain Parity Gate",
+      "policy": "MCP tools/resources must reuse HTTP domain services and the same authorization/validation rules.",
+      "scope": "security"
+    },
+    {
+      "activation": {
+        "featureIds": [],
+        "mode": "always",
+        "rationale": "審計查詢能力完成後，所有高風險寫入都應進入統一不可竄改留痕。",
+        "requiresFeatureIds": [
+          "identity-access-governance",
+          "audit-trail-and-investigation-query"
+        ]
+      },
+      "blocking": true,
+      "evidence": {
+        "checks": [
+          "高風險寫入事件包含 actorId、role、entityId、reason、timestamp。",
+          "審計紀錄採 append-only 或等效不可竄改模式。",
+          "可用 correlationId 串連跨流程操作鏈。"
+        ]
+      },
+      "influencedBy": [
+        "issue-auth-source-of-truth",
+        "issue-data-retention-compliance"
+      ],
+      "instructions": "下單、核銷、審核、退款、鎖帳等動作若缺少必要審計欄位不得上線。",
+      "name": "High-Risk Write Audit Discipline",
+      "policy": "All high-risk write operations must emit immutable, attributable audit events.",
+      "scope": "compliance"
+    },
+    {
+      "activation": {
+        "featureIds": [],
+        "mode": "always",
+        "rationale": "專案明確不追求向後相容，任何替代路徑都會增加維運風險。",
+        "requiresFeatureIds": [
+          "identity-access-governance"
+        ]
+      },
+      "blocking": true,
+      "evidence": {
+        "checks": [
+          "變更後不存在 legacy/fallback 分支維持舊正式行為。",
+          "被取代的 handler/DTO/route 在同批次移除。",
+          "測試僅覆蓋現行正式流程。"
+        ]
+      },
+      "influencedBy": [],
+      "instructions": "每次破壞式調整必須同步刪除舊路徑與舊測試。",
+      "name": "No Legacy Path Rule",
+      "policy": "Superseded compatibility and fallback paths must be removed immediately when new contracts ship.",
+      "scope": "engineering"
+    },
+    {
+      "activation": {
+        "featureIds": [
+          "recommendation-engine",
+          "rush-reminder-notifications",
+          "advanced-analytics-dashboard"
+        ],
+        "mode": "feature",
+        "rationale": "第二階段能力必須與 MVP 核心路徑隔離，避免影響首階段驗收。",
+        "requiresFeatureIds": [
+          "identity-access-governance"
+        ]
+      },
+      "blocking": true,
+      "evidence": {
+        "checks": [
+          "Optional 功能在 MVP 環境預設 flag=false。",
+          "Flag 關閉時無對外入口與副作用 API。",
+          "具備可驗證的一鍵停用路徑。"
+        ]
+      },
+      "influencedBy": [],
+      "instructions": "Optional 功能 PR 需附 flag 設定與關閉驗證結果。",
+      "name": "Optional Feature Flag Discipline",
+      "policy": "All optional phase-2 capabilities must ship behind runtime feature flags defaulted OFF for MVP.",
+      "scope": "product"
+    },
+    {
+      "activation": {
+        "featureIds": [
+          "order-state-inventory-engine",
+          "pickup-totp-checkin"
+        ],
+        "mode": "feature",
+        "rationale": "交易與核銷是尖峰風險核心，該能力屬於訂單與核銷功能本體。",
+        "requiresFeatureIds": [
+          "observability-k8s-slo"
+        ]
+      },
+      "blocking": true,
+      "evidence": {
+        "checks": [
+          "壓測報告覆蓋尖峰場景且達成既定 p95/p99 與錯誤率門檻。",
+          "尖峰測試含下單與核銷並發場景。",
+          "Grafana 面板可即時觀測 SLO 指標。"
+        ]
+      },
+      "influencedBy": [
+        "issue-pickup-throughput-slo"
+      ],
+      "instructions": "未通過硬性 SLO gate 不得進入 production。",
+      "name": "Peak Load SLO Gate",
+      "policy": "Order and pickup capabilities must pass hard pre-launch peak-load SLO validation.",
+      "scope": "operations"
+    },
+    {
+      "activation": {
+        "featureIds": [
+          "monthly-settlement-and-hr-export",
+          "payroll-ledger-dispute-tracking"
+        ],
+        "mode": "feature",
+        "rationale": "財務能力啟用時需立即防止錯帳與不可追溯調整。",
+        "requiresFeatureIds": [
+          "audit-trail-and-investigation-query"
+        ]
+      },
+      "blocking": true,
+      "evidence": {
+        "checks": [
+          "每期結算快照有唯一 cycle key 與摘要校驗。",
+          "同 cycle 重送具可驗證 idempotency。",
+          "例外清單完整覆蓋退款、扣款失敗、離職員工。"
+        ]
+      },
+      "influencedBy": [
+        "issue-hr-payroll-interface",
+        "issue-timezone-and-business-calendar"
+      ],
+      "instructions": "結算上線前完成鎖帳、重跑、例外演練並保留證據。",
+      "name": "Financial Close Integrity Gate",
+      "policy": "Settlement and payroll outputs must be deterministic, idempotent, and fully auditable.",
+      "scope": "compliance"
+    },
+    {
+      "activation": {
+        "featureIds": [],
+        "mode": "always",
+        "rationale": "資料政策已決議，完成審計與薪資資料落地後應全面啟用。",
+        "requiresFeatureIds": [
+          "audit-trail-and-investigation-query",
+          "payroll-ledger-dispute-tracking"
+        ]
+      },
+      "blocking": true,
+      "evidence": {
+        "checks": [
+          "保留年限、刪除/匿名化工作排程可被驗證。",
+          "高敏欄位加密與存取控制有測試覆蓋。",
+          "刪除/匿名化結果可於稽核查詢中追蹤。"
+        ]
+      },
+      "influencedBy": [
+        "issue-data-retention-compliance"
+      ],
+      "instructions": "將資料保留與刪除政策落地為可執行工作流與測試，不接受文件化未落地。",
+      "name": "Data Retention Enforcement",
+      "policy": "Defined retention and deletion policy must be technically enforced for payroll, order, and audit data.",
+      "scope": "data"
+    }
+  ],
+  "techDebt": []
+}

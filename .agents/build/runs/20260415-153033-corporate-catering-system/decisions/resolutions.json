@@ -1,0 +1,205 @@
+[
+  {
+    "answers": [
+      {
+        "decisions": [
+          {
+            "optionId": "opt-auth-corp-sso-plus-vendor-mfa",
+            "optionLabel": "員工SSO+商家MFA",
+            "state": "core"
+          },
+          {
+            "optionId": "opt-auth-unified-idp-all",
+            "optionLabel": "全角色統一IdP",
+            "state": "excluded"
+          },
+          {
+            "optionId": "opt-auth-local-accounts-all",
+            "optionLabel": "全角色本地帳號",
+            "state": "excluded"
+          }
+        ],
+        "note": "",
+        "questionId": "cq-auth-source-model",
+        "response": "Core: 員工SSO+商家MFA | Excluded: 全角色統一IdP, 全角色本地帳號"
+      }
+    ],
+    "decidedBy": "cli-auto-recommendation",
+    "issueId": "issue-auth-source-of-truth",
+    "notes": []
+  },
+  {
+    "answers": [
+      {
+        "decisions": [
+          {
+            "optionId": "opt-hr-sftp-batch",
+            "optionLabel": "SFTP批次檔",
+            "state": "core"
+          },
+          {
+            "optionId": "opt-hr-api-sync",
+            "optionLabel": "HR API同步",
+            "state": "optional"
+          },
+          {
+            "optionId": "opt-hr-manual-csv",
+            "optionLabel": "人工CSV上傳",
+            "state": "excluded"
+          }
+        ],
+        "note": "",
+        "questionId": "cq-hr-integration-contract",
+        "response": "Core: SFTP批次檔 | Optional: HR API同步 | Excluded: 人工CSV上傳"
+      }
+    ],
+    "decidedBy": "cli-auto-recommendation",
+    "issueId": "issue-hr-payroll-interface",
+    "notes": []
+  },
+  {
+    "answers": [
+      {
+        "decisions": [
+          {
+            "optionId": "opt-mcp-oauth-rbac",
+            "optionLabel": "OAuth服務帳號+RBAC",
+            "state": "core"
+          },
+          {
+            "optionId": "opt-mcp-shortlived-keys",
+            "optionLabel": "短效金鑰橋接",
+            "state": "optional"
+          },
+          {
+            "optionId": "opt-mcp-network-trust-only",
+            "optionLabel": "僅內網信任",
+            "state": "excluded"
+          }
+        ],
+        "note": "",
+        "questionId": "cq-mcp-authz-model",
+        "response": "Core: OAuth服務帳號+RBAC | Optional: 短效金鑰橋接 | Excluded: 僅內網信任"
+      }
+    ],
+    "decidedBy": "cli-auto-recommendation",
+    "issueId": "issue-mcp-authz-model",
+    "notes": []
+  },
+  {
+    "answers": [
+      {
+        "decisions": [
+          {
+            "optionId": "opt-slo-hard-gate",
+            "optionLabel": "先定硬性SLO",
+            "state": "core"
+          },
+          {
+            "optionId": "opt-slo-soft-target",
+            "optionLabel": "先上線後優化",
+            "state": "excluded"
+          },
+          {
+            "optionId": "opt-slo-none",
+            "optionLabel": "不定SLO",
+            "state": "excluded"
+          }
+        ],
+        "note": "",
+        "questionId": "cq-pickup-throughput-slo",
+        "response": "Core: 先定硬性SLO | Excluded: 先上線後優化, 不定SLO"
+      }
+    ],
+    "decidedBy": "cli-auto-recommendation",
+    "issueId": "issue-pickup-throughput-slo",
+    "notes": []
+  },
+  {
+    "answers": [
+      {
+        "decisions": [
+          {
+            "optionId": "opt-timezone-fixed-tpe",
+            "optionLabel": "固定 Asia/Taipei",
+            "state": "core"
+          },
+          {
+            "optionId": "opt-timezone-per-plant",
+            "optionLabel": "各廠區獨立時區",
+            "state": "excluded"
+          },
+          {
+            "optionId": "opt-timezone-utc-internal",
+            "optionLabel": "內部UTC換算",
+            "state": "excluded"
+          }
+        ],
+        "note": "",
+        "questionId": "cq-timezone-calendar-policy",
+        "response": "Core: 固定 Asia/Taipei | Excluded: 各廠區獨立時區, 內部UTC換算"
+      }
+    ],
+    "decidedBy": "cli-auto-recommendation",
+    "issueId": "issue-timezone-and-business-calendar",
+    "notes": []
+  },
+  {
+    "answers": [
+      {
+        "decisions": [
+          {
+            "optionId": "opt-doc-configurable-template",
+            "optionLabel": "可配置文件模板",
+            "state": "core"
+          },
+          {
+            "optionId": "opt-doc-minimal-single",
+            "optionLabel": "單一必備文件",
+            "state": "excluded"
+          },
+          {
+            "optionId": "opt-doc-manual-expiry",
+            "optionLabel": "人工追蹤到期",
+            "state": "excluded"
+          }
+        ],
+        "note": "",
+        "questionId": "cq-vendor-document-policy",
+        "response": "Core: 可配置文件模板 | Excluded: 單一必備文件, 人工追蹤到期"
+      }
+    ],
+    "decidedBy": "cli-auto-recommendation",
+    "issueId": "issue-vendor-document-policy",
+    "notes": []
+  },
+  {
+    "answers": [
+      {
+        "decisions": [
+          {
+            "optionId": "opt-retention-defined-policy",
+            "optionLabel": "明確保留與刪除政策",
+            "state": "core"
+          },
+          {
+            "optionId": "opt-retention-indefinite",
+            "optionLabel": "資料永久保留",
+            "state": "excluded"
+          },
+          {
+            "optionId": "opt-retention-defer",
+            "optionLabel": "上線後再定",
+            "state": "excluded"
+          }
+        ],
+        "note": "",
+        "questionId": "cq-data-retention-compliance",
+        "response": "Core: 明確保留與刪除政策 | Excluded: 資料永久保留, 上線後再定"
+      }
+    ],
+    "decidedBy": "cli-auto-recommendation",
+    "issueId": "issue-data-retention-compliance",
+    "notes": []
+  }
+]

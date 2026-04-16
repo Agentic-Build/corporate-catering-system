@@ -1,0 +1,2001 @@
+{
+  "attempt": 1,
+  "blockingIssues": [
+    {
+      "blocking": true,
+      "clarifications": [
+        {
+          "allowCustomNote": true,
+          "id": "cq-auth-source-model",
+          "maxActiveOptions": 1,
+          "minActiveOptions": 1,
+          "options": [
+            {
+              "conflictOptionIds": [
+                "opt-auth-unified-idp-all",
+                "opt-auth-local-accounts-all"
+              ],
+              "id": "opt-auth-corp-sso-plus-vendor-mfa",
+              "label": "員工SSO+商家MFA",
+              "rationale": "員工與福委會走企業 IdP，商家走獨立帳號與 MFA，平衡治理與外部協作。",
+              "recommendedState": "core"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-auth-corp-sso-plus-vendor-mfa",
+                "opt-auth-local-accounts-all"
+              ],
+              "id": "opt-auth-unified-idp-all",
+              "label": "全角色統一IdP",
+              "rationale": "全部角色都由企業 IdP 管理，治理集中但對外商家導入成本高。",
+              "recommendedState": "excluded"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-auth-corp-sso-plus-vendor-mfa",
+                "opt-auth-unified-idp-all"
+              ],
+              "id": "opt-auth-local-accounts-all",
+              "label": "全角色本地帳號",
+              "rationale": "全部使用系統自管帳號，實作快但治理與風險較高。",
+              "recommendedState": "excluded"
+            }
+          ],
+          "prompt": "身份來源與登入模型要採哪一種主路徑？",
+          "rationale": "RBAC、審計追蹤與 MCP 權限都依賴一致身份模型。",
+          "recommendationSummary": "建議採員工/福委會企業 SSO + 商家獨立帳號 MFA，先滿足治理與落地速度。"
+        }
+      ],
+      "details": "目前未鎖定員工、商家、福委會與薪資角色的身份來源與 MFA 邊界，會影響權限模型與審計可追溯性。",
+      "id": "issue-auth-source-of-truth",
+      "kind": "missing-detail",
+      "severity": "critical",
+      "status": "open",
+      "title": "身份來源與登入邊界未定"
+    },
+    {
+      "blocking": true,
+      "clarifications": [
+        {
+          "allowCustomNote": true,
+          "id": "cq-hr-integration-contract",
+          "maxActiveOptions": 2,
+          "minActiveOptions": 1,
+          "options": [
+            {
+              "conflictOptionIds": [
+                "opt-hr-manual-csv"
+              ],
+              "id": "opt-hr-sftp-batch",
+              "label": "SFTP批次檔",
+              "rationale": "符合月結批次節奏，易與鎖帳流程整合。",
+              "recommendedState": "core"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-hr-manual-csv"
+              ],
+              "id": "opt-hr-api-sync",
+              "label": "HR API同步",
+              "rationale": "可提升即時性與回寫能力，但整合複雜度較高。",
+              "recommendedState": "optional"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-hr-sftp-batch",
+                "opt-hr-api-sync"
+              ],
+              "id": "opt-hr-manual-csv",
+              "label": "人工CSV上傳",
+              "rationale": "可作短期應急，但可追溯性與穩定性不足。",
+              "recommendedState": "excluded"
+            }
+          ],
+          "prompt": "薪資扣款資料交換要採哪些正式通道？",
+          "rationale": "月結匯出、例外處理與鎖帳重跑都依賴可驗證的 HR 契約。",
+          "recommendationSummary": "建議以 SFTP 批次為核心，必要時補充 API 同步，不採人工流程當正式路徑。"
+        }
+      ],
+      "details": "尚未明確 HR 格式欄位、傳輸通道、回執機制與重送規則，財務流程無法安全上線。",
+      "id": "issue-hr-payroll-interface",
+      "kind": "missing-detail",
+      "severity": "critical",
+      "status": "open",
+      "title": "HR 薪資整合契約未定"
+    },
+    {
+      "blocking": true,
+      "clarifications": [
+        {
+          "allowCustomNote": true,
+          "id": "cq-mcp-authz-model",
+          "maxActiveOptions": 2,
+          "minActiveOptions": 1,
+          "options": [
+            {
+              "conflictOptionIds": [
+                "opt-mcp-network-trust-only"
+              ],
+              "id": "opt-mcp-oauth-rbac",
+              "label": "OAuth服務帳號+RBAC",
+              "rationale": "可與企業治理對齊，適合高風險 write tools。",
+              "recommendedState": "core"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-mcp-network-trust-only"
+              ],
+              "id": "opt-mcp-shortlived-keys",
+              "label": "短效金鑰橋接",
+              "rationale": "可支援部分自動化場景，但需嚴格輪替與稽核。",
+              "recommendedState": "optional"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-mcp-oauth-rbac",
+                "opt-mcp-shortlived-keys"
+              ],
+              "id": "opt-mcp-network-trust-only",
+              "label": "僅內網信任",
+              "rationale": "缺乏可驗證身份與最小權限控管。",
+              "recommendedState": "excluded"
+            }
+          ],
+          "prompt": "MCP server 的認證授權模式要採哪些正式機制？",
+          "rationale": "MCP 含高風險寫入能力，必須先鎖定可稽核的安全邊界。",
+          "recommendationSummary": "建議以 OAuth 服務帳號 + tool 級 RBAC 為主，可視需要補短效金鑰。"
+        }
+      ],
+      "details": "MCP 被要求支援高價值讀寫操作，但尚未定義 agent 身份模型、最小權限與破壞性操作保護。",
+      "id": "issue-mcp-authz-model",
+      "kind": "risk",
+      "severity": "critical",
+      "status": "open",
+      "title": "MCP 權限與安全模型未定"
+    },
+    {
+      "blocking": true,
+      "clarifications": [
+        {
+          "allowCustomNote": true,
+          "id": "cq-pickup-throughput-slo",
+          "maxActiveOptions": 1,
+          "minActiveOptions": 1,
+          "options": [
+            {
+              "conflictOptionIds": [
+                "opt-slo-soft-target",
+                "opt-slo-none"
+              ],
+              "id": "opt-slo-hard-gate",
+              "label": "先定硬性SLO",
+              "rationale": "可在上線前驗證尖峰吞吐，降低現場失控風險。",
+              "recommendedState": "core"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-slo-hard-gate",
+                "opt-slo-none"
+              ],
+              "id": "opt-slo-soft-target",
+              "label": "先上線後優化",
+              "rationale": "交付較快但現場失效風險高。",
+              "recommendedState": "excluded"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-slo-hard-gate",
+                "opt-slo-soft-target"
+              ],
+              "id": "opt-slo-none",
+              "label": "不定SLO",
+              "rationale": "無法客觀驗證是否可承受尖峰。",
+              "recommendedState": "excluded"
+            }
+          ],
+          "prompt": "尖峰領餐核銷與下單流程要以哪種效能門檻作為上線標準？",
+          "rationale": "TOTP 核銷是單一路徑，若無明確容量目標將無法保證現場可用性。",
+          "recommendationSummary": "建議在上線前鎖定可量測 SLO 並完成壓測驗證。"
+        }
+      ],
+      "details": "需求強調尖峰吞吐，但缺少具體吞吐量、延遲目標與可接受錯誤率。",
+      "id": "issue-pickup-throughput-slo",
+      "kind": "risk",
+      "severity": "high",
+      "status": "open",
+      "title": "尖峰吞吐與延遲 SLO 未定"
+    },
+    {
+      "blocking": true,
+      "clarifications": [
+        {
+          "allowCustomNote": true,
+          "id": "cq-timezone-calendar-policy",
+          "maxActiveOptions": 1,
+          "minActiveOptions": 1,
+          "options": [
+            {
+              "conflictOptionIds": [
+                "opt-timezone-per-plant",
+                "opt-timezone-utc-internal"
+              ],
+              "id": "opt-timezone-fixed-tpe",
+              "label": "固定 Asia/Taipei",
+              "rationale": "單一公司場景最簡潔，能降低截單與月結邊界錯誤。",
+              "recommendedState": "core"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-timezone-fixed-tpe",
+                "opt-timezone-utc-internal"
+              ],
+              "id": "opt-timezone-per-plant",
+              "label": "各廠區獨立時區",
+              "rationale": "適用跨時區擴張，但規則與測試成本顯著增加。",
+              "recommendedState": "excluded"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-timezone-fixed-tpe",
+                "opt-timezone-per-plant"
+              ],
+              "id": "opt-timezone-utc-internal",
+              "label": "內部UTC換算",
+              "rationale": "技術上可行，但業務邊界容易與人員認知不一致。",
+              "recommendedState": "excluded"
+            }
+          ],
+          "prompt": "截單、預購視窗與月結週期要用哪個時間/行事曆基準？",
+          "rationale": "沒有統一時間規則會造成訂單邊界與財務結算錯誤。",
+          "recommendationSummary": "建議先固定 Asia/Taipei 並明確公司行事曆規則。"
+        }
+      ],
+      "details": "預設前一天 17:00 截單與月結邊界已給方向，但時區與節假日規則尚未被正式鎖定。",
+      "id": "issue-timezone-and-business-calendar",
+      "kind": "ambiguity",
+      "severity": "high",
+      "status": "open",
+      "title": "時間與行事曆計算基準未定"
+    },
+    {
+      "blocking": true,
+      "clarifications": [
+        {
+          "allowCustomNote": true,
+          "id": "cq-vendor-document-policy",
+          "maxActiveOptions": 1,
+          "minActiveOptions": 1,
+          "options": [
+            {
+              "conflictOptionIds": [
+                "opt-doc-minimal-single",
+                "opt-doc-manual-expiry"
+              ],
+              "id": "opt-doc-configurable-template",
+              "label": "可配置文件模板",
+              "rationale": "可涵蓋不同商家類型並支援到期自動治理。",
+              "recommendedState": "core"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-doc-configurable-template",
+                "opt-doc-manual-expiry"
+              ],
+              "id": "opt-doc-minimal-single",
+              "label": "單一必備文件",
+              "rationale": "實作快但合規覆蓋不足。",
+              "recommendedState": "excluded"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-doc-configurable-template",
+                "opt-doc-minimal-single"
+              ],
+              "id": "opt-doc-manual-expiry",
+              "label": "人工追蹤到期",
+              "rationale": "缺乏自動治理，不符合需求核心。",
+              "recommendedState": "excluded"
+            }
+          ],
+          "prompt": "商家合規文件要採哪種治理模型？",
+          "rationale": "文件種類與到期治理會直接影響審核流程、停權規則與預警能力。",
+          "recommendationSummary": "建議採可配置模板 + 到期自動提醒/停權流程。"
+        }
+      ],
+      "details": "需求要求完整文件生命週期，但未定義必備文件集合、到期寬限與停權觸發條件。",
+      "id": "issue-vendor-document-policy",
+      "kind": "missing-detail",
+      "severity": "high",
+      "status": "open",
+      "title": "商家文件政策細節未定"
+    },
+    {
+      "blocking": true,
+      "clarifications": [
+        {
+          "allowCustomNote": true,
+          "id": "cq-data-retention-compliance",
+          "maxActiveOptions": 1,
+          "minActiveOptions": 1,
+          "options": [
+            {
+              "conflictOptionIds": [
+                "opt-retention-indefinite",
+                "opt-retention-defer"
+              ],
+              "id": "opt-retention-defined-policy",
+              "label": "明確保留與刪除政策",
+              "rationale": "可同時滿足稽核需求與個資風險控制。",
+              "recommendedState": "core"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-retention-defined-policy",
+                "opt-retention-defer"
+              ],
+              "id": "opt-retention-indefinite",
+              "label": "資料永久保留",
+              "rationale": "實作簡單但合規與風險暴露高。",
+              "recommendedState": "excluded"
+            },
+            {
+              "conflictOptionIds": [
+                "opt-retention-defined-policy",
+                "opt-retention-indefinite"
+              ],
+              "id": "opt-retention-defer",
+              "label": "上線後再定",
+              "rationale": "會造成後續補救成本與合規風險。",
+              "recommendedState": "excluded"
+            }
+          ],
+          "prompt": "訂單/薪資/審計資料的保留與刪除策略要採哪一種？",
+          "rationale": "涉及個資、薪資與稽核資料，沒有明確政策無法安全上線。",
+          "recommendationSummary": "建議在 MVP 前鎖定加密、保留年限、刪除/匿名化流程。"
+        }
+      ],
+      "details": "薪資與稽核資料屬高敏感資訊，尚未定義保留年限、刪除策略與加密基線。",
+      "id": "issue-data-retention-compliance",
+      "kind": "missing-detail",
+      "severity": "high",
+      "status": "open",
+      "title": "資料保留與合規策略未定"
+    }
+  ],
+  "createdAt": "2026-04-15T15:49:50.594Z",
+  "resolutions": [
+    {
+      "answers": [
+        {
+          "decisions": [
+            {
+              "optionId": "opt-auth-corp-sso-plus-vendor-mfa",
+              "optionLabel": "員工SSO+商家MFA",
+              "state": "core"
+            },
+            {
+              "optionId": "opt-auth-unified-idp-all",
+              "optionLabel": "全角色統一IdP",
+              "state": "excluded"
+            },
+            {
+              "optionId": "opt-auth-local-accounts-all",
+              "optionLabel": "全角色本地帳號",
+              "state": "excluded"
+            }
+          ],
+          "note": "",
+          "questionId": "cq-auth-source-model",
+          "response": "Core: 員工SSO+商家MFA | Excluded: 全角色統一IdP, 全角色本地帳號"
+        }
+      ],
+      "decidedBy": "cli-auto-recommendation",
+      "issueId": "issue-auth-source-of-truth",
+      "notes": []
+    },
+    {
+      "answers": [
+        {
+          "decisions": [
+            {
+              "optionId": "opt-hr-sftp-batch",
+              "optionLabel": "SFTP批次檔",
+              "state": "core"
+            },
+            {
+              "optionId": "opt-hr-api-sync",
+              "optionLabel": "HR API同步",
+              "state": "optional"
+            },
+            {
+              "optionId": "opt-hr-manual-csv",
+              "optionLabel": "人工CSV上傳",
+              "state": "excluded"
+            }
+          ],
+          "note": "",
+          "questionId": "cq-hr-integration-contract",
+          "response": "Core: SFTP批次檔 | Optional: HR API同步 | Excluded: 人工CSV上傳"
+        }
+      ],
+      "decidedBy": "cli-auto-recommendation",
+      "issueId": "issue-hr-payroll-interface",
+      "notes": []
+    },
+    {
+      "answers": [
+        {
+          "decisions": [
+            {
+              "optionId": "opt-mcp-oauth-rbac",
+              "optionLabel": "OAuth服務帳號+RBAC",
+              "state": "core"
+            },
+            {
+              "optionId": "opt-mcp-shortlived-keys",
+              "optionLabel": "短效金鑰橋接",
+              "state": "optional"
+            },
+            {
+              "optionId": "opt-mcp-network-trust-only",
+              "optionLabel": "僅內網信任",
+              "state": "excluded"
+            }
+          ],
+          "note": "",
+          "questionId": "cq-mcp-authz-model",
+          "response": "Core: OAuth服務帳號+RBAC | Optional: 短效金鑰橋接 | Excluded: 僅內網信任"
+        }
+      ],
+      "decidedBy": "cli-auto-recommendation",
+      "issueId": "issue-mcp-authz-model",
+      "notes": []
+    },
+    {
+      "answers": [
+        {
+          "decisions": [
+            {
+              "optionId": "opt-slo-hard-gate",
+              "optionLabel": "先定硬性SLO",
+              "state": "core"
+            },
+            {
+              "optionId": "opt-slo-soft-target",
+              "optionLabel": "先上線後優化",
+              "state": "excluded"
+            },
+            {
+              "optionId": "opt-slo-none",
+              "optionLabel": "不定SLO",
+              "state": "excluded"
+            }
+          ],
+          "note": "",
+          "questionId": "cq-pickup-throughput-slo",
+          "response": "Core: 先定硬性SLO | Excluded: 先上線後優化, 不定SLO"
+        }
+      ],
+      "decidedBy": "cli-auto-recommendation",
+      "issueId": "issue-pickup-throughput-slo",
+      "notes": []
+    },
+    {
+      "answers": [
+        {
+          "decisions": [
+            {
+              "optionId": "opt-timezone-fixed-tpe",
+              "optionLabel": "固定 Asia/Taipei",
+              "state": "core"
+            },
+            {
+              "optionId": "opt-timezone-per-plant",
+              "optionLabel": "各廠區獨立時區",
+              "state": "excluded"
+            },
+            {
+              "optionId": "opt-timezone-utc-internal",
+              "optionLabel": "內部UTC換算",
+              "state": "excluded"
+            }
+          ],
+          "note": "",
+          "questionId": "cq-timezone-calendar-policy",
+          "response": "Core: 固定 Asia/Taipei | Excluded: 各廠區獨立時區, 內部UTC換算"
+        }
+      ],
+      "decidedBy": "cli-auto-recommendation",
+      "issueId": "issue-timezone-and-business-calendar",
+      "notes": []
+    },
+    {
+      "answers": [
+        {
+          "decisions": [
+            {
+              "optionId": "opt-doc-configurable-template",
+              "optionLabel": "可配置文件模板",
+              "state": "core"
+            },
+            {
+              "optionId": "opt-doc-minimal-single",
+              "optionLabel": "單一必備文件",
+              "state": "excluded"
+            },
+            {
+              "optionId": "opt-doc-manual-expiry",
+              "optionLabel": "人工追蹤到期",
+              "state": "excluded"
+            }
+          ],
+          "note": "",
+          "questionId": "cq-vendor-document-policy",
+          "response": "Core: 可配置文件模板 | Excluded: 單一必備文件, 人工追蹤到期"
+        }
+      ],
+      "decidedBy": "cli-auto-recommendation",
+      "issueId": "issue-vendor-document-policy",
+      "notes": []
+    },
+    {
+      "answers": [
+        {
+          "decisions": [
+            {
+              "optionId": "opt-retention-defined-policy",
+              "optionLabel": "明確保留與刪除政策",
+              "state": "core"
+            },
+            {
+              "optionId": "opt-retention-indefinite",
+              "optionLabel": "資料永久保留",
+              "state": "excluded"
+            },
+            {
+              "optionId": "opt-retention-defer",
+              "optionLabel": "上線後再定",
+              "state": "excluded"
+            }
+          ],
+          "note": "",
+          "questionId": "cq-data-retention-compliance",
+          "response": "Core: 明確保留與刪除政策 | Excluded: 資料永久保留, 上線後再定"
+        }
+      ],
+      "decidedBy": "cli-auto-recommendation",
+      "issueId": "issue-data-retention-compliance",
+      "notes": []
+    }
+  ],
+  "snapshot": {
+    "assumptions": [
+      "I am treating the provided PRD/System Requirement section as the canonical scope baseline.",
+      "No prior clarification has been locked yet, so all listed decision issues remain open.",
+      "MVP implementation should prioritize end-to-end flow integrity over phase-2 optimization features."
+    ],
+    "features": [
+      {
+        "acceptanceSignals": [
+          "RBAC policy tests cover allow/deny matrix for employee, vendor, committee admin, and payroll roles.",
+          "Authenticated request context always includes actor id, role, and plant scope.",
+          "Authorization middleware is reused by both HTTP and MCP entry points."
+        ],
+        "decisionIssueIds": [
+          "issue-auth-source-of-truth"
+        ],
+        "dependsOn": [],
+        "excludedApproaches": [
+          "Scattered per-handler permission checks with no shared policy layer.",
+          "Trusting internal network location as a substitute for authentication.",
+          "Maintaining separate auth logic for HTTP and MCP paths."
+        ],
+        "executionConstraints": [
+          "Implement a single identity and authorization core before business endpoints.",
+          "Role model must at least include employee, vendor operator, committee admin, and payroll operator.",
+          "All mutating operations require authenticated actor context with auditable identity.",
+          "Finalize IdP and MFA boundaries per `issue-auth-source-of-truth` before production release."
+        ],
+        "id": "domain-access-control",
+        "name": "Domain Access Control Foundation",
+        "order": 0,
+        "priority": "core",
+        "rationale": "All ordering, reconciliation, and governance workflows depend on enforceable identity and permission boundaries.",
+        "summary": "Establish unified authentication, RBAC, and actor context used by every surface."
+      },
+      {
+        "acceptanceSignals": [
+          "OpenAPI 3.1 spec includes all official employee/vendor/admin HTTP endpoints.",
+          "`openapi.json` (or yaml) and browsable API docs are generated in CI artifacts.",
+          "Generated client/types compile without manual type patching."
+        ],
+        "decisionIssueIds": [
+          "issue-auth-source-of-truth"
+        ],
+        "dependsOn": [
+          "domain-access-control"
+        ],
+        "excludedApproaches": [
+          "Shipping runtime endpoints that are absent from the OpenAPI document.",
+          "Maintaining handwritten API types as the primary contract source.",
+          "Updating implementation first and deferring spec updates."
+        ],
+        "executionConstraints": [
+          "Use OpenAPI 3.1 as formal source of truth for all external HTTP APIs.",
+          "Specify request/response schemas, error models, auth, pagination, sorting, filtering, and enum validations.",
+          "Contract changes must be synchronized with caller updates in the same delivery cycle.",
+          "Auth scheme declarations must align with the resolved identity model from `issue-auth-source-of-truth`."
+        ],
+        "id": "openapi-contract-registry",
+        "name": "OpenAPI Contract Registry",
+        "order": 1,
+        "priority": "core",
+        "rationale": "Contract-first execution is explicitly required to prevent API drift across frontend, backend, testing, and integrations.",
+        "summary": "Create and maintain the complete machine-verifiable HTTP contract and documentation."
+      },
+      {
+        "acceptanceSignals": [
+          "Committee admin can review submissions with approve/reject/request-changes decisions and reasons.",
+          "Document expiry reminders and suspension actions trigger according to configured rules.",
+          "Suspended vendors are automatically prevented from being orderable."
+        ],
+        "decisionIssueIds": [
+          "issue-vendor-document-policy",
+          "issue-data-retention-compliance"
+        ],
+        "dependsOn": [
+          "domain-access-control",
+          "openapi-contract-registry"
+        ],
+        "excludedApproaches": [
+          "Manual off-platform document review as the primary onboarding flow.",
+          "Document records without expiry metadata or state transitions.",
+          "Allowing non-compliant vendors to remain orderable after expiry."
+        ],
+        "executionConstraints": [
+          "Support document lifecycle states: submitted, under_review, needs_revision, approved, suspended, reinstated.",
+          "Persist full operation history (upload/review/suspension/reinstatement) for audit.",
+          "Reminder cadence, mandatory document sets, and auto-suspension policy follow `issue-vendor-document-policy`.",
+          "Storage and retention controls must follow `issue-data-retention-compliance`."
+        ],
+        "id": "vendor-onboarding-doc-lifecycle",
+        "name": "Vendor Onboarding and Document Lifecycle",
+        "order": 2,
+        "priority": "core",
+        "rationale": "Vendor compliance governance is a first-phase requirement and controls who can legally serve employees.",
+        "summary": "Implement vendor application, document review, expiry governance, and suspension/reinstatement."
+      },
+      {
+        "acceptanceSignals": [
+          "Employees only see vendors mapped to their plant and active service window.",
+          "Admin updates to mapping take effect immediately with audit trace.",
+          "API responses expose deterministic deliverability decisions."
+        ],
+        "decisionIssueIds": [
+          "issue-timezone-and-business-calendar"
+        ],
+        "dependsOn": [
+          "domain-access-control",
+          "vendor-onboarding-doc-lifecycle"
+        ],
+        "excludedApproaches": [
+          "Client-only filtering of deliverability without backend enforcement.",
+          "Treating vendor availability as global with no plant/time mapping.",
+          "Allowing ambiguous overlapping mapping rules without deterministic precedence."
+        ],
+        "executionConstraints": [
+          "Model vendor-to-plant mapping with effective time windows and activation state.",
+          "Deliverability filtering is a hard backend constraint for browse/search/order APIs.",
+          "Conflict resolution rules for overlapping mappings must be explicit and deterministic.",
+          "Time-window evaluation uses the canonical timezone/business-calendar decision from `issue-timezone-and-business-calendar`."
+        ],
+        "id": "vendor-plant-service-mapping",
+        "name": "Vendor-Plant Service Mapping",
+        "order": 3,
+        "priority": "core",
+        "rationale": "Incorrect mapping directly causes non-deliverable exposure and operational failure at scale.",
+        "summary": "Control where and when each vendor can serve, and enforce it in all employee-facing queries."
+      },
+      {
+        "acceptanceSignals": [
+          "Vendors can create/copy menus and set per-day supply quotas.",
+          "Quota under concurrency never drops below zero or oversells.",
+          "Cutoff and preorder windows are enforced and reflected in employee view."
+        ],
+        "decisionIssueIds": [
+          "issue-timezone-and-business-calendar",
+          "issue-special-request-controls"
+        ],
+        "dependsOn": [
+          "domain-access-control",
+          "openapi-contract-registry",
+          "vendor-plant-service-mapping"
+        ],
+        "excludedApproaches": [
+          "Unlimited inventory without enforceable quota accounting.",
+          "Hardcoded global cutoff without vendor-level configuration.",
+          "Unbounded free-text special requests as default order input."
+        ],
+        "executionConstraints": [
+          "Support menu item metadata (name, description, price, image, category/health tags, availability).",
+          "Default preorder opening window is up to 7 days ahead, with vendor-configurable overrides within policy bounds.",
+          "Default latest modify/cancel cutoff is previous day 17:00, vendor-adjustable within governance rules.",
+          "Special request schema must follow the resolved control model from `issue-special-request-controls`."
+        ],
+        "id": "vendor-menu-supply-cutoff",
+        "name": "Vendor Menu, Supply, and Cutoff Rules",
+        "order": 4,
+        "priority": "core",
+        "rationale": "Menu and quota correctness is the center of reducing order confusion and stock mismatch.",
+        "summary": "Enable vendors to manage menus, quotas, and ordering windows safely."
+      },
+      {
+        "acceptanceSignals": [
+          "Employee can browse by calendar/week and place multi-day preorders within allowed window.",
+          "Search/filter supports price, category, health tags, deliverability, and exact remaining quantity.",
+          "UI behavior remains fully functional with recommendation features disabled."
+        ],
+        "decisionIssueIds": [],
+        "dependsOn": [
+          "domain-access-control",
+          "vendor-plant-service-mapping",
+          "vendor-menu-supply-cutoff"
+        ],
+        "excludedApproaches": [
+          "Recommendation-first UX that hides or weakens deterministic search/filter.",
+          "Showing vendors or items not deliverable to the employee plant.",
+          "Displaying coarse stock buckets instead of exact remaining count."
+        ],
+        "executionConstraints": [
+          "Prioritize deterministic search/filter and transparent item metadata for MVP.",
+          "Use employee plant scope and active mapping as non-bypassable filter criteria.",
+          "Expose exact remaining quantity sourced from authoritative inventory counters.",
+          "Keep phase-2 recommendation entry points disabled by default."
+        ],
+        "id": "employee-preorder-discovery",
+        "name": "Employee Preorder Discovery Experience",
+        "order": 5,
+        "priority": "core",
+        "rationale": "Employee-side usability and visibility are MVP-critical for adoption and demand planning.",
+        "summary": "Deliver multi-day browsing, filtering, and preorder entry with accurate deliverability and stock visibility."
+      },
+      {
+        "acceptanceSignals": [
+          "State transitions enforce cutoff rules for modify/cancel and return explicit domain errors on violation.",
+          "Concurrency tests prove idempotent reservations/releases with no oversell.",
+          "Order history includes complete status timeline and notifications for sold-out/out-of-stock paths."
+        ],
+        "decisionIssueIds": [
+          "issue-timezone-and-business-calendar",
+          "issue-special-request-controls",
+          "issue-pickup-throughput-slo"
+        ],
+        "dependsOn": [
+          "domain-access-control",
+          "vendor-menu-supply-cutoff",
+          "employee-preorder-discovery"
+        ],
+        "excludedApproaches": [
+          "Best-effort inventory updates without transactional guarantees.",
+          "Accepting post-cutoff modifications silently.",
+          "Maintaining separate manual refund/cancel records outside the order domain model."
+        ],
+        "executionConstraints": [
+          "Implement order state machine covering place/modify/cancel/sold-out/stockout-refund flows.",
+          "Inventory reservation and release must be atomic, idempotent, and auditable.",
+          "Cutoff evaluation must use resolved timezone/calendar policy.",
+          "Performance characteristics for peak ordering should satisfy targets resolved in `issue-pickup-throughput-slo`."
+        ],
+        "id": "order-lifecycle-inventory",
+        "name": "Order Lifecycle and Inventory Reservation",
+        "order": 6,
+        "priority": "core",
+        "rationale": "Core transaction integrity prevents count errors and downstream reconciliation failures.",
+        "summary": "Implement robust order state handling with strict inventory and cutoff enforcement."
+      },
+      {
+        "acceptanceSignals": [
+          "QR token validation is single-use and replay-protected.",
+          "Expired/invalid token attempts are rejected with auditable error records.",
+          "Load tests at agreed peak levels meet verification latency/throughput targets."
+        ],
+        "decisionIssueIds": [
+          "issue-pickup-throughput-slo",
+          "issue-timezone-and-business-calendar"
+        ],
+        "dependsOn": [
+          "domain-access-control",
+          "order-lifecycle-inventory"
+        ],
+        "excludedApproaches": [
+          "PIN/manual-name-check production fallback path.",
+          "Long-lived static QR tokens.",
+          "Client-side-only verification without server authority."
+        ],
+        "executionConstraints": [
+          "TOTP QR is the only supported on-site verification mechanism.",
+          "Use short-lived, server-verifiable tokens with anti-replay controls.",
+          "Verification updates order pickup status in real time and emits audit events.",
+          "Operational SLO and sizing must match the resolution from `issue-pickup-throughput-slo`."
+        ],
+        "id": "pickup-totp-verification",
+        "name": "Pickup TOTP Verification",
+        "order": 7,
+        "priority": "core",
+        "rationale": "Fast and accurate pickup verification is a direct interview-validated pain point.",
+        "summary": "Provide secure high-throughput QR verification for meal pickup."
+      },
+      {
+        "acceptanceSignals": [
+          "Vendor board shows per-plant counts, special requirements, and delivery status in near real time.",
+          "System can export daily summary, plant partition sheet, item labels, and basket list.",
+          "Generated packaging outputs are reproducible from a fixed order snapshot."
+        ],
+        "decisionIssueIds": [
+          "issue-special-request-controls"
+        ],
+        "dependsOn": [
+          "domain-access-control",
+          "vendor-menu-supply-cutoff",
+          "order-lifecycle-inventory"
+        ],
+        "excludedApproaches": [
+          "Manual spreadsheet collation as the primary fulfillment workflow.",
+          "Label generation from mutable live data without snapshot pinning.",
+          "Printing unrestricted free-text modifiers directly into packing artifacts."
+        ],
+        "executionConstraints": [
+          "Provide operational board grouped by date/plant with live status and anomaly indicators.",
+          "Generate all required packaging and delivery artifacts from immutable batch snapshots.",
+          "Special requirement rendering must obey controlled schema from `issue-special-request-controls`.",
+          "Delivery status transitions must be auditable and queryable."
+        ],
+        "id": "vendor-ops-board-packaging",
+        "name": "Vendor Operations Board and Packaging Outputs",
+        "order": 8,
+        "priority": "core",
+        "rationale": "Vendor-side fulfillment quality is essential to avoid mispack and wrong-delivery events.",
+        "summary": "Give vendors real-time prep visibility and deterministic delivery output artifacts."
+      },
+      {
+        "acceptanceSignals": [
+          "Employees can view per-order deduction, refund, and dispute status details.",
+          "Dispute workflow tracks owner, SLA timer, and final resolution result.",
+          "Ledger adjustments are append-only with full trace back to order events."
+        ],
+        "decisionIssueIds": [
+          "issue-hr-payroll-interface",
+          "issue-data-retention-compliance"
+        ],
+        "dependsOn": [
+          "domain-access-control",
+          "order-lifecycle-inventory"
+        ],
+        "excludedApproaches": [
+          "Monthly lump-sum display without per-order traceability.",
+          "Off-platform dispute handling without system status visibility.",
+          "In-place mutation of financial records without adjustment lineage."
+        ],
+        "executionConstraints": [
+          "Maintain per-order financial ledger entries for deduction/refund/dispute lifecycle.",
+          "Expose transparent employee-facing detail and status timeline for every monetary event.",
+          "Use append-only accounting-style adjustment records with immutable provenance.",
+          "PII and retention controls must follow `issue-data-retention-compliance` and integration shape from `issue-hr-payroll-interface`."
+        ],
+        "id": "payroll-ledger-transparency",
+        "name": "Payroll Ledger and Employee Transparency",
+        "order": 9,
+        "priority": "core",
+        "rationale": "Payroll transparency and dispute traceability are explicit employee trust requirements.",
+        "summary": "Implement transparent payroll deduction ledger with refund and dispute tracking."
+      },
+      {
+        "acceptanceSignals": [
+          "Monthly close produces immutable settlement snapshot with deterministic totals.",
+          "HR export matches agreed schema and includes exception categories.",
+          "Re-run behavior for same cycle is idempotent unless authorized unlock occurs."
+        ],
+        "decisionIssueIds": [
+          "issue-hr-payroll-interface",
+          "issue-timezone-and-business-calendar"
+        ],
+        "dependsOn": [
+          "domain-access-control",
+          "order-lifecycle-inventory",
+          "payroll-ledger-transparency"
+        ],
+        "excludedApproaches": [
+          "Manual editing of exported settlement files as source of truth.",
+          "Recomputing locked periods without explicit unlock governance.",
+          "Silent overwrite of prior exports."
+        ],
+        "executionConstraints": [
+          "Support cycle close, lock/unlock with reason, export, and exception handling.",
+          "Exception categories must include refunds, deduction failures, and terminated employees.",
+          "Export schema/transport and cycle semantics must follow `issue-hr-payroll-interface`.",
+          "Period boundary calculations must follow `issue-timezone-and-business-calendar`."
+        ],
+        "id": "monthly-settlement-hr-export",
+        "name": "Monthly Settlement and HR Export",
+        "order": 10,
+        "priority": "core",
+        "rationale": "Automated close and exception handling is a first-phase operational requirement for finance governance.",
+        "summary": "Automate monthly payroll deduction settlement with lock controls and exception processing."
+      },
+      {
+        "acceptanceSignals": [
+          "Rule engine generates alerts for document expiry, on-time degradation, low satisfaction, and complaint spikes.",
+          "Each alert has assignee, status lifecycle, and linked remediation actions.",
+          "SLA breach indicators and closure summaries are queryable."
+        ],
+        "decisionIssueIds": [
+          "issue-anomaly-governance-playbook"
+        ],
+        "dependsOn": [
+          "openapi-contract-registry",
+          "vendor-onboarding-doc-lifecycle",
+          "vendor-ops-board-packaging",
+          "monthly-settlement-hr-export"
+        ],
+        "excludedApproaches": [
+          "Static dashboards without actionable alert workflow.",
+          "Alert dismissal without reason or ownership.",
+          "Hardcoded thresholds with no governance configurability."
+        ],
+        "executionConstraints": [
+          "Implement rule-based anomaly detection for required governance scenarios.",
+          "Alerts must support end-to-end workflow states with ownership and escalation metadata.",
+          "Governance process details (SLA/escalation/ticket linkage) must follow `issue-anomaly-governance-playbook`.",
+          "All actions on alerts must be auditable."
+        ],
+        "id": "anomaly-alert-governance",
+        "name": "Anomaly Alerting and Governance Workflow",
+        "order": 11,
+        "priority": "core",
+        "rationale": "Committee admin needs proactive governance, not passive reporting.",
+        "summary": "Provide actionable anomaly alerts with ownership, lifecycle, and remediation tracking."
+      },
+      {
+        "acceptanceSignals": [
+          "Admin queries can filter audit trails by actor, action, entity, and time range.",
+          "Cross-system correlation id links business events, API calls, and settlement changes.",
+          "Retention jobs preserve required compliance-grade audit evidence."
+        ],
+        "decisionIssueIds": [
+          "issue-data-retention-compliance",
+          "issue-auth-source-of-truth"
+        ],
+        "dependsOn": [
+          "domain-access-control",
+          "vendor-onboarding-doc-lifecycle",
+          "order-lifecycle-inventory",
+          "monthly-settlement-hr-export"
+        ],
+        "excludedApproaches": [
+          "Relying only on ephemeral service logs for audit.",
+          "Allowing critical write operations without audit events.",
+          "Mutable audit entries without tamper evidence."
+        ],
+        "executionConstraints": [
+          "Capture immutable audit events for onboarding, mapping, ordering, verification, and financial adjustments.",
+          "Expose committee admin query surfaces for audit and accountability investigations.",
+          "Actor identity and role fields must align with chosen auth source model.",
+          "Retention/deletion strategy must satisfy `issue-data-retention-compliance`."
+        ],
+        "id": "audit-query-trail",
+        "name": "Audit Trail and Governance Query",
+        "order": 12,
+        "priority": "core",
+        "rationale": "Auditability is mandatory for compliance, dispute resolution, and operational accountability.",
+        "summary": "Implement immutable operation trails and admin-grade audit query capabilities."
+      },
+      {
+        "acceptanceSignals": [
+          "MCP exposes tools/resources for ordering, verification, vendor governance, reconciliation, and anomaly workflows.",
+          "Parity tests show MCP and HTTP produce equivalent validation and error behavior for shared operations.",
+          "High-risk MCP writes require explicit authorization and are fully audited."
+        ],
+        "decisionIssueIds": [
+          "issue-mcp-authz-model"
+        ],
+        "dependsOn": [
+          "domain-access-control",
+          "openapi-contract-registry",
+          "order-lifecycle-inventory",
+          "monthly-settlement-hr-export",
+          "audit-query-trail"
+        ],
+        "excludedApproaches": [
+          "MCP server with duplicated domain/business logic.",
+          "Read-only MCP that omits required write workflows.",
+          "Unauthenticated MCP access based only on network trust."
+        ],
+        "executionConstraints": [
+          "MCP must be built on the same domain/service layer as HTTP APIs.",
+          "Define clear tool boundaries for query, order, verify, review, reconcile, and governance actions.",
+          "Authorization, validation, and error taxonomy must be consistent with HTTP behavior.",
+          "MCP authentication/authorization scheme must follow `issue-mcp-authz-model`."
+        ],
+        "id": "mcp-agent-interface",
+        "name": "MCP Agent Interface",
+        "order": 13,
+        "priority": "core",
+        "rationale": "Agent-facing integration is explicitly required as a first-class system contract.",
+        "summary": "Deliver a secure MCP server aligned with core domain logic and permissions."
+      },
+      {
+        "acceptanceSignals": [
+          "CI fails when runtime HTTP routes are missing in OpenAPI.",
+          "CI fails when MCP schema/behavior drifts from implementation or policy tests.",
+          "Contract tests cover happy paths and representative error scenarios for core domains."
+        ],
+        "decisionIssueIds": [],
+        "dependsOn": [
+          "openapi-contract-registry",
+          "mcp-agent-interface"
+        ],
+        "excludedApproaches": [
+          "Manual periodic contract checks instead of merge-time gates.",
+          "Allowing breaking behavior without synchronized spec and caller updates.",
+          "Testing only schema snapshots without behavior assertions."
+        ],
+        "executionConstraints": [
+          "Automate drift detection across OpenAPI, generated artifacts, backend behavior, and MCP definitions.",
+          "Block merges on contract inconsistency across spec, implementation, and generated clients.",
+          "Include CI tests for authz and error-model consistency in both HTTP and MCP surfaces.",
+          "Keep test suite aligned with active behavior only; avoid legacy compatibility checks."
+        ],
+        "id": "contract-conformance-ci",
+        "name": "Contract Conformance CI and Test Gates",
+        "order": 14,
+        "priority": "core",
+        "rationale": "Automated verification is required to prevent long-term contract and agent drift.",
+        "summary": "Add CI gates that enforce HTTP/MCP contract correctness and behavior consistency."
+      },
+      {
+        "acceptanceSignals": [
+          "All services emit correlated traces, metrics, and logs through OpenTelemetry.",
+          "Grafana dashboards cover ordering, pickup, settlement, and anomaly workflows.",
+          "Kubernetes deployment includes health probes, scaling policy signals, and actionable alerts."
+        ],
+        "decisionIssueIds": [
+          "issue-pickup-throughput-slo"
+        ],
+        "dependsOn": [
+          "domain-access-control",
+          "openapi-contract-registry"
+        ],
+        "excludedApproaches": [
+          "Unstructured logs without trace correlation.",
+          "Environment-specific observability semantics that break cross-env comparability.",
+          "Production go-live without SLO dashboards and alerting baselines."
+        ],
+        "executionConstraints": [
+          "Adopt OpenTelemetry instrumentation and route telemetry to VictoriaMetrics/VictoriaLogs/VictoriaTraces with Grafana.",
+          "Define and publish service and product SLO dashboards, including pickup throughput and settlement reliability.",
+          "Ensure Kubernetes manifests include readiness/liveness probes and scaling hooks tied to observed load.",
+          "Thresholds for peak pickup/order checks must align with `issue-pickup-throughput-slo`."
+        ],
+        "id": "observability-k8s-baseline",
+        "name": "Observability and Kubernetes Reliability Baseline",
+        "order": 15,
+        "priority": "core",
+        "rationale": "High-scale operations require robust monitoring and reliability controls from the start.",
+        "summary": "Establish production-grade telemetry, dashboards, and K8s reliability controls."
+      },
+      {
+        "acceptanceSignals": [
+          "Recommendation feature is fully disabled by default via feature flag.",
+          "When enabled, recommendation output does not replace core deterministic filter/search paths.",
+          "Offline evaluation metrics can be computed without affecting transaction latency."
+        ],
+        "decisionIssueIds": [],
+        "dependsOn": [
+          "employee-preorder-discovery",
+          "order-lifecycle-inventory",
+          "contract-conformance-ci"
+        ],
+        "excludedApproaches": [
+          "Always-on recommendation rollout in MVP environments.",
+          "Replacing mandatory search/filter capabilities with recommendation-only UX.",
+          "Shipping model-driven ranking without observability and rollback controls."
+        ],
+        "executionConstraints": [
+          "Keep feature optional and guarded by flag default-off in MVP.",
+          "Use existing catalog/order signals without introducing separate source-of-truth state.",
+          "Maintain deterministic fallback to core discovery behavior when flag is off."
+        ],
+        "id": "recommendation-engine",
+        "name": "Recommendation Engine",
+        "order": 16,
+        "priority": "optional",
+        "rationale": "Recommendation is explicitly phase-2 and must not delay or destabilize MVP flow integrity.",
+        "summary": "Add optional personalized recommendation capability behind strict feature gating."
+      },
+      {
+        "acceptanceSignals": [
+          "Reminder scheduling can target preorder opening windows and high-demand items.",
+          "Users can opt out and reminders honor notification preferences.",
+          "Core ordering remains available even if reminder delivery fails."
+        ],
+        "decisionIssueIds": [],
+        "dependsOn": [
+          "vendor-menu-supply-cutoff",
+          "employee-preorder-discovery",
+          "contract-conformance-ci"
+        ],
+        "excludedApproaches": [
+          "Mandatory reminder delivery as a prerequisite for ordering.",
+          "Unthrottled mass notifications without preference controls.",
+          "Hardcoded one-size-fits-all reminder timing."
+        ],
+        "executionConstraints": [
+          "Implement as optional feature flag default-off in MVP environments.",
+          "Use policy-driven scheduling and throttling rules.",
+          "Treat reminder delivery as non-blocking auxiliary workflow.",
+          "Track send/delivery outcomes for operations visibility."
+        ],
+        "id": "release-reminder-notifications",
+        "name": "Release Reminder and Rush Support",
+        "order": 17,
+        "priority": "optional",
+        "rationale": "Rush and reminder enhancements are second-phase value-add features.",
+        "summary": "Provide optional sale-opening and demand-spike reminder capabilities."
+      },
+      {
+        "acceptanceSignals": [
+          "Dashboard metrics can be sliced by vendor, plant, and date with documented definitions.",
+          "Flag-off state removes dashboard navigation and API exposure.",
+          "Dashboard queries use stable aggregated views without harming transactional workload."
+        ],
+        "decisionIssueIds": [],
+        "dependsOn": [
+          "vendor-ops-board-packaging",
+          "monthly-settlement-hr-export",
+          "anomaly-alert-governance",
+          "contract-conformance-ci",
+          "observability-k8s-baseline"
+        ],
+        "excludedApproaches": [
+          "Replacing core governance workflows with passive analytics-only views.",
+          "Directly querying hot transactional tables from interactive dashboards.",
+          "Publishing KPIs without formula/source documentation."
+        ],
+        "executionConstraints": [
+          "Keep analytics dashboard optional and feature-flagged off by default.",
+          "Build on governed metric views with versioned definitions.",
+          "Maintain governance workflow as primary action path; dashboard is supporting insight layer."
+        ],
+        "id": "advanced-analytics-dashboard",
+        "name": "Advanced Operations Analytics Dashboard",
+        "order": 18,
+        "priority": "optional",
+        "rationale": "Advanced analytics is phase-2 and should build on stable MVP data contracts and telemetry.",
+        "summary": "Deliver optional deeper operational analytics for vendors and committee admins."
+      }
+    ],
+    "issues": [
+      {
+        "blocking": true,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "cq-auth-source-model",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "opt-auth-unified-idp-all",
+                  "opt-auth-local-accounts-all"
+                ],
+                "id": "opt-auth-corp-sso-plus-vendor-mfa",
+                "label": "員工SSO+商家MFA",
+                "rationale": "員工與福委會走企業 IdP，商家走獨立帳號與 MFA，平衡治理與外部協作。",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-auth-corp-sso-plus-vendor-mfa",
+                  "opt-auth-local-accounts-all"
+                ],
+                "id": "opt-auth-unified-idp-all",
+                "label": "全角色統一IdP",
+                "rationale": "全部角色都由企業 IdP 管理，治理集中但對外商家導入成本高。",
+                "recommendedState": "excluded"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-auth-corp-sso-plus-vendor-mfa",
+                  "opt-auth-unified-idp-all"
+                ],
+                "id": "opt-auth-local-accounts-all",
+                "label": "全角色本地帳號",
+                "rationale": "全部使用系統自管帳號，實作快但治理與風險較高。",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "身份來源與登入模型要採哪一種主路徑？",
+            "rationale": "RBAC、審計追蹤與 MCP 權限都依賴一致身份模型。",
+            "recommendationSummary": "建議採員工/福委會企業 SSO + 商家獨立帳號 MFA，先滿足治理與落地速度。"
+          }
+        ],
+        "details": "目前未鎖定員工、商家、福委會與薪資角色的身份來源與 MFA 邊界，會影響權限模型與審計可追溯性。",
+        "id": "issue-auth-source-of-truth",
+        "kind": "missing-detail",
+        "severity": "critical",
+        "status": "open",
+        "title": "身份來源與登入邊界未定"
+      },
+      {
+        "blocking": true,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "cq-hr-integration-contract",
+            "maxActiveOptions": 2,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "opt-hr-manual-csv"
+                ],
+                "id": "opt-hr-sftp-batch",
+                "label": "SFTP批次檔",
+                "rationale": "符合月結批次節奏，易與鎖帳流程整合。",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-hr-manual-csv"
+                ],
+                "id": "opt-hr-api-sync",
+                "label": "HR API同步",
+                "rationale": "可提升即時性與回寫能力，但整合複雜度較高。",
+                "recommendedState": "optional"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-hr-sftp-batch",
+                  "opt-hr-api-sync"
+                ],
+                "id": "opt-hr-manual-csv",
+                "label": "人工CSV上傳",
+                "rationale": "可作短期應急，但可追溯性與穩定性不足。",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "薪資扣款資料交換要採哪些正式通道？",
+            "rationale": "月結匯出、例外處理與鎖帳重跑都依賴可驗證的 HR 契約。",
+            "recommendationSummary": "建議以 SFTP 批次為核心，必要時補充 API 同步，不採人工流程當正式路徑。"
+          }
+        ],
+        "details": "尚未明確 HR 格式欄位、傳輸通道、回執機制與重送規則，財務流程無法安全上線。",
+        "id": "issue-hr-payroll-interface",
+        "kind": "missing-detail",
+        "severity": "critical",
+        "status": "open",
+        "title": "HR 薪資整合契約未定"
+      },
+      {
+        "blocking": true,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "cq-timezone-calendar-policy",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "opt-timezone-per-plant",
+                  "opt-timezone-utc-internal"
+                ],
+                "id": "opt-timezone-fixed-tpe",
+                "label": "固定 Asia/Taipei",
+                "rationale": "單一公司場景最簡潔，能降低截單與月結邊界錯誤。",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-timezone-fixed-tpe",
+                  "opt-timezone-utc-internal"
+                ],
+                "id": "opt-timezone-per-plant",
+                "label": "各廠區獨立時區",
+                "rationale": "適用跨時區擴張，但規則與測試成本顯著增加。",
+                "recommendedState": "excluded"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-timezone-fixed-tpe",
+                  "opt-timezone-per-plant"
+                ],
+                "id": "opt-timezone-utc-internal",
+                "label": "內部UTC換算",
+                "rationale": "技術上可行，但業務邊界容易與人員認知不一致。",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "截單、預購視窗與月結週期要用哪個時間/行事曆基準？",
+            "rationale": "沒有統一時間規則會造成訂單邊界與財務結算錯誤。",
+            "recommendationSummary": "建議先固定 Asia/Taipei 並明確公司行事曆規則。"
+          }
+        ],
+        "details": "預設前一天 17:00 截單與月結邊界已給方向，但時區與節假日規則尚未被正式鎖定。",
+        "id": "issue-timezone-and-business-calendar",
+        "kind": "ambiguity",
+        "severity": "high",
+        "status": "open",
+        "title": "時間與行事曆計算基準未定"
+      },
+      {
+        "blocking": true,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "cq-vendor-document-policy",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "opt-doc-minimal-single",
+                  "opt-doc-manual-expiry"
+                ],
+                "id": "opt-doc-configurable-template",
+                "label": "可配置文件模板",
+                "rationale": "可涵蓋不同商家類型並支援到期自動治理。",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-doc-configurable-template",
+                  "opt-doc-manual-expiry"
+                ],
+                "id": "opt-doc-minimal-single",
+                "label": "單一必備文件",
+                "rationale": "實作快但合規覆蓋不足。",
+                "recommendedState": "excluded"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-doc-configurable-template",
+                  "opt-doc-minimal-single"
+                ],
+                "id": "opt-doc-manual-expiry",
+                "label": "人工追蹤到期",
+                "rationale": "缺乏自動治理，不符合需求核心。",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "商家合規文件要採哪種治理模型？",
+            "rationale": "文件種類與到期治理會直接影響審核流程、停權規則與預警能力。",
+            "recommendationSummary": "建議採可配置模板 + 到期自動提醒/停權流程。"
+          }
+        ],
+        "details": "需求要求完整文件生命週期，但未定義必備文件集合、到期寬限與停權觸發條件。",
+        "id": "issue-vendor-document-policy",
+        "kind": "missing-detail",
+        "severity": "high",
+        "status": "open",
+        "title": "商家文件政策細節未定"
+      },
+      {
+        "blocking": false,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "cq-special-request-schema",
+            "maxActiveOptions": 2,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "opt-special-unlimited-text"
+                ],
+                "id": "opt-special-enum-only",
+                "label": "固定選項",
+                "rationale": "出餐風險最低，最易標準化分裝。",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-special-unlimited-text"
+                ],
+                "id": "opt-special-enum-plus-short-note",
+                "label": "固定選項+短註記",
+                "rationale": "保留少量彈性，同時控制風險。",
+                "recommendedState": "optional"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-special-enum-only",
+                  "opt-special-enum-plus-short-note"
+                ],
+                "id": "opt-special-unlimited-text",
+                "label": "不限自由文字",
+                "rationale": "彈性高但備餐錯誤風險大。",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "特殊備註欄位要提供到什麼程度？",
+            "rationale": "會直接影響備餐出錯率、標籤可讀性與客服負擔。",
+            "recommendationSummary": "建議固定選項為主，必要時加受限短註記，不開放無限制自由文字。"
+          }
+        ],
+        "details": "訪談建議偏向固定選項，但是否允許受限短註記仍未明確。",
+        "id": "issue-special-request-controls",
+        "kind": "open-question",
+        "severity": "medium",
+        "status": "open",
+        "title": "特殊備註控制範圍待決"
+      },
+      {
+        "blocking": true,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "cq-pickup-throughput-slo",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "opt-slo-soft-target",
+                  "opt-slo-none"
+                ],
+                "id": "opt-slo-hard-gate",
+                "label": "先定硬性SLO",
+                "rationale": "可在上線前驗證尖峰吞吐，降低現場失控風險。",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-slo-hard-gate",
+                  "opt-slo-none"
+                ],
+                "id": "opt-slo-soft-target",
+                "label": "先上線後優化",
+                "rationale": "交付較快但現場失效風險高。",
+                "recommendedState": "excluded"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-slo-hard-gate",
+                  "opt-slo-soft-target"
+                ],
+                "id": "opt-slo-none",
+                "label": "不定SLO",
+                "rationale": "無法客觀驗證是否可承受尖峰。",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "尖峰領餐核銷與下單流程要以哪種效能門檻作為上線標準？",
+            "rationale": "TOTP 核銷是單一路徑，若無明確容量目標將無法保證現場可用性。",
+            "recommendationSummary": "建議在上線前鎖定可量測 SLO 並完成壓測驗證。"
+          }
+        ],
+        "details": "需求強調尖峰吞吐，但缺少具體吞吐量、延遲目標與可接受錯誤率。",
+        "id": "issue-pickup-throughput-slo",
+        "kind": "risk",
+        "severity": "high",
+        "status": "open",
+        "title": "尖峰吞吐與延遲 SLO 未定"
+      },
+      {
+        "blocking": false,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "cq-anomaly-playbook",
+            "maxActiveOptions": 2,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "opt-anomaly-alerts-only"
+                ],
+                "id": "opt-anomaly-owner-sla",
+                "label": "責任人+SLA流程",
+                "rationale": "可形成可治理、可稽核的閉環。",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-anomaly-alerts-only"
+                ],
+                "id": "opt-anomaly-ticket-integration",
+                "label": "串接工單系統",
+                "rationale": "便於跨部門追蹤與升級處理。",
+                "recommendedState": "optional"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-anomaly-owner-sla",
+                  "opt-anomaly-ticket-integration"
+                ],
+                "id": "opt-anomaly-alerts-only",
+                "label": "僅通知不治理",
+                "rationale": "可視化但無法確保問題被處理。",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "異常預警後續治理要採哪些流程能力？",
+            "rationale": "沒有治理流程，預警只會成為噪音且無責任歸屬。",
+            "recommendationSummary": "建議至少落地責任人與 SLA，並可選擇串接工單。"
+          }
+        ],
+        "details": "目前僅明確要有預警，尚未鎖定責任分派、升級與結案標準。",
+        "id": "issue-anomaly-governance-playbook",
+        "kind": "missing-detail",
+        "severity": "medium",
+        "status": "open",
+        "title": "異常治理流程規格未定"
+      },
+      {
+        "blocking": true,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "cq-mcp-authz-model",
+            "maxActiveOptions": 2,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "opt-mcp-network-trust-only"
+                ],
+                "id": "opt-mcp-oauth-rbac",
+                "label": "OAuth服務帳號+RBAC",
+                "rationale": "可與企業治理對齊，適合高風險 write tools。",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-mcp-network-trust-only"
+                ],
+                "id": "opt-mcp-shortlived-keys",
+                "label": "短效金鑰橋接",
+                "rationale": "可支援部分自動化場景，但需嚴格輪替與稽核。",
+                "recommendedState": "optional"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-mcp-oauth-rbac",
+                  "opt-mcp-shortlived-keys"
+                ],
+                "id": "opt-mcp-network-trust-only",
+                "label": "僅內網信任",
+                "rationale": "缺乏可驗證身份與最小權限控管。",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "MCP server 的認證授權模式要採哪些正式機制？",
+            "rationale": "MCP 含高風險寫入能力，必須先鎖定可稽核的安全邊界。",
+            "recommendationSummary": "建議以 OAuth 服務帳號 + tool 級 RBAC 為主，可視需要補短效金鑰。"
+          }
+        ],
+        "details": "MCP 被要求支援高價值讀寫操作，但尚未定義 agent 身份模型、最小權限與破壞性操作保護。",
+        "id": "issue-mcp-authz-model",
+        "kind": "risk",
+        "severity": "critical",
+        "status": "open",
+        "title": "MCP 權限與安全模型未定"
+      },
+      {
+        "blocking": true,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "cq-data-retention-compliance",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "opt-retention-indefinite",
+                  "opt-retention-defer"
+                ],
+                "id": "opt-retention-defined-policy",
+                "label": "明確保留與刪除政策",
+                "rationale": "可同時滿足稽核需求與個資風險控制。",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-retention-defined-policy",
+                  "opt-retention-defer"
+                ],
+                "id": "opt-retention-indefinite",
+                "label": "資料永久保留",
+                "rationale": "實作簡單但合規與風險暴露高。",
+                "recommendedState": "excluded"
+              },
+              {
+                "conflictOptionIds": [
+                  "opt-retention-defined-policy",
+                  "opt-retention-indefinite"
+                ],
+                "id": "opt-retention-defer",
+                "label": "上線後再定",
+                "rationale": "會造成後續補救成本與合規風險。",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "訂單/薪資/審計資料的保留與刪除策略要採哪一種？",
+            "rationale": "涉及個資、薪資與稽核資料，沒有明確政策無法安全上線。",
+            "recommendationSummary": "建議在 MVP 前鎖定加密、保留年限、刪除/匿名化流程。"
+          }
+        ],
+        "details": "薪資與稽核資料屬高敏感資訊，尚未定義保留年限、刪除策略與加密基線。",
+        "id": "issue-data-retention-compliance",
+        "kind": "missing-detail",
+        "severity": "high",
+        "status": "open",
+        "title": "資料保留與合規策略未定"
+      }
+    ],
+    "reinforcements": [
+      {
+        "activation": {
+          "featureIds": [],
+          "mode": "always",
+          "rationale": "一旦建立正式契約，所有後續 HTTP 變更都必須受同一套契約門檻約束。",
+          "requiresFeatureIds": [
+            "openapi-contract-registry"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "CI route-to-spec diff 無新增未登錄 endpoint。",
+            "OpenAPI 變更同步產出並提交 generated client/type diff。",
+            "每個錯誤碼都能對應到 OpenAPI error schema。"
+          ]
+        },
+        "influencedBy": [
+          "issue-auth-source-of-truth",
+          "issue-hr-payroll-interface"
+        ],
+        "instructions": "在每次新增或修改 HTTP endpoint 的 PR 中，同步更新 OpenAPI 與生成產物；未同步則拒絕合併。",
+        "name": "Contract Synchronization Gate",
+        "policy": "No externally consumed HTTP behavior may ship unless OpenAPI 3.1 and generated artifacts are updated in the same change set.",
+        "scope": "engineering"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "mcp-agent-interface"
+          ],
+          "mode": "feature",
+          "rationale": "MCP 上線時最容易出現規則分叉，需在該功能啟用時立即套用。",
+          "requiresFeatureIds": [
+            "domain-access-control",
+            "openapi-contract-registry"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "每個 MCP write tool 可追溯到與 HTTP 共用的 domain service。",
+            "MCP/HTTP 配對行為測試對齊驗證與錯誤碼。",
+            "不存在 MCP 專用的權限繞過路徑。"
+          ]
+        },
+        "influencedBy": [
+          "issue-mcp-authz-model"
+        ],
+        "instructions": "建立 MCP tool-to-service 映射清單，PR review 必查是否重複實作商業規則。",
+        "name": "MCP HTTP Domain Parity",
+        "policy": "MCP tools/resources must reuse the same domain services, authorization, and validation stack as HTTP APIs.",
+        "scope": "security"
+      },
+      {
+        "activation": {
+          "featureIds": [],
+          "mode": "always",
+          "rationale": "完成審計基礎能力後，所有高風險寫入都必須統一留痕。",
+          "requiresFeatureIds": [
+            "domain-access-control",
+            "audit-query-trail"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "高風險寫入事件都含 actorId、role、entityId、reason、timestamp。",
+            "審計紀錄採 append-only 或等效不可竄改策略。",
+            "管理端可用 correlation id 串起跨流程操作鏈。"
+          ]
+        },
+        "influencedBy": [
+          "issue-auth-source-of-truth",
+          "issue-data-retention-compliance"
+        ],
+        "instructions": "將下單、核銷、審核、鎖帳、退款等動作註冊為必留痕事件，缺任一欄位不得上線。",
+        "name": "Auditable High Risk Writes",
+        "policy": "All high-risk write operations must emit immutable audit events with accountable actor context.",
+        "scope": "compliance"
+      },
+      {
+        "activation": {
+          "featureIds": [],
+          "mode": "always",
+          "rationale": "專案明確不追求向後相容，任何功能演進都需同步清理舊路徑。",
+          "requiresFeatureIds": [
+            "domain-access-control"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "變更後不存在 legacy/fallback 分支維持舊行為。",
+            "被替換 endpoint/DTO/handler 在同批次移除。",
+            "測試僅覆蓋現行正式行為。"
+          ]
+        },
+        "influencedBy": [],
+        "instructions": "每次破壞式調整必須同步刪除舊碼與舊測試，不接受未驗證 fallback。",
+        "name": "No Legacy or Fallback Paths",
+        "policy": "Contract and behavior changes must remove superseded code paths immediately rather than preserving legacy compatibility branches.",
+        "scope": "engineering"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "recommendation-engine",
+            "release-reminder-notifications",
+            "advanced-analytics-dashboard"
+          ],
+          "mode": "feature",
+          "rationale": "第二階段能力必須與 MVP 核心流程隔離，避免影響首階段驗收。",
+          "requiresFeatureIds": [
+            "domain-access-control"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "Optional 功能在所有 MVP 環境預設 flag=false。",
+            "Flag 關閉時無對外 UI 入口與副作用 API。",
+            "具備可執行的一鍵關閉回退步驟。"
+          ]
+        },
+        "influencedBy": [],
+        "instructions": "所有 optional feature PR 必附 flag 配置與關閉驗證證據。",
+        "name": "Optional Feature Flag Discipline",
+        "policy": "All optional phase-2 capabilities must be isolated behind runtime feature flags defaulted OFF in MVP deployments.",
+        "scope": "product"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "order-lifecycle-inventory",
+            "pickup-totp-verification"
+          ],
+          "mode": "feature",
+          "rationale": "交易與核銷是尖峰壓力主戰場，需在功能啟用時以 SLO 驗證作為放行門檻。",
+          "requiresFeatureIds": [
+            "observability-k8s-baseline"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "壓測報告覆蓋尖峰場景並達成既定 p95/p99 目標。",
+            "尖峰期間錯誤率低於已定義閾值。",
+            "監控面板可即時觀測核銷成功率與排隊深度。"
+          ]
+        },
+        "influencedBy": [
+          "issue-pickup-throughput-slo"
+        ],
+        "instructions": "未達尖峰 SLO 不得進入 production rollout。",
+        "name": "Peak Load SLO Gate",
+        "policy": "Order placement and pickup verification must pass agreed peak-load SLO tests before production release.",
+        "scope": "operations"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "payroll-ledger-transparency",
+            "monthly-settlement-hr-export"
+          ],
+          "mode": "feature",
+          "rationale": "財務流程一旦啟用就需要防重跑錯帳與可稽核性。",
+          "requiresFeatureIds": [
+            "audit-query-trail"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "每期結算快照具唯一 cycle key 與摘要雜湊。",
+            "同 cycle 重送輸出結果一致且可驗證 idempotency。",
+            "例外清單完整覆蓋退款/扣款失敗/離職三類。"
+          ]
+        },
+        "influencedBy": [
+          "issue-hr-payroll-interface",
+          "issue-timezone-and-business-calendar",
+          "issue-data-retention-compliance"
+        ],
+        "instructions": "結算模組上線前必須完成鎖帳、重跑與例外流程演練。",
+        "name": "Financial Close Integrity",
+        "policy": "Settlement close/export operations must be deterministic, idempotent, and fully auditable.",
+        "scope": "compliance"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "anomaly-alert-governance"
+          ],
+          "mode": "feature",
+          "rationale": "異常能力啟用時若沒有責任流程會造成告警噪音且無治理效果。",
+          "requiresFeatureIds": [
+            "audit-query-trail"
+          ]
+        },
+        "blocking": false,
+        "evidence": {
+          "checks": [
+            "每種異常規則皆有 owner、SLA、升級路徑設定。",
+            "告警關閉必填處置摘要與責任人。",
+            "逾期未處理告警可被系統查詢與通知。"
+          ]
+        },
+        "influencedBy": [
+          "issue-anomaly-governance-playbook"
+        ],
+        "instructions": "異常規則上線同時提交治理 playbook 與責任矩陣。",
+        "name": "Alert Ownership and Closure Discipline",
+        "policy": "Anomaly alerts must have explicit ownership, SLA targets, and accountable closure records.",
+        "scope": "operations"
+      }
+    ],
+    "roles": [
+      {
+        "influenceAreas": [
+          "user",
+          "operations",
+          "cost"
+        ],
+        "kind": "system-user",
+        "name": "Employee",
+        "responsibilities": [
+          "Browse eligible vendors and pre-order meals across upcoming days.",
+          "Manage orders before cutoff and complete pickup verification.",
+          "Track payroll deductions, refunds, and dispute progress transparently."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "operations",
+          "cost",
+          "user"
+        ],
+        "kind": "system-user",
+        "name": "Vendor Operator",
+        "responsibilities": [
+          "Maintain menus, daily supply, preorder windows, and stock changes.",
+          "Use operational board and packaging outputs for fulfillment and delivery.",
+          "Review monthly settlement summaries against platform records."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "compliance",
+          "operations",
+          "cost"
+        ],
+        "kind": "system-user",
+        "name": "Welfare Committee Admin",
+        "responsibilities": [
+          "Review vendor onboarding/documents and enforce suspension/reinstatement.",
+          "Configure vendor-plant mappings and governance rules.",
+          "Execute settlement close/export and handle operational anomalies."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "cost",
+          "compliance",
+          "data"
+        ],
+        "kind": "system-user",
+        "name": "HR Payroll Operator",
+        "responsibilities": [
+          "Consume payroll deduction exports and return processing exceptions.",
+          "Reconcile deduction outcomes with platform settlement cycles.",
+          "Support traceable handling of failed deductions and termination cases."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "product",
+          "user",
+          "operations"
+        ],
+        "kind": "delivery",
+        "name": "Product Owner",
+        "responsibilities": [
+          "Control MVP scope and acceptance boundaries.",
+          "Prioritize backlog sequencing across employee, vendor, and admin flows.",
+          "Own clarification closure for open decision issues."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "engineering",
+          "security",
+          "data"
+        ],
+        "kind": "delivery",
+        "name": "Backend Engineer (Rust)",
+        "responsibilities": [
+          "Implement domain services, transactional integrity, and API/MCP handlers.",
+          "Enforce authorization, validation, and audit emission in backend flows.",
+          "Maintain OpenAPI-first contracts and contract conformance tests."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "engineering",
+          "user",
+          "product"
+        ],
+        "kind": "delivery",
+        "name": "Frontend Engineer (SvelteKit)",
+        "responsibilities": [
+          "Build employee/vendor/admin interfaces aligned with contract-generated types.",
+          "Implement multi-day preorder, operational board, and transparency views.",
+          "Ensure optional features remain properly flag-gated."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "operations",
+          "engineering",
+          "security"
+        ],
+        "kind": "delivery",
+        "name": "Platform SRE",
+        "responsibilities": [
+          "Operate Kubernetes deployments, autoscaling, and reliability controls.",
+          "Implement observability stack integration and service dashboards.",
+          "Enforce SLO gates for peak ordering and pickup traffic."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "engineering",
+          "product",
+          "security"
+        ],
+        "kind": "delivery",
+        "name": "QA and Contract Automation Engineer",
+        "responsibilities": [
+          "Build automated tests for domain logic, API contracts, and MCP behavior.",
+          "Maintain CI drift detection across OpenAPI, SDK outputs, and runtime behavior.",
+          "Validate regression risks on cutoff, inventory, settlement, and pickup paths."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "security",
+          "compliance",
+          "data"
+        ],
+        "kind": "delivery",
+        "name": "Security and Compliance Engineer",
+        "responsibilities": [
+          "Define auth, key management, and least-privilege policies for HTTP/MCP.",
+          "Set retention, encryption, and audit controls for payroll and PII data.",
+          "Review high-risk flows for governance and traceability requirements."
+        ]
+      }
+    ],
+    "summary": "Backlog prioritizes MVP flow integrity (auth, contract-first APIs, ordering, pickup, settlement, governance) before phase-2 value-add features. The main blockers are identity model, HR payroll contract, time/calendar policy, document governance, MCP authz, throughput SLO, and data retention policy. Reinforcements enforce non-legacy implementation, contract parity, auditable high-risk writes, and release gates for performance and optional features."
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "acceptanceSignals": [
+    "Audit query supports filtering by actor, action, entity, and time.",
+    "Cross-flow correlation IDs link order, verification, review, and settlement events.",
+    "Audit retention and purge jobs follow policy and are test-verified."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260415-153033-corporate-catering-system-f011-audit-trail-and-investigation-query-a1",
+      "outcome": "completed",
+      "startedAt": "2026-04-16T01:01:21.079Z",
+      "lastStage": "completed",
+      "latestEventSummary": "feature completed: Audit Trail and Investigation Query in 0 attempts",
+      "lastCommit": {
+        "hash": "c156fe15d91888321377b11d6221d520a00bea52",
+        "message": "feat: implement Audit Trail and Investigation Query (attempt 4)"
+      },
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "HTTP Contract Sync Gate",
+          "summary": "The current feature satisfies the active policy: new audit HTTP routes are mirrored in the OpenAPI contract and generated TS client artifacts, route-to-spec parity and error-schema mapping checks are present, and the implementation includes immutable audit evidence, actor/action/entity/time investigation filters, cross-flow correlation, and retention/purge with committee-admin investigation capabilities.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No Legacy Path Rule",
+          "summary": "Static review indicates this feature satisfies the active policy: immutable audit evidence is emitted on high-risk write paths with locked actor context, investigation queries support actor/action/entity/time (plus correlation), committee-admin responsibility attribution and retention-purge flows are implemented, and retention/purge behavior is covered by dedicated tests without legacy/fallback audit paths in the current feature area.",
+          "verdict": "pass"
+        }
+      ],
+      "finishedAt": "2026-04-16T02:32:30.588Z",
+      "resultStatus": "passed"
+    }
+  ],
+  "decisionIssueIds": [
+    "issue-auth-source-of-truth",
+    "issue-data-retention-compliance"
+  ],
+  "dependsOn": [
+    "identity-access-governance",
+    "order-state-inventory-engine",
+    "vendor-compliance-lifecycle"
+  ],
+  "excludedApproaches": [
+    "Anonymous actor records for high-risk operations.",
+    "Using only transient service logs as audit evidence.",
+    "Deferring retention/deletion implementation after launch."
+  ],
+  "executionConstraints": [
+    "All high-risk writes must emit immutable audit events with actor identity from locked auth model.",
+    "Audit storage/query lifecycle must follow defined retention/deletion policy.",
+    "Provide committee-admin investigation queries for responsibility attribution."
+  ],
+  "featureId": "audit-trail-and-investigation-query",
+  "name": "Audit Trail and Investigation Query",
+  "order": 11,
+  "phase": "completed",
+  "priority": "core",
+  "rationale": "Governance, compliance, and dispute handling require durable accountability records.",
+  "summary": "Implement immutable audit evidence and admin investigation capabilities.",
+  "completedAt": "2026-04-16T02:32:30.701Z"
+}

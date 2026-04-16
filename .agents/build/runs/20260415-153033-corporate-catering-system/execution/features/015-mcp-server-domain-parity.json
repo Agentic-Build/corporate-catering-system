@@ -1,0 +1,99 @@
+{
+  "acceptanceSignals": [
+    "MCP tools/resources cover ordering, verification, compliance review, settlement query/export, and anomaly operations.",
+    "Parity tests confirm MCP and HTTP share validation, authz, and error behavior.",
+    "High-risk MCP writes are authorization-checked and fully audited."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260415-153033-corporate-catering-system-f015-mcp-server-domain-parity-a1",
+      "outcome": "completed",
+      "startedAt": "2026-04-16T07:38:53.087Z",
+      "lastStage": "completed",
+      "latestEventSummary": "feature completed: MCP Server Domain Parity in 0 attempts",
+      "lastCommit": {
+        "hash": "1a5738f429067d126d633169a55333628c34036f",
+        "message": "feat: implement MCP Server Domain Parity (attempt 4)"
+      },
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "HTTP Contract Sync Gate",
+          "summary": "The MCP Server Domain Parity feature satisfies the active policy in this workspace: MCP tools/resources cover the required domains, OAuth service-account plus tool-level RBAC is enforced with strict optional bridge-key controls and auditable write authorization, MCP invocation reuses shared HTTP/domain handlers, and OpenAPI plus generated TypeScript artifacts are synchronized with route/spec and error-schema conformance checks wired in CI.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "MCP Domain Parity Gate",
+          "summary": "Pass based on static workspace review: MCP endpoints enforce OAuth service-account authentication with tool-level RBAC, optional bridge keys are guarded by TTL/rotation/registry checks and audit metadata, MCP write invocations are authorization-checked and audited, MCP tools/resources cover ordering/verification/compliance/settlement/anomaly domains, and MCP invocation paths reuse the same handler/domain execution used by HTTP with paired MCP/HTTP parity tests present for validation/error/authz behavior.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "High-Risk Write Audit Discipline",
+          "summary": "The current MCP Server Domain Parity workspace satisfies the active policy: MCP uses OAuth service-account auth with tool-level RBAC, optional bridge keys are constrained by TTL/rotation/registry checks and audited, MCP invokes shared HTTP/domain execution paths (not MCP-only logic), and high-risk MCP writes are authorization-gated and recorded through the unified immutable audit trail with attributable fields (actorId, role, entityId, reason, timestamp) plus correlationId.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No Legacy Path Rule",
+          "summary": "The current workspace satisfies the MCP Server Domain Parity policy: MCP tools/resources cover ordering, verification, compliance review, settlement query/export, and anomaly operations; MCP auth uses OAuth service-account grants with tool-level RBAC plus strict short-lived bridge-key rotation/registry/audit controls; MCP write paths are authorization-gated and emit audit evidence; and MCP execution routes through the same domain handlers/services used by HTTP paths with parity-focused tests present for validation/authz/error behavior. (Targeted test execution could not be re-run in this read-only sandbox, but the committed implementation and test coverage evidence align with the active policy.)",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Data Retention Enforcement",
+          "summary": "Based on the current workspace code and test artifacts, this feature satisfies the active policy: MCP uses OAuth service-account authentication with tool-level RBAC (plus strictly validated short-lived bridge keys), MCP write authorization is audited, MCP execution reuses shared HTTP/domain handlers, and payroll/order/audit retention-deletion workflows are implemented with schedulable jobs, encryption and access-control test coverage, and audit-query traceability of purge outcomes.",
+          "verdict": "pass"
+        }
+      ],
+      "finishedAt": "2026-04-16T09:58:19.766Z",
+      "resultStatus": "passed"
+    }
+  ],
+  "decisionIssueIds": [
+    "issue-mcp-authz-model",
+    "issue-auth-source-of-truth"
+  ],
+  "dependsOn": [
+    "identity-access-governance",
+    "openapi-contract-platform",
+    "contract-conformance-ci",
+    "vendor-compliance-lifecycle",
+    "order-state-inventory-engine",
+    "pickup-totp-checkin",
+    "monthly-settlement-and-hr-export",
+    "audit-trail-and-investigation-query",
+    "anomaly-alert-workflow"
+  ],
+  "excludedApproaches": [
+    "Network-trust-only authentication for MCP access.",
+    "A separate MCP-only domain logic implementation.",
+    "Unscoped broad MCP credentials without tool-level RBAC."
+  ],
+  "executionConstraints": [
+    "Use OAuth service-account + tool-level RBAC as the core MCP authz model.",
+    "Support optional short-lived key bridging only under strict rotation and audit controls.",
+    "MCP must call the same domain services used by HTTP APIs."
+  ],
+  "featureId": "mcp-server-domain-parity",
+  "name": "MCP Server Domain Parity",
+  "order": 15,
+  "phase": "completed",
+  "priority": "core",
+  "rationale": "Agent integration is a required first-class surface with strict security parity needs.",
+  "summary": "Implement secure MCP access over shared domain logic and permission controls.",
+  "completedAt": "2026-04-16T09:58:19.886Z"
+}

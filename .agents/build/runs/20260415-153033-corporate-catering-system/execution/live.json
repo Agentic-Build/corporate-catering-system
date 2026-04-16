@@ -1,0 +1,62 @@
+{
+  "attempt": 1,
+  "currentFeature": {
+    "featureId": "advanced-analytics-dashboard",
+    "kind": "feature",
+    "name": "Advanced Analytics Dashboard",
+    "order": 18
+  },
+  "lastEventAt": "2026-04-16T12:08:25.514Z",
+  "lastEventSummary": "feature completed: Advanced Analytics Dashboard in 0 attempts",
+  "latestCommit": {
+    "hash": "0f89042f999fc7853f1f8e4d3f52f02eaaa7ed5b",
+    "message": "feat: implement Advanced Analytics Dashboard (attempt 3)"
+  },
+  "latestReinforcements": [
+    {
+      "blocking": true,
+      "blockingIssueCount": 0,
+      "blockingIssueTitles": [],
+      "name": "HTTP Contract Sync Gate",
+      "summary": "The active policy is satisfied for this feature: the new analytics HTTP endpoints are synchronized across runtime route contracts and OpenAPI (`openapi.yaml`/`openapi.json`), generated TypeScript client artifacts are updated in the same change set, and contract tests validate route-to-spec coverage plus error response schema mappings for the new endpoints. The feature is runtime-flagged default OFF and implemented on pre-aggregated, versioned analytics models.",
+      "verdict": "pass"
+    },
+    {
+      "blocking": true,
+      "blockingIssueCount": 0,
+      "blockingIssueTitles": [],
+      "name": "High-Risk Write Audit Discipline",
+      "summary": "The Advanced Analytics Dashboard implementation satisfies the active policy for this feature: it is runtime-flagged default OFF, dashboard endpoints are unavailable when disabled, analytics reads use a pre-aggregated warehouse with versioned metric definitions, and high-risk operational writes remain covered by immutable audit evidence containing actorId/role/entityId/reason/timestamp with correlationId linkage.",
+      "verdict": "pass"
+    },
+    {
+      "blocking": true,
+      "blockingIssueCount": 0,
+      "blockingIssueTitles": [],
+      "name": "No Legacy Path Rule",
+      "summary": "The Advanced Analytics Dashboard implementation satisfies the active policy for this feature: it is runtime-gated by `PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED` with default OFF, dashboard routes are not mounted when disabled (and handler-level access returns 404), responses include vendor/plant/time breakdowns plus versioned metric definitions (`key/displayName/unit/formula/source/version`), and query execution reads pre-aggregated warehouse state rather than transactional tables while governance workflows remain the authoritative action path.",
+      "verdict": "pass"
+    },
+    {
+      "blocking": true,
+      "blockingIssueCount": 0,
+      "blockingIssueTitles": [],
+      "name": "Optional Feature Flag Discipline",
+      "summary": "The current Advanced Analytics Dashboard implementation satisfies the active optional-phase policy: it is gated by runtime flag `PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED` with default OFF, dashboard routes are not registered when disabled (and handler-level access also returns `404`), metric outputs are versioned and include formula/source definitions, and query reads come from a pre-aggregated `OperationsAnalyticsWarehouse` model rather than direct transactional-table analytics paths.",
+      "verdict": "pass"
+    },
+    {
+      "blocking": true,
+      "blockingIssueCount": 0,
+      "blockingIssueTitles": [],
+      "name": "Data Retention Enforcement",
+      "summary": "The current feature satisfies the active policy: advanced analytics is behind a runtime flag default OFF with endpoint gating, uses versioned metric definitions over pre-aggregated analytical state, and does not bypass existing enforced payroll/order/audit retention-purge workflows, encryption/access-control coverage, or audit-query traceability for deletion outcomes.",
+      "verdict": "pass"
+    }
+  ],
+  "retrySummary": "High-Risk Write Audit Discipline: Payroll settlement replay inflates analytics metrics; HR sync analytics uses request intent instead of persisted outcome",
+  "stage": "completed",
+  "stageStartedAt": "2026-04-16T12:08:25.514Z",
+  "totalFeatureCount": 19,
+  "updatedAt": "2026-04-16T12:08:25.519Z"
+}

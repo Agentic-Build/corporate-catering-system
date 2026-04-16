@@ -1,0 +1,85 @@
+{
+  "acceptanceSignals": [
+    "Employees can view per-order deductions, refunds, and dispute statuses.",
+    "Ledger entries are append-only with source event references.",
+    "Dispute workflow has owner, timestamps, and resolution trace."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260415-153033-corporate-catering-system-f012-payroll-ledger-dispute-tracking-a1",
+      "outcome": "completed",
+      "startedAt": "2026-04-16T02:32:30.727Z",
+      "lastStage": "completed",
+      "latestEventSummary": "feature completed: Payroll Ledger and Dispute Tracking in 0 attempts",
+      "lastCommit": {
+        "hash": "618b82cf41c3b07dad74ac533811320cb1b77051",
+        "message": "feat: implement Payroll Ledger and Dispute Tracking (attempt 4)"
+      },
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "HTTP Contract Sync Gate",
+          "summary": "The active policy is satisfied for this feature: the new payroll/dispute external HTTP operations are synchronized with OpenAPI (`contract/openapi/openapi.yaml` and `openapi.json`), generated TypeScript client artifacts were updated in the same change set (`contract/generated/ts-client/**`), and contract tests include route-to-spec parity plus payroll endpoint error-response/schema validation.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "High-Risk Write Audit Discipline",
+          "summary": "The current Payroll Ledger and Dispute Tracking implementation satisfies the active audit policy: high-risk payroll/dispute writes append immutable audit evidence with attributable identity (`actorId`, `role`), `entityId`, `reason`, `timestamp`, and `correlationId`; audit storage uses append-only evidence sequencing with investigation-by-correlation support; and the feature ships with SFTP-first exchange, optional HR API adjunct sync, append-only ledger adjustment lineage, and retention purge controls.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No Legacy Path Rule",
+          "summary": "Static review indicates this feature satisfies the active policy in scope: per-order employee payroll view includes deductions/refunds/disputes, ledger/dispute records are append-only with source-event traceability, SFTP batch is the core exchange path with HR API as adjunct, and payroll/dispute retention purge controls are implemented. No legacy/fallback payroll handler/DTO/route was found as an active official path for this feature. Test execution was not possible in this read-only sandbox.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Financial Close Integrity Gate",
+          "summary": "Workspace implementation satisfies the active payroll policy: employee per-order ledger/dispute visibility, append-only ledger with source event references, dispute owner/timestamp/resolution trace, SFTP-core exchange with optional HR API adjunct sync, cycle-key + snapshot checksum with same-cycle idempotent replay, exception coverage for refunded/deduction-failed/terminated employees, and payroll/dispute retention purge controls.",
+          "verdict": "pass"
+        }
+      ],
+      "finishedAt": "2026-04-16T04:04:10.249Z",
+      "resultStatus": "passed"
+    }
+  ],
+  "decisionIssueIds": [
+    "issue-hr-payroll-interface",
+    "issue-data-retention-compliance"
+  ],
+  "dependsOn": [
+    "identity-access-governance",
+    "order-state-inventory-engine",
+    "audit-trail-and-investigation-query"
+  ],
+  "excludedApproaches": [
+    "Using manual CSV upload as official payroll interface path.",
+    "Overwriting financial records in place without adjustment lineage.",
+    "Keeping payroll/PII indefinitely without policy controls."
+  ],
+  "executionConstraints": [
+    "Use SFTP batch as core payroll exchange path; support HR API sync as optional adjunct.",
+    "Implement immutable per-order payroll ledger with traceable adjustments.",
+    "Apply defined retention/deletion policy to payroll and dispute data."
+  ],
+  "featureId": "payroll-ledger-dispute-tracking",
+  "name": "Payroll Ledger and Dispute Tracking",
+  "order": 12,
+  "phase": "completed",
+  "priority": "core",
+  "rationale": "Employee trust and finance control require transparent and traceable deductions.",
+  "summary": "Deliver transparent payroll accounting and dispute lifecycle visibility.",
+  "completedAt": "2026-04-16T04:04:10.364Z"
+}

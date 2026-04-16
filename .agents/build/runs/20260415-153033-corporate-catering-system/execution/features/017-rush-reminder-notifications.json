@@ -1,0 +1,90 @@
+{
+  "acceptanceSignals": [
+    "Reminder scheduling supports preorder-open and demand-spike scenarios.",
+    "Users can opt out and preferences are enforced.",
+    "Reminder delivery failures do not impact ordering correctness."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260415-153033-corporate-catering-system-f017-rush-reminder-notifications-a1",
+      "outcome": "completed",
+      "startedAt": "2026-04-16T10:22:21.385Z",
+      "lastStage": "completed",
+      "latestEventSummary": "feature completed: Rush Reminder Notifications in 0 attempts",
+      "lastCommit": {
+        "hash": "3b199ed51ce8059d069abfbe84ce089c4499fcc9",
+        "message": "feat: implement Rush Reminder Notifications (attempt 3)"
+      },
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "HTTP Contract Sync Gate",
+          "summary": "The new HTTP behavior (`PUT /api/v1/employee/rush-reminder-preferences`) is synchronized with OpenAPI (`contract/openapi/openapi.yaml` and `openapi.json`) and generated client artifacts (`contract/generated/ts-client/*`) in the same change set, and contract tests include route-to-spec coverage plus explicit error-response schema assertions for the new operation.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "High-Risk Write Audit Discipline",
+          "summary": "Rush Reminder Notifications are correctly gated behind a runtime feature flag defaulting to OFF, scheduling is policy-driven (preorder-open and demand-spike) with throttling and preference opt-out enforcement, and reminder delivery failures are handled best-effort without impacting ordering correctness. The feature does not introduce a new high-risk write path that bypasses the existing immutable audit-trail model.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No Legacy Path Rule",
+          "summary": "Pass. The workspace implements Rush Reminder Notifications behind `PRELAUNCH_RUSH_REMINDER_ENABLED` (default OFF), adds policy-driven scheduling for preorder-open and demand-spike scenarios with throttling and opt-out preference enforcement, and isolates reminder scheduling/delivery as best-effort so delivery failures do not affect ordering correctness. The feature diff shows new contracts/routes/models without retaining superseded legacy/fallback reminder paths.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Optional Feature Flag Discipline",
+          "summary": "The current feature satisfies the active policy: rush reminders are controlled by a runtime flag (`PRELAUNCH_RUSH_REMINDER_ENABLED`) that defaults to OFF, reminder API exposure is disabled when the flag is OFF (route not mounted and handler returns 404), scheduling is policy-driven with preorder-open and demand-spike scenarios plus throttling and preference opt-out enforcement, and delivery is best-effort/isolated so failures do not affect ordering correctness.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Data Retention Enforcement",
+          "summary": "Rush Reminder Notifications in this workspace is feature-flagged at runtime with default OFF, supports preorder-open and demand-spike scheduling with policy throttling and opt-out preference enforcement, and keeps reminder delivery best-effort/isolated from ordering paths. The active payroll/order/audit data policy is also technically enforced via retention+purge workflows (including scheduled purge jobs), sensitive payroll field encryption with access-control coverage, and audit-query traceability for purge outcomes.",
+          "verdict": "pass"
+        }
+      ],
+      "finishedAt": "2026-04-16T11:17:52.911Z",
+      "resultStatus": "passed"
+    }
+  ],
+  "decisionIssueIds": [],
+  "dependsOn": [
+    "menu-supply-window-management",
+    "employee-discovery-preorder",
+    "contract-conformance-ci"
+  ],
+  "excludedApproaches": [
+    "Making reminder delivery a prerequisite for successful ordering.",
+    "Sending unthrottled notifications without preference controls.",
+    "Hardcoding one static reminder strategy for all contexts."
+  ],
+  "executionConstraints": [
+    "Ship behind runtime feature flag default OFF.",
+    "Use policy-driven scheduling with throttling and preference checks.",
+    "Keep reminder workflows operationally isolated from transaction paths."
+  ],
+  "featureId": "rush-reminder-notifications",
+  "name": "Rush Reminder Notifications",
+  "order": 17,
+  "phase": "completed",
+  "priority": "optional",
+  "rationale": "Reminder capability is phase-2 and should remain non-critical to MVP flow.",
+  "summary": "Add optional notification support for open-window and rush cases.",
+  "completedAt": "2026-04-16T11:17:53.028Z"
+}

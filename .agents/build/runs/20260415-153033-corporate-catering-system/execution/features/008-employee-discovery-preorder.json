@@ -1,0 +1,69 @@
+{
+  "acceptanceSignals": [
+    "Employees can preorder across multiple future dates in calendar/week views.",
+    "Search and filters cover price, type, health tags, deliverability, and exact remaining quantity.",
+    "Core discovery remains fully functional with recommendation flags disabled."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260415-153033-corporate-catering-system-f008-employee-discovery-preorder-a1",
+      "outcome": "completed",
+      "startedAt": "2026-04-15T22:49:41.547Z",
+      "lastStage": "completed",
+      "latestEventSummary": "feature completed: Employee Discovery and Preorder in 0 attempts",
+      "lastCommit": {
+        "hash": "e9c52c7f619879a0a9888f346a4f7baaecc7cddf",
+        "message": "feat: implement Employee Discovery and Preorder (attempt 4)"
+      },
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "HTTP Contract Sync Gate",
+          "summary": "The feature’s HTTP behavior changes are contract-synchronized: OpenAPI specs and generated TypeScript artifacts were updated in the same change set, and contract tests cover route-to-spec parity plus error-code/error-schema mapping for the employee discovery and preorder paths.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No Legacy Path Rule",
+          "summary": "The current workspace satisfies this feature and active policy: employee discovery/preorder supports multi-day week/calendar windows, deterministic search/filter (price, type, health tags, deliverability, exact remaining quantity), consistent Asia/Taipei window/cutoff handling, and backend authoritative remaining-quantity counters, with legacy/fallback paths removed and covered by current-flow tests.",
+          "verdict": "pass"
+        }
+      ],
+      "finishedAt": "2026-04-15T23:47:43.626Z",
+      "resultStatus": "passed"
+    }
+  ],
+  "decisionIssueIds": [
+    "issue-timezone-and-business-calendar"
+  ],
+  "dependsOn": [
+    "identity-access-governance",
+    "vendor-plant-delivery-mapping",
+    "menu-supply-window-management",
+    "order-state-inventory-engine"
+  ],
+  "excludedApproaches": [
+    "Recommendation-first UI that weakens deterministic filtering.",
+    "Showing non-deliverable vendors or items to users.",
+    "Coarse inventory ranges instead of exact remaining counts."
+  ],
+  "executionConstraints": [
+    "Prioritize deterministic search/filter over recommendation behavior for MVP.",
+    "Apply Asia/Taipei window/cutoff semantics consistently in UI and API results.",
+    "Use backend authoritative inventory counters for remaining quantity display."
+  ],
+  "featureId": "employee-discovery-preorder",
+  "name": "Employee Discovery and Preorder",
+  "order": 8,
+  "phase": "completed",
+  "priority": "core",
+  "rationale": "Employee-side usability and transparency are required for adoption at scale.",
+  "summary": "Deliver multi-day discovery and preorder entry with accurate availability context.",
+  "completedAt": "2026-04-15T23:47:43.738Z"
+}

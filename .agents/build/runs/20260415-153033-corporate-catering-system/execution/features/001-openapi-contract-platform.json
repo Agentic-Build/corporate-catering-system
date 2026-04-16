@@ -1,0 +1,58 @@
+{
+  "acceptanceSignals": [
+    "All official external HTTP endpoints are present in OpenAPI 3.1.",
+    "CI publishes machine-readable spec and browsable API docs artifacts.",
+    "Generated client/types build without manual type patching."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260415-153033-corporate-catering-system-f001-openapi-contract-platform-a1",
+      "outcome": "completed",
+      "startedAt": "2026-04-15T17:08:45.206Z",
+      "lastStage": "completed",
+      "latestEventSummary": "feature completed: OpenAPI Contract Platform in 0 attempts",
+      "lastCommit": {
+        "hash": "70c25a52588ab914263e7070604f6dadca36308b",
+        "message": "feat: implement OpenAPI Contract Platform (attempt 1)"
+      },
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No Legacy Path Rule",
+          "summary": "Pass based on workspace evidence: the code defines a canonical OpenAPI 3.1 contract for employee/vendor/admin/integration APIs, includes explicit schemas/errors/auth/pagination-sort-filter/enums/validation constraints, enforces operation/auth-model consistency in tests, and CI exports machine-readable spec plus browsable docs artifacts while validating generated TypeScript client/types via contract generation and compile checks. No legacy/fallback compatibility path evidence was found in current source/tests for this feature scope.",
+          "verdict": "pass"
+        }
+      ],
+      "finishedAt": "2026-04-15T17:24:52.469Z",
+      "resultStatus": "passed"
+    }
+  ],
+  "decisionIssueIds": [
+    "issue-auth-source-of-truth"
+  ],
+  "dependsOn": [
+    "identity-access-governance"
+  ],
+  "excludedApproaches": [
+    "Shipping externally used endpoints that are absent from OpenAPI.",
+    "Treating handwritten API interfaces as primary contract source.",
+    "Deferring contract updates to later releases."
+  ],
+  "executionConstraints": [
+    "OpenAPI 3.1 is the formal contract for employee, vendor, admin, and integration HTTP APIs.",
+    "Contract must define schemas, errors, auth, pagination/sort/filter, enums, and validation constraints.",
+    "Auth declarations in the spec must match the locked SSO+vendor-MFA model."
+  ],
+  "featureId": "openapi-contract-platform",
+  "name": "OpenAPI Contract Platform",
+  "order": 1,
+  "phase": "completed",
+  "priority": "core",
+  "rationale": "Contract-first control is required to prevent implementation and integration drift.",
+  "summary": "Build and enforce the canonical machine-verifiable HTTP contract.",
+  "completedAt": "2026-04-15T17:24:52.571Z"
+}
