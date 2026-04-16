@@ -611,6 +611,7 @@
             "items": {
               "maxLength": 280,
               "minLength": 1,
+              "pattern": ".*\\S.*",
               "type": "string"
             },
             "minItems": 1,
@@ -823,6 +824,7 @@
             "items": {
               "maxLength": 280,
               "minLength": 1,
+              "pattern": ".*\\S.*",
               "type": "string"
             },
             "type": "array"

@@ -3761,7 +3761,12 @@ pub fn canonical_openapi_spec() -> Value {
               },
               "closureEvidenceRefs": {
                 "type": "array",
-                "items": { "type": "string", "minLength": 1, "maxLength": 280 }
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 280,
+                  "pattern": ".*\\S.*"
+                }
               },
               "ticketReference": { "type": "string", "maxLength": 128 },
               "trace": {
@@ -3870,7 +3875,12 @@ pub fn canonical_openapi_spec() -> Value {
               },
               "closureEvidenceRefs": {
                 "type": "array",
-                "items": { "type": "string", "minLength": 1, "maxLength": 280 },
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 280,
+                  "pattern": ".*\\S.*"
+                },
                 "minItems": 1
               },
               "ticketReference": { "type": "string", "maxLength": 128 }

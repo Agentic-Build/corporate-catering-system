@@ -1204,6 +1204,14 @@ fn anomaly_alert_workflow_contract_exposes_governance_endpoints_and_schemas() {
     assert_eq!(close_schema["minLength"].as_u64(), Some(1));
     assert_eq!(close_schema["maxLength"].as_u64(), Some(280));
     assert_eq!(close_schema["pattern"].as_str(), Some(r".*\S.*"));
+    let close_evidence_item_schema = &spec["components"]["schemas"]
+        ["AdminAnomalyAlertClosePatchRequest"]["properties"]["closureEvidenceRefs"]["items"];
+    assert_eq!(close_evidence_item_schema["minLength"].as_u64(), Some(1));
+    assert_eq!(close_evidence_item_schema["maxLength"].as_u64(), Some(280));
+    assert_eq!(
+        close_evidence_item_schema["pattern"].as_str(),
+        Some(r".*\S.*")
+    );
 
     let anomaly_rule_kind_enum = spec["components"]["schemas"]["AnomalyRuleKind"]["enum"]
         .as_array()
