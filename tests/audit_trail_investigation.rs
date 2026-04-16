@@ -379,8 +379,17 @@ fn retention_purge_removes_expired_evidence_and_requires_committee_role() {
     let remaining = gateway
         .execute_investigation_query(&committee, &AuditInvestigationFilter::default())
         .expect("query should succeed");
-    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining.len(), 2);
     assert_eq!(remaining[0].entity().entity_id(), "menu-keep-a");
+    assert_eq!(remaining[1].action(), AuditAction::PurgeAuditEvidence);
+    assert_eq!(
+        remaining[1].audit_identity().actor_id(),
+        committee.actor_id()
+    );
+    assert_eq!(
+        remaining[1].entity().entity_type(),
+        AuditEntityType::AuditTrail
+    );
 
     let employee = employee_actor();
     let unauthorized =

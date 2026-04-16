@@ -56,7 +56,7 @@ const DEFAULT_AUDIT_TRAIL_PATH: &str = "ops/state/audit-trail.json";
 const LOAD_GATE_EMPLOYEE_ACTOR_ID: &str = "emp-load-gate";
 const LOAD_GATE_COMMITTEE_ACTOR_ID: &str = "committee-load-gate";
 
-const ALL_AUDIT_ACTIONS: [AuditAction; 19] = [
+const ALL_AUDIT_ACTIONS: [AuditAction; 20] = [
     AuditAction::CreateEmployeeOrder,
     AuditAction::UpdateEmployeeOrder,
     AuditAction::VerifyPickupOrder,
@@ -74,11 +74,12 @@ const ALL_AUDIT_ACTIONS: [AuditAction; 19] = [
     AuditAction::SubmitVendorComplianceDocument,
     AuditAction::ReviewVendorApplication,
     AuditAction::RunVendorComplianceLifecycle,
+    AuditAction::PurgeAuditEvidence,
     AuditAction::PruneVendorComplianceHistory,
     AuditAction::ExportPayrollDeductions,
 ];
 
-const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 8] = [
+const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 9] = [
     AuditEntityType::Order,
     AuditEntityType::MenuItem,
     AuditEntityType::Vendor,
@@ -87,6 +88,7 @@ const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 8] = [
     AuditEntityType::FulfillmentBatch,
     AuditEntityType::Settlement,
     AuditEntityType::VendorOrderingPolicy,
+    AuditEntityType::AuditTrail,
 ];
 
 #[derive(Debug, Clone)]
@@ -2128,7 +2130,7 @@ fn build_audit_investigation_filter(
         .map(AuditTimestamp::from_epoch_day);
     let occurred_to = query
         .occurred_to_epoch_day
-        .map(AuditTimestamp::from_epoch_day);
+        .map(AuditTimestamp::through_epoch_day);
     if let (Some(from), Some(to)) = (occurred_from, occurred_to) {
         if from > to {
             return Err(domain_error(
@@ -2869,8 +2871,85 @@ mod tests {
             audit_trail
                 .evidence_count()
                 .expect("evidence count should resolve"),
-            0
+            1
         );
+        let events = audit_trail
+            .investigation_query(
+                &committee,
+                &AuditInvestigationFilter::default().with_action(AuditAction::PurgeAuditEvidence),
+            )
+            .expect("purge audit event should be queryable");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].audit_identity().actor_id(), committee.actor_id());
+        assert_eq!(
+            events[0].entity().entity_type(),
+            AuditEntityType::AuditTrail
+        );
+    }
+
+    #[test]
+    fn occurred_to_epoch_day_filter_includes_same_day_events() {
+        let committee = committee_admin();
+        let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
+        let state = AppState {
+            next_order_sequence: Arc::new(AtomicU64::new(1)),
+            plant_id: plant_id("fab-a"),
+            audit_trail: audit_trail.clone(),
+            compliance_lifecycle: Arc::new(VendorComplianceLifecycle::with_audit_trail(
+                HistoryRetentionPolicy::default(),
+                audit_trail.clone(),
+            )),
+            delivery_policy: Arc::new(VendorPlantDeliveryPolicy::with_audit_trail(
+                audit_trail.clone(),
+            )),
+            menu_supply_policy: MenuSupplyPolicy::with_audit_trail(
+                Default::default(),
+                audit_trail.clone(),
+            ),
+            pickup_totp_verifier: Arc::new(
+                PickupTotpVerifier::from_secret("unit-test-pickup-totp-secret".as_bytes())
+                    .expect("test pickup verifier should be valid"),
+            ),
+        };
+
+        audit_trail
+            .append(AuditEvidenceWrite::new(
+                AuditTimestamp::new(41, 780).expect("timestamp should be valid"),
+                AuditIdentityLink::from_actor(&committee, "seedAuditEvidence"),
+                AuditAction::RunVendorComplianceLifecycle,
+                AuditEntityRef::new(AuditEntityType::Vendor, "ven-filter-day")
+                    .expect("entity ref should be valid"),
+                AuditCorrelationId::parse("case:filter-day").expect("correlation id should parse"),
+            ))
+            .expect("seed same-day evidence should append");
+
+        audit_trail
+            .append(AuditEvidenceWrite::new(
+                AuditTimestamp::new(42, 15).expect("timestamp should be valid"),
+                AuditIdentityLink::from_actor(&committee, "seedAuditEvidence"),
+                AuditAction::RunVendorComplianceLifecycle,
+                AuditEntityRef::new(AuditEntityType::Vendor, "ven-filter-next-day")
+                    .expect("entity ref should be valid"),
+                AuditCorrelationId::parse("case:filter-next-day")
+                    .expect("correlation id should parse"),
+            ))
+            .expect("seed next-day evidence should append");
+
+        let response = handle_query_audit_investigations(
+            &state,
+            AuditInvestigationQuery {
+                actor_id: None,
+                action: None,
+                entity_type: None,
+                entity_id: None,
+                occurred_from_epoch_day: None,
+                occurred_to_epoch_day: Some(41),
+                correlation_id: None,
+            },
+        )
+        .expect("investigation query should succeed");
+        assert_eq!(response.items.len(), 1);
+        assert_eq!(response.items[0].entity_id, "ven-filter-day");
     }
 
     #[test]

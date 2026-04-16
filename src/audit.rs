@@ -12,6 +12,9 @@ use crate::identity::{ActorId, AuthenticatedActorContext, AuthenticationSource, 
 const MINUTES_PER_DAY: u16 = 24 * 60;
 const SECONDS_PER_DAY: i64 = 86_400;
 const TAIPEI_FIXED_OFFSET_SECONDS: i64 = 8 * 60 * 60;
+const PURGE_AUDIT_EVIDENCE_OPERATION_ID: &str = "purgeAuditEvidence";
+const AUDIT_TRAIL_ENTITY_ID: &str = "audit-trail";
+const PURGE_AUDIT_EVIDENCE_CORRELATION_PREFIX: &str = "audit-trail-retention-purge";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuditIdentityLink {
@@ -78,6 +81,13 @@ impl AuditTimestamp {
         }
     }
 
+    pub const fn through_epoch_day(epoch_day: i32) -> Self {
+        Self {
+            epoch_day,
+            minute_of_day: MINUTES_PER_DAY - 1,
+        }
+    }
+
     pub fn from_taipei_business_moment(
         epoch_day: i32,
         minute_of_day: u16,
@@ -134,6 +144,7 @@ pub enum AuditAction {
     SubmitVendorComplianceDocument,
     ReviewVendorApplication,
     RunVendorComplianceLifecycle,
+    PurgeAuditEvidence,
     PruneVendorComplianceHistory,
     ExportPayrollDeductions,
 }
@@ -160,6 +171,7 @@ impl AuditAction {
             Self::SubmitVendorComplianceDocument => "SUBMIT_VENDOR_COMPLIANCE_DOCUMENT",
             Self::ReviewVendorApplication => "REVIEW_VENDOR_APPLICATION",
             Self::RunVendorComplianceLifecycle => "RUN_VENDOR_COMPLIANCE_LIFECYCLE",
+            Self::PurgeAuditEvidence => "PURGE_AUDIT_EVIDENCE",
             Self::PruneVendorComplianceHistory => "PRUNE_VENDOR_COMPLIANCE_HISTORY",
             Self::ExportPayrollDeductions => "EXPORT_PAYROLL_DEDUCTIONS",
         }
@@ -182,6 +194,7 @@ pub enum AuditEntityType {
     FulfillmentBatch,
     Settlement,
     VendorOrderingPolicy,
+    AuditTrail,
 }
 
 impl AuditEntityType {
@@ -195,6 +208,7 @@ impl AuditEntityType {
             Self::FulfillmentBatch => "FULFILLMENT_BATCH",
             Self::Settlement => "SETTLEMENT",
             Self::VendorOrderingPolicy => "VENDOR_ORDERING_POLICY",
+            Self::AuditTrail => "AUDIT_TRAIL",
         }
     }
 }
@@ -639,17 +653,52 @@ impl ImmutableAuditTrail {
         let mut state = lock_state(&self.state)?;
         let before = state.evidences.len();
         let previous_evidences = state.evidences.clone();
+        let previous_next_evidence_id = state.next_evidence_id;
         let retention_days = i32::from(state.retention_policy.retention_days());
         state
             .evidences
             .retain(|evidence| as_of.days_since(evidence.occurred_at()) <= retention_days);
+        let purged_events = before.saturating_sub(state.evidences.len());
+        let purge_entity =
+            match AuditEntityRef::new(AuditEntityType::AuditTrail, AUDIT_TRAIL_ENTITY_ID) {
+                Ok(entity) => entity,
+                Err(error) => {
+                    state.evidences = previous_evidences;
+                    return Err(error);
+                }
+            };
+        let purge_correlation_id = match AuditCorrelationId::parse(format!(
+            "{PURGE_AUDIT_EVIDENCE_CORRELATION_PREFIX}:{}",
+            as_of.epoch_day()
+        )) {
+            Ok(correlation_id) => correlation_id,
+            Err(error) => {
+                state.evidences = previous_evidences;
+                return Err(error);
+            }
+        };
+        state.next_evidence_id = match state.next_evidence_id.checked_add(1) {
+            Some(next_evidence_id) => next_evidence_id,
+            None => {
+                state.evidences = previous_evidences;
+                return Err(AuditTrailError::EvidenceSequenceOverflow);
+            }
+        };
+        let purge_evidence = ImmutableAuditEvidence {
+            evidence_id: state.next_evidence_id,
+            occurred_at: as_of,
+            audit_identity: AuditIdentityLink::from_actor(actor, PURGE_AUDIT_EVIDENCE_OPERATION_ID),
+            action: AuditAction::PurgeAuditEvidence,
+            entity: purge_entity,
+            correlation_id: purge_correlation_id,
+        };
+        state.evidences.push(purge_evidence);
         if let Err(error) = persist_state_if_needed(&state) {
             state.evidences = previous_evidences;
+            state.next_evidence_id = previous_next_evidence_id;
             return Err(error);
         }
-        Ok(AuditPurgeReport {
-            purged_events: before.saturating_sub(state.evidences.len()),
-        })
+        Ok(AuditPurgeReport { purged_events })
     }
 
     pub fn evidence_count(&self) -> Result<usize, AuditTrailError> {
@@ -810,6 +859,7 @@ enum PersistedAuditAction {
     SubmitVendorComplianceDocument,
     ReviewVendorApplication,
     RunVendorComplianceLifecycle,
+    PurgeAuditEvidence,
     PruneVendorComplianceHistory,
     ExportPayrollDeductions,
 }
@@ -831,6 +881,7 @@ enum PersistedAuditEntityType {
     FulfillmentBatch,
     Settlement,
     VendorOrderingPolicy,
+    AuditTrail,
 }
 
 fn ensure_committee_admin(actor: &AuthenticatedActorContext) -> Result<(), AuditTrailError> {
@@ -1063,6 +1114,7 @@ fn persisted_audit_action_from_domain(action: AuditAction) -> PersistedAuditActi
         AuditAction::RunVendorComplianceLifecycle => {
             PersistedAuditAction::RunVendorComplianceLifecycle
         }
+        AuditAction::PurgeAuditEvidence => PersistedAuditAction::PurgeAuditEvidence,
         AuditAction::PruneVendorComplianceHistory => {
             PersistedAuditAction::PruneVendorComplianceHistory
         }
@@ -1103,6 +1155,7 @@ fn domain_audit_action_from_persisted(action: PersistedAuditAction) -> AuditActi
         PersistedAuditAction::RunVendorComplianceLifecycle => {
             AuditAction::RunVendorComplianceLifecycle
         }
+        PersistedAuditAction::PurgeAuditEvidence => AuditAction::PurgeAuditEvidence,
         PersistedAuditAction::PruneVendorComplianceHistory => {
             AuditAction::PruneVendorComplianceHistory
         }
@@ -1138,6 +1191,7 @@ fn persisted_entity_type_from_domain(entity_type: AuditEntityType) -> PersistedA
         AuditEntityType::FulfillmentBatch => PersistedAuditEntityType::FulfillmentBatch,
         AuditEntityType::Settlement => PersistedAuditEntityType::Settlement,
         AuditEntityType::VendorOrderingPolicy => PersistedAuditEntityType::VendorOrderingPolicy,
+        AuditEntityType::AuditTrail => PersistedAuditEntityType::AuditTrail,
     }
 }
 
@@ -1153,6 +1207,7 @@ fn domain_entity_type_from_persisted(entity_type: PersistedAuditEntityType) -> A
         PersistedAuditEntityType::FulfillmentBatch => AuditEntityType::FulfillmentBatch,
         PersistedAuditEntityType::Settlement => AuditEntityType::Settlement,
         PersistedAuditEntityType::VendorOrderingPolicy => AuditEntityType::VendorOrderingPolicy,
+        PersistedAuditEntityType::AuditTrail => AuditEntityType::AuditTrail,
     }
 }
 

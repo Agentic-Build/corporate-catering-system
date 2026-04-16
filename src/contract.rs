@@ -1577,6 +1577,7 @@ pub fn canonical_openapi_spec() -> Value {
               "SUBMIT_VENDOR_COMPLIANCE_DOCUMENT",
               "REVIEW_VENDOR_APPLICATION",
               "RUN_VENDOR_COMPLIANCE_LIFECYCLE",
+              "PURGE_AUDIT_EVIDENCE",
               "PRUNE_VENDOR_COMPLIANCE_HISTORY",
               "EXPORT_PAYROLL_DEDUCTIONS"
             ]
@@ -1591,7 +1592,8 @@ pub fn canonical_openapi_spec() -> Value {
               "COMPLIANCE_DOCUMENT_TEMPLATE",
               "FULFILLMENT_BATCH",
               "SETTLEMENT",
-              "VENDOR_ORDERING_POLICY"
+              "VENDOR_ORDERING_POLICY",
+              "AUDIT_TRAIL"
             ]
           },
           "AuditEntityRef": {

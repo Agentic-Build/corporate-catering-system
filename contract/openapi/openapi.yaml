@@ -369,6 +369,7 @@ components:
       - SUBMIT_VENDOR_COMPLIANCE_DOCUMENT
       - REVIEW_VENDOR_APPLICATION
       - RUN_VENDOR_COMPLIANCE_LIFECYCLE
+      - PURGE_AUDIT_EVIDENCE
       - PRUNE_VENDOR_COMPLIANCE_HISTORY
       - EXPORT_PAYROLL_DEDUCTIONS
       type: string
@@ -395,6 +396,7 @@ components:
       - FULFILLMENT_BATCH
       - SETTLEMENT
       - VENDOR_ORDERING_POLICY
+      - AUDIT_TRAIL
       type: string
     AuditEvidence:
       additionalProperties: false
