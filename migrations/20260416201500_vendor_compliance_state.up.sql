@@ -1,5 +1,6 @@
 CREATE TABLE vendor_compliance_state (
-    state_key TEXT PRIMARY KEY
+    id global_pk PRIMARY KEY DEFAULT gen_random_uuid(),
+    state_key TEXT NOT NULL UNIQUE
         CHECK (state_key <> '' AND state_key = btrim(state_key)),
     payload JSONB NOT NULL
         CHECK (jsonb_typeof(payload) = 'object'),
