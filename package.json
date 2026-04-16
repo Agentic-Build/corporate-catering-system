@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "description": "OpenAPI contract generation and typed client validation tooling",
   "scripts": {
+    "db:migrate": "sqlx migrate run --source migrations",
+    "db:migrate:revert": "sqlx migrate revert --source migrations",
+    "db:migrate:verify": "./scripts/check-sqlx-migrations.sh",
     "contract:export": "cargo run --quiet --bin export_openapi_contract -- contract/openapi",
     "contract:generate-client": "openapi --input contract/openapi/openapi.json --output contract/generated/ts-client --client fetch --useUnionTypes",
     "contract:sync": "pnpm run contract:export && pnpm run contract:generate-client",

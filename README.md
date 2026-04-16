@@ -32,6 +32,25 @@ Runtime bootstrap seeds deterministic scenarios for:
 - anomaly: seeded anomaly alert triggered, triaged, and closed with evidence
 - mapping: seeded delivery allow + deny mapping rules
 
+## PostgreSQL Schema and Migration Lifecycle
+
+Database schema is managed only via `sqlx migrate` migrations under `migrations/`.
+
+- Global PK standard: `UUID` (`global_pk`) on every table primary key.
+- Monetary values: `BIGINT` minor units (`money_minor` domain), never float/double.
+- State enums: PostgreSQL `ENUM` types.
+- Append-only protections: trigger-enforced guards on `audit_event` and `payroll_ledger_entry`.
+
+Canonical commands:
+
+- `pnpm run db:migrate` applies pending migrations.
+- `pnpm run db:migrate:revert` reverts the latest migration.
+- `pnpm run db:migrate:verify` runs clean-database up/down validation and invariant checks.
+
+Default startup behavior:
+
+- `make dev` and `make dev-app` automatically run `sqlx migrate run` before starting the runtime service.
+
 ## OpenAPI Contract Platform
 
 Canonical HTTP contract artifacts are generated from the Rust contract module and committed under `contract/`.

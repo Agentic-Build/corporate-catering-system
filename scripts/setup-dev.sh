@@ -64,6 +64,18 @@ ensure_state_dirs() {
   mkdir -p "${ROOT_DIR}/ops/state"
 }
 
+run_database_migrations() {
+  require_command sqlx
+  if [[ -z "${DATABASE_URL:-}" ]]; then
+    echo "missing required env: DATABASE_URL" >&2
+    exit 1
+  fi
+  (
+    cd "${ROOT_DIR}"
+    DATABASE_URL="${DATABASE_URL}" sqlx migrate run --source migrations
+  )
+}
+
 runtime_state_file() {
   local configured="${PRELAUNCH_AUDIT_TRAIL_PATH}"
   if [[ "${configured}" = /* ]]; then
@@ -99,6 +111,7 @@ ensure_state_dirs
 case "${command}" in
   dev)
     compose up -d --wait
+    run_database_migrations
     reset_runtime_state_file
     exec cargo run --bin observability_runtime_service
     ;;
@@ -106,6 +119,7 @@ case "${command}" in
     compose up -d --wait
     ;;
   app)
+    run_database_migrations
     exec cargo run --bin observability_runtime_service
     ;;
   down)
