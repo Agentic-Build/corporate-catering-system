@@ -97,3 +97,37 @@ groups:
         annotations:
           summary: "HPA is near max replicas during sustained load"
           runbook: "Increase capacity before next peak release"
+      - alert: EventBackboneDeadLetterIngress
+        expr: |
+          sum(
+            increase(
+              jetstream_dead_letter_rows_total{
+                service_name="catering-http-api",
+                consumer_name="catering-order-state-projection"
+              }[5m]
+            )
+          ) >= 1
+        for: 5m
+        labels:
+          severity: warning
+          gate: hard-slo
+          slo: event-backbone-dlq-ingress
+        annotations:
+          summary: "JetStream order-event consumer is routing messages to DLQ"
+          runbook: "Inspect jetstream_dead_letter failures and reconcile poison events before release"
+      - alert: EventBackboneDeadLetterBacklogHigh
+        expr: |
+          max_over_time(
+            jetstream_dead_letter_backlog{
+              service_name="catering-http-api",
+              consumer_name="catering-order-state-projection"
+            }[10m]
+          ) >= 10
+        for: 10m
+        labels:
+          severity: critical
+          gate: hard-slo
+          slo: event-backbone-dlq-backlog
+        annotations:
+          summary: "JetStream DLQ backlog exceeded hard limit"
+          runbook: "Block release, drain DLQ backlog, and fix failing consumer projection handler"

@@ -302,6 +302,8 @@ fn hard_slo_alert_rules_cover_release_blocking_and_kubernetes_peak_signals() {
         "OrderApiErrorBudgetBurnTooFast",
         "KubernetesReadinessDrop",
         "KubernetesHpaSaturation",
+        "EventBackboneDeadLetterIngress",
+        "EventBackboneDeadLetterBacklogHigh",
     ] {
         assert!(
             alert_names.contains(required),

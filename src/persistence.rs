@@ -29,6 +29,13 @@ const ANOMALY_ALERT_STATE_KEY: &str = "anomaly_alert_workflow";
 const DELIVERY_POLICY_STATE_KEY: &str = "vendor_delivery_policy";
 const OPERATIONS_ANALYTICS_STATE_KEY: &str = "operations_analytics_warehouse";
 
+#[derive(Debug, Clone)]
+pub struct OutboxEventRecord {
+    pub event_id: String,
+    pub subject: String,
+    pub payload: serde_json::Value,
+}
+
 pub async fn build_operational_pg_pool_from_env() -> Result<PgPool, String> {
     let database_url = std::env::var(DATABASE_URL_ENV)
         .map_err(|_| format!("{DATABASE_URL_ENV} must be configured"))?;
@@ -244,6 +251,31 @@ impl SqlJsonStateRepository {
         transaction.commit().await?;
         Ok((snapshot, value))
     }
+
+    pub async fn mutate_snapshot_with_outbox<T, R, E, F>(
+        &self,
+        mutator: F,
+    ) -> Result<(T, R), JsonStatePersistenceError<E>>
+    where
+        T: serde::Serialize + DeserializeOwned,
+        F: FnOnce(Option<T>) -> Result<(T, R, Vec<OutboxEventRecord>), E>,
+    {
+        let mut transaction = self.pool.begin().await?;
+        let payload = load_payload_for_update(&mut transaction, self.state_key).await?;
+        let current = payload
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(JsonStatePersistenceError::<E>::from)?;
+        let (snapshot, value, outbox_events) =
+            mutator(current).map_err(JsonStatePersistenceError::Domain)?;
+        let payload = serde_json::to_value(&snapshot)?;
+        save_payload_in_transaction(&mut transaction, self.state_key, payload).await?;
+        for outbox_event in outbox_events {
+            insert_outbox_event_in_transaction(&mut transaction, &outbox_event).await?;
+        }
+        transaction.commit().await?;
+        Ok((snapshot, value))
+    }
 }
 
 async fn load_payload(
@@ -320,6 +352,25 @@ SET payload = EXCLUDED.payload,
         state_key,
         payload
     )
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+async fn insert_outbox_event_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    event: &OutboxEventRecord,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+INSERT INTO domain_event_outbox (event_id, subject, payload)
+VALUES ($1, $2, $3)
+ON CONFLICT (event_id) DO NOTHING
+        "#,
+    )
+    .bind(event.event_id.as_str())
+    .bind(event.subject.as_str())
+    .bind(&event.payload)
     .execute(&mut **transaction)
     .await?;
     Ok(())

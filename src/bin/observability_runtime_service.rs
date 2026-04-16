@@ -74,8 +74,8 @@ use corporate_catering_system::payroll::{
 };
 use corporate_catering_system::persistence::{
     allocate_order_id_hex_from_postgres, build_operational_pg_pool_from_env,
-    JsonStatePersistenceError, SqlJsonStateRepository, VendorCompliancePersistenceError,
-    VendorComplianceSqlRepository,
+    JsonStatePersistenceError, OutboxEventRecord, SqlJsonStateRepository,
+    VendorCompliancePersistenceError, VendorComplianceSqlRepository,
 };
 use corporate_catering_system::pickup_totp::{
     PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
@@ -3389,14 +3389,13 @@ fn mutate_ordering_menu_supply_policy<T, F>(
     mutator: F,
 ) -> Result<T, (StatusCode, ErrorPayload)>
 where
-    F: FnOnce(&MenuSupplyPolicy) -> Result<T, HttpOrderExecutionError>,
+    F: FnOnce(&MenuSupplyPolicy) -> Result<(T, Vec<OutboxEventRecord>), HttpOrderExecutionError>,
 {
     match &state.runtime_state_persistence {
         RuntimeStatePersistence::Sql(repositories) => {
             let audit_trail = state.audit_trail.clone();
-            let persistence_result =
-                tokio::task::block_in_place(|| {
-                    Handle::current().block_on(repositories.menu_supply.mutate_snapshot::<
+            let persistence_result = tokio::task::block_in_place(|| {
+                Handle::current().block_on(repositories.menu_supply.mutate_snapshot_with_outbox::<
                     MenuSupplyPolicySnapshot,
                     T,
                     HttpOrderExecutionError,
@@ -3407,13 +3406,13 @@ where
                     })?;
                     let menu_supply_policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail)
                         .map_err(HttpOrderExecutionError::MenuSupply)?;
-                    let value = mutator(&menu_supply_policy)?;
+                    let (value, outbox_events) = mutator(&menu_supply_policy)?;
                     let snapshot = menu_supply_policy
                         .snapshot()
                         .map_err(HttpOrderExecutionError::MenuSupply)?;
-                    Ok((snapshot, value))
+                    Ok((snapshot, value, outbox_events))
                 }))
-                });
+            });
             match persistence_result {
                 Ok((snapshot, value)) => {
                     write_runtime_state_snapshot_to_cache(state, MENU_SUPPLY_STATE_KEY, &snapshot);
@@ -3436,7 +3435,9 @@ where
         }
         #[cfg(test)]
         RuntimeStatePersistence::InMemoryOnly => {
-            mutator(&state.menu_supply_policy).map_err(map_http_order_execution_error)
+            let (value, _outbox_events) =
+                mutator(&state.menu_supply_policy).map_err(map_http_order_execution_error)?;
+            Ok(value)
         }
     }
 }
@@ -7158,6 +7159,16 @@ fn handle_create_employee_order_for_actor(
                     order_id.clone(),
                 ))
             })
+            .map(|snapshot| {
+                let outbox_events = build_order_state_changed_outbox_records(
+                    state,
+                    employee_actor,
+                    operation_id,
+                    &snapshot,
+                    requested_at,
+                );
+                (snapshot, outbox_events)
+            })
     })?;
     sync_payroll_ledger_from_order_snapshot(
         state,
@@ -7166,9 +7177,6 @@ fn handle_create_employee_order_for_actor(
         &snapshot,
         requested_at,
     )?;
-    let event =
-        build_order_state_changed_event(employee_actor, operation_id, &snapshot, requested_at);
-    enqueue_order_state_changed_event_best_effort(state, &event);
     build_employee_order_payload(state, &snapshot)
 }
 
@@ -7282,6 +7290,16 @@ fn handle_update_employee_order_for_actor(
                     order_id.clone(),
                 ))
             })
+            .map(|snapshot| {
+                let outbox_events = build_order_state_changed_outbox_records(
+                    state,
+                    actor,
+                    operation_id,
+                    &snapshot,
+                    requested_at,
+                );
+                (snapshot, outbox_events)
+            })
     })?;
     sync_payroll_ledger_from_order_snapshot(
         state,
@@ -7290,9 +7308,6 @@ fn handle_update_employee_order_for_actor(
         &updated_snapshot,
         requested_at,
     )?;
-    let event =
-        build_order_state_changed_event(actor, operation_id, &updated_snapshot, requested_at);
-    enqueue_order_state_changed_event_best_effort(state, &event);
     build_employee_order_payload(state, &updated_snapshot)
 }
 
@@ -10475,21 +10490,35 @@ fn build_order_state_changed_event(
     }
 }
 
-fn enqueue_order_state_changed_event_best_effort(state: &AppState, event: &OrderStateChangedEvent) {
+fn build_order_state_changed_outbox_records(
+    state: &AppState,
+    actor: &AuthenticatedActorContext,
+    operation_id: &str,
+    snapshot: &OrderSnapshot,
+    occurred_at: TaipeiBusinessMoment,
+) -> Vec<OutboxEventRecord> {
     let Some(backbone) = state.order_event_backbone.as_ref() else {
-        return;
+        return Vec::new();
     };
-    let enqueue_result = tokio::task::block_in_place(|| {
-        Handle::current().block_on(backbone.enqueue_order_state_changed_event(event))
-    });
-    if let Err(error) = enqueue_result {
-        tracing::warn!(
-            error = %error,
-            event_id = %event.event_id,
-            order_id = %event.order_id,
-            "failed to enqueue order state-change event into outbox"
-        );
-    }
+    let event = build_order_state_changed_event(actor, operation_id, snapshot, occurred_at);
+    vec![OutboxEventRecord {
+        event_id: event.event_id.clone(),
+        subject: backbone.config().order_subject.clone(),
+        payload: order_state_changed_event_payload(&event),
+    }]
+}
+
+fn order_state_changed_event_payload(event: &OrderStateChangedEvent) -> serde_json::Value {
+    serde_json::json!({
+        "eventId": event.event_id.as_str(),
+        "orderId": event.order_id.as_str(),
+        "vendorId": event.vendor_id.as_str(),
+        "plantId": event.plant_id.as_str(),
+        "orderState": event.order_state.as_str(),
+        "operationId": event.operation_id.as_str(),
+        "actorId": event.actor_id.as_str(),
+        "occurredAtEpochMillis": event.occurred_at_epoch_millis,
+    })
 }
 
 fn taipei_moment_to_iso_datetime(moment: TaipeiBusinessMoment) -> String {

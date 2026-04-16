@@ -18,7 +18,8 @@ use corporate_catering_system::payroll::{
     PayrollLedgerSourceRef, PayrollRetentionPolicy,
 };
 use corporate_catering_system::persistence::{
-    allocate_order_id_hex_from_postgres, JsonStatePersistenceError, SqlJsonStateRepository,
+    allocate_order_id_hex_from_postgres, JsonStatePersistenceError, OutboxEventRecord,
+    SqlJsonStateRepository,
 };
 use corporate_catering_system::transport::http::HttpOrderingExecutionGateway;
 use corporate_catering_system::vendor_compliance::{
@@ -30,11 +31,17 @@ use corporate_catering_system::vendor_delivery_mapping::{
     DeliveryMappingId, DeliveryRuleEffect, ServiceWindow, TaipeiBusinessMoment,
     VendorPlantDeliveryMapping, VendorPlantDeliveryPolicy,
 };
+use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPoolOptions;
 use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::testcontainers::runners::AsyncRunner;
 use testcontainers_modules::testcontainers::ImageExt;
 use tokio::sync::Barrier;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct CounterSnapshot {
+    value: i32,
+}
 
 fn actor_id(value: &str) -> ActorId {
     ActorId::parse(value).expect("actor id should be valid")
@@ -555,6 +562,127 @@ async fn runtime_order_payroll_anomaly_flows_persist_on_real_postgres_with_trans
     assert!(
         !alerts.is_empty(),
         "anomaly alerts should remain after SQL persistence reload"
+    );
+}
+
+#[tokio::test]
+async fn sql_state_mutation_with_outbox_commits_atomically_and_rolls_back_on_error() {
+    std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
+
+    let postgres = Postgres::default()
+        .with_tag("16-alpine")
+        .start()
+        .await
+        .expect("testcontainers postgres should start");
+    let database_url = format!(
+        "postgres://postgres:postgres@{}:{}/postgres",
+        postgres
+            .get_host()
+            .await
+            .expect("postgres host should resolve"),
+        postgres
+            .get_host_port_ipv4(5432)
+            .await
+            .expect("postgres mapped port should resolve"),
+    );
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(database_url.as_str())
+        .await
+        .expect("postgres pool should connect");
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("migrations should apply");
+
+    let repository = SqlJsonStateRepository::for_menu_supply(pool.clone());
+    repository
+        .save_snapshot(&CounterSnapshot { value: 1 })
+        .await
+        .expect("initial snapshot should persist");
+
+    let first_event_id = "evt-runtime-outbox-atomic-0001";
+    let (persisted_snapshot, value_after_commit) = repository
+        .mutate_snapshot_with_outbox::<CounterSnapshot, i32, String, _>(|snapshot| {
+            let mut snapshot = snapshot.ok_or("missing counter snapshot".to_owned())?;
+            snapshot.value += 1;
+            let outbox_event = OutboxEventRecord {
+                event_id: first_event_id.to_owned(),
+                subject: "catering.order.state.changed.v1".to_owned(),
+                payload: serde_json::json!({
+                    "eventId": first_event_id,
+                    "value": snapshot.value,
+                }),
+            };
+            Ok((snapshot.clone(), snapshot.value, vec![outbox_event]))
+        })
+        .await
+        .expect("mutation with outbox should commit");
+    assert_eq!(persisted_snapshot.value, 2);
+    assert_eq!(value_after_commit, 2);
+
+    let committed_snapshot = repository
+        .load_snapshot::<CounterSnapshot>()
+        .await
+        .expect("snapshot load should succeed")
+        .expect("snapshot should exist");
+    assert_eq!(committed_snapshot.value, 2);
+
+    let committed_outbox_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*)::bigint FROM domain_event_outbox")
+            .fetch_one(&pool)
+            .await
+            .expect("outbox count should query");
+    assert_eq!(committed_outbox_count, 1);
+
+    let committed_subject: String =
+        sqlx::query_scalar("SELECT subject FROM domain_event_outbox WHERE event_id = $1")
+            .bind(first_event_id)
+            .fetch_one(&pool)
+            .await
+            .expect("outbox subject should load");
+    assert_eq!(committed_subject, "catering.order.state.changed.v1");
+
+    let rollback_result = repository
+        .mutate_snapshot_with_outbox::<CounterSnapshot, (), String, _>(|snapshot| {
+            let mut snapshot = snapshot.ok_or("missing counter snapshot".to_owned())?;
+            snapshot.value += 10;
+            let _candidate_outbox_event = OutboxEventRecord {
+                event_id: "evt-runtime-outbox-atomic-rollback-0001".to_owned(),
+                subject: "catering.order.state.changed.v1".to_owned(),
+                payload: serde_json::json!({
+                    "eventId": "evt-runtime-outbox-atomic-rollback-0001",
+                    "value": snapshot.value,
+                }),
+            };
+            Err("forced rollback".to_owned())
+        })
+        .await;
+    match rollback_result {
+        Err(JsonStatePersistenceError::Domain(message)) => {
+            assert_eq!(message, "forced rollback");
+        }
+        other => panic!("expected domain rollback error, got {other:?}"),
+    }
+
+    let post_rollback_snapshot = repository
+        .load_snapshot::<CounterSnapshot>()
+        .await
+        .expect("snapshot load should succeed after rollback")
+        .expect("snapshot should exist after rollback");
+    assert_eq!(
+        post_rollback_snapshot.value, 2,
+        "failed outbox mutation must not change persisted snapshot"
+    );
+
+    let post_rollback_outbox_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*)::bigint FROM domain_event_outbox")
+            .fetch_one(&pool)
+            .await
+            .expect("outbox count should query after rollback");
+    assert_eq!(
+        post_rollback_outbox_count, 1,
+        "failed outbox mutation must not append outbox rows"
     );
 }
 
