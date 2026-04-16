@@ -182,18 +182,16 @@ WHERE consumer_name = $1 AND event_id = $2
         "duplicate message deliveries must be idempotent at the consumer boundary"
     );
 
-    sqlx::query(
-        r#"
-INSERT INTO domain_event_outbox (event_id, subject, payload)
-VALUES ($1, $2, $3)
-        "#,
+    js.publish(
+        config.order_subject.clone(),
+        serde_json::to_vec(&serde_json::json!("poison-non-object-payload"))
+            .expect("poison payload should encode")
+            .into(),
     )
-    .bind(format!("invalid-msg-{suffix}"))
-    .bind(config.order_subject.as_str())
-    .bind(serde_json::json!({ "unexpected": true }))
-    .execute(&pool)
     .await
-    .expect("invalid payload should enqueue for retry and DLQ flow");
+    .expect("poison payload should publish to JetStream")
+    .await
+    .expect("poison payload publish ack should succeed");
 
     wait_until(Duration::from_secs(8), || {
         let pool = pool.clone();
@@ -234,6 +232,9 @@ LIMIT 1
     let failure_reason: String = dlq_row
         .try_get("failure_reason")
         .expect("failure reason column should decode");
+    let payload: serde_json::Value = dlq_row
+        .try_get("payload")
+        .expect("payload column should decode");
     assert!(
         delivery_attempt >= 2,
         "failed message should only route to DLQ after retries"
@@ -242,5 +243,15 @@ LIMIT 1
         failure_reason.contains("payload shape is invalid")
             || failure_reason.contains("payload is invalid JSON"),
         "dead-letter reason should capture parse failure, got `{failure_reason}`"
+    );
+    assert_eq!(
+        payload["rawPayloadType"],
+        serde_json::Value::String("string".to_owned()),
+        "DLQ persisted payload should normalize non-object poison values"
+    );
+    assert_eq!(
+        payload["rawPayload"],
+        serde_json::Value::String("poison-non-object-payload".to_owned()),
+        "DLQ payload should retain original poison payload value"
     );
 }

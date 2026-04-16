@@ -576,12 +576,13 @@ SET
         failure_reason: &str,
         payload: serde_json::Value,
     ) -> Result<(), String> {
+        let normalized_payload = normalize_dead_letter_payload(payload);
         let dead_letter = OrderStateChangedDeadLetter {
             consumer_name: self.config.order_consumer_name.clone(),
             source_subject,
             delivery_attempt: delivery_attempt.max(0) as u64,
             failure_reason: failure_reason.to_owned(),
-            event: payload.clone(),
+            event: normalized_payload.clone(),
             failed_at_epoch_millis: now_epoch_millis(),
         };
         let serialized = serde_json::to_vec(&dead_letter)
@@ -614,7 +615,7 @@ VALUES ($1, $2, $3, $4, $5)
         .bind(dead_letter.source_subject.as_str())
         .bind(delivery_attempt)
         .bind(dead_letter.failure_reason.as_str())
-        .bind(payload)
+        .bind(normalized_payload)
         .execute(&self.pool)
         .await
         .map_err(|error| format!("failed to persist dead-letter record: {error}"))?;
@@ -694,4 +695,25 @@ fn now_epoch_millis() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as i64)
         .unwrap_or(0)
+}
+
+fn normalize_dead_letter_payload(payload: serde_json::Value) -> serde_json::Value {
+    match payload {
+        serde_json::Value::Object(_) => payload,
+        non_object => serde_json::json!({
+            "rawPayloadType": json_value_type(&non_object),
+            "rawPayload": non_object,
+        }),
+    }
+}
+
+fn json_value_type(value: &serde_json::Value) -> &'static str {
+    match value {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "boolean",
+        serde_json::Value::Number(_) => "number",
+        serde_json::Value::String(_) => "string",
+        serde_json::Value::Array(_) => "array",
+        serde_json::Value::Object(_) => "object",
+    }
 }
