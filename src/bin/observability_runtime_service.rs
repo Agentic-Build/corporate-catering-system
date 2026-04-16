@@ -1,10 +1,13 @@
 use std::cmp::Ordering as CmpOrdering;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+#[cfg(test)]
+use std::collections::BTreeSet;
 
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
@@ -55,7 +58,7 @@ use corporate_catering_system::pickup_totp::{
 };
 use corporate_catering_system::rush_reminder::{
     NoopRushReminderDeliveryGateway, RushReminderDeliveryGateway, RushReminderPolicy,
-    RushReminderWorkflow,
+    RushReminderPreferences, RushReminderWorkflow,
 };
 use corporate_catering_system::transport::http::{
     HttpAuditInvestigationExecutionGateway, HttpEmployeeDiscoveryExecutionGateway,
@@ -375,6 +378,23 @@ struct EmployeeOrderPayload {
     total: MenuPricePayload,
     timeline: Vec<OrderTimelineEventPayload>,
     created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EmployeeRushReminderPreferencesUpsertRequest {
+    plant_id: String,
+    preorder_open_enabled: bool,
+    demand_spike_enabled: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EmployeeRushReminderPreferencesPayload {
+    employee_actor_id: String,
+    plant_id: String,
+    preorder_open_enabled: bool,
+    demand_spike_enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1186,7 +1206,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         parse_bool_env_default_false(PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED_ENV)?;
     let rush_reminder_runtime_enabled =
         parse_bool_env_default_false(PRELAUNCH_RUSH_REMINDER_ENABLED_ENV)?;
-    let rush_reminder_policy = parse_rush_reminder_policy_from_env()?;
+    let rush_reminder_policy = resolve_rush_reminder_policy(rush_reminder_runtime_enabled)?;
 
     let delivery_epoch_day = resolve_delivery_epoch_day()?;
     let audit_retention_days = parse_positive_u16_env(
@@ -1285,6 +1305,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         .route("/health/live", get(live_probe))
         .route("/health/startup", get(startup_probe))
         .route("/api/v1/employee/menus", get(list_employee_menus))
+        .route(
+            "/api/v1/employee/rush-reminder-preferences",
+            put(upsert_employee_rush_reminder_preferences),
+        )
         .route("/api/v1/employee/orders", post(create_employee_order))
         .route(
             "/api/v1/employee/orders/:orderId",
@@ -2758,6 +2782,14 @@ fn parse_bool_env_default_false(key: &str) -> Result<bool, String> {
     }
 }
 
+fn resolve_rush_reminder_policy(runtime_enabled: bool) -> Result<RushReminderPolicy, String> {
+    if runtime_enabled {
+        parse_rush_reminder_policy_from_env()
+    } else {
+        Ok(RushReminderPolicy::default())
+    }
+}
+
 fn parse_rush_reminder_policy_from_env() -> Result<RushReminderPolicy, String> {
     let preorder_open_min_lead_days = parse_positive_u16_env(
         PRELAUNCH_RUSH_PREORDER_MIN_LEAD_DAYS_ENV,
@@ -3120,6 +3152,98 @@ async fn list_employee_menus(
     };
 
     response
+}
+
+async fn upsert_employee_rush_reminder_preferences(
+    State(state): State<AppState>,
+    Json(request): Json<EmployeeRushReminderPreferencesUpsertRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "upsertEmployeeRushReminderPreferences",
+        Some(LOAD_GATE_EMPLOYEE_ACTOR_ID),
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_upsert_employee_rush_reminder_preferences(&state, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("rush reminder preferences payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect(
+                            "rush reminder preference upsert error payload serialization should succeed",
+                        ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_upsert_employee_rush_reminder_preferences(
+    state: &AppState,
+    request: EmployeeRushReminderPreferencesUpsertRequest,
+) -> Result<EmployeeRushReminderPreferencesPayload, (StatusCode, ErrorPayload)> {
+    if request.plant_id != state.plant_id.as_str() {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "UNSUPPORTED_PLANT_ID",
+            format!(
+                "plantId `{}` is unsupported by this runtime, expected `{}`",
+                request.plant_id,
+                state.plant_id.as_str()
+            ),
+        ));
+    }
+
+    let employee_actor = load_gate_employee_actor_for_plant(state, &state.plant_id)?;
+    state
+        .rush_reminder_workflow
+        .upsert_preferences(
+            employee_actor.actor_id().clone(),
+            RushReminderPreferences::new(
+                request.preorder_open_enabled,
+                request.demand_spike_enabled,
+            ),
+        )
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_SERVER_ERROR",
+                format!("failed to persist rush reminder preferences: {error}"),
+            )
+        })?;
+
+    let saved = state
+        .rush_reminder_workflow
+        .preferences_for(employee_actor.actor_id())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_SERVER_ERROR",
+                format!("failed to load persisted rush reminder preferences: {error}"),
+            )
+        })?;
+
+    Ok(EmployeeRushReminderPreferencesPayload {
+        employee_actor_id: employee_actor.actor_id().as_str().to_owned(),
+        plant_id: state.plant_id.as_str().to_owned(),
+        preorder_open_enabled: saved.preorder_open_enabled(),
+        demand_spike_enabled: saved.demand_spike_enabled(),
+    })
 }
 
 fn handle_list_employee_menus(
@@ -3543,38 +3667,6 @@ fn schedule_and_dispatch_rush_reminders_best_effort(
     }
 }
 
-fn trigger_rush_reminders_for_vendor_best_effort(
-    state: &AppState,
-    subscriber_actor_id: &ActorId,
-    vendor_id: &VendorId,
-    at: TaipeiBusinessMoment,
-    operation_id: &str,
-) {
-    let deliverable_vendor_ids = BTreeSet::from([vendor_id.clone()]);
-    let entries = match state
-        .menu_supply_policy
-        .employee_discovery_snapshot(&deliverable_vendor_ids, at)
-    {
-        Ok(entries) => entries,
-        Err(error) => {
-            tracing::warn!(
-                operation_id,
-                reminder_error = %error,
-                "rush reminder discovery snapshot failed; continuing without notification side effects"
-            );
-            return;
-        }
-    };
-    let subscriber_actor_ids = HashSet::from([subscriber_actor_id.clone()]);
-    schedule_and_dispatch_rush_reminders_best_effort(
-        state,
-        &subscriber_actor_ids,
-        &entries,
-        at,
-        operation_id,
-    );
-}
-
 fn heuristic_menu_recommendation_ranker(
     entries: &mut Vec<EmployeeMenuDiscoveryEntry>,
     moment: TaipeiBusinessMoment,
@@ -3902,13 +3994,6 @@ fn handle_create_employee_order_for_actor(
         &snapshot,
         requested_at,
     )?;
-    trigger_rush_reminders_for_vendor_best_effort(
-        state,
-        employee_actor.actor_id(),
-        snapshot.vendor_id(),
-        requested_at,
-        operation_id,
-    );
     build_employee_order_payload(state, &snapshot)
 }
 
@@ -4023,13 +4108,6 @@ fn handle_update_employee_order_for_actor(
         &updated_snapshot,
         requested_at,
     )?;
-    trigger_rush_reminders_for_vendor_best_effort(
-        state,
-        actor.actor_id(),
-        updated_snapshot.vendor_id(),
-        requested_at,
-        operation_id,
-    );
     build_employee_order_payload(state, &updated_snapshot)
 }
 
@@ -8983,6 +9061,57 @@ mod tests {
     }
 
     #[test]
+    fn rush_reminder_policy_resolution_defaults_when_runtime_is_disabled() {
+        let policy = resolve_rush_reminder_policy(false)
+            .expect("disabled runtime should not require parsing reminder policy env");
+        assert_eq!(policy, RushReminderPolicy::default());
+    }
+
+    #[test]
+    fn rush_reminder_preferences_are_upserted_via_runtime_handler() {
+        let now_epoch_day = 300;
+        let state = build_state_with_rush_reminder_runtime(now_epoch_day, true);
+
+        let payload = handle_upsert_employee_rush_reminder_preferences(
+            &state,
+            EmployeeRushReminderPreferencesUpsertRequest {
+                plant_id: "fab-a".to_owned(),
+                preorder_open_enabled: false,
+                demand_spike_enabled: true,
+            },
+        )
+        .expect("preference upsert should succeed");
+        assert_eq!(payload.employee_actor_id, LOAD_GATE_EMPLOYEE_ACTOR_ID);
+        assert_eq!(payload.plant_id, "fab-a");
+        assert!(!payload.preorder_open_enabled);
+        assert!(payload.demand_spike_enabled);
+
+        let persisted = state
+            .rush_reminder_workflow
+            .preferences_for(&actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID))
+            .expect("persisted reminder preferences should be queryable");
+        assert!(!persisted.preorder_open_enabled());
+        assert!(persisted.demand_spike_enabled());
+    }
+
+    #[test]
+    fn rush_reminder_preferences_reject_unsupported_plant() {
+        let now_epoch_day = 300;
+        let state = build_state_with_rush_reminder_runtime(now_epoch_day, true);
+        let error = handle_upsert_employee_rush_reminder_preferences(
+            &state,
+            EmployeeRushReminderPreferencesUpsertRequest {
+                plant_id: "fab-b".to_owned(),
+                preorder_open_enabled: false,
+                demand_spike_enabled: false,
+            },
+        )
+        .expect_err("unsupported plant should be rejected");
+        assert_eq!(error.0, StatusCode::BAD_REQUEST);
+        assert_eq!(error.1.code, "UNSUPPORTED_PLANT_ID");
+    }
+
+    #[test]
     fn recommendation_ranking_is_deterministic_when_feature_flag_enabled() {
         let now_epoch_day = 300;
         let state = build_state_with_recommendation_runtime(now_epoch_day, true);
@@ -9226,6 +9355,37 @@ mod tests {
         let created =
             handle_create_employee_order(&state, create_request).expect("order should be created");
         assert_eq!(created.status, "PENDING");
+    }
+
+    #[test]
+    fn rush_reminder_delivery_is_isolated_from_order_transaction_path() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for rush reminder isolation test")
+            .epoch_day();
+        let mut state = build_state_with_rush_reminder_runtime(now_epoch_day, true);
+        state.rush_reminder_delivery_gateway = Arc::new(FailingRushReminderDeliveryGateway);
+
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        handle_create_employee_order(&state, create_request)
+            .expect("order creation should remain independent from reminder delivery");
+
+        let delivery_failures = state
+            .rush_reminder_workflow
+            .delivery_failures()
+            .expect("reminder delivery failures should be queryable");
+        assert!(
+            delivery_failures.is_empty(),
+            "ordering should not trigger reminder delivery attempts"
+        );
     }
 
     #[test]

@@ -540,6 +540,43 @@ fn delivery_mapping_endpoints_have_tested_error_code_to_schema_refs() {
 fn ordering_and_menu_endpoints_have_tested_error_code_to_schema_refs() {
     let spec = canonical_openapi_spec();
 
+    let reminder_preferences_operation =
+        operation_by_path_and_method(&spec, "/api/v1/employee/rush-reminder-preferences", "put");
+    assert_eq!(
+        reminder_preferences_operation["operationId"],
+        HttpOperation::UpsertEmployeeRushReminderPreferences.operation_id()
+    );
+    assert_eq!(
+        reminder_preferences_operation["requestBody"]["content"]["application/json"]["schema"]
+            ["$ref"],
+        "#/components/schemas/EmployeeRushReminderPreferencesUpsertRequest"
+    );
+    assert_eq!(
+        reminder_preferences_operation["responses"]["200"]["content"]["application/json"]["schema"]
+            ["$ref"],
+        "#/components/schemas/EmployeeRushReminderPreferences"
+    );
+    assert_error_response_ref(
+        reminder_preferences_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        reminder_preferences_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        reminder_preferences_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        reminder_preferences_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+
     let create_order_operation =
         operation_by_path_and_method(&spec, "/api/v1/employee/orders", "post");
     assert_error_response_ref(

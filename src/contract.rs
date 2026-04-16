@@ -37,6 +37,7 @@ impl HttpMethod {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HttpOperation {
     ListEmployeeMenus,
+    UpsertEmployeeRushReminderPreferences,
     CreateEmployeeOrder,
     UpdateEmployeeOrder,
     VerifyPickupOrder,
@@ -75,8 +76,9 @@ pub enum HttpOperation {
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 36] = [
+    pub const ALL: [Self; 37] = [
         Self::ListEmployeeMenus,
+        Self::UpsertEmployeeRushReminderPreferences,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
         Self::VerifyPickupOrder,
@@ -117,6 +119,7 @@ impl HttpOperation {
     pub const fn operation_id(self) -> &'static str {
         match self {
             Self::ListEmployeeMenus => "listEmployeeMenus",
+            Self::UpsertEmployeeRushReminderPreferences => "upsertEmployeeRushReminderPreferences",
             Self::CreateEmployeeOrder => "createEmployeeOrder",
             Self::UpdateEmployeeOrder => "updateEmployeeOrder",
             Self::VerifyPickupOrder => "verifyPickupOrder",
@@ -170,6 +173,11 @@ impl HttpOperation {
             | Self::QueryAuditInvestigations
             | Self::QueryAuditResponsibilities
             | Self::ExportPayrollDeductions => HttpMethod::Get,
+            Self::UpsertEmployeeRushReminderPreferences
+            | Self::UpsertVendorMenuItem
+            | Self::UpsertComplianceDocumentTemplate
+            | Self::UpsertVendorPlantDeliveryMapping
+            | Self::UpsertAnomalyRule => HttpMethod::Put,
             Self::CreateEmployeeOrder
             | Self::CreateEmployeeOrderDispute
             | Self::VerifyPickupOrder
@@ -188,10 +196,6 @@ impl HttpOperation {
             Self::UpdateEmployeeOrder
             | Self::UpdateAdminPayrollDispute
             | Self::UpdateAdminAnomalyAlert => HttpMethod::Patch,
-            Self::UpsertVendorMenuItem
-            | Self::UpsertComplianceDocumentTemplate
-            | Self::UpsertVendorPlantDeliveryMapping
-            | Self::UpsertAnomalyRule => HttpMethod::Put,
             Self::ListAnomalyRules | Self::ListAnomalyAlerts => HttpMethod::Get,
             Self::DeleteVendorPlantDeliveryMapping => HttpMethod::Delete,
         }
@@ -200,6 +204,9 @@ impl HttpOperation {
     pub const fn path(self) -> &'static str {
         match self {
             Self::ListEmployeeMenus => "/api/v1/employee/menus",
+            Self::UpsertEmployeeRushReminderPreferences => {
+                "/api/v1/employee/rush-reminder-preferences"
+            }
             Self::CreateEmployeeOrder => "/api/v1/employee/orders",
             Self::UpdateEmployeeOrder => "/api/v1/employee/orders/{orderId}",
             Self::VerifyPickupOrder => "/api/v1/employee/orders/{orderId}/pickup-verifications",
@@ -259,6 +266,7 @@ impl HttpOperation {
     pub const fn audience(self) -> HttpAudience {
         match self {
             Self::ListEmployeeMenus
+            | Self::UpsertEmployeeRushReminderPreferences
             | Self::CreateEmployeeOrder
             | Self::UpdateEmployeeOrder
             | Self::VerifyPickupOrder
@@ -301,6 +309,7 @@ impl HttpOperation {
     pub const fn write_action(self) -> Option<Action> {
         match self {
             Self::CreateEmployeeOrder
+            | Self::UpsertEmployeeRushReminderPreferences
             | Self::UpdateEmployeeOrder
             | Self::VerifyPickupOrder
             | Self::CreateEmployeeOrderDispute => Some(Action::PlaceEmployeeOrder),
@@ -346,6 +355,9 @@ impl HttpOperation {
     pub fn from_operation_id(value: &str) -> Option<Self> {
         match value {
             "listEmployeeMenus" => Some(Self::ListEmployeeMenus),
+            "upsertEmployeeRushReminderPreferences" => {
+                Some(Self::UpsertEmployeeRushReminderPreferences)
+            }
             "createEmployeeOrder" => Some(Self::CreateEmployeeOrder),
             "updateEmployeeOrder" => Some(Self::UpdateEmployeeOrder),
             "verifyPickupOrder" => Some(Self::VerifyPickupOrder),
@@ -498,6 +510,46 @@ pub fn canonical_openapi_spec() -> Value {
                 "content": {
                   "application/json": {
                     "schema": { "$ref": "#/components/schemas/MenuPage" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/employee/rush-reminder-preferences": {
+          "put": {
+            "tags": ["Employee"],
+            "summary": "Update employee rush reminder preferences",
+            "operationId": HttpOperation::UpsertEmployeeRushReminderPreferences.operation_id(),
+            "x-reminder-governance": {
+              "phase": "OPTIONAL_PHASE_2",
+              "featureFlag": "PRELAUNCH_RUSH_REMINDER_ENABLED",
+              "defaultEnabled": false,
+              "enforcePreferenceOptOut": true
+            },
+            "security": [{ "corporateSsoBearer": [] }],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/EmployeeRushReminderPreferencesUpsertRequest"
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Employee rush reminder preferences persisted",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/EmployeeRushReminderPreferences"
+                    }
                   }
                 }
               },
@@ -2955,6 +3007,32 @@ pub fn canonical_openapi_spec() -> Value {
                 "maxItems": 10
               },
               "employeeNote": { "type": "string", "maxLength": 200 }
+            },
+            "additionalProperties": false
+          },
+          "EmployeeRushReminderPreferencesUpsertRequest": {
+            "type": "object",
+            "required": ["plantId", "preorderOpenEnabled", "demandSpikeEnabled"],
+            "properties": {
+              "plantId": { "$ref": "#/components/schemas/PlantId" },
+              "preorderOpenEnabled": { "type": "boolean" },
+              "demandSpikeEnabled": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          },
+          "EmployeeRushReminderPreferences": {
+            "type": "object",
+            "required": [
+              "employeeActorId",
+              "plantId",
+              "preorderOpenEnabled",
+              "demandSpikeEnabled"
+            ],
+            "properties": {
+              "employeeActorId": { "$ref": "#/components/schemas/ActorId" },
+              "plantId": { "$ref": "#/components/schemas/PlantId" },
+              "preorderOpenEnabled": { "type": "boolean" },
+              "demandSpikeEnabled": { "type": "boolean" }
             },
             "additionalProperties": false
           },

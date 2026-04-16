@@ -396,33 +396,39 @@ impl RushReminderWorkflow {
         delivery_gateway: &(dyn RushReminderDeliveryGateway + Send + Sync),
         at: TaipeiBusinessMoment,
     ) -> Result<RushReminderDispatchReport, RushReminderError> {
-        let mut state = lock_state(&self.state)?;
         let mut report = RushReminderDispatchReport::default();
 
-        if !runtime_enabled {
-            report.skipped_count = state.pending.len();
-            return Ok(report);
-        }
+        let pending = {
+            let mut state = lock_state(&self.state)?;
+            if !runtime_enabled {
+                report.skipped_count = state.pending.len();
+                return Ok(report);
+            }
+            std::mem::take(&mut state.pending)
+        };
 
-        let pending = std::mem::take(&mut state.pending);
+        let mut delivered = Vec::new();
+        let mut failures = Vec::new();
         for notification in pending {
             match delivery_gateway.deliver(&notification) {
-                Ok(()) => {
-                    report.delivered_count = report.delivered_count.saturating_add(1);
-                    report.delivered.push(notification.clone());
-                    state.delivered.push(notification);
-                }
-                Err(error) => {
-                    report.failed_count = report.failed_count.saturating_add(1);
-                    let failure = RushReminderDeliveryFailure {
-                        notification: notification.clone(),
-                        attempted_at: at,
-                        message: error.to_string(),
-                    };
-                    report.failures.push(failure.clone());
-                    state.failures.push(failure);
-                }
+                Ok(()) => delivered.push(notification),
+                Err(error) => failures.push(RushReminderDeliveryFailure {
+                    notification,
+                    attempted_at: at,
+                    message: error.to_string(),
+                }),
             }
+        }
+
+        report.delivered_count = delivered.len();
+        report.failed_count = failures.len();
+        report.delivered = delivered;
+        report.failures = failures;
+
+        if report.delivered_count > 0 || report.failed_count > 0 {
+            let mut state = lock_state(&self.state)?;
+            state.delivered.extend(report.delivered.iter().cloned());
+            state.failures.extend(report.failures.iter().cloned());
         }
 
         Ok(report)
