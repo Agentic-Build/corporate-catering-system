@@ -511,6 +511,50 @@ pub struct FulfillmentArtifactReference {
 }
 
 impl FulfillmentArtifactReference {
+    pub fn new(
+        artifact_type: FulfillmentArtifactType,
+        object_ref: impl Into<String>,
+        mime_type: impl Into<String>,
+        size_bytes: u64,
+        sha256: impl Into<String>,
+    ) -> Result<Self, VendorFulfillmentError> {
+        let object_ref = object_ref.into();
+        ObjectStorageReference::parse(object_ref.as_str()).map_err(|error| {
+            VendorFulfillmentError::InvalidArtifactObjectReference {
+                artifact_type,
+                reason: error.to_string(),
+            }
+        })?;
+        if size_bytes == 0 {
+            return Err(VendorFulfillmentError::ArtifactStorageConfiguration(
+                "artifact payload size must be greater than zero".to_owned(),
+            ));
+        }
+        let mime_type = mime_type.into().trim().to_owned();
+        if mime_type.is_empty() {
+            return Err(VendorFulfillmentError::ArtifactStorageConfiguration(
+                "artifact mime type must not be empty".to_owned(),
+            ));
+        }
+        let sha256 = sha256.into().trim().to_ascii_lowercase();
+        if sha256.len() != 64
+            || !sha256
+                .chars()
+                .all(|character| character.is_ascii_hexdigit())
+        {
+            return Err(VendorFulfillmentError::ArtifactStorageConfiguration(
+                "artifact sha256 must be a 64-character lowercase hex string".to_owned(),
+            ));
+        }
+        Ok(Self {
+            artifact_type,
+            object_ref,
+            mime_type,
+            size_bytes,
+            sha256,
+        })
+    }
+
     pub fn artifact_type(&self) -> FulfillmentArtifactType {
         self.artifact_type
     }
@@ -561,68 +605,6 @@ pub trait FulfillmentArtifactStore: Send + Sync {
         artifact_type: FulfillmentArtifactType,
         payload: &[u8],
     ) -> Result<FulfillmentArtifactReference, VendorFulfillmentError>;
-}
-
-#[derive(Debug)]
-pub struct InMemoryFulfillmentArtifactStore {
-    bucket: String,
-    objects: Arc<Mutex<BTreeMap<String, Vec<u8>>>>,
-}
-
-impl InMemoryFulfillmentArtifactStore {
-    pub fn new(bucket: impl Into<String>) -> Result<Self, VendorFulfillmentError> {
-        let bucket = bucket.into().trim().to_owned();
-        if bucket.is_empty() {
-            return Err(VendorFulfillmentError::ArtifactStorageConfiguration(
-                "fulfillment artifact store bucket must not be empty".to_owned(),
-            ));
-        }
-        ObjectStorageReference::parse(format!("s3://{bucket}/validation/object.json")).map_err(
-            |error| VendorFulfillmentError::ArtifactStorageConfiguration(error.to_string()),
-        )?;
-        Ok(Self {
-            bucket,
-            objects: Arc::new(Mutex::new(BTreeMap::new())),
-        })
-    }
-}
-
-impl FulfillmentArtifactStore for InMemoryFulfillmentArtifactStore {
-    fn store_json_artifact(
-        &self,
-        vendor_id: &VendorId,
-        batch_id: &FulfillmentBatchId,
-        delivery_epoch_day: i32,
-        artifact_type: FulfillmentArtifactType,
-        payload: &[u8],
-    ) -> Result<FulfillmentArtifactReference, VendorFulfillmentError> {
-        let object_ref = format!(
-            "s3://{}/{}/{}/{}/{}.json",
-            self.bucket,
-            vendor_id.as_str(),
-            delivery_epoch_day,
-            batch_id.as_str(),
-            artifact_type.file_stem()
-        );
-        let object_ref = ObjectStorageReference::parse(object_ref.as_str()).map_err(|error| {
-            VendorFulfillmentError::InvalidArtifactObjectReference {
-                artifact_type,
-                reason: error.to_string(),
-            }
-        })?;
-        let mut objects = self
-            .objects
-            .lock()
-            .map_err(|_| VendorFulfillmentError::StatePoisoned)?;
-        objects.insert(object_ref.as_str().to_owned(), payload.to_vec());
-        Ok(FulfillmentArtifactReference {
-            artifact_type,
-            object_ref: object_ref.as_str().to_owned(),
-            mime_type: "application/json".to_owned(),
-            size_bytes: u64::try_from(payload.len()).expect("artifact payload length should fit"),
-            sha256: sha256_hex(payload),
-        })
-    }
 }
 
 pub struct ObjectStorageFulfillmentArtifactStore {
@@ -694,13 +676,13 @@ impl FulfillmentArtifactStore for ObjectStorageFulfillmentArtifactStore {
             });
         }
 
-        Ok(FulfillmentArtifactReference {
+        FulfillmentArtifactReference::new(
             artifact_type,
-            object_ref: upload_plan.primary.object_ref.as_str().to_owned(),
-            mime_type: upload_plan.metadata.mime_type,
-            size_bytes: u64::try_from(payload.len()).expect("artifact payload length should fit"),
-            sha256: sha256_hex(payload),
-        })
+            upload_plan.primary.object_ref.as_str().to_owned(),
+            upload_plan.metadata.mime_type,
+            u64::try_from(payload.len()).expect("artifact payload length should fit"),
+            sha256_hex(payload),
+        )
     }
 }
 

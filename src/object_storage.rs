@@ -372,16 +372,17 @@ impl ObjectStorageUploadPipeline {
 
         let thumbnail = if policy.include_thumbnail_plan {
             let thumbnail_mime = "image/webp".to_owned();
+            let thumbnail_size_bytes = intent.size_bytes.min(
+                StorageArtifactClass::MenuImageThumbnail
+                    .policy()
+                    .max_size_bytes,
+            );
             let thumbnail_key = self.build_object_key(
                 StorageArtifactClass::MenuImageThumbnail,
                 normalized_owner_scope.as_deref(),
                 "thumbnail.webp",
                 thumbnail_mime.as_str(),
-                intent.size_bytes.min(
-                    StorageArtifactClass::MenuImageThumbnail
-                        .policy()
-                        .max_size_bytes,
-                ),
+                thumbnail_size_bytes,
                 now_epoch_seconds,
                 &short_date,
                 true,
@@ -398,6 +399,14 @@ impl ObjectStorageUploadPipeline {
             thumbnail_headers.insert(
                 "x-amz-meta-thumbnail-of".to_owned(),
                 object_ref.as_str().to_owned(),
+            );
+            thumbnail_headers.insert(
+                "x-amz-meta-size-bytes".to_owned(),
+                thumbnail_size_bytes.to_string(),
+            );
+            thumbnail_headers.insert(
+                "content-length".to_owned(),
+                thumbnail_size_bytes.to_string(),
             );
             let (thumbnail_upload_url, thumbnail_upload_expires_at_epoch_seconds) = self
                 .presign_url(
@@ -1074,6 +1083,35 @@ mod tests {
         assert_eq!(
             plan.primary.required_headers.get("content-length"),
             Some(&"128000".to_owned())
+        );
+        assert_eq!(
+            plan.thumbnail
+                .as_ref()
+                .and_then(|target| target.required_headers.get("content-length")),
+            Some(&"128000".to_owned())
+        );
+    }
+
+    #[test]
+    fn thumbnail_content_length_is_capped_by_thumbnail_policy_limit() {
+        let pipeline = pipeline();
+        let plan = pipeline
+            .create_upload_plan(
+                ObjectUploadIntent {
+                    artifact_class: StorageArtifactClass::MenuImage,
+                    owner_scope: None,
+                    file_name: "menu-photo.jpg".to_owned(),
+                    mime_type: "image/jpeg".to_owned(),
+                    size_bytes: 10 * 1024 * 1024,
+                },
+                UNIX_EPOCH + std::time::Duration::from_secs(1_712_000_000),
+            )
+            .expect("upload plan should be generated");
+        assert_eq!(
+            plan.thumbnail
+                .as_ref()
+                .and_then(|target| target.required_headers.get("content-length")),
+            Some(&"2097152".to_owned())
         );
     }
 

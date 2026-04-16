@@ -11,9 +11,10 @@ use corporate_catering_system::transport::http::HttpVendorFulfillmentExecutionGa
 use corporate_catering_system::vendor_compliance::VendorId;
 use corporate_catering_system::vendor_delivery_mapping::TaipeiBusinessMoment;
 use corporate_catering_system::vendor_fulfillment::{
-    FulfillmentBatchId, FulfillmentDeliveryStatus, InMemoryFulfillmentArtifactStore,
-    VendorFulfillmentError, VendorFulfillmentPolicy,
+    FulfillmentArtifactReference, FulfillmentArtifactStore, FulfillmentArtifactType,
+    FulfillmentBatchId, FulfillmentDeliveryStatus, VendorFulfillmentError, VendorFulfillmentPolicy,
 };
+use sha2::{Digest, Sha256};
 
 fn actor_id(value: &str) -> ActorId {
     ActorId::parse(value).expect("actor id should be valid")
@@ -64,10 +65,72 @@ fn taipei_moment(epoch_day: i32, minute_of_day: u16) -> TaipeiBusinessMoment {
     TaipeiBusinessMoment::new(epoch_day, minute_of_day).expect("Taipei business moment is valid")
 }
 
+#[derive(Debug)]
+struct FixtureFulfillmentArtifactStore {
+    bucket: String,
+}
+
+impl FixtureFulfillmentArtifactStore {
+    fn new(bucket: impl Into<String>) -> Result<Self, VendorFulfillmentError> {
+        let bucket = bucket.into().trim().to_owned();
+        if bucket.is_empty() {
+            return Err(VendorFulfillmentError::ArtifactStorageConfiguration(
+                "fixture fulfillment artifact store bucket must not be empty".to_owned(),
+            ));
+        }
+        Ok(Self { bucket })
+    }
+}
+
+impl FulfillmentArtifactStore for FixtureFulfillmentArtifactStore {
+    fn store_json_artifact(
+        &self,
+        vendor_id: &VendorId,
+        batch_id: &FulfillmentBatchId,
+        delivery_epoch_day: i32,
+        artifact_type: FulfillmentArtifactType,
+        payload: &[u8],
+    ) -> Result<FulfillmentArtifactReference, VendorFulfillmentError> {
+        let size_bytes = u64::try_from(payload.len()).expect("artifact payload length should fit");
+        let digest = sha256_hex(payload);
+        let artifact_file_stem = artifact_type
+            .as_str()
+            .to_ascii_lowercase()
+            .replace('_', "-");
+        let object_ref = format!(
+            "s3://{}/fulfillment-artifacts/{}/{}/{}/{}-deadbeef-{}.json",
+            self.bucket,
+            vendor_id.as_str(),
+            delivery_epoch_day,
+            batch_id.as_str(),
+            size_bytes,
+            artifact_file_stem
+        );
+        FulfillmentArtifactReference::new(
+            artifact_type,
+            object_ref,
+            "application/json",
+            size_bytes,
+            digest,
+        )
+    }
+}
+
+fn sha256_hex(payload: &[u8]) -> String {
+    let mut digest = Sha256::new();
+    digest.update(payload);
+    let digest = digest.finalize();
+    let mut output = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        output.push_str(format!("{byte:02x}").as_str());
+    }
+    output
+}
+
 fn fulfillment_policy() -> VendorFulfillmentPolicy {
     VendorFulfillmentPolicy::new(Arc::new(
-        InMemoryFulfillmentArtifactStore::new("fulfillment-exports")
-            .expect("in-memory artifact store should initialize"),
+        FixtureFulfillmentArtifactStore::new("fulfillment-exports")
+            .expect("fixture artifact store should initialize"),
     ))
 }
 
