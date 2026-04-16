@@ -69,6 +69,13 @@ pub async fn build_operational_pg_pool_from_env() -> Result<PgPool, String> {
         .map_err(|error| format!("failed to create PostgreSQL connection pool: {error}"))
 }
 
+pub async fn apply_sql_migrations(pool: &PgPool) -> Result<(), String> {
+    sqlx::migrate!("./migrations")
+        .run(pool)
+        .await
+        .map_err(|error| format!("failed to apply SQL migrations: {error}"))
+}
+
 fn parse_positive_u32_env(env_name: &str, default: u32) -> Result<u32, String> {
     match std::env::var(env_name) {
         Ok(raw) => {

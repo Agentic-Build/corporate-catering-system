@@ -3,11 +3,13 @@ use std::collections::{BTreeMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(test)]
 use std::collections::BTreeSet;
+#[cfg(test)]
+use std::sync::{RwLock, RwLockReadGuard};
 
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
@@ -266,6 +268,7 @@ struct AppState {
     terminated_employee_actor_ids: Arc<HashSet<ActorId>>,
     audit_trail: ImmutableAuditTrail,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
+    #[cfg(test)]
     compliance_lifecycle: Arc<RwLock<VendorComplianceLifecycle>>,
     compliance_persistence: CompliancePersistence,
     runtime_state_persistence: RuntimeStatePersistence,
@@ -1421,23 +1424,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         include_lifecycle_seed_baseline,
     )
     .map_err(|error| format!("failed to bootstrap runtime state: {error}"))?;
-    if include_lifecycle_seed_baseline {
-        let seeded_lifecycle = state
-            .compliance_lifecycle
-            .read()
-            .map_err(|_| "compliance lifecycle state lock is poisoned".to_owned())?
-            .clone();
-        match &state.compliance_persistence {
-            CompliancePersistence::Sql(repository) => repository
-                .save_lifecycle(&seeded_lifecycle)
-                .await
-                .map_err(|error| {
-                    format!("failed to persist seeded compliance baseline scenarios: {error}")
-                })?,
-            #[cfg(test)]
-            CompliancePersistence::InMemoryOnly => {}
-        }
-    }
     let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| {
         format!(
             "failed to load committee actor for purge job: {}",
@@ -2907,28 +2893,43 @@ fn map_vendor_compliance_persistence_error(
     }
 }
 
+#[cfg(test)]
 fn read_compliance_lifecycle<'a>(
     state: &'a AppState,
 ) -> Result<RwLockReadGuard<'a, VendorComplianceLifecycle>, (StatusCode, ErrorPayload)> {
     state.compliance_lifecycle.read().map_err(|_| {
         domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "COMPLIANCE_LIFECYCLE_INTERNAL_ERROR",
+            "VENDOR_COMPLIANCE_INTERNAL_ERROR",
             "compliance lifecycle state lock is poisoned".to_owned(),
         )
     })
 }
 
-fn write_compliance_lifecycle<'a>(
-    state: &'a AppState,
-) -> Result<RwLockWriteGuard<'a, VendorComplianceLifecycle>, (StatusCode, ErrorPayload)> {
-    state.compliance_lifecycle.write().map_err(|_| {
-        domain_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "COMPLIANCE_LIFECYCLE_INTERNAL_ERROR",
-            "compliance lifecycle state lock is poisoned".to_owned(),
-        )
-    })
+fn load_compliance_lifecycle_snapshot(
+    state: &AppState,
+) -> Result<VendorComplianceLifecycle, (StatusCode, ErrorPayload)> {
+    match &state.compliance_persistence {
+        CompliancePersistence::Sql(repository) => tokio::task::block_in_place(|| {
+            Handle::current().block_on(
+                repository
+                    .load_lifecycle(HistoryRetentionPolicy::default(), state.audit_trail.clone()),
+            )
+        })
+        .map_err(map_vendor_compliance_persistence_error)?
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "VENDOR_COMPLIANCE_PERSISTENCE_ERROR",
+                "compliance lifecycle state is uninitialized".to_owned(),
+            )
+        }),
+        #[cfg(test)]
+        CompliancePersistence::InMemoryOnly => {
+            let lifecycle = read_compliance_lifecycle(state)?;
+            Ok(lifecycle.clone())
+        }
+    }
 }
 
 fn mutate_compliance_lifecycle<T, F>(
@@ -2941,26 +2942,29 @@ where
     let mut mutator = Some(mutator);
     match &state.compliance_persistence {
         CompliancePersistence::Sql(repository) => {
-            let mut lifecycle = write_compliance_lifecycle(state)?;
-            let retention_policy = lifecycle.retention_policy().clone();
             let mutator = mutator
                 .take()
                 .expect("compliance lifecycle mutator should be present");
             let persistence_result = tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(repository.mutate_lifecycle(
-                    retention_policy,
+                    HistoryRetentionPolicy::default(),
                     state.audit_trail.clone(),
                     mutator,
                 ))
             });
-            let (latest_lifecycle, value) =
+            let (_latest_lifecycle, value) =
                 persistence_result.map_err(map_vendor_compliance_persistence_error)?;
-            *lifecycle = latest_lifecycle;
             Ok(value)
         }
         #[cfg(test)]
         CompliancePersistence::InMemoryOnly => {
-            let mut lifecycle = write_compliance_lifecycle(state)?;
+            let mut lifecycle = state.compliance_lifecycle.write().map_err(|_| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "VENDOR_COMPLIANCE_INTERNAL_ERROR",
+                    "compliance lifecycle state lock is poisoned".to_owned(),
+                )
+            })?;
             let mutator = mutator
                 .take()
                 .expect("compliance lifecycle mutator should be present");
@@ -4111,6 +4115,21 @@ fn bootstrap_runtime_state(
             })
             .map_err(|error| format!("failed to persist seeded runtime SQL snapshots: {error}"))?;
         }
+
+        if include_lifecycle_seed_baseline {
+            match &compliance_persistence {
+                CompliancePersistence::Sql(repository) => {
+                    tokio::task::block_in_place(|| {
+                        Handle::current().block_on(repository.save_lifecycle(&compliance_lifecycle))
+                    })
+                    .map_err(|error| {
+                        format!("failed to persist seeded compliance baseline scenarios: {error}")
+                    })?;
+                }
+                #[cfg(test)]
+                CompliancePersistence::InMemoryOnly => {}
+            }
+        }
     }
 
     Ok(AppState {
@@ -4126,6 +4145,7 @@ fn bootstrap_runtime_state(
         terminated_employee_actor_ids: Arc::new(terminated_employee_actor_ids),
         audit_trail,
         payroll_export_field_encryptor,
+        #[cfg(test)]
         compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
         compliance_persistence,
         runtime_state_persistence,
@@ -4868,7 +4888,7 @@ fn handle_list_employee_menus_at(
     }
     let recommendation_requested = state.recommendation_engine_runtime_enabled;
 
-    let compliance_lifecycle = read_compliance_lifecycle(state)?;
+    let compliance_lifecycle = load_compliance_lifecycle_snapshot(state)?;
     let delivery_policy = with_delivery_policy(state, |policy| Ok(policy.clone()))?;
     let menu_supply_policy = with_menu_supply_policy(state, |policy| Ok(policy.clone()))?;
     let discovery_gateway = HttpEmployeeDiscoveryExecutionGateway::new(
@@ -5491,7 +5511,7 @@ fn handle_create_employee_order_for_actor(
     })?;
 
     let order_id = generate_contract_order_id(state)?;
-    let compliance_lifecycle = read_compliance_lifecycle(state)?;
+    let compliance_lifecycle = load_compliance_lifecycle_snapshot(state)?;
     let delivery_policy = with_delivery_policy(state, |policy| Ok(policy.clone()))?;
     let snapshot = mutate_ordering_menu_supply_policy(state, |menu_supply_policy| {
         let ordering_gateway = HttpOrderingExecutionGateway::new(
@@ -5612,7 +5632,7 @@ fn handle_update_employee_order_for_actor(
         )
     })?;
 
-    let compliance_lifecycle = read_compliance_lifecycle(state)?;
+    let compliance_lifecycle = load_compliance_lifecycle_snapshot(state)?;
     let delivery_policy = with_delivery_policy(state, |policy| Ok(policy.clone()))?;
     let current_vendor_id = current_snapshot.vendor_id().clone();
     let updated_snapshot = mutate_ordering_menu_supply_policy(state, |menu_supply_policy| {

@@ -81,6 +81,12 @@ if ! command -v k6 >/dev/null 2>&1; then
   echo "k6 is required to enforce prelaunch load thresholds"
   exit 1
 fi
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  echo "DATABASE_URL must be configured for hard-SLO baseline verification"
+  exit 1
+fi
+
+SQLX_OFFLINE="true" cargo run --quiet --bin apply_sql_migrations >/dev/null
 
 summary_file="$(mktemp -t prelaunch-k6-summary.XXXXXX.json)"
 service_log_file="$(mktemp -t prelaunch-k6-service.XXXXXX.log)"
@@ -125,6 +131,7 @@ PRELAUNCH_DELIVERY_EPOCH_DAY="${delivery_epoch_day}" \
 PRELAUNCH_PICKUP_TOTP_SECRET="${prelaunch_pickup_totp_secret}" \
 OTEL_SERVICE_NAME="catering-http-api" \
 OTEL_EXPORTER_OTLP_ENDPOINT="${collector_endpoint}" \
+SQLX_OFFLINE="true" \
 cargo run --quiet --bin observability_runtime_service >"${service_log_file}" 2>&1 &
 service_pid=$!
 
