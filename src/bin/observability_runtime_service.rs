@@ -49,12 +49,12 @@ use corporate_catering_system::operations_analytics::{
     OperationsAnalyticsDashboardSnapshot, OperationsAnalyticsQuery, OperationsAnalyticsWarehouse,
 };
 use corporate_catering_system::payroll::{
-    OrderPayrollView, PayrollDeductionRecord, PayrollDisputeId, PayrollDisputeRecord,
-    PayrollDisputeTraceEvent, PayrollExchangeBatch, PayrollExchangeBatchId, PayrollExportPage,
-    PayrollHrApiSyncOutcome, PayrollLedgerError, PayrollLedgerService, PayrollLedgerSourceKind,
-    PayrollLedgerSourceRef, PayrollReconciliationMetadata, PayrollRetentionPolicy,
-    PayrollSettlementLockReceipt, PayrollSortField as PayrollSortFieldDomain,
-    SortOrder as PayrollSortOrderDomain,
+    HrApiSyncStatus, OrderPayrollView, PayrollDeductionRecord, PayrollDisputeId,
+    PayrollDisputeRecord, PayrollDisputeTraceEvent, PayrollExchangeBatch, PayrollExchangeBatchId,
+    PayrollExportPage, PayrollHrApiSyncOutcome, PayrollLedgerError, PayrollLedgerService,
+    PayrollLedgerSourceKind, PayrollLedgerSourceRef, PayrollReconciliationMetadata,
+    PayrollRetentionPolicy, PayrollSettlementLockReceipt,
+    PayrollSortField as PayrollSortFieldDomain, SortOrder as PayrollSortOrderDomain,
 };
 use corporate_catering_system::pickup_totp::{
     PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
@@ -2928,6 +2928,7 @@ fn record_operations_analytics_payroll_settlement_closed_best_effort(
         state.vendor_id.as_str(),
         state.plant_id.as_str(),
         epoch_day,
+        batch.batch_id().as_str(),
         reconciliation.total_records(),
         reconciliation.disputed_records(),
         reconciliation.deduction_failed_records(),
@@ -2937,11 +2938,19 @@ fn record_operations_analytics_payroll_settlement_closed_best_effort(
 fn record_operations_analytics_payroll_hr_sync_best_effort(
     state: &AppState,
     epoch_day: i32,
-    outcome: PayrollHrApiSyncOutcome,
+    batch: &PayrollExchangeBatch,
 ) {
     if !state.advanced_analytics_dashboard_runtime_enabled {
         return;
     }
+    let Some(sync_receipt) = batch.hr_api_sync_receipt() else {
+        return;
+    };
+    let sync_succeeded = match sync_receipt.status() {
+        HrApiSyncStatus::Succeeded => true,
+        HrApiSyncStatus::Failed => false,
+        HrApiSyncStatus::NotSynced => return,
+    };
     let mut warehouse = match write_operations_analytics_warehouse(state) {
         Ok(warehouse) => warehouse,
         Err((_status, error)) => {
@@ -2957,7 +2966,8 @@ fn record_operations_analytics_payroll_hr_sync_best_effort(
         state.vendor_id.as_str(),
         state.plant_id.as_str(),
         epoch_day,
-        matches!(outcome, PayrollHrApiSyncOutcome::Succeeded),
+        batch.batch_id().as_str(),
+        sync_succeeded,
     );
 }
 
@@ -6278,11 +6288,7 @@ fn handle_sync_payroll_hr_api_adjunct(
         .sync_hr_api_adjunct(payroll_actor, &batch_id, outcome, request.note, occurred_at)
         .map_err(map_payroll_ledger_error)?;
 
-    record_operations_analytics_payroll_hr_sync_best_effort(
-        state,
-        occurred_at.epoch_day(),
-        outcome,
-    );
+    record_operations_analytics_payroll_hr_sync_best_effort(state, occurred_at.epoch_day(), &batch);
 
     Ok(PayrollHrApiSyncResponse {
         exchange_batch: to_payroll_exchange_batch_payload(&batch),
@@ -8976,6 +8982,58 @@ mod tests {
         state
     }
 
+    fn seed_previous_pay_period_payroll_record(
+        state: &AppState,
+        now_epoch_day: i32,
+        order_id_value: &str,
+        amount_minor: u32,
+    ) {
+        let previous_pay_period = previous_pay_period_for_epoch_day(now_epoch_day);
+        let delivery_epoch_day = parse_iso_date_to_epoch_day(&format!("{previous_pay_period}-15"))
+            .expect("previous pay period test date should be valid");
+        let employee = employee_actor();
+        let source_event = PayrollLedgerSourceRef::new(
+            PayrollLedgerSourceKind::OrderMutation,
+            format!("order:{order_id_value}:state:CREATED"),
+        )
+        .expect("payroll source ref should be valid");
+        let occurred_at = AuditTimestamp::from_taipei_business_moment(delivery_epoch_day, 600)
+            .expect("audit timestamp should be valid");
+        state
+            .payroll_ledger_service
+            .reconcile_order_charge(
+                &employee,
+                "createEmployeeOrder",
+                &order_id(order_id_value),
+                employee.actor_id(),
+                EmploymentStatus::Active,
+                delivery_epoch_day,
+                "TWD",
+                amount_minor,
+                occurred_at,
+                source_event,
+            )
+            .expect("previous-cycle payroll record should be seeded");
+    }
+
+    fn vendor_metric_value(
+        dashboard: &OperationsAnalyticsDashboardPayload,
+        vendor_id: &str,
+        metric_key: &str,
+    ) -> f64 {
+        dashboard
+            .vendor_breakdown
+            .iter()
+            .find(|row| row.vendor_id == vendor_id)
+            .and_then(|row| {
+                row.metrics
+                    .iter()
+                    .find(|metric| metric.metric_key == metric_key)
+            })
+            .map(|metric| metric.value)
+            .expect("metric should exist in vendor breakdown")
+    }
+
     fn failing_menu_recommendation_ranker(
         _entries: &mut Vec<EmployeeMenuDiscoveryEntry>,
         _at: TaipeiBusinessMoment,
@@ -9773,6 +9831,138 @@ mod tests {
             .find(|metric| metric.metric_key == "payroll_hr_sync_failed_total")
             .expect("vendor breakdown should include payroll hr sync failure metric");
         assert!(payroll_sync_failed_metric.value >= 1.0);
+    }
+
+    #[test]
+    fn advanced_analytics_settlement_replay_is_idempotent_for_metrics() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state_with_advanced_analytics_runtime(now_epoch_day, true);
+        let committee = committee_admin();
+        let payroll = payroll_operator();
+
+        seed_previous_pay_period_payroll_record(
+            &state,
+            now_epoch_day,
+            "ord-analytics-settlement-replay",
+            12_000,
+        );
+
+        let first_close = handle_close_payroll_monthly_settlement(
+            &state,
+            &payroll,
+            PayrollMonthlySettlementCloseRequest::default(),
+        )
+        .expect("first monthly close should succeed");
+        let replay_close = handle_close_payroll_monthly_settlement(
+            &state,
+            &payroll,
+            PayrollMonthlySettlementCloseRequest::default(),
+        )
+        .expect("replayed monthly close should succeed");
+        assert_eq!(
+            first_close.exchange_batch.batch_id,
+            replay_close.exchange_batch.batch_id
+        );
+
+        let dashboard = handle_get_admin_operations_analytics_dashboard(
+            &state,
+            &committee,
+            OperationsAnalyticsDashboardQueryRequest::default(),
+        )
+        .expect("admin analytics dashboard should be queryable");
+
+        assert_eq!(
+            vendor_metric_value(
+                &dashboard,
+                state.vendor_id.as_str(),
+                "payroll_settlement_records_total",
+            ),
+            first_close.exchange_batch.reconciliation.total_records as f64
+        );
+        assert_eq!(
+            vendor_metric_value(
+                &dashboard,
+                state.vendor_id.as_str(),
+                "payroll_disputed_records_total",
+            ),
+            first_close.exchange_batch.reconciliation.disputed_records as f64
+        );
+        assert_eq!(
+            vendor_metric_value(
+                &dashboard,
+                state.vendor_id.as_str(),
+                "payroll_deduction_failed_records_total",
+            ),
+            first_close
+                .exchange_batch
+                .reconciliation
+                .deduction_failed_records as f64
+        );
+    }
+
+    #[test]
+    fn advanced_analytics_hr_sync_replay_uses_persisted_batch_status() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state_with_advanced_analytics_runtime(now_epoch_day, true);
+        let committee = committee_admin();
+        let payroll = payroll_operator();
+
+        seed_previous_pay_period_payroll_record(
+            &state,
+            now_epoch_day,
+            "ord-analytics-hr-sync-replay",
+            9_500,
+        );
+        let closed = handle_close_payroll_monthly_settlement(
+            &state,
+            &payroll,
+            PayrollMonthlySettlementCloseRequest::default(),
+        )
+        .expect("monthly close should succeed");
+        let batch_id = closed.exchange_batch.batch_id.clone();
+
+        let initial_sync = handle_sync_payroll_hr_api_adjunct(
+            &state,
+            &payroll,
+            batch_id.clone(),
+            PayrollHrApiSyncRequest {
+                outcome: PayrollHrApiSyncOutcomePayload::Succeeded,
+                note: Some("initial successful sync".to_owned()),
+            },
+        )
+        .expect("first hr sync should succeed");
+        assert_eq!(initial_sync.exchange_batch.hr_api_sync_status, "SUCCEEDED");
+
+        let replay_sync = handle_sync_payroll_hr_api_adjunct(
+            &state,
+            &payroll,
+            batch_id,
+            PayrollHrApiSyncRequest {
+                outcome: PayrollHrApiSyncOutcomePayload::Failed,
+                note: Some("replayed request should not change persisted status".to_owned()),
+            },
+        )
+        .expect("replayed hr sync should remain idempotent");
+        assert_eq!(replay_sync.exchange_batch.hr_api_sync_status, "SUCCEEDED");
+
+        let dashboard = handle_get_admin_operations_analytics_dashboard(
+            &state,
+            &committee,
+            OperationsAnalyticsDashboardQueryRequest::default(),
+        )
+        .expect("admin analytics dashboard should be queryable");
+        assert_eq!(
+            vendor_metric_value(
+                &dashboard,
+                state.vendor_id.as_str(),
+                "payroll_hr_sync_failed_total",
+            ),
+            0.0
+        );
     }
 
     #[test]

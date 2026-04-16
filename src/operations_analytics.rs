@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const OPERATIONS_ANALYTICS_METRIC_SCHEMA_VERSION_V1: &str = "operations-v1";
 
@@ -76,6 +76,8 @@ impl MetricBucket {
 #[derive(Debug, Clone, Default)]
 pub struct OperationsAnalyticsWarehouse {
     by_vendor_plant_day: BTreeMap<(String, String, i32), MetricBucket>,
+    recorded_payroll_settlement_batches: BTreeSet<String>,
+    recorded_payroll_hr_sync_batches: BTreeSet<String>,
 }
 
 impl OperationsAnalyticsWarehouse {
@@ -104,10 +106,17 @@ impl OperationsAnalyticsWarehouse {
         vendor_id: &str,
         plant_id: &str,
         epoch_day: i32,
+        batch_id: &str,
         total_records: usize,
         disputed_records: usize,
         deduction_failed_records: usize,
     ) {
+        if !self
+            .recorded_payroll_settlement_batches
+            .insert(batch_id.to_owned())
+        {
+            return;
+        }
         self.record_metric(
             vendor_id,
             plant_id,
@@ -136,8 +145,15 @@ impl OperationsAnalyticsWarehouse {
         vendor_id: &str,
         plant_id: &str,
         epoch_day: i32,
+        batch_id: &str,
         succeeded: bool,
     ) {
+        if !self
+            .recorded_payroll_hr_sync_batches
+            .insert(batch_id.to_owned())
+        {
+            return;
+        }
         if !succeeded {
             self.record_metric(
                 vendor_id,
@@ -316,8 +332,8 @@ mod tests {
         warehouse.record_anomaly_triggered("ven-a", "fab-a", 100);
         warehouse.record_anomaly_triggered("ven-a", "fab-a", 100);
         warehouse.record_anomaly_closed("ven-a", "fab-a", 101);
-        warehouse.record_payroll_settlement_closed("ven-a", "fab-a", 101, 40, 3, 1);
-        warehouse.record_payroll_hr_sync_outcome("ven-a", "fab-a", 101, false);
+        warehouse.record_payroll_settlement_closed("ven-a", "fab-a", 101, "batch-101", 40, 3, 1);
+        warehouse.record_payroll_hr_sync_outcome("ven-a", "fab-a", 101, "batch-101", false);
 
         let snapshot = warehouse.query(OperationsAnalyticsQuery {
             from_epoch_day: 100,
@@ -417,6 +433,53 @@ mod tests {
         );
         assert_eq!(snapshot.plant_breakdown.len(), 1);
         assert_eq!(snapshot.time_breakdown.len(), 1);
+    }
+
+    #[test]
+    fn payroll_settlement_metrics_are_idempotent_for_replayed_batches() {
+        let mut warehouse = OperationsAnalyticsWarehouse::default();
+        warehouse.record_payroll_settlement_closed("ven-a", "fab-a", 300, "batch-a", 40, 3, 1);
+        warehouse.record_payroll_settlement_closed("ven-a", "fab-a", 300, "batch-a", 40, 3, 1);
+        warehouse.record_payroll_settlement_closed("ven-a", "fab-a", 300, "batch-b", 10, 2, 0);
+
+        let snapshot = warehouse.query(OperationsAnalyticsQuery {
+            from_epoch_day: 300,
+            to_epoch_day: 300,
+            vendor_scope: Some("ven-a"),
+        });
+        let metrics = &snapshot.vendor_breakdown[0].metrics;
+        assert_eq!(
+            metric_value(metrics, METRIC_KEY_PAYROLL_SETTLEMENT_RECORDS_TOTAL),
+            50.0
+        );
+        assert_eq!(
+            metric_value(metrics, METRIC_KEY_PAYROLL_DISPUTED_RECORDS_TOTAL),
+            5.0
+        );
+        assert_eq!(
+            metric_value(metrics, METRIC_KEY_PAYROLL_DEDUCTION_FAILED_RECORDS_TOTAL),
+            1.0
+        );
+    }
+
+    #[test]
+    fn payroll_hr_sync_failure_metric_uses_first_recorded_batch_outcome() {
+        let mut warehouse = OperationsAnalyticsWarehouse::default();
+        warehouse.record_payroll_hr_sync_outcome("ven-a", "fab-a", 300, "batch-success", true);
+        warehouse.record_payroll_hr_sync_outcome("ven-a", "fab-a", 300, "batch-success", false);
+        warehouse.record_payroll_hr_sync_outcome("ven-a", "fab-a", 300, "batch-failed", false);
+        warehouse.record_payroll_hr_sync_outcome("ven-a", "fab-a", 300, "batch-failed", true);
+
+        let snapshot = warehouse.query(OperationsAnalyticsQuery {
+            from_epoch_day: 300,
+            to_epoch_day: 300,
+            vendor_scope: Some("ven-a"),
+        });
+        let metrics = &snapshot.vendor_breakdown[0].metrics;
+        assert_eq!(
+            metric_value(metrics, METRIC_KEY_PAYROLL_HR_SYNC_FAILED_TOTAL),
+            1.0
+        );
     }
 
     #[test]

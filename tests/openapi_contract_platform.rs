@@ -447,21 +447,13 @@ fn advanced_operations_analytics_dashboard_contracts_are_flagged_and_documented(
         admin_operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
         "#/components/schemas/OperationsAnalyticsDashboard"
     );
-    assert_error_response_ref(
-        admin_operation,
-        "400",
-        "#/components/responses/BadRequest",
-    );
+    assert_error_response_ref(admin_operation, "400", "#/components/responses/BadRequest");
     assert_error_response_ref(
         admin_operation,
         "401",
         "#/components/responses/Unauthorized",
     );
-    assert_error_response_ref(
-        admin_operation,
-        "403",
-        "#/components/responses/Forbidden",
-    );
+    assert_error_response_ref(admin_operation, "403", "#/components/responses/Forbidden");
     assert_error_response_ref(admin_operation, "404", "#/components/responses/NotFound");
     assert_error_response_ref(
         admin_operation,
@@ -496,21 +488,13 @@ fn advanced_operations_analytics_dashboard_contracts_are_flagged_and_documented(
             "#/components/parameters/AnalyticsToEpochDayQuery".to_owned(),
         ])
     );
-    assert_error_response_ref(
-        vendor_operation,
-        "400",
-        "#/components/responses/BadRequest",
-    );
+    assert_error_response_ref(vendor_operation, "400", "#/components/responses/BadRequest");
     assert_error_response_ref(
         vendor_operation,
         "401",
         "#/components/responses/Unauthorized",
     );
-    assert_error_response_ref(
-        vendor_operation,
-        "403",
-        "#/components/responses/Forbidden",
-    );
+    assert_error_response_ref(vendor_operation, "403", "#/components/responses/Forbidden");
     assert_error_response_ref(vendor_operation, "404", "#/components/responses/NotFound");
     assert_error_response_ref(
         vendor_operation,
