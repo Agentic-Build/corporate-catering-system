@@ -466,6 +466,11 @@ fn ordering_and_menu_endpoints_have_tested_error_code_to_schema_refs() {
     assert!(as_set.contains("CONFLICT"));
     assert!(as_set.contains("VALIDATION_FAILED"));
     assert!(as_set.contains("INVALID_PICKUP_VERIFICATION_REQUEST"));
+    assert!(as_set.contains("PICKUP_VERIFICATION_REPLAYED"));
+    assert!(as_set.contains("PICKUP_VERIFICATION_STATE_CONFLICT"));
+    assert!(as_set.contains("PICKUP_VERIFICATION_EXPIRED"));
+    assert!(as_set.contains("PICKUP_VERIFICATION_INVALID_WINDOW"));
+    assert!(as_set.contains("PICKUP_VERIFICATION_INVALID_CODE"));
     assert!(as_set.contains("PICKUP_VERIFICATION_INTERNAL_ERROR"));
     assert!(as_set.contains("ORDER_NOT_FOUND"));
 }

@@ -2040,6 +2040,11 @@ pub fn canonical_openapi_spec() -> Value {
               "INVALID_MENU_DISCOVERY_QUERY",
               "MENU_DISCOVERY_INTERNAL_ERROR",
               "INVALID_PICKUP_VERIFICATION_REQUEST",
+              "PICKUP_VERIFICATION_REPLAYED",
+              "PICKUP_VERIFICATION_STATE_CONFLICT",
+              "PICKUP_VERIFICATION_EXPIRED",
+              "PICKUP_VERIFICATION_INVALID_WINDOW",
+              "PICKUP_VERIFICATION_INVALID_CODE",
               "PICKUP_VERIFICATION_INTERNAL_ERROR",
               "ORDER_NOT_FOUND"
             ]

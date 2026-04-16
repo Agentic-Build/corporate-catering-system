@@ -1,23 +1,22 @@
 {
     "root_group": {
-        "name": "",
         "path": "",
         "id": "d41d8cd98f00b204e9800998ecf8427e",
         "groups": {},
         "checks": {
                 "create order endpoint accepted request": {
+                    "passes": 10989,
+                    "fails": 0,
                     "name": "create order endpoint accepted request",
                     "path": "::create order endpoint accepted request",
-                    "id": "cafa65f8e79e4dbd0e45ed02b1de2ab4",
-                    "passes": 10989,
-                    "fails": 0
+                    "id": "cafa65f8e79e4dbd0e45ed02b1de2ab4"
                 },
                 "readiness endpoint healthy": {
-                    "passes": 36151,
-                    "fails": 0,
                     "name": "readiness endpoint healthy",
                     "path": "::readiness endpoint healthy",
-                    "id": "3319a48c92130eb61a5956e7b48e893c"
+                    "id": "3319a48c92130eb61a5956e7b48e893c",
+                    "passes": 36152,
+                    "fails": 0
                 },
                 "menu endpoint healthy": {
                     "name": "menu endpoint healthy",
@@ -26,17 +25,24 @@
                     "passes": 10801,
                     "fails": 0
                 },
+                "create order endpoint accepted request for pickup flow": {
+                    "path": "::create order endpoint accepted request for pickup flow",
+                    "id": "36f3e99a560762e0bb19fcfbc8391ad5",
+                    "passes": 9601,
+                    "fails": 0,
+                    "name": "create order endpoint accepted request for pickup flow"
+                },
                 "create order endpoint accepted request for lifecycle flow": {
                     "name": "create order endpoint accepted request for lifecycle flow",
                     "path": "::create order endpoint accepted request for lifecycle flow",
                     "id": "f2e1a9b2043a05d7ee36472b926cba2e",
-                    "passes": 8400,
+                    "passes": 8401,
                     "fails": 0
                 },
-                "create order endpoint accepted request for pickup flow": {
-                    "name": "create order endpoint accepted request for pickup flow",
-                    "path": "::create order endpoint accepted request for pickup flow",
-                    "id": "36f3e99a560762e0bb19fcfbc8391ad5",
+                "pickup verification endpoint accepted request": {
+                    "name": "pickup verification endpoint accepted request",
+                    "path": "::pickup verification endpoint accepted request",
+                    "id": "b1949faf67fb87665b7575fe1a56016e",
                     "passes": 9601,
                     "fails": 0
                 },
@@ -44,112 +50,86 @@
                     "name": "update order endpoint accepted request",
                     "path": "::update order endpoint accepted request",
                     "id": "9f73edc0180c8b2ee86535bb28de48eb",
-                    "passes": 8400,
+                    "passes": 8401,
                     "fails": 0
-                },
-                "pickup verification endpoint accepted request": {
-                    "id": "b1949faf67fb87665b7575fe1a56016e",
-                    "passes": 9601,
-                    "fails": 0,
-                    "name": "pickup verification endpoint accepted request",
-                    "path": "::pickup verification endpoint accepted request"
                 }
-            }
+            },
+        "name": ""
     },
     "metrics": {
-        "http_req_failed{scenario:mixed-order-and-menu-reads}": {
-            "passes": 0,
-            "fails": 25242,
-            "thresholds": {
-                "rate<0.001": false
-            },
-            "value": 0
-        },
-        "http_req_sending": {
-            "avg": 0.004323717573421241,
-            "min": 0.001,
-            "med": 0.004,
-            "max": 0.995,
-            "p(90)": 0.007,
-            "p(95)": 0.008,
-            "p(99)": 0.019
-        },
-        "http_reqs": {
-            "count": 93943,
-            "rate": 1173.7547033962608
-        },
-        "http_reqs{scenario:peak-order-placement}": {
-            "count": 14698,
-            "rate": 183.6416404683504,
-            "thresholds": {
-                "rate>120": false
-            }
-        },
-        "http_req_duration{scenario:mixed-order-and-menu-reads}": {
-            "max": 18.351,
-            "p(90)": 2.037,
-            "p(95)": 2.133,
-            "p(99)": 2.5585899999999997,
-            "avg": 1.1395570477775168,
-            "min": 0.24,
-            "med": 0.721,
-            "thresholds": {
-                "p(99)<400": false,
-                "p(95)<250": false
-            }
-        },
-        "data_sent": {
-            "count": 17953694,
-            "rate": 224319.35083867054
-        },
-        "iterations": {
-            "rate": 451.68247003478945,
-            "count": 36151
-        },
-        "vus": {
-            "value": 9,
-            "min": 3,
-            "max": 33
-        },
         "http_req_failed{scenario:peak-order-lifecycle-mutations}": {
             "passes": 0,
-            "fails": 25200,
+            "fails": 25203,
             "thresholds": {
                 "rate<0.002": false
             },
             "value": 0
         },
-        "checks": {
-            "passes": 93943,
-            "fails": 0,
-            "value": 1
-        },
-        "http_req_blocked": {
-            "max": 3.742,
-            "p(90)": 0.001,
-            "p(95)": 0.002,
-            "p(99)": 0.011,
-            "avg": 0.002406480525427754,
-            "min": 0,
-            "med": 0.001
-        },
-        "http_req_waiting": {
-            "med": 0.491,
-            "max": 19.553,
-            "p(90)": 1.866,
-            "p(95)": 2.053,
-            "p(99)": 2.641,
-            "avg": 0.7639839690024792,
-            "min": 0.226
+        "http_reqs{scenario:peak-order-lifecycle-mutations}": {
+            "count": 25203,
+            "rate": 314.8903596072146,
+            "thresholds": {
+                "rate>140": false
+            }
         },
         "http_req_duration": {
-            "p(99)": 2.706579999999999,
-            "avg": 0.778370043537029,
-            "min": 0.236,
-            "med": 0.505,
-            "max": 19.575,
-            "p(90)": 1.885800000000002,
-            "p(95)": 2.07
+            "p(99)": 2.702,
+            "avg": 0.814529846933341,
+            "min": 0.24,
+            "med": 0.514,
+            "max": 33.284,
+            "p(90)": 1.859,
+            "p(95)": 2.061
+        },
+        "data_received": {
+            "rate": 3345041.058439418,
+            "count": 267728329
+        },
+        "checks{check_type:readiness}": {
+            "fails": 0,
+            "passes": 36152,
+            "thresholds": {
+                "rate>0.999": false
+            },
+            "value": 1
+        },
+        "iterations": {
+            "count": 36152,
+            "rate": 451.6889370519391
+        },
+        "http_req_duration{scenario:peak-order-and-pickup-verification}": {
+            "p(95)": 1.939,
+            "p(99)": 2.514,
+            "avg": 0.6327103773912447,
+            "min": 0.246,
+            "med": 0.464,
+            "max": 30.147,
+            "p(90)": 0.963,
+            "thresholds": {
+                "p(95)<300": false,
+                "p(99)<450": false
+            }
+        },
+        "http_req_duration{scenario:peak-order-placement}": {
+            "avg": 0.8344687032249318,
+            "min": 0.261,
+            "med": 0.504,
+            "max": 33.284,
+            "p(90)": 1.7083000000000004,
+            "p(95)": 2.307,
+            "p(99)": 3.627839999999996,
+            "thresholds": {
+                "p(95)<350": false,
+                "p(99)<500": false
+            }
+        },
+        "http_req_failed{scenario:peak-order-and-pickup-verification}": {
+            "passes": 0,
+            "fails": 28803,
+            "thresholds": {
+                "rate<0.002": false
+            },
+            "value": 0
         },
         "http_req_failed{scenario:peak-order-placement}": {
             "passes": 0,
@@ -159,140 +139,160 @@
             },
             "value": 0
         },
-        "http_req_tls_handshaking": {
-            "p(90)": 0,
-            "p(95)": 0,
-            "p(99)": 0,
-            "avg": 0,
-            "min": 0,
-            "med": 0,
-            "max": 0
-        },
-        "http_req_duration{expected_response:true}": {
-            "p(90)": 1.885800000000002,
-            "p(95)": 2.07,
-            "p(99)": 2.706579999999999,
-            "avg": 0.778370043537029,
-            "min": 0.236,
-            "med": 0.505,
-            "max": 19.575
-        },
-        "http_req_duration{scenario:peak-order-placement}": {
-            "med": 0.496,
-            "max": 15.681,
-            "p(90)": 1.068,
-            "p(95)": 2.298,
-            "p(99)": 3.631179999999999,
-            "avg": 0.7103130357871796,
-            "min": 0.253,
-            "thresholds": {
-                "p(95)<350": false,
-                "p(99)<500": false
-            }
-        },
-        "iteration_duration": {
-            "avg": 41.38548589643459,
-            "min": 31.233875,
-            "med": 32.585292,
-            "max": 101.48425,
-            "p(90)": 82.679833,
-            "p(95)": 83.2018125,
-            "p(99)": 83.653667
-        },
-        "http_reqs{scenario:peak-order-and-pickup-verification}": {
-            "count": 28803,
-            "rate": 359.8741441291262,
-            "thresholds": {
-                "rate>160": false
-            }
-        },
-        "http_req_failed{scenario:peak-order-and-pickup-verification}": {
-            "fails": 28803,
-            "passes": 0,
-            "thresholds": {
-                "rate<0.002": false
-            },
-            "value": 0
-        },
-        "data_received": {
-            "count": 267726997,
-            "rate": 3345069.052030557
-        },
-        "http_req_duration{scenario:peak-order-lifecycle-mutations}": {
-            "p(90)": 0.861,
-            "p(95)": 1.995,
-            "p(99)": 2.239,
-            "avg": 0.6513096825396767,
-            "min": 0.238,
-            "med": 0.508,
-            "max": 18.379,
-            "thresholds": {
-                "p(99)<480": false,
-                "p(95)<320": false
-            }
-        },
-        "http_req_duration{scenario:peak-order-and-pickup-verification}": {
-            "p(90)": 0.944,
-            "p(95)": 1.2708999999999986,
-            "p(99)": 2.2559799999999997,
-            "avg": 0.6077329792035578,
-            "min": 0.236,
-            "med": 0.464,
-            "max": 19.575,
-            "thresholds": {
-                "p(95)<300": false,
-                "p(99)<450": false
-            }
-        },
         "vus_max": {
+            "min": 560,
             "max": 560,
-            "value": 560,
-            "min": 560
+            "value": 560
         },
-        "http_req_failed": {
-            "passes": 0,
-            "fails": 93943,
-            "value": 0
-        },
-        "http_req_connecting": {
-            "avg": 0.0014383083359058174,
-            "min": 0,
-            "med": 0,
-            "max": 3.727,
-            "p(90)": 0,
-            "p(95)": 0,
-            "p(99)": 0
-        },
-        "checks{check_type:readiness}": {
-            "passes": 36151,
-            "fails": 0,
-            "thresholds": {
-                "rate>0.999": false
-            },
-            "value": 1
+        "http_req_sending": {
+            "avg": 0.0043677751048464145,
+            "min": 0.001,
+            "med": 0.003,
+            "max": 1.853,
+            "p(90)": 0.007,
+            "p(95)": 0.008,
+            "p(99)": 0.018
         },
         "http_reqs{scenario:mixed-order-and-menu-reads}": {
             "count": 25242,
-            "rate": 315.38184029814266,
+            "rate": 315.37763191704596,
             "thresholds": {
                 "rate>180": false
             }
         },
-        "http_reqs{scenario:peak-order-lifecycle-mutations}": {
-            "count": 25200,
-            "rate": 314.8570785006416,
-            "thresholds": {
-                "rate>140": false
-            }
+        "vus": {
+            "value": 10,
+            "min": 3,
+            "max": 31
+        },
+        "http_req_blocked": {
+            "p(90)": 0.001,
+            "p(95)": 0.002,
+            "p(99)": 0.01,
+            "avg": 0.0021344282885941176,
+            "min": 0,
+            "med": 0.001,
+            "max": 1.949
         },
         "http_req_receiving": {
-            "p(90)": 0.014,
-            "p(95)": 0.017,
-            "p(99)": 0.047,
-            "avg": 0.01006235696112835,
+            "avg": 0.009790337002099393,
             "min": 0.003,
             "med": 0.008,
-            "max": 2.251
+            "max": 1.535,
+            "p(90)": 0.014,
+            "p(95)": 0.017,
+            "p(99)": 0.043
+        },
+        "iteration_duration": {
+            "p(95)": 83.257142,
+            "p(99)": 83.63832966,
+            "avg": 41.49236075215759,
+            "min": 31.230791,
+            "med": 32.622020500000005,
+            "max": 132.238833,
+            "p(90)": 82.6991792
+        },
+        "http_reqs": {
+            "count": 93946,
+            "rate": 1173.7765235749466
+        },
+        "http_req_duration{expected_response:true}": {
+            "max": 33.284,
+            "p(90)": 1.859,
+            "p(95)": 2.061,
+            "p(99)": 2.702,
+            "avg": 0.814529846933341,
+            "min": 0.24,
+            "med": 0.514
+        },
+        "http_req_tls_handshaking": {
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0
+        },
+        "checks": {
+            "passes": 93946,
+            "fails": 0,
+            "value": 1
+        },
+        "http_req_duration{scenario:peak-order-lifecycle-mutations}": {
+            "p(90)": 1.035,
+            "p(95)": 1.756,
+            "p(99)": 2.5339599999999995,
+            "avg": 0.6789187398325592,
+            "min": 0.24,
+            "med": 0.511,
+            "max": 28.502,
+            "thresholds": {
+                "p(95)<320": false,
+                "p(99)<480": false
+            }
+        },
+        "data_sent": {
+            "count": 17954375,
+            "rate": 224324.86609819398
+        },
+        "http_req_failed{scenario:mixed-order-and-menu-reads}": {
+            "passes": 0,
+            "fails": 25242,
+            "thresholds": {
+                "rate<0.001": false
+            },
+            "value": 0
+        },
+        "http_req_waiting": {
+            "avg": 0.8003717348263809,
+            "min": 0.23,
+            "med": 0.501,
+            "max": 33.253,
+            "p(90)": 1.84,
+            "p(95)": 2.044,
+            "p(99)": 2.656
+        },
+        "http_reqs{scenario:peak-order-and-pickup-verification}": {
+            "count": 28803,
+            "rate": 359.8693420531921,
+            "thresholds": {
+                "rate>160": false
+            }
+        },
+        "http_req_duration{scenario:mixed-order-and-menu-reads}": {
+            "min": 0.24,
+            "med": 0.729,
+            "max": 32.915,
+            "p(90)": 2.023,
+            "p(95)": 2.13,
+            "p(99)": 2.536,
+            "avg": 1.1457909040488166,
+            "thresholds": {
+                "p(95)<250": false,
+                "p(99)<400": false
+            }
+        },
+        "http_reqs{scenario:peak-order-placement}": {
+            "count": 14698,
+            "rate": 183.63918999749393,
+            "thresholds": {
+                "rate>120": false
+            }
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 93946,
+            "value": 0
+        },
+        "http_req_connecting": {
+            "min": 0,
+            "med": 0,
+            "max": 1.679,
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0,
+            "avg": 0.0011557916249760485
         }
     }
 }
