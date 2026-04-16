@@ -20,7 +20,8 @@ Environment baseline:
 Compose local stack (`ops/local/docker-compose.dev.yml`) includes core stateful dependencies:
 
 - `postgres`
-- `redis`
+- `redis` (Valkey-compatible cache backend)
+- `nats` (JetStream event backbone)
 - `minio`
 - `otel-collector`
 - all service images are pinned to immutable digests for deterministic startup

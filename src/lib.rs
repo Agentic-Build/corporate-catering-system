@@ -3,7 +3,9 @@
 pub mod access;
 pub mod anomaly_alert;
 pub mod audit;
+pub mod cache_backbone;
 pub mod contract;
+pub mod event_backbone;
 pub mod health;
 pub mod identity;
 pub mod menu_supply_window;

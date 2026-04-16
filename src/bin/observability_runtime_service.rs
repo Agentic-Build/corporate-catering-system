@@ -2,13 +2,12 @@ use std::cmp::Ordering as CmpOrdering;
 use std::collections::{BTreeMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(test)]
 use std::collections::BTreeSet;
-#[cfg(test)]
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 #[cfg(test)]
 use std::sync::{RwLock, RwLockReadGuard};
 
@@ -33,6 +32,14 @@ use corporate_catering_system::audit::{
     AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
     AuditInvestigationFilter, AuditRetentionPolicy, AuditSnapshotEncryptionKey, AuditTimestamp,
     AuditTrailError, ImmutableAuditEvidence, ImmutableAuditTrail, ResponsibilityAttribution,
+};
+use corporate_catering_system::cache_backbone::{
+    RuntimeStateCacheTtls, ValkeyRuntimeStateCache, ANOMALY_ALERT_STATE_KEY,
+    DELIVERY_POLICY_STATE_KEY, MENU_SUPPLY_STATE_KEY, OPERATIONS_ANALYTICS_STATE_KEY,
+    PAYROLL_LEDGER_STATE_KEY,
+};
+use corporate_catering_system::event_backbone::{
+    EventBackboneConfig, OrderEventBackbone, OrderStateChangedEvent,
 };
 use corporate_catering_system::health::{evaluate_probe, HealthProbeKind, HealthState};
 use corporate_catering_system::identity::{
@@ -103,6 +110,7 @@ use corporate_catering_system::vendor_delivery_mapping::{
     TaipeiBusinessMoment, VendorPlantDeliveryMapping, VendorPlantDeliveryPolicy,
 };
 use hmac::{Hmac, Mac};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::runtime::Handle;
@@ -157,6 +165,9 @@ const OBJECT_STORAGE_REGION_ENV: &str = "OBJECT_STORAGE_REGION";
 const OBJECT_STORAGE_KEY_NAMESPACE_ENV: &str = "OBJECT_STORAGE_KEY_NAMESPACE";
 const OBJECT_STORAGE_UPLOAD_TTL_SECONDS_ENV: &str = "OBJECT_STORAGE_UPLOAD_TTL_SECONDS";
 const OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS_ENV: &str = "OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS";
+const VALKEY_URL_ENV: &str = "VALKEY_URL";
+const VALKEY_CACHE_KEY_PREFIX_ENV: &str = "PRELAUNCH_CACHE_KEY_PREFIX";
+const DEFAULT_VALKEY_CACHE_KEY_PREFIX: &str = "ccs:runtime-state";
 #[cfg(test)]
 const DEFAULT_OBJECT_STORAGE_KEY_NAMESPACE: &str = "corporate-catering";
 #[cfg(test)]
@@ -190,6 +201,8 @@ const DEFAULT_SEED_DENY_PLANT_ID: &str = "fab-b";
 const DEFAULT_SEED_DENY_MAPPING_ID: &str = "map-load-gate-deny-fab-b";
 const DEFAULT_SEED_DISPUTE_EMPLOYEE_ACTOR_ID: &str = "emp-seed-dispute";
 const DEFAULT_SEED_DISPUTE_ORDER_ID: &str = "ord-seeddispute0001";
+
+static ORDER_EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 const ALL_AUDIT_ACTIONS: [AuditAction; 35] = [
     AuditAction::CreateEmployeeOrder,
@@ -299,6 +312,8 @@ struct AppState {
     compliance_lifecycle: Arc<RwLock<VendorComplianceLifecycle>>,
     compliance_persistence: CompliancePersistence,
     runtime_state_persistence: RuntimeStatePersistence,
+    runtime_state_cache: Option<Arc<ValkeyRuntimeStateCache>>,
+    order_event_backbone: Option<Arc<OrderEventBackbone>>,
     pickup_totp_verifier: Arc<PickupTotpVerifier>,
     #[cfg(test)]
     operations_analytics_warehouse: Arc<RwLock<OperationsAnalyticsWarehouse>>,
@@ -1536,6 +1551,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     let operational_pool = build_operational_pg_pool_from_env()
         .await
         .map_err(|error| format!("PostgreSQL pool configuration is invalid: {error}"))?;
+    let runtime_state_cache = Arc::new(
+        parse_valkey_runtime_state_cache_from_env()
+            .await
+            .map_err(|error| format!("Valkey cache backbone configuration is invalid: {error}"))?,
+    );
+    let order_event_backbone = OrderEventBackbone::connect(
+        operational_pool.clone(),
+        EventBackboneConfig::from_env().map_err(|error| {
+            format!("JetStream event backbone configuration is invalid: {error}")
+        })?,
+    )
+    .await
+    .map_err(|error| format!("failed to initialize JetStream event backbone: {error}"))?;
     let compliance_repository =
         Arc::new(VendorComplianceSqlRepository::new(operational_pool.clone()));
     let runtime_state_repositories = SqlRuntimeStateRepositories {
@@ -1543,7 +1571,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         payroll_ledger: SqlJsonStateRepository::for_payroll_ledger(operational_pool.clone()),
         anomaly_alert: SqlJsonStateRepository::for_anomaly_alert(operational_pool.clone()),
         delivery_policy: SqlJsonStateRepository::for_delivery_policy(operational_pool.clone()),
-        operations_analytics: SqlJsonStateRepository::for_operations_analytics(operational_pool),
+        operations_analytics: SqlJsonStateRepository::for_operations_analytics(
+            operational_pool.clone(),
+        ),
     };
     let (compliance_lifecycle, include_lifecycle_seed_baseline) =
         load_or_seed_compliance_lifecycle(
@@ -1575,9 +1605,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         compliance_lifecycle,
         CompliancePersistence::Sql(compliance_repository),
         RuntimeStatePersistence::Sql(runtime_state_repositories),
+        Some(runtime_state_cache),
+        Some(order_event_backbone.clone()),
         include_lifecycle_seed_baseline,
     )
     .map_err(|error| format!("failed to bootstrap runtime state: {error}"))?;
+    order_event_backbone.spawn_background_workers();
     let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| {
         format!(
             "failed to load committee actor for purge job: {}",
@@ -3143,33 +3176,87 @@ where
     }
 }
 
+fn load_runtime_state_snapshot_from_cache<T>(state: &AppState, state_key: &'static str) -> Option<T>
+where
+    T: DeserializeOwned,
+{
+    let cache = state.runtime_state_cache.as_ref()?;
+    let load_result = tokio::task::block_in_place(|| {
+        Handle::current().block_on(cache.load_snapshot::<T>(state_key))
+    });
+    match load_result {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                state_key = state_key,
+                "Valkey cache read failed; falling back to PostgreSQL snapshot"
+            );
+            None
+        }
+    }
+}
+
+fn write_runtime_state_snapshot_to_cache<T>(state: &AppState, state_key: &'static str, snapshot: &T)
+where
+    T: Serialize,
+{
+    let Some(cache) = state.runtime_state_cache.as_ref() else {
+        return;
+    };
+    let write_result = tokio::task::block_in_place(|| {
+        Handle::current().block_on(cache.write_through_snapshot(state_key, snapshot))
+    });
+    if let Err(error) = write_result {
+        tracing::warn!(
+            error = %error,
+            state_key = state_key,
+            "Valkey cache write-through invalidation failed"
+        );
+    }
+}
+
 fn with_delivery_policy<T, F>(state: &AppState, reader: F) -> Result<T, (StatusCode, ErrorPayload)>
 where
     F: FnOnce(&VendorPlantDeliveryPolicy) -> Result<T, (StatusCode, ErrorPayload)>,
 {
     match &state.runtime_state_persistence {
         RuntimeStatePersistence::Sql(repositories) => {
-            let snapshot = tokio::task::block_in_place(|| {
-                Handle::current().block_on(
-                    repositories
-                        .delivery_policy
-                        .load_snapshot::<PersistedPolicySnapshot>(),
-                )
-            })
-            .map_err(|error| {
-                domain_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ORDER_POLICY_VIOLATION",
-                    format!("failed to load delivery policy state from SQL: {error}"),
-                )
-            })?
-            .ok_or_else(|| {
-                domain_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ORDER_POLICY_VIOLATION",
-                    "delivery policy state is uninitialized".to_owned(),
-                )
-            })?;
+            let snapshot = match load_runtime_state_snapshot_from_cache::<PersistedPolicySnapshot>(
+                state,
+                DELIVERY_POLICY_STATE_KEY,
+            ) {
+                Some(snapshot) => snapshot,
+                None => {
+                    let snapshot = tokio::task::block_in_place(|| {
+                        Handle::current().block_on(
+                            repositories
+                                .delivery_policy
+                                .load_snapshot::<PersistedPolicySnapshot>(),
+                        )
+                    })
+                    .map_err(|error| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ORDER_POLICY_VIOLATION",
+                            format!("failed to load delivery policy state from SQL: {error}"),
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ORDER_POLICY_VIOLATION",
+                            "delivery policy state is uninitialized".to_owned(),
+                        )
+                    })?;
+                    write_runtime_state_snapshot_to_cache(
+                        state,
+                        DELIVERY_POLICY_STATE_KEY,
+                        &snapshot,
+                    );
+                    snapshot
+                }
+            };
             let delivery_policy =
                 VendorPlantDeliveryPolicy::from_snapshot(snapshot, state.audit_trail.clone())
                     .map_err(|error| {
@@ -3195,27 +3282,37 @@ where
 {
     match &state.runtime_state_persistence {
         RuntimeStatePersistence::Sql(repositories) => {
-            let snapshot = tokio::task::block_in_place(|| {
-                Handle::current().block_on(
-                    repositories
-                        .menu_supply
-                        .load_snapshot::<MenuSupplyPolicySnapshot>(),
-                )
-            })
-            .map_err(|error| {
-                domain_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ORDER_POLICY_VIOLATION",
-                    format!("failed to load menu supply state from SQL: {error}"),
-                )
-            })?
-            .ok_or_else(|| {
-                domain_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ORDER_POLICY_VIOLATION",
-                    "menu supply state is uninitialized".to_owned(),
-                )
-            })?;
+            let snapshot = match load_runtime_state_snapshot_from_cache::<MenuSupplyPolicySnapshot>(
+                state,
+                MENU_SUPPLY_STATE_KEY,
+            ) {
+                Some(snapshot) => snapshot,
+                None => {
+                    let snapshot = tokio::task::block_in_place(|| {
+                        Handle::current().block_on(
+                            repositories
+                                .menu_supply
+                                .load_snapshot::<MenuSupplyPolicySnapshot>(),
+                        )
+                    })
+                    .map_err(|error| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ORDER_POLICY_VIOLATION",
+                            format!("failed to load menu supply state from SQL: {error}"),
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ORDER_POLICY_VIOLATION",
+                            "menu supply state is uninitialized".to_owned(),
+                        )
+                    })?;
+                    write_runtime_state_snapshot_to_cache(state, MENU_SUPPLY_STATE_KEY, &snapshot);
+                    snapshot
+                }
+            };
             let menu_supply_policy =
                 MenuSupplyPolicy::from_snapshot(snapshot, state.audit_trail.clone()).map_err(
                     |error| {
@@ -3263,7 +3360,10 @@ where
                 }))
                 });
             match persistence_result {
-                Ok((_snapshot, value)) => Ok(value),
+                Ok((snapshot, value)) => {
+                    write_runtime_state_snapshot_to_cache(state, MENU_SUPPLY_STATE_KEY, &snapshot);
+                    Ok(value)
+                }
                 Err(JsonStatePersistenceError::Domain(error)) => Err(map_domain_error(error)),
                 Err(JsonStatePersistenceError::Sqlx(error)) => Err(domain_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -3315,7 +3415,10 @@ where
                 }))
                 });
             match persistence_result {
-                Ok((_snapshot, value)) => Ok(value),
+                Ok((snapshot, value)) => {
+                    write_runtime_state_snapshot_to_cache(state, MENU_SUPPLY_STATE_KEY, &snapshot);
+                    Ok(value)
+                }
                 Err(JsonStatePersistenceError::Domain(error)) => {
                     Err(map_http_order_execution_error(error))
                 }
@@ -3347,27 +3450,41 @@ where
 {
     match &state.runtime_state_persistence {
         RuntimeStatePersistence::Sql(repositories) => {
-            let snapshot = tokio::task::block_in_place(|| {
-                Handle::current().block_on(
-                    repositories
-                        .payroll_ledger
-                        .load_snapshot::<PayrollLedgerServiceSnapshot>(),
-                )
-            })
-            .map_err(|error| {
-                domain_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "PAYROLL_LEDGER_INTERNAL_ERROR",
-                    format!("failed to load payroll ledger state from SQL: {error}"),
-                )
-            })?
-            .ok_or_else(|| {
-                domain_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "PAYROLL_LEDGER_INTERNAL_ERROR",
-                    "payroll ledger state is uninitialized".to_owned(),
-                )
-            })?;
+            let snapshot = match load_runtime_state_snapshot_from_cache::<
+                PayrollLedgerServiceSnapshot,
+            >(state, PAYROLL_LEDGER_STATE_KEY)
+            {
+                Some(snapshot) => snapshot,
+                None => {
+                    let snapshot = tokio::task::block_in_place(|| {
+                        Handle::current().block_on(
+                            repositories
+                                .payroll_ledger
+                                .load_snapshot::<PayrollLedgerServiceSnapshot>(),
+                        )
+                    })
+                    .map_err(|error| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "PAYROLL_LEDGER_INTERNAL_ERROR",
+                            format!("failed to load payroll ledger state from SQL: {error}"),
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "PAYROLL_LEDGER_INTERNAL_ERROR",
+                            "payroll ledger state is uninitialized".to_owned(),
+                        )
+                    })?;
+                    write_runtime_state_snapshot_to_cache(
+                        state,
+                        PAYROLL_LEDGER_STATE_KEY,
+                        &snapshot,
+                    );
+                    snapshot
+                }
+            };
             let payroll_ledger_service =
                 PayrollLedgerService::from_snapshot(snapshot, state.audit_trail.clone());
             reader(&payroll_ledger_service).map_err(map_payroll_ledger_error)
@@ -3406,7 +3523,14 @@ where
                 )
             });
             match persistence_result {
-                Ok((_snapshot, value)) => Ok(value),
+                Ok((snapshot, value)) => {
+                    write_runtime_state_snapshot_to_cache(
+                        state,
+                        PAYROLL_LEDGER_STATE_KEY,
+                        &snapshot,
+                    );
+                    Ok(value)
+                }
                 Err(JsonStatePersistenceError::Domain(error)) => {
                     Err(map_payroll_ledger_error(error))
                 }
@@ -3438,27 +3562,41 @@ where
 {
     match &state.runtime_state_persistence {
         RuntimeStatePersistence::Sql(repositories) => {
-            let snapshot = tokio::task::block_in_place(|| {
-                Handle::current().block_on(
-                    repositories
-                        .anomaly_alert
-                        .load_snapshot::<AnomalyAlertWorkflowSnapshot>(),
-                )
-            })
-            .map_err(|error| {
-                domain_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ANOMALY_ALERT_INTERNAL_ERROR",
-                    format!("failed to load anomaly alert state from SQL: {error}"),
-                )
-            })?
-            .ok_or_else(|| {
-                domain_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ANOMALY_ALERT_INTERNAL_ERROR",
-                    "anomaly alert state is uninitialized".to_owned(),
-                )
-            })?;
+            let snapshot = match load_runtime_state_snapshot_from_cache::<
+                AnomalyAlertWorkflowSnapshot,
+            >(state, ANOMALY_ALERT_STATE_KEY)
+            {
+                Some(snapshot) => snapshot,
+                None => {
+                    let snapshot = tokio::task::block_in_place(|| {
+                        Handle::current().block_on(
+                            repositories
+                                .anomaly_alert
+                                .load_snapshot::<AnomalyAlertWorkflowSnapshot>(),
+                        )
+                    })
+                    .map_err(|error| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ANOMALY_ALERT_INTERNAL_ERROR",
+                            format!("failed to load anomaly alert state from SQL: {error}"),
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ANOMALY_ALERT_INTERNAL_ERROR",
+                            "anomaly alert state is uninitialized".to_owned(),
+                        )
+                    })?;
+                    write_runtime_state_snapshot_to_cache(
+                        state,
+                        ANOMALY_ALERT_STATE_KEY,
+                        &snapshot,
+                    );
+                    snapshot
+                }
+            };
             let anomaly_alert_workflow =
                 AnomalyAlertWorkflow::from_snapshot(snapshot, state.audit_trail.clone());
             reader(&anomaly_alert_workflow).map_err(map_anomaly_alert_error)
@@ -3497,7 +3635,14 @@ where
                 )
             });
             match persistence_result {
-                Ok((_snapshot, value)) => Ok(value),
+                Ok((snapshot, value)) => {
+                    write_runtime_state_snapshot_to_cache(
+                        state,
+                        ANOMALY_ALERT_STATE_KEY,
+                        &snapshot,
+                    );
+                    Ok(value)
+                }
                 Err(JsonStatePersistenceError::Domain(error)) => {
                     Err(map_anomaly_alert_error(error))
                 }
@@ -3529,27 +3674,41 @@ where
 {
     match &state.runtime_state_persistence {
         RuntimeStatePersistence::Sql(repositories) => {
-            let snapshot = tokio::task::block_in_place(|| {
-                Handle::current().block_on(
-                    repositories
-                        .operations_analytics
-                        .load_snapshot::<OperationsAnalyticsWarehouseSnapshot>(),
-                )
-            })
-            .map_err(|error| {
-                domain_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
-                    format!("failed to load analytics warehouse state from SQL: {error}"),
-                )
-            })?
-            .ok_or_else(|| {
-                domain_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
-                    "analytics warehouse state is uninitialized".to_owned(),
-                )
-            })?;
+            let snapshot = match load_runtime_state_snapshot_from_cache::<
+                OperationsAnalyticsWarehouseSnapshot,
+            >(state, OPERATIONS_ANALYTICS_STATE_KEY)
+            {
+                Some(snapshot) => snapshot,
+                None => {
+                    let snapshot = tokio::task::block_in_place(|| {
+                        Handle::current().block_on(
+                            repositories
+                                .operations_analytics
+                                .load_snapshot::<OperationsAnalyticsWarehouseSnapshot>(),
+                        )
+                    })
+                    .map_err(|error| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
+                            format!("failed to load analytics warehouse state from SQL: {error}"),
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
+                            "analytics warehouse state is uninitialized".to_owned(),
+                        )
+                    })?;
+                    write_runtime_state_snapshot_to_cache(
+                        state,
+                        OPERATIONS_ANALYTICS_STATE_KEY,
+                        &snapshot,
+                    );
+                    snapshot
+                }
+            };
             let warehouse =
                 OperationsAnalyticsWarehouse::from_snapshot(snapshot).map_err(|error| {
                     domain_error(
@@ -3601,11 +3760,18 @@ fn mutate_operations_analytics_warehouse_best_effort<F>(
                         ),
                 )
             });
-            if let Err(error) = persistence_result {
-                tracing::warn!(
-                    error = %error,
-                    "{warning_context}"
-                );
+            match persistence_result {
+                Ok((snapshot, ())) => write_runtime_state_snapshot_to_cache(
+                    state,
+                    OPERATIONS_ANALYTICS_STATE_KEY,
+                    &snapshot,
+                ),
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        "{warning_context}"
+                    );
+                }
             }
         }
         #[cfg(test)]
@@ -3765,6 +3931,17 @@ fn load_required_non_empty_env(key: &str) -> Result<String, String> {
         return Err(format!("{key} environment variable must be non-empty"));
     }
     Ok(trimmed.to_owned())
+}
+
+async fn parse_valkey_runtime_state_cache_from_env() -> Result<ValkeyRuntimeStateCache, String> {
+    let valkey_url = load_required_non_empty_env(VALKEY_URL_ENV)?;
+    let key_prefix = std::env::var(VALKEY_CACHE_KEY_PREFIX_ENV)
+        .map(|value| value.trim().to_owned())
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_VALKEY_CACHE_KEY_PREFIX.to_owned());
+    let ttls = RuntimeStateCacheTtls::from_env()?;
+    ValkeyRuntimeStateCache::connect(valkey_url, key_prefix, ttls).await
 }
 
 fn parse_object_storage_upload_pipeline_from_env() -> Result<ObjectStorageUploadPipeline, String> {
@@ -4221,6 +4398,8 @@ fn bootstrap_runtime_state(
     compliance_lifecycle: VendorComplianceLifecycle,
     compliance_persistence: CompliancePersistence,
     runtime_state_persistence: RuntimeStatePersistence,
+    runtime_state_cache: Option<Arc<ValkeyRuntimeStateCache>>,
+    order_event_backbone: Option<Arc<OrderEventBackbone>>,
     include_lifecycle_seed_baseline: bool,
 ) -> Result<AppState, String> {
     let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| error.message)?;
@@ -4542,6 +4721,41 @@ fn bootstrap_runtime_state(
         }
     }
 
+    if let Some(cache) = runtime_state_cache.as_ref() {
+        let delivery_snapshot = delivery_policy.snapshot();
+        let menu_snapshot = menu_supply_policy.snapshot().map_err(|error| {
+            format!("failed to snapshot menu supply state for cache warmup: {error}")
+        })?;
+        let payroll_snapshot = payroll_ledger_service.snapshot().map_err(|error| {
+            format!("failed to snapshot payroll ledger state for cache warmup: {error}")
+        })?;
+        let anomaly_snapshot = anomaly_alert_workflow.snapshot().map_err(|error| {
+            format!("failed to snapshot anomaly alert state for cache warmup: {error}")
+        })?;
+        let analytics_snapshot = operations_analytics_warehouse.snapshot();
+        tokio::task::block_in_place(|| {
+            Handle::current().block_on(async {
+                cache
+                    .write_through_snapshot(DELIVERY_POLICY_STATE_KEY, &delivery_snapshot)
+                    .await?;
+                cache
+                    .write_through_snapshot(MENU_SUPPLY_STATE_KEY, &menu_snapshot)
+                    .await?;
+                cache
+                    .write_through_snapshot(PAYROLL_LEDGER_STATE_KEY, &payroll_snapshot)
+                    .await?;
+                cache
+                    .write_through_snapshot(ANOMALY_ALERT_STATE_KEY, &anomaly_snapshot)
+                    .await?;
+                cache
+                    .write_through_snapshot(OPERATIONS_ANALYTICS_STATE_KEY, &analytics_snapshot)
+                    .await?;
+                Ok::<(), String>(())
+            })
+        })
+        .map_err(|error| format!("failed to warm Valkey runtime state cache: {error}"))?;
+    }
+
     Ok(AppState {
         #[cfg(test)]
         next_order_sequence: Arc::new(AtomicU64::new(1)),
@@ -4561,6 +4775,8 @@ fn bootstrap_runtime_state(
         compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
         compliance_persistence,
         runtime_state_persistence,
+        runtime_state_cache,
+        order_event_backbone,
         pickup_totp_verifier,
         #[cfg(test)]
         operations_analytics_warehouse: Arc::new(RwLock::new(operations_analytics_warehouse)),
@@ -6950,6 +7166,9 @@ fn handle_create_employee_order_for_actor(
         &snapshot,
         requested_at,
     )?;
+    let event =
+        build_order_state_changed_event(employee_actor, operation_id, &snapshot, requested_at);
+    enqueue_order_state_changed_event_best_effort(state, &event);
     build_employee_order_payload(state, &snapshot)
 }
 
@@ -7071,6 +7290,9 @@ fn handle_update_employee_order_for_actor(
         &updated_snapshot,
         requested_at,
     )?;
+    let event =
+        build_order_state_changed_event(actor, operation_id, &updated_snapshot, requested_at);
+    enqueue_order_state_changed_event_best_effort(state, &event);
     build_employee_order_payload(state, &updated_snapshot)
 }
 
@@ -10226,11 +10448,65 @@ fn sync_payroll_ledger_from_order_snapshot(
     Ok(())
 }
 
+fn build_order_state_changed_event(
+    actor: &AuthenticatedActorContext,
+    operation_id: &str,
+    snapshot: &OrderSnapshot,
+    occurred_at: TaipeiBusinessMoment,
+) -> OrderStateChangedEvent {
+    let sequence = ORDER_EVENT_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed);
+    let now_nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    OrderStateChangedEvent {
+        event_id: format!(
+            "evt:{}:{}:{sequence:016x}",
+            snapshot.order_id().as_str(),
+            now_nanos
+        ),
+        order_id: snapshot.order_id().as_str().to_owned(),
+        vendor_id: snapshot.vendor_id().as_str().to_owned(),
+        plant_id: snapshot.plant_id().as_str().to_owned(),
+        order_state: snapshot.state().as_str().to_owned(),
+        operation_id: operation_id.to_owned(),
+        actor_id: actor.actor_id().as_str().to_owned(),
+        occurred_at_epoch_millis: taipei_moment_to_epoch_millis(occurred_at),
+    }
+}
+
+fn enqueue_order_state_changed_event_best_effort(state: &AppState, event: &OrderStateChangedEvent) {
+    let Some(backbone) = state.order_event_backbone.as_ref() else {
+        return;
+    };
+    let enqueue_result = tokio::task::block_in_place(|| {
+        Handle::current().block_on(backbone.enqueue_order_state_changed_event(event))
+    });
+    if let Err(error) = enqueue_result {
+        tracing::warn!(
+            error = %error,
+            event_id = %event.event_id,
+            order_id = %event.order_id,
+            "failed to enqueue order state-change event into outbox"
+        );
+    }
+}
+
 fn taipei_moment_to_iso_datetime(moment: TaipeiBusinessMoment) -> String {
     let (year, month, day) = civil_from_days(i64::from(moment.epoch_day()));
     let hour = moment.minute_of_day() / 60;
     let minute = moment.minute_of_day() % 60;
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:00+08:00")
+}
+
+fn taipei_moment_to_epoch_millis(moment: TaipeiBusinessMoment) -> i64 {
+    const SECONDS_PER_DAY: i64 = 86_400;
+    const TAIPEI_OFFSET_SECONDS: i64 = 8 * 60 * 60;
+    i64::from(moment.epoch_day())
+        .saturating_mul(SECONDS_PER_DAY)
+        .saturating_add(i64::from(moment.minute_of_day()) * 60)
+        .saturating_sub(TAIPEI_OFFSET_SECONDS)
+        .saturating_mul(1000)
 }
 
 fn parse_domain_line_items(
@@ -11697,6 +11973,8 @@ mod tests {
             compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
             compliance_persistence: CompliancePersistence::InMemoryOnly,
             runtime_state_persistence: RuntimeStatePersistence::InMemoryOnly,
+            runtime_state_cache: None,
+            order_event_backbone: None,
             delivery_policy: Arc::new(delivery_policy),
             menu_supply_policy,
             pickup_totp_verifier: Arc::new(
@@ -11856,6 +12134,8 @@ mod tests {
             compliance_lifecycle,
             CompliancePersistence::InMemoryOnly,
             RuntimeStatePersistence::InMemoryOnly,
+            None,
+            None,
             true,
         )
         .expect("runtime bootstrap should seed baseline scenarios");
@@ -12511,6 +12791,8 @@ mod tests {
             )),
             compliance_persistence: CompliancePersistence::InMemoryOnly,
             runtime_state_persistence: RuntimeStatePersistence::InMemoryOnly,
+            runtime_state_cache: None,
+            order_event_backbone: None,
             delivery_policy: Arc::new(VendorPlantDeliveryPolicy::with_audit_trail(
                 audit_trail.clone(),
             )),

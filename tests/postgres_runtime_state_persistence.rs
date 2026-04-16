@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use corporate_catering_system::anomaly_alert::{
     AnomalyAlertQuery, AnomalyAlertWorkflow, AnomalyAlertWorkflowSnapshot, AnomalySignalSnapshot,
@@ -33,6 +34,7 @@ use sqlx::postgres::PgPoolOptions;
 use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::testcontainers::runners::AsyncRunner;
 use testcontainers_modules::testcontainers::ImageExt;
+use tokio::sync::Barrier;
 
 fn actor_id(value: &str) -> ActorId {
     ActorId::parse(value).expect("actor id should be valid")
@@ -553,5 +555,202 @@ async fn runtime_order_payroll_anomaly_flows_persist_on_real_postgres_with_trans
     assert!(
         !alerts.is_empty(),
         "anomaly alerts should remain after SQL persistence reload"
+    );
+}
+
+#[tokio::test]
+async fn sql_runtime_concurrent_stock_decrement_prevents_oversell() {
+    std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
+
+    let postgres = Postgres::default()
+        .with_tag("16-alpine")
+        .start()
+        .await
+        .expect("testcontainers postgres should start");
+    let database_url = format!(
+        "postgres://postgres:postgres@{}:{}/postgres",
+        postgres
+            .get_host()
+            .await
+            .expect("postgres host should resolve"),
+        postgres
+            .get_host_port_ipv4(5432)
+            .await
+            .expect("postgres mapped port should resolve"),
+    );
+    let pool = PgPoolOptions::new()
+        .max_connections(20)
+        .connect(database_url.as_str())
+        .await
+        .expect("postgres pool should connect");
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("migrations should apply");
+
+    let menu_repo = SqlJsonStateRepository::for_menu_supply(pool);
+    let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
+    let committee = committee_admin();
+    let plant = plant_id("fab-a");
+    let vendor_actor = vendor_operator(&plant);
+    let employee = employee_actor(&plant);
+    let vendor_id = VendorId::parse("ven-runtime-oversell-001").expect("vendor id should parse");
+    let menu_item_id =
+        MenuItemId::parse("menu-runtime-oversell-001").expect("menu id should parse");
+    let delivery_epoch_day = 21_500;
+
+    let compliance_lifecycle = Arc::new(build_approved_compliance_lifecycle(
+        audit_trail.clone(),
+        &committee,
+        &vendor_actor,
+        &vendor_id,
+        delivery_epoch_day,
+    ));
+    let mut delivery_policy = VendorPlantDeliveryPolicy::with_audit_trail(audit_trail.clone());
+    delivery_policy
+        .upsert_mapping(
+            &committee,
+            TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(1), 1)
+                .expect("moment should be valid"),
+            VendorPlantDeliveryMapping::new(
+                DeliveryMappingId::parse("map-runtime-oversell-allow")
+                    .expect("mapping id should parse"),
+                vendor_id.clone(),
+                plant.clone(),
+                ServiceWindow::new(
+                    TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(1), 0)
+                        .expect("moment should be valid"),
+                    TaipeiBusinessMoment::new(delivery_epoch_day.saturating_add(2), 23 * 60 + 59)
+                        .expect("moment should be valid"),
+                )
+                .expect("service window should be valid"),
+                DeliveryRuleEffect::Allow,
+                100,
+            ),
+        )
+        .expect("allow mapping should persist");
+    let delivery_policy = Arc::new(delivery_policy);
+
+    let menu_supply_policy = MenuSupplyPolicy::with_audit_trail_and_retention(
+        Default::default(),
+        audit_trail.clone(),
+        OrderRetentionPolicy::default(),
+    );
+    menu_supply_policy
+        .upsert_menu_item(
+            &vendor_actor,
+            VendorMenuItem::new(
+                menu_item_id.clone(),
+                vendor_id.clone(),
+                VendorMenuItemDraft::new(
+                    "Runtime Oversell Bento",
+                    "seeded for SQL concurrent stock decrement validation",
+                    "BENTO",
+                    vec![MenuHealthTag::HighProtein],
+                    Some(
+                        MenuImageUrl::parse(format!(
+                            "s3://menu-assets/menu-images/{}/media/262144-deadbeef-runtime-oversell.jpg",
+                            vendor_id.as_str()
+                        ))
+                        .expect("image url should parse"),
+                    ),
+                    Money::new("TWD", 12_000).expect("money should be valid"),
+                    5,
+                    delivery_epoch_day,
+                )
+                .expect("menu draft should be valid"),
+            ),
+        )
+        .expect("menu item should upsert");
+    menu_repo
+        .save_snapshot(
+            &menu_supply_policy
+                .snapshot()
+                .expect("menu supply snapshot should build"),
+        )
+        .await
+        .expect("menu supply snapshot should persist");
+
+    let barrier = Arc::new(Barrier::new(11));
+    let mut tasks = Vec::new();
+    for index in 0..10 {
+        let barrier = Arc::clone(&barrier);
+        let menu_repo = menu_repo.clone();
+        let audit_trail = audit_trail.clone();
+        let compliance_lifecycle = Arc::clone(&compliance_lifecycle);
+        let delivery_policy = Arc::clone(&delivery_policy);
+        let employee = employee.clone();
+        let vendor_id = vendor_id.clone();
+        let plant = plant.clone();
+        let menu_item_id = menu_item_id.clone();
+        tasks.push(tokio::spawn(async move {
+            barrier.wait().await;
+            menu_repo
+                .mutate_snapshot::<MenuSupplyPolicySnapshot, (), String, _>(|snapshot| {
+                    let snapshot = snapshot.ok_or("missing menu supply snapshot".to_owned())?;
+                    let policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail.clone())
+                        .map_err(|error| error.to_string())?;
+                    let gateway = HttpOrderingExecutionGateway::new(
+                        compliance_lifecycle.as_ref(),
+                        delivery_policy.as_ref(),
+                        &policy,
+                    );
+                    gateway
+                        .execute_create_employee_order(
+                            &employee,
+                            OrderId::parse(format!("ord-runtime-oversell-{index:02}"))
+                                .expect("order id should parse"),
+                            &vendor_id,
+                            &plant,
+                            delivery_epoch_day,
+                            vec![OrderLineItemRequest::new(menu_item_id, 1, vec![])
+                                .expect("line item should be valid")],
+                            TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(1), 660)
+                                .expect("moment should be valid"),
+                        )
+                        .map_err(|error| error.to_string())?;
+                    let persisted = policy.snapshot().map_err(|error| error.to_string())?;
+                    Ok((persisted, ()))
+                })
+                .await
+        }));
+    }
+
+    barrier.wait().await;
+
+    let mut success_count = 0;
+    let mut rejection_count = 0;
+    for task in tasks {
+        match task.await.expect("task should complete") {
+            Ok((_snapshot, ())) => success_count += 1,
+            Err(JsonStatePersistenceError::Domain(_)) => rejection_count += 1,
+            Err(error) => panic!("unexpected persistence error under concurrency: {error}"),
+        }
+    }
+
+    assert_eq!(
+        success_count, 5,
+        "exactly five decrements should commit for daily quota 5"
+    );
+    assert_eq!(
+        rejection_count, 5,
+        "remaining concurrent decrements should be rejected"
+    );
+
+    let reloaded_policy = MenuSupplyPolicy::from_snapshot(
+        menu_repo
+            .load_snapshot::<MenuSupplyPolicySnapshot>()
+            .await
+            .expect("snapshot load should succeed")
+            .expect("snapshot should exist"),
+        audit_trail,
+    )
+    .expect("reloaded menu policy should be valid");
+    assert_eq!(
+        reloaded_policy
+            .remaining_quantity(&menu_item_id)
+            .expect("remaining quantity should resolve"),
+        Some(0),
+        "concurrent decrement flow must never oversell"
     );
 }
