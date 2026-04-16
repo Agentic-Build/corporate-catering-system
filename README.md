@@ -23,6 +23,7 @@ Compose local stack (`ops/local/docker-compose.dev.yml`) includes core stateful 
 - `redis`
 - `minio`
 - `otel-collector`
+- all service images are pinned to immutable digests for deterministic startup
 
 Runtime bootstrap seeds deterministic scenarios for:
 
