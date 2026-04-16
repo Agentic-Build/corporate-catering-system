@@ -185,6 +185,14 @@
           "type": "string"
         }
       },
+      "EmployeeOrderSortByQuery": {
+        "in": "query",
+        "name": "sortBy",
+        "required": false,
+        "schema": {
+          "$ref": "#/components/schemas/EmployeeOrderSortField"
+        }
+      },
       "FromDateQuery": {
         "in": "query",
         "name": "fromDate",
@@ -1586,6 +1594,25 @@
         ],
         "type": "object"
       },
+      "EmployeeOrderPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmployeeOrder"
+            },
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "type": "object"
+      },
       "EmployeeOrderPatchRequest": {
         "description": "Order patch command. Supports line-item replacement and cancellation under the same cutoff governance.",
         "oneOf": [
@@ -1665,6 +1692,14 @@
           "lineItems"
         ],
         "type": "object"
+      },
+      "EmployeeOrderSortField": {
+        "enum": [
+          "deliveryDate",
+          "status",
+          "createdAt"
+        ],
+        "type": "string"
       },
       "EmployeeOrderStatus": {
         "enum": [
@@ -5897,6 +5932,68 @@
       }
     },
     "/api/v1/employee/orders": {
+      "get": {
+        "operationId": "listEmployeeOrders",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PlantIdQuery"
+          },
+          {
+            "$ref": "#/components/parameters/FromDateQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ToDateQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeQuery"
+          },
+          {
+            "$ref": "#/components/parameters/EmployeeOrderSortByQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SortOrderQuery"
+          },
+          {
+            "$ref": "#/components/parameters/OrderStatusFilterQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeOrderPage"
+                }
+              }
+            },
+            "description": "Paginated employee order history and active preorder entries"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "corporateSsoBearer": []
+          }
+        ],
+        "summary": "List employee orders",
+        "tags": [
+          "Employee"
+        ]
+      },
       "post": {
         "operationId": "createEmployeeOrder",
         "requestBody": {
@@ -6740,6 +6837,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "security": [

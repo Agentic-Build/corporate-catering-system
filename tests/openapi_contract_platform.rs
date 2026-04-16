@@ -92,6 +92,20 @@ fn assert_error_response_ref(operation: &Value, status_code: &str, expected_ref:
     assert_eq!(actual_ref, expected_ref);
 }
 
+fn operation_parameter_refs(operation: &Value) -> BTreeSet<String> {
+    operation["parameters"]
+        .as_array()
+        .expect("operation parameters should be an array")
+        .iter()
+        .map(|parameter| {
+            parameter["$ref"]
+                .as_str()
+                .expect("operation parameter should be a ref")
+                .to_owned()
+        })
+        .collect()
+}
+
 fn different_action(action: Action) -> Action {
     match action {
         Action::PlaceEmployeeOrder => Action::ManageVendorMenu,
@@ -668,6 +682,29 @@ fn ordering_and_menu_endpoints_have_tested_error_code_to_schema_refs() {
         "#/components/responses/InternalServerError",
     );
 
+    let employee_list_order_operation =
+        operation_by_path_and_method(&spec, "/api/v1/employee/orders", "get");
+    assert_error_response_ref(
+        employee_list_order_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        employee_list_order_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        employee_list_order_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        employee_list_order_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+
     let create_order_operation =
         operation_by_path_and_method(&spec, "/api/v1/employee/orders", "post");
     assert_error_response_ref(
@@ -756,6 +793,29 @@ fn ordering_and_menu_endpoints_have_tested_error_code_to_schema_refs() {
     );
     assert_error_response_ref(
         pickup_verification_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+
+    let vendor_list_order_operation =
+        operation_by_path_and_method(&spec, "/api/v1/vendor/orders", "get");
+    assert_error_response_ref(
+        vendor_list_order_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        vendor_list_order_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        vendor_list_order_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        vendor_list_order_operation,
         "500",
         "#/components/responses/InternalServerError",
     );
@@ -1903,6 +1963,79 @@ fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_re
     assert_eq!(
         spec["components"]["schemas"]["EmployeeOrder"]["properties"]["timeline"]["items"]["$ref"],
         "#/components/schemas/OrderTimelineEvent"
+    );
+}
+
+#[test]
+fn order_list_contracts_expose_pagination_filters_and_page_schemas() {
+    let spec = canonical_openapi_spec();
+
+    let employee_list_operation =
+        operation_by_path_and_method(&spec, "/api/v1/employee/orders", "get");
+    assert_eq!(
+        employee_list_operation["operationId"],
+        HttpOperation::ListEmployeeOrders.operation_id()
+    );
+    assert_eq!(
+        employee_list_operation["responses"]["200"]["content"]["application/json"]["schema"]
+            ["$ref"],
+        "#/components/schemas/EmployeeOrderPage"
+    );
+    assert_eq!(
+        operation_parameter_refs(employee_list_operation),
+        BTreeSet::from([
+            "#/components/parameters/EmployeeOrderSortByQuery".to_owned(),
+            "#/components/parameters/FromDateQuery".to_owned(),
+            "#/components/parameters/OrderStatusFilterQuery".to_owned(),
+            "#/components/parameters/PageQuery".to_owned(),
+            "#/components/parameters/PageSizeQuery".to_owned(),
+            "#/components/parameters/PlantIdQuery".to_owned(),
+            "#/components/parameters/SortOrderQuery".to_owned(),
+            "#/components/parameters/ToDateQuery".to_owned(),
+        ])
+    );
+
+    let employee_sort_enum = spec["components"]["schemas"]["EmployeeOrderSortField"]["enum"]
+        .as_array()
+        .expect("EmployeeOrderSortField enum should exist")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("EmployeeOrderSortField values should be strings")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        employee_sort_enum,
+        BTreeSet::from([
+            "createdAt".to_owned(),
+            "deliveryDate".to_owned(),
+            "status".to_owned(),
+        ])
+    );
+
+    let vendor_list_operation = operation_by_path_and_method(&spec, "/api/v1/vendor/orders", "get");
+    assert_eq!(
+        vendor_list_operation["operationId"],
+        HttpOperation::ListVendorOrders.operation_id()
+    );
+    assert_eq!(
+        vendor_list_operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/VendorOrderPage"
+    );
+    assert_eq!(
+        operation_parameter_refs(vendor_list_operation),
+        BTreeSet::from([
+            "#/components/parameters/FromDateQuery".to_owned(),
+            "#/components/parameters/OrderStatusFilterQuery".to_owned(),
+            "#/components/parameters/PageQuery".to_owned(),
+            "#/components/parameters/PageSizeQuery".to_owned(),
+            "#/components/parameters/PlantIdQuery".to_owned(),
+            "#/components/parameters/SortOrderQuery".to_owned(),
+            "#/components/parameters/ToDateQuery".to_owned(),
+            "#/components/parameters/VendorOrderSortByQuery".to_owned(),
+        ])
     );
 }
 

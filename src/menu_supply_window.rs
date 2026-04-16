@@ -1241,18 +1241,7 @@ impl MenuSupplyPolicy {
         Ok(state
             .orders
             .get(order_id)
-            .map(|stored_order| OrderSnapshot {
-                order_id: order_id.clone(),
-                employee_actor_id: stored_order.employee_actor_id.clone(),
-                vendor_id: stored_order.vendor_id.clone(),
-                plant_id: stored_order.plant_id.clone(),
-                delivery_epoch_day: stored_order.delivery_epoch_day,
-                state: stored_order.state,
-                line_items: stored_order.line_items.clone(),
-                special_requests_by_menu_item: stored_order.special_requests_by_menu_item.clone(),
-                timeline: stored_order.timeline.clone(),
-                inventory_reserved: stored_order.inventory_reserved,
-            }))
+            .map(|stored_order| order_snapshot_from_stored(order_id, stored_order)))
     }
 
     pub fn order_timeline(
@@ -1262,6 +1251,25 @@ impl MenuSupplyPolicy {
         Ok(self
             .order_snapshot(order_id)?
             .map(|snapshot| snapshot.timeline))
+    }
+
+    pub fn order_snapshots_for_employee(
+        &self,
+        employee_actor_id: &ActorId,
+    ) -> Result<Vec<OrderSnapshot>, MenuSupplyWindowError> {
+        let state = lock_state(&self.state)?;
+        let mut snapshots = state
+            .orders
+            .iter()
+            .filter_map(|(order_id, stored_order)| {
+                if &stored_order.employee_actor_id != employee_actor_id {
+                    return None;
+                }
+                Some(order_snapshot_from_stored(order_id, stored_order))
+            })
+            .collect::<Vec<_>>();
+        snapshots.sort_by(|left, right| left.order_id().cmp(right.order_id()));
+        Ok(snapshots)
     }
 
     pub fn purge_expired_orders(
@@ -1360,20 +1368,33 @@ impl MenuSupplyPolicy {
                 {
                     return None;
                 }
-                Some(OrderSnapshot {
-                    order_id: order_id.clone(),
-                    employee_actor_id: stored_order.employee_actor_id.clone(),
-                    vendor_id: stored_order.vendor_id.clone(),
-                    plant_id: stored_order.plant_id.clone(),
-                    delivery_epoch_day: stored_order.delivery_epoch_day,
-                    state: stored_order.state,
-                    line_items: stored_order.line_items.clone(),
-                    special_requests_by_menu_item: stored_order
-                        .special_requests_by_menu_item
-                        .clone(),
-                    timeline: stored_order.timeline.clone(),
-                    inventory_reserved: stored_order.inventory_reserved,
-                })
+                Some(order_snapshot_from_stored(order_id, stored_order))
+            })
+            .collect::<Vec<_>>();
+        snapshots.sort_by(|left, right| left.order_id().cmp(right.order_id()));
+        Ok(snapshots)
+    }
+
+    pub fn order_snapshots_for_vendor_date_range(
+        &self,
+        vendor_id: &VendorId,
+        from_epoch_day: i32,
+        to_epoch_day: i32,
+    ) -> Result<Vec<OrderSnapshot>, MenuSupplyWindowError> {
+        let state = lock_state(&self.state)?;
+        let mut snapshots = state
+            .orders
+            .iter()
+            .filter_map(|(order_id, stored_order)| {
+                if stored_order.vendor_id != *vendor_id {
+                    return None;
+                }
+                if stored_order.delivery_epoch_day < from_epoch_day
+                    || stored_order.delivery_epoch_day > to_epoch_day
+                {
+                    return None;
+                }
+                Some(order_snapshot_from_stored(order_id, stored_order))
             })
             .collect::<Vec<_>>();
         snapshots.sort_by(|left, right| left.order_id().cmp(right.order_id()));
@@ -2149,6 +2170,21 @@ fn release_order_allocation_locked(
         state.allocated_quantity_by_menu_item.remove(&menu_item_id);
     }
     Ok(())
+}
+
+fn order_snapshot_from_stored(order_id: &OrderId, stored_order: &StoredOrder) -> OrderSnapshot {
+    OrderSnapshot {
+        order_id: order_id.clone(),
+        employee_actor_id: stored_order.employee_actor_id.clone(),
+        vendor_id: stored_order.vendor_id.clone(),
+        plant_id: stored_order.plant_id.clone(),
+        delivery_epoch_day: stored_order.delivery_epoch_day,
+        state: stored_order.state,
+        line_items: stored_order.line_items.clone(),
+        special_requests_by_menu_item: stored_order.special_requests_by_menu_item.clone(),
+        timeline: stored_order.timeline.clone(),
+        inventory_reserved: stored_order.inventory_reserved,
+    }
 }
 
 fn is_valid_iso_currency(value: &str) -> bool {

@@ -440,6 +440,31 @@ struct EmployeeOrderPayload {
     created_at: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EmployeeOrderPagePayload {
+    items: Vec<EmployeeOrderPayload>,
+    page: PageMetaPayload,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorOrderBoardEntryPayload {
+    order_id: String,
+    plant_id: String,
+    delivery_date: String,
+    status: String,
+    line_items: Vec<EmployeeOrderLineItemPayload>,
+    timeline: Vec<OrderTimelineEventPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorOrderPagePayload {
+    items: Vec<VendorOrderBoardEntryPayload>,
+    page: PageMetaPayload,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct EmployeeRushReminderPreferencesUpsertRequest {
@@ -1085,6 +1110,23 @@ enum MenuSortFieldQuery {
 }
 
 #[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+enum EmployeeOrderSortFieldQuery {
+    DeliveryDate,
+    Status,
+    CreatedAt,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+enum VendorOrderSortFieldQuery {
+    DeliveryDate,
+    PlantId,
+    Status,
+    CreatedAt,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 enum SortOrderQuery {
     Asc,
@@ -1118,6 +1160,32 @@ struct EmployeeMenuDiscoveryQuery {
     price_min_minor: Option<u32>,
     price_max_minor: Option<u32>,
     remaining_quantity: Option<u16>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct EmployeeOrderListQuery {
+    plant_id: Option<String>,
+    from_date: Option<String>,
+    to_date: Option<String>,
+    page: Option<usize>,
+    page_size: Option<usize>,
+    sort_by: Option<EmployeeOrderSortFieldQuery>,
+    sort_order: Option<SortOrderQuery>,
+    status: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct VendorOrderListQuery {
+    plant_id: Option<String>,
+    from_date: Option<String>,
+    to_date: Option<String>,
+    page: Option<usize>,
+    page_size: Option<usize>,
+    sort_by: Option<VendorOrderSortFieldQuery>,
+    sort_order: Option<SortOrderQuery>,
+    status: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1450,7 +1518,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         .route("/health/live", get(live_probe))
         .route("/health/startup", get(startup_probe))
         .route("/api/v1/employee/menus", get(list_employee_menus))
-        .route("/api/v1/employee/orders", post(create_employee_order))
+        .route(
+            "/api/v1/employee/orders",
+            get(list_employee_orders).post(create_employee_order),
+        )
         .route(
             "/api/v1/employee/orders/:orderId",
             patch(update_employee_order),
@@ -1467,6 +1538,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
             "/api/v1/employee/orders/:orderId/disputes",
             post(create_employee_order_dispute),
         )
+        .route("/api/v1/vendor/orders", get(list_vendor_orders))
         .route(
             "/api/v1/admin/vendors/:vendorId/reviews",
             post(review_vendor_application),
@@ -4654,6 +4726,386 @@ fn health_probe_response(
     )
 }
 
+async fn list_employee_orders(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<EmployeeOrderListQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "listEmployeeOrders",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let employee_actor = match require_corporate_actor_for_role(&headers, Role::Employee) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_list_employee_orders(&state, &employee_actor, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("employee order page payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("employee order page error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_list_employee_orders(
+    state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
+    query: EmployeeOrderListQuery,
+) -> Result<EmployeeOrderPagePayload, (StatusCode, ErrorPayload)> {
+    if employee_actor.role() != Role::Employee {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::Employee,
+                employee_actor.role()
+            ),
+        ));
+    }
+
+    let request_plant_id = query.plant_id.as_deref().ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "plantId query parameter is required".to_owned(),
+        )
+    })?;
+    if request_plant_id != state.plant_id.as_str() {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "UNSUPPORTED_PLANT_ID",
+            format!(
+                "plantId `{request_plant_id}` is unsupported by this runtime, expected `{}`",
+                state.plant_id.as_str()
+            ),
+        ));
+    }
+    if !employee_actor.plant_scope().contains(&state.plant_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not authorized for plant `{}`",
+                employee_actor.actor_id().as_str(),
+                state.plant_id.as_str()
+            ),
+        ));
+    }
+
+    let now_epoch_day = current_taipei_business_moment()
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "TIME_RESOLUTION_FAILED",
+                error,
+            )
+        })?
+        .epoch_day();
+    let (from_epoch_day, to_epoch_day) = resolve_order_query_range(
+        query.from_date.as_deref(),
+        query.to_date.as_deref(),
+        now_epoch_day,
+    )?;
+    let status_filter = query
+        .status
+        .as_deref()
+        .map(parse_order_status_filter)
+        .transpose()?;
+
+    let page = query.page.unwrap_or(1);
+    if page == 0 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "page must be greater than or equal to 1".to_owned(),
+        ));
+    }
+    let page_size = query.page_size.unwrap_or(20);
+    if page_size == 0 || page_size > 200 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "pageSize must be between 1 and 200".to_owned(),
+        ));
+    }
+
+    let mut snapshots = with_menu_supply_policy(state, |menu_supply_policy| {
+        menu_supply_policy
+            .order_snapshots_for_employee(employee_actor.actor_id())
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    error.to_string(),
+                )
+            })
+    })?;
+    snapshots.retain(|snapshot| {
+        snapshot.plant_id() == &state.plant_id
+            && snapshot.delivery_epoch_day() >= from_epoch_day
+            && snapshot.delivery_epoch_day() <= to_epoch_day
+            && status_filter
+                .map(|status| snapshot.state() == status)
+                .unwrap_or(true)
+    });
+
+    let sort_by = query
+        .sort_by
+        .unwrap_or(EmployeeOrderSortFieldQuery::CreatedAt);
+    let sort_order = query.sort_order.unwrap_or(SortOrderQuery::Desc);
+    snapshots
+        .sort_by(|left, right| compare_employee_order_snapshot(left, right, sort_by, sort_order));
+
+    let total_items = snapshots.len();
+    let total_pages = if total_items == 0 {
+        0
+    } else {
+        (total_items - 1) / page_size + 1
+    };
+    let start = page.saturating_sub(1).saturating_mul(page_size);
+    let end = start.saturating_add(page_size).min(total_items);
+    let paged_snapshots = if start >= total_items {
+        Vec::new()
+    } else {
+        snapshots[start..end].to_vec()
+    };
+
+    let mut items = Vec::with_capacity(paged_snapshots.len());
+    for snapshot in &paged_snapshots {
+        items.push(build_employee_order_payload(state, snapshot)?);
+    }
+
+    Ok(EmployeeOrderPagePayload {
+        items,
+        page: PageMetaPayload {
+            page,
+            page_size,
+            total_items,
+            total_pages,
+        },
+    })
+}
+
+async fn list_vendor_orders(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<VendorOrderListQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "listVendorOrders",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_list_vendor_orders(&state, &vendor_actor, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("vendor order page payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("vendor order page error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_list_vendor_orders(
+    state: &AppState,
+    vendor_actor: &AuthenticatedActorContext,
+    query: VendorOrderListQuery,
+) -> Result<VendorOrderPagePayload, (StatusCode, ErrorPayload)> {
+    if vendor_actor.role() != Role::VendorOperator {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::VendorOperator,
+                vendor_actor.role()
+            ),
+        ));
+    }
+
+    let request_plant_id = query.plant_id.as_deref().ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "plantId query parameter is required".to_owned(),
+        )
+    })?;
+    if request_plant_id != state.plant_id.as_str() {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "UNSUPPORTED_PLANT_ID",
+            format!(
+                "plantId `{request_plant_id}` is unsupported by this runtime, expected `{}`",
+                state.plant_id.as_str()
+            ),
+        ));
+    }
+    if !vendor_actor.plant_scope().contains(&state.plant_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not authorized for plant `{}`",
+                vendor_actor.actor_id().as_str(),
+                state.plant_id.as_str()
+            ),
+        ));
+    }
+
+    let now_epoch_day = current_taipei_business_moment()
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "TIME_RESOLUTION_FAILED",
+                error,
+            )
+        })?
+        .epoch_day();
+    let (from_epoch_day, to_epoch_day) = resolve_order_query_range(
+        query.from_date.as_deref(),
+        query.to_date.as_deref(),
+        now_epoch_day,
+    )?;
+    let status_filter = query
+        .status
+        .as_deref()
+        .map(parse_order_status_filter)
+        .transpose()?;
+
+    let page = query.page.unwrap_or(1);
+    if page == 0 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "page must be greater than or equal to 1".to_owned(),
+        ));
+    }
+    let page_size = query.page_size.unwrap_or(20);
+    if page_size == 0 || page_size > 200 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "pageSize must be between 1 and 200".to_owned(),
+        ));
+    }
+
+    let mut snapshots = with_menu_supply_policy(state, |menu_supply_policy| {
+        menu_supply_policy
+            .order_snapshots_for_vendor_date_range(&state.vendor_id, from_epoch_day, to_epoch_day)
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    error.to_string(),
+                )
+            })
+    })?;
+    snapshots.retain(|snapshot| {
+        snapshot.plant_id() == &state.plant_id
+            && status_filter
+                .map(|status| snapshot.state() == status)
+                .unwrap_or(true)
+    });
+
+    let sort_by = query
+        .sort_by
+        .unwrap_or(VendorOrderSortFieldQuery::DeliveryDate);
+    let sort_order = query.sort_order.unwrap_or(SortOrderQuery::Asc);
+    snapshots
+        .sort_by(|left, right| compare_vendor_order_snapshot(left, right, sort_by, sort_order));
+
+    let total_items = snapshots.len();
+    let total_pages = if total_items == 0 {
+        0
+    } else {
+        (total_items - 1) / page_size + 1
+    };
+    let start = page.saturating_sub(1).saturating_mul(page_size);
+    let end = start.saturating_add(page_size).min(total_items);
+    let paged_snapshots = if start >= total_items {
+        Vec::new()
+    } else {
+        snapshots[start..end].to_vec()
+    };
+
+    let mut items = Vec::with_capacity(paged_snapshots.len());
+    for snapshot in &paged_snapshots {
+        items.push(build_vendor_order_board_entry_payload(state, snapshot)?);
+    }
+
+    Ok(VendorOrderPagePayload {
+        items,
+        page: PageMetaPayload {
+            page,
+            page_size,
+            total_items,
+            total_pages,
+        },
+    })
+}
+
 async fn list_employee_menus(
     State(state): State<AppState>,
     Query(query): Query<EmployeeMenuDiscoveryQuery>,
@@ -5040,6 +5492,136 @@ fn query_has_search_filters(query: &EmployeeMenuDiscoveryQuery) -> bool {
         || query.price_min_minor.is_some()
         || query.price_max_minor.is_some()
         || query.remaining_quantity.is_some()
+}
+
+const DEFAULT_ORDER_LIST_LOOKBACK_DAYS: i32 = 30;
+const DEFAULT_ORDER_LIST_LOOKAHEAD_DAYS: i32 = 30;
+const MAX_ORDER_LIST_RANGE_DAYS: i32 = 366;
+
+fn resolve_order_query_range(
+    from_date: Option<&str>,
+    to_date: Option<&str>,
+    now_epoch_day: i32,
+) -> Result<(i32, i32), (StatusCode, ErrorPayload)> {
+    let parsed_from = from_date
+        .map(parse_iso_date_to_epoch_day)
+        .transpose()
+        .map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("fromDate is invalid: {error}"),
+            )
+        })?;
+    let parsed_to = to_date
+        .map(parse_iso_date_to_epoch_day)
+        .transpose()
+        .map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("toDate is invalid: {error}"),
+            )
+        })?;
+
+    let from_epoch_day = parsed_from
+        .unwrap_or_else(|| now_epoch_day.saturating_sub(DEFAULT_ORDER_LIST_LOOKBACK_DAYS));
+    let to_epoch_day = parsed_to
+        .unwrap_or_else(|| now_epoch_day.saturating_add(DEFAULT_ORDER_LIST_LOOKAHEAD_DAYS));
+
+    if to_epoch_day < from_epoch_day {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "toDate must be greater than or equal to fromDate".to_owned(),
+        ));
+    }
+    let range_days = to_epoch_day
+        .saturating_sub(from_epoch_day)
+        .saturating_add(1);
+    if range_days > MAX_ORDER_LIST_RANGE_DAYS {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!(
+                "order query range exceeds maximum supported span of {MAX_ORDER_LIST_RANGE_DAYS} days"
+            ),
+        ));
+    }
+    Ok((from_epoch_day, to_epoch_day))
+}
+
+fn parse_order_status_filter(
+    value: &str,
+) -> Result<OrderLifecycleState, (StatusCode, ErrorPayload)> {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "PENDING" => Ok(OrderLifecycleState::Pending),
+        "MODIFIED" => Ok(OrderLifecycleState::Modified),
+        "CANCELLED" => Ok(OrderLifecycleState::Cancelled),
+        "SOLD_OUT" => Ok(OrderLifecycleState::SoldOut),
+        "REFUND_PENDING" => Ok(OrderLifecycleState::RefundPending),
+        "REFUNDED" => Ok(OrderLifecycleState::Refunded),
+        "FULFILLED" => Ok(OrderLifecycleState::Fulfilled),
+        _ => Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("status `{}` is unsupported", value.trim()),
+        )),
+    }
+}
+
+fn order_created_at(snapshot: &OrderSnapshot) -> Option<TaipeiBusinessMoment> {
+    snapshot.timeline().first().map(|event| event.occurred_at())
+}
+
+fn compare_employee_order_snapshot(
+    left: &OrderSnapshot,
+    right: &OrderSnapshot,
+    sort_by: EmployeeOrderSortFieldQuery,
+    sort_order: SortOrderQuery,
+) -> CmpOrdering {
+    let ordering = match sort_by {
+        EmployeeOrderSortFieldQuery::DeliveryDate => {
+            left.delivery_epoch_day().cmp(&right.delivery_epoch_day())
+        }
+        EmployeeOrderSortFieldQuery::Status => left.state().as_str().cmp(right.state().as_str()),
+        EmployeeOrderSortFieldQuery::CreatedAt => {
+            order_created_at(left).cmp(&order_created_at(right))
+        }
+    }
+    .then_with(|| left.delivery_epoch_day().cmp(&right.delivery_epoch_day()))
+    .then_with(|| order_created_at(left).cmp(&order_created_at(right)))
+    .then_with(|| left.order_id().cmp(right.order_id()));
+    match sort_order {
+        SortOrderQuery::Asc => ordering,
+        SortOrderQuery::Desc => ordering.reverse(),
+    }
+}
+
+fn compare_vendor_order_snapshot(
+    left: &OrderSnapshot,
+    right: &OrderSnapshot,
+    sort_by: VendorOrderSortFieldQuery,
+    sort_order: SortOrderQuery,
+) -> CmpOrdering {
+    let ordering = match sort_by {
+        VendorOrderSortFieldQuery::DeliveryDate => {
+            left.delivery_epoch_day().cmp(&right.delivery_epoch_day())
+        }
+        VendorOrderSortFieldQuery::PlantId => left.plant_id().cmp(right.plant_id()),
+        VendorOrderSortFieldQuery::Status => left.state().as_str().cmp(right.state().as_str()),
+        VendorOrderSortFieldQuery::CreatedAt => {
+            order_created_at(left).cmp(&order_created_at(right))
+        }
+    }
+    .then_with(|| left.delivery_epoch_day().cmp(&right.delivery_epoch_day()))
+    .then_with(|| left.plant_id().cmp(right.plant_id()))
+    .then_with(|| order_created_at(left).cmp(&order_created_at(right)))
+    .then_with(|| left.order_id().cmp(right.order_id()));
+    match sort_order {
+        SortOrderQuery::Asc => ordering,
+        SortOrderQuery::Desc => ordering.reverse(),
+    }
 }
 
 fn resolve_discovery_window(
@@ -8662,6 +9244,21 @@ fn build_employee_order_payload(
     })
 }
 
+fn build_vendor_order_board_entry_payload(
+    state: &AppState,
+    snapshot: &OrderSnapshot,
+) -> Result<VendorOrderBoardEntryPayload, (StatusCode, ErrorPayload)> {
+    let employee_payload = build_employee_order_payload(state, snapshot)?;
+    Ok(VendorOrderBoardEntryPayload {
+        order_id: employee_payload.order_id,
+        plant_id: employee_payload.plant_id,
+        delivery_date: employee_payload.delivery_date,
+        status: employee_payload.status,
+        line_items: employee_payload.line_items,
+        timeline: employee_payload.timeline,
+    })
+}
+
 fn compute_order_total_for_payroll(
     state: &AppState,
     snapshot: &OrderSnapshot,
@@ -11050,6 +11647,240 @@ mod tests {
         let serialized =
             serde_json::to_value(&updated_order).expect("employee order payload should serialize");
         assert!(serialized.get("accepted").is_none());
+    }
+
+    #[test]
+    fn employee_order_list_supports_pagination_filter_and_sorting() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let employee = employee_actor();
+        let delivery_date = epoch_day_to_iso_date(now_epoch_day.saturating_add(3));
+
+        let first_created = handle_create_employee_order_for_actor(
+            &state,
+            &employee,
+            "createEmployeeOrder",
+            EmployeeOrderCreateRequestPayload {
+                plant_id: "fab-a".to_owned(),
+                delivery_date: delivery_date.clone(),
+                line_items: vec![OrderLineItemRequestPayload {
+                    menu_item_id: "menu-discoverytsta2".to_owned(),
+                    quantity: 1,
+                    special_requests: vec![],
+                }],
+                employee_note: None,
+            },
+        )
+        .expect("first order should be created");
+
+        let second_created = handle_create_employee_order_for_actor(
+            &state,
+            &employee,
+            "createEmployeeOrder",
+            EmployeeOrderCreateRequestPayload {
+                plant_id: "fab-a".to_owned(),
+                delivery_date: delivery_date.clone(),
+                line_items: vec![OrderLineItemRequestPayload {
+                    menu_item_id: "menu-discoverytsta2".to_owned(),
+                    quantity: 1,
+                    special_requests: vec![],
+                }],
+                employee_note: None,
+            },
+        )
+        .expect("second order should be created");
+
+        handle_update_employee_order_for_actor(
+            &state,
+            &employee,
+            "updateEmployeeOrder",
+            second_created.order_id.clone(),
+            UpdateOrderRequest {
+                operation: "CANCEL".to_owned(),
+                line_items: None,
+                cancel_reason: Some("shift changed".to_owned()),
+            },
+        )
+        .expect("second order should be cancelled");
+
+        let filtered = handle_list_employee_orders(
+            &state,
+            &employee,
+            EmployeeOrderListQuery {
+                plant_id: Some("fab-a".to_owned()),
+                from_date: Some(delivery_date.clone()),
+                to_date: Some(delivery_date.clone()),
+                page: Some(1),
+                page_size: Some(10),
+                sort_by: Some(EmployeeOrderSortFieldQuery::CreatedAt),
+                sort_order: Some(SortOrderQuery::Desc),
+                status: Some("CANCELLED".to_owned()),
+            },
+        )
+        .expect("employee order list with status filter should succeed");
+        assert_eq!(filtered.items.len(), 1);
+        assert_eq!(filtered.items[0].order_id, second_created.order_id);
+        assert_eq!(filtered.items[0].status, "CANCELLED");
+        assert_eq!(filtered.page.total_items, 1);
+
+        let paged = handle_list_employee_orders(
+            &state,
+            &employee,
+            EmployeeOrderListQuery {
+                plant_id: Some("fab-a".to_owned()),
+                from_date: Some(delivery_date.clone()),
+                to_date: Some(delivery_date),
+                page: Some(2),
+                page_size: Some(1),
+                sort_by: Some(EmployeeOrderSortFieldQuery::CreatedAt),
+                sort_order: Some(SortOrderQuery::Asc),
+                status: None,
+            },
+        )
+        .expect("employee order list pagination should succeed");
+        assert_eq!(paged.page.total_items, 2);
+        assert_eq!(paged.page.total_pages, 2);
+        assert_eq!(paged.items.len(), 1);
+        assert_eq!(paged.items[0].order_id, second_created.order_id);
+        assert_eq!(first_created.status, "PENDING");
+    }
+
+    #[test]
+    fn employee_order_list_enforces_employee_role() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let vendor = vendor_operator();
+
+        let error = handle_list_employee_orders(
+            &state,
+            &vendor,
+            EmployeeOrderListQuery {
+                plant_id: Some("fab-a".to_owned()),
+                ..EmployeeOrderListQuery::default()
+            },
+        )
+        .expect_err("non-employee actor should be rejected");
+        assert_eq!(error.0, StatusCode::FORBIDDEN);
+        assert_eq!(error.1.code, "FORBIDDEN");
+    }
+
+    #[test]
+    fn vendor_order_list_supports_pagination_filter_and_sorting() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let vendor = vendor_operator();
+        let delivery_date = epoch_day_to_iso_date(now_epoch_day.saturating_add(3));
+
+        let first_created = handle_create_employee_order(
+            &state,
+            EmployeeOrderCreateRequestPayload {
+                plant_id: "fab-a".to_owned(),
+                delivery_date: delivery_date.clone(),
+                line_items: vec![OrderLineItemRequestPayload {
+                    menu_item_id: "menu-discoverytsta2".to_owned(),
+                    quantity: 1,
+                    special_requests: vec![],
+                }],
+                employee_note: None,
+            },
+        )
+        .expect("first vendor-visible order should be created");
+
+        let second_created = handle_create_employee_order(
+            &state,
+            EmployeeOrderCreateRequestPayload {
+                plant_id: "fab-a".to_owned(),
+                delivery_date: delivery_date.clone(),
+                line_items: vec![OrderLineItemRequestPayload {
+                    menu_item_id: "menu-discoverytsta2".to_owned(),
+                    quantity: 1,
+                    special_requests: vec![],
+                }],
+                employee_note: None,
+            },
+        )
+        .expect("second vendor-visible order should be created");
+
+        handle_update_employee_order(
+            &state,
+            second_created.order_id.clone(),
+            UpdateOrderRequest {
+                operation: "CANCEL".to_owned(),
+                line_items: None,
+                cancel_reason: Some("vendor board test".to_owned()),
+            },
+        )
+        .expect("second order should be cancelled");
+
+        let filtered = handle_list_vendor_orders(
+            &state,
+            &vendor,
+            VendorOrderListQuery {
+                plant_id: Some("fab-a".to_owned()),
+                from_date: Some(delivery_date.clone()),
+                to_date: Some(delivery_date.clone()),
+                page: Some(1),
+                page_size: Some(10),
+                sort_by: Some(VendorOrderSortFieldQuery::CreatedAt),
+                sort_order: Some(SortOrderQuery::Desc),
+                status: Some("CANCELLED".to_owned()),
+            },
+        )
+        .expect("vendor order list with status filter should succeed");
+        assert_eq!(filtered.items.len(), 1);
+        assert_eq!(filtered.items[0].order_id, second_created.order_id);
+        assert_eq!(filtered.items[0].status, "CANCELLED");
+        assert_eq!(filtered.page.total_items, 1);
+        let serialized_entry =
+            serde_json::to_value(&filtered.items[0]).expect("vendor order entry should serialize");
+        assert!(serialized_entry.get("employeeActorId").is_none());
+
+        let paged = handle_list_vendor_orders(
+            &state,
+            &vendor,
+            VendorOrderListQuery {
+                plant_id: Some("fab-a".to_owned()),
+                from_date: Some(delivery_date.clone()),
+                to_date: Some(delivery_date),
+                page: Some(1),
+                page_size: Some(1),
+                sort_by: Some(VendorOrderSortFieldQuery::CreatedAt),
+                sort_order: Some(SortOrderQuery::Asc),
+                status: None,
+            },
+        )
+        .expect("vendor order list pagination should succeed");
+        assert_eq!(paged.page.total_items, 2);
+        assert_eq!(paged.page.total_pages, 2);
+        assert_eq!(paged.items.len(), 1);
+        assert_eq!(paged.items[0].order_id, first_created.order_id);
+    }
+
+    #[test]
+    fn vendor_order_list_enforces_vendor_role() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let employee = employee_actor();
+
+        let error = handle_list_vendor_orders(
+            &state,
+            &employee,
+            VendorOrderListQuery {
+                plant_id: Some("fab-a".to_owned()),
+                ..VendorOrderListQuery::default()
+            },
+        )
+        .expect_err("non-vendor actor should be rejected");
+        assert_eq!(error.0, StatusCode::FORBIDDEN);
+        assert_eq!(error.1.code, "FORBIDDEN");
     }
 
     #[test]

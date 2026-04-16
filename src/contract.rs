@@ -37,6 +37,7 @@ impl HttpMethod {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HttpOperation {
     ListEmployeeMenus,
+    ListEmployeeOrders,
     UpsertEmployeeRushReminderPreferences,
     CreateEmployeeOrder,
     UpdateEmployeeOrder,
@@ -78,8 +79,9 @@ pub enum HttpOperation {
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 39] = [
+    pub const ALL: [Self; 40] = [
         Self::ListEmployeeMenus,
+        Self::ListEmployeeOrders,
         Self::UpsertEmployeeRushReminderPreferences,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
@@ -123,6 +125,7 @@ impl HttpOperation {
     pub const fn operation_id(self) -> &'static str {
         match self {
             Self::ListEmployeeMenus => "listEmployeeMenus",
+            Self::ListEmployeeOrders => "listEmployeeOrders",
             Self::UpsertEmployeeRushReminderPreferences => "upsertEmployeeRushReminderPreferences",
             Self::CreateEmployeeOrder => "createEmployeeOrder",
             Self::UpdateEmployeeOrder => "updateEmployeeOrder",
@@ -169,6 +172,7 @@ impl HttpOperation {
     pub const fn method(self) -> HttpMethod {
         match self {
             Self::ListEmployeeMenus
+            | Self::ListEmployeeOrders
             | Self::GetEmployeeOrderPayrollLedger
             | Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
@@ -212,6 +216,7 @@ impl HttpOperation {
     pub const fn path(self) -> &'static str {
         match self {
             Self::ListEmployeeMenus => "/api/v1/employee/menus",
+            Self::ListEmployeeOrders => "/api/v1/employee/orders",
             Self::UpsertEmployeeRushReminderPreferences => {
                 "/api/v1/employee/rush-reminder-preferences"
             }
@@ -280,6 +285,7 @@ impl HttpOperation {
     pub const fn audience(self) -> HttpAudience {
         match self {
             Self::ListEmployeeMenus
+            | Self::ListEmployeeOrders
             | Self::UpsertEmployeeRushReminderPreferences
             | Self::CreateEmployeeOrder
             | Self::UpdateEmployeeOrder
@@ -349,6 +355,7 @@ impl HttpOperation {
             | Self::CloseMonthlyPayrollSettlement
             | Self::SyncPayrollHrApiAdjunct => Some(Action::ExportPayrollDeductions),
             Self::ListEmployeeMenus
+            | Self::ListEmployeeOrders
             | Self::GetEmployeeOrderPayrollLedger
             | Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
@@ -373,6 +380,7 @@ impl HttpOperation {
     pub fn from_operation_id(value: &str) -> Option<Self> {
         match value {
             "listEmployeeMenus" => Some(Self::ListEmployeeMenus),
+            "listEmployeeOrders" => Some(Self::ListEmployeeOrders),
             "upsertEmployeeRushReminderPreferences" => {
                 Some(Self::UpsertEmployeeRushReminderPreferences)
             }
@@ -585,6 +593,36 @@ pub fn canonical_openapi_spec() -> Value {
           }
         },
         "/api/v1/employee/orders": {
+          "get": {
+            "tags": ["Employee"],
+            "summary": "List employee orders",
+            "operationId": HttpOperation::ListEmployeeOrders.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/PlantIdQuery" },
+              { "$ref": "#/components/parameters/FromDateQuery" },
+              { "$ref": "#/components/parameters/ToDateQuery" },
+              { "$ref": "#/components/parameters/PageQuery" },
+              { "$ref": "#/components/parameters/PageSizeQuery" },
+              { "$ref": "#/components/parameters/EmployeeOrderSortByQuery" },
+              { "$ref": "#/components/parameters/SortOrderQuery" },
+              { "$ref": "#/components/parameters/OrderStatusFilterQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Paginated employee order history and active preorder entries",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/EmployeeOrderPage" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          },
           "post": {
             "tags": ["Employee"],
             "summary": "Create a meal order",
@@ -846,7 +884,8 @@ pub fn canonical_openapi_spec() -> Value {
               },
               "400": { "$ref": "#/components/responses/BadRequest" },
               "401": { "$ref": "#/components/responses/Unauthorized" },
-              "403": { "$ref": "#/components/responses/Forbidden" }
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
         },
@@ -2057,6 +2096,12 @@ pub fn canonical_openapi_spec() -> Value {
             "required": false,
             "schema": { "$ref": "#/components/schemas/MenuSortField" }
           },
+          "EmployeeOrderSortByQuery": {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/EmployeeOrderSortField" }
+          },
           "VendorOrderSortByQuery": {
             "name": "sortBy",
             "in": "query",
@@ -2774,6 +2819,10 @@ pub fn canonical_openapi_spec() -> Value {
             "type": "string",
             "enum": ["name", "priceMinor", "remainingQuantity", "deliveryDate"]
           },
+          "EmployeeOrderSortField": {
+            "type": "string",
+            "enum": ["deliveryDate", "status", "createdAt"]
+          },
           "MenuDiscoveryView": {
             "type": "string",
             "enum": ["week", "calendar"],
@@ -3259,6 +3308,18 @@ pub fn canonical_openapi_spec() -> Value {
                 "minItems": 1
               },
               "createdAt": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          },
+          "EmployeeOrderPage": {
+            "type": "object",
+            "required": ["items", "page"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/EmployeeOrder" }
+              },
+              "page": { "$ref": "#/components/schemas/PageMeta" }
             },
             "additionalProperties": false
           },

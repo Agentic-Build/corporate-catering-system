@@ -4,8 +4,11 @@
 /* eslint-disable */
 import type { EmployeeOrder } from '../models/EmployeeOrder';
 import type { EmployeeOrderCreateRequest } from '../models/EmployeeOrderCreateRequest';
+import type { EmployeeOrderPage } from '../models/EmployeeOrderPage';
 import type { EmployeeOrderPatchRequest } from '../models/EmployeeOrderPatchRequest';
 import type { EmployeeOrderPayrollLedger } from '../models/EmployeeOrderPayrollLedger';
+import type { EmployeeOrderSortField } from '../models/EmployeeOrderSortField';
+import type { EmployeeOrderStatus } from '../models/EmployeeOrderStatus';
 import type { EmployeePayrollDisputeCreateRequest } from '../models/EmployeePayrollDisputeCreateRequest';
 import type { EmployeeRushReminderPreferences } from '../models/EmployeeRushReminderPreferences';
 import type { EmployeeRushReminderPreferencesUpsertRequest } from '../models/EmployeeRushReminderPreferencesUpsertRequest';
@@ -79,6 +82,50 @@ export class EmployeeService {
                 'priceMinMinor': priceMinMinor,
                 'priceMaxMinor': priceMaxMinor,
                 'remainingQuantity': remainingQuantity,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * List employee orders
+     * @param plantId Target plant for scoping.
+     * @param fromDate
+     * @param toDate
+     * @param page
+     * @param pageSize
+     * @param sortBy
+     * @param sortOrder
+     * @param status
+     * @returns EmployeeOrderPage Paginated employee order history and active preorder entries
+     * @throws ApiError
+     */
+    public static listEmployeeOrders(
+        plantId: PlantId,
+        fromDate?: string,
+        toDate?: string,
+        page: number = 1,
+        pageSize: number = 20,
+        sortBy?: EmployeeOrderSortField,
+        sortOrder?: SortOrder,
+        status?: EmployeeOrderStatus,
+    ): CancelablePromise<EmployeeOrderPage> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/employee/orders',
+            query: {
+                'plantId': plantId,
+                'fromDate': fromDate,
+                'toDate': toDate,
+                'page': page,
+                'pageSize': pageSize,
+                'sortBy': sortBy,
+                'sortOrder': sortOrder,
+                'status': status,
             },
             errors: {
                 400: `Request payload or query is invalid.`,
