@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "tsx --test tests/**/*.test.ts"
   },
   "devDependencies": {
     "@types/node": "^24.8.1",
@@ -15,6 +16,7 @@
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "svelte": "^5.55.4",
     "svelte-check": "^4.4.6",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.3",
     "vite": "^8.0.8"
   }

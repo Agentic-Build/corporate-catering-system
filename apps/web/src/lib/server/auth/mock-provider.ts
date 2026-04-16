@@ -3,13 +3,14 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { RequestEvent } from "@sveltejs/kit";
 
 import {
+  validateActorScope,
   parseAuthRole,
   type AuthProvider,
   type AuthRole,
   type AuthSession
 } from "./contracts";
 
-const SESSION_COOKIE_NAME = "cc_portal_auth_session";
+export const MOCK_AUTH_SESSION_COOKIE_NAME = "cc_portal_auth_session";
 const SESSION_COOKIE_PATH = "/";
 const SESSION_TOKEN_VERSION = "v1";
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
@@ -28,24 +29,57 @@ interface MockSessionPayload {
     id: string;
     role: AuthRole;
     displayName: string;
+    scope: {
+      plantIds: string[];
+      vendorIds: string[];
+      permissions: string[];
+    };
   };
   issuedAtEpochMs: number;
   refreshAfterEpochMs: number;
   expiresAtEpochMs: number;
 }
 
-const MOCK_ACTOR_TEMPLATE: Readonly<Record<AuthRole, { id: string; displayName: string }>> = {
+const MOCK_ACTOR_TEMPLATE: Readonly<
+  Record<
+    AuthRole,
+    {
+      id: string;
+      displayName: string;
+      scope: {
+        plantIds: readonly string[];
+        vendorIds: readonly string[];
+        permissions: readonly string[];
+      };
+    }
+  >
+> = {
   employee: {
     id: "emp-mock-001",
-    displayName: "Mock Employee"
+    displayName: "Mock Employee",
+    scope: {
+      plantIds: ["plant-tpe-a1"],
+      vendorIds: [],
+      permissions: ["employee:portal"]
+    }
   },
   vendor: {
     id: "ven-mock-001",
-    displayName: "Mock Vendor"
+    displayName: "Mock Vendor",
+    scope: {
+      plantIds: ["plant-tpe-a1"],
+      vendorIds: ["ven-mock-001"],
+      permissions: ["vendor:portal"]
+    }
   },
   admin: {
     id: "adm-mock-001",
-    displayName: "Mock Admin"
+    displayName: "Mock Admin",
+    scope: {
+      plantIds: [],
+      vendorIds: [],
+      permissions: ["admin:portal", "scope:all"]
+    }
   }
 };
 
@@ -67,7 +101,7 @@ export function createMockAuthProvider(options: MockAuthProviderOptions): AuthPr
   return {
     id: "mock",
     async readSession(event: RequestEvent) {
-      const token = event.cookies.get(SESSION_COOKIE_NAME);
+      const token = event.cookies.get(MOCK_AUTH_SESSION_COOKIE_NAME);
       if (!token) {
         return null;
       }
@@ -100,7 +134,12 @@ export function createMockAuthProvider(options: MockAuthProviderOptions): AuthPr
         {
           id: template.id,
           role,
-          displayName: template.displayName
+          displayName: template.displayName,
+          scope: {
+            plantIds: [...template.scope.plantIds],
+            vendorIds: [...template.scope.vendorIds],
+            permissions: [...template.scope.permissions]
+          }
         },
         Date.now(),
         ttlMs,
@@ -110,7 +149,7 @@ export function createMockAuthProvider(options: MockAuthProviderOptions): AuthPr
       return session;
     },
     clearSession(event: RequestEvent) {
-      event.cookies.delete(SESSION_COOKIE_NAME, cookieOptions(event));
+      event.cookies.delete(MOCK_AUTH_SESSION_COOKIE_NAME, cookieOptions(event));
     }
   };
 }
@@ -127,7 +166,12 @@ function buildSessionForActor(
     actor: {
       id: actor.id,
       role: actor.role,
-      displayName: actor.displayName
+      displayName: actor.displayName,
+      scope: {
+        plantIds: [...actor.scope.plantIds],
+        vendorIds: [...actor.scope.vendorIds],
+        permissions: [...actor.scope.permissions]
+      }
     },
     issuedAtEpochMs: nowEpochMs,
     refreshAfterEpochMs: nowEpochMs + (ttlMs - refreshWindowMs),
@@ -138,7 +182,7 @@ function buildSessionForActor(
 function persistSession(event: RequestEvent, session: AuthSession, signingSecret: string) {
   const token = serializeSession(session, signingSecret);
   const maxAgeSeconds = maxAgeSecondsUntilExpiry(session.expiresAtEpochMs, Date.now());
-  event.cookies.set(SESSION_COOKIE_NAME, token, cookieOptions(event, maxAgeSeconds));
+  event.cookies.set(MOCK_AUTH_SESSION_COOKIE_NAME, token, cookieOptions(event, maxAgeSeconds));
 }
 
 function serializeSession(session: AuthSession, signingSecret: string): string {
@@ -184,7 +228,12 @@ function sessionToPayload(session: AuthSession): MockSessionPayload {
     actor: {
       id: session.actor.id,
       role: session.actor.role,
-      displayName: session.actor.displayName
+      displayName: session.actor.displayName,
+      scope: {
+        plantIds: [...session.actor.scope.plantIds],
+        vendorIds: [...session.actor.scope.vendorIds],
+        permissions: [...session.actor.scope.permissions]
+      }
     },
     issuedAtEpochMs: session.issuedAtEpochMs,
     refreshAfterEpochMs: session.refreshAfterEpochMs,
@@ -213,6 +262,9 @@ function payloadToSession(payload: MockSessionPayload): AuthSession | null {
   if (typeof payload.actor.displayName !== "string" || payload.actor.displayName.length === 0) {
     return null;
   }
+  if (!payload.actor.scope || typeof payload.actor.scope !== "object") {
+    return null;
+  }
 
   if (
     !isFinitePositiveEpoch(payload.issuedAtEpochMs) ||
@@ -228,18 +280,30 @@ function payloadToSession(payload: MockSessionPayload): AuthSession | null {
     return null;
   }
 
-  return {
+  const session: AuthSession = {
     sessionId: payload.sessionId,
     provider: "mock",
     actor: {
       id: payload.actor.id,
       role,
-      displayName: payload.actor.displayName
+      displayName: payload.actor.displayName,
+      scope: {
+        plantIds: payload.actor.scope.plantIds,
+        vendorIds: payload.actor.scope.vendorIds,
+        permissions: payload.actor.scope.permissions
+      }
     },
     issuedAtEpochMs: payload.issuedAtEpochMs,
     refreshAfterEpochMs: payload.refreshAfterEpochMs,
     expiresAtEpochMs: payload.expiresAtEpochMs
   };
+
+  const issue = validateActorScope(session.actor);
+  if (issue) {
+    return null;
+  }
+
+  return session;
 }
 
 function signPayload(encodedPayload: string, signingSecret: string): string {
