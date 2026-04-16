@@ -23,6 +23,7 @@ const SYNC_PAYROLL_HR_API_OPERATION_ID: &str = "syncPayrollHrApiAdjunct";
 const PURGE_PAYROLL_DATA_OPERATION_ID: &str = "purgePayrollData";
 const PAYROLL_EXCHANGE_CORRELATION_PREFIX: &str = "payroll-exchange";
 const PAYROLL_SETTLEMENT_CORRELATION_PREFIX: &str = "payroll-settlement";
+const MAX_PAYROLL_EXPORT_PAGE_SIZE: usize = 200;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PayrollRetentionPolicy {
@@ -1307,7 +1308,7 @@ impl PayrollLedgerService {
         ensure_role(actor, Role::PayrollOperator)?;
         validate_pay_period(pay_period)?;
         let cycle_key = normalize_cycle_key(cycle_key)?;
-        if page == 0 || page_size == 0 || page_size > 500 {
+        if page == 0 || page_size == 0 || page_size > MAX_PAYROLL_EXPORT_PAGE_SIZE {
             return Err(PayrollLedgerError::InvalidPagination { page, page_size });
         }
         let (cycle_start_epoch_day, cycle_end_epoch_day) = pay_period_bounds(pay_period)?;
@@ -2492,7 +2493,7 @@ impl fmt::Display for PayrollLedgerError {
             }
             Self::InvalidPagination { page, page_size } => write!(
                 f,
-                "invalid pagination: page must be >= 1 and pageSize must be 1..=500, got page={page} pageSize={page_size}"
+                "invalid pagination: page must be >= 1 and pageSize must be 1..={MAX_PAYROLL_EXPORT_PAGE_SIZE}, got page={page} pageSize={page_size}"
             ),
             Self::InvalidMoney(message) => write!(f, "invalid payroll money amount: {message}"),
             Self::UnauthorizedRole { expected, actual } => write!(
@@ -2943,6 +2944,33 @@ mod tests {
         );
         assert_eq!(first_export.items(), replay_export.items());
         assert_eq!(first_evidence_count, replay_evidence_count);
+    }
+
+    #[test]
+    fn export_rejects_page_size_above_openapi_limit() {
+        let audit_trail = ImmutableAuditTrail::default();
+        let service = PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail);
+        let payroll = payroll_actor();
+
+        let error = service
+            .export_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-page-size-limit",
+                1,
+                201,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+                audit_timestamp(95, 520),
+            )
+            .expect_err("pageSize above OpenAPI max should fail");
+        assert!(matches!(
+            error,
+            PayrollLedgerError::InvalidPagination {
+                page: 1,
+                page_size: 201
+            }
+        ));
     }
 
     #[test]

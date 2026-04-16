@@ -5942,6 +5942,41 @@ mod tests {
     }
 
     #[test]
+    fn payroll_settlement_and_export_reject_page_size_above_openapi_limit() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let payroll = payroll_operator();
+
+        let export_error = handle_export_payroll_deductions(
+            &state,
+            &payroll,
+            PayrollExportQuery {
+                pay_period: Some("1970-04".to_owned()),
+                cycle_key: Some("cycle-page-size-guard".to_owned()),
+                page: Some(1),
+                page_size: Some(201),
+                sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
+                sort_order: Some(SortOrderQuery::Asc),
+            },
+        )
+        .expect_err("integration export should reject pageSize above OpenAPI max");
+        assert_eq!(export_error.0, StatusCode::BAD_REQUEST);
+
+        let close_error = handle_close_payroll_monthly_settlement(
+            &state,
+            &payroll,
+            PayrollMonthlySettlementCloseRequest {
+                page_size: Some(201),
+                ..PayrollMonthlySettlementCloseRequest::default()
+            },
+        )
+        .expect_err("monthly close should reject pageSize above OpenAPI max");
+        assert_eq!(close_error.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
     fn settlement_cycle_lock_handlers_require_reason_and_toggle_lock_state() {
         let now_epoch_day = current_taipei_business_moment()
             .expect("current time should resolve for test")
