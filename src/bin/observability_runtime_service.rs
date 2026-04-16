@@ -149,6 +149,14 @@ const PAYROLL_FIELD_ENVELOPE_VERSION: &str = "v1";
 const PAYROLL_FIELD_NONCE_BYTES: usize = 12;
 const DEFAULT_ADVANCED_ANALYTICS_LOOKBACK_DAYS: i32 = 30;
 const MAX_ADVANCED_ANALYTICS_RANGE_DAYS: i32 = 366;
+const DEFAULT_SEED_TEMPLATE_ID: &str = "tmpl-load-gate-license";
+const DEFAULT_SEED_LIFECYCLE_TEMPLATE_ID: &str = "tmpl-load-gate-health-cert";
+const DEFAULT_SEED_LIFECYCLE_VENDOR_ID: &str = "ven-load-gate-lifecycle";
+const DEFAULT_SEED_LIFECYCLE_ALLOW_MAPPING_ID: &str = "map-load-gate-lifecycle-allow";
+const DEFAULT_SEED_DENY_PLANT_ID: &str = "fab-b";
+const DEFAULT_SEED_DENY_MAPPING_ID: &str = "map-load-gate-deny-fab-b";
+const DEFAULT_SEED_DISPUTE_EMPLOYEE_ACTOR_ID: &str = "emp-seed-dispute";
+const DEFAULT_SEED_DISPUTE_ORDER_ID: &str = "ord-seeddispute0001";
 
 const ALL_AUDIT_ACTIONS: [AuditAction; 35] = [
     AuditAction::CreateEmployeeOrder,
@@ -3160,7 +3168,7 @@ fn bootstrap_runtime_state(
     );
     let vendor_category = VendorCategory::parse("RESTAURANT").map_err(|error| error.to_string())?;
     let template_id =
-        DocumentTemplateId::parse("tmpl-load-gate-license").map_err(|error| error.to_string())?;
+        DocumentTemplateId::parse(DEFAULT_SEED_TEMPLATE_ID).map_err(|error| error.to_string())?;
 
     compliance_lifecycle
         .upsert_document_template(
@@ -3288,6 +3296,19 @@ fn bootstrap_runtime_state(
             .map_err(|error| error.to_string())?;
     }
 
+    seed_runtime_baseline_scenarios(
+        &committee_actor,
+        &vendor_actor,
+        &vendor_id,
+        &plant_id,
+        delivery_epoch_day,
+        &mut compliance_lifecycle,
+        &mut delivery_policy,
+        &menu_supply_policy,
+        &payroll_ledger_service,
+        &anomaly_alert_workflow,
+    )?;
+
     Ok(AppState {
         next_order_sequence: Arc::new(AtomicU64::new(1)),
         vendor_id,
@@ -3309,6 +3330,435 @@ fn bootstrap_runtime_state(
         menu_supply_policy,
         pickup_totp_verifier,
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn seed_runtime_baseline_scenarios(
+    committee_actor: &AuthenticatedActorContext,
+    vendor_actor: &AuthenticatedActorContext,
+    vendor_id: &VendorId,
+    plant_id: &PlantId,
+    delivery_epoch_day: i32,
+    compliance_lifecycle: &mut VendorComplianceLifecycle,
+    delivery_policy: &mut VendorPlantDeliveryPolicy,
+    menu_supply_policy: &MenuSupplyPolicy,
+    payroll_ledger_service: &PayrollLedgerService,
+    anomaly_alert_workflow: &AnomalyAlertWorkflow,
+) -> Result<(), String> {
+    seed_lifecycle_and_mapping_scenarios(
+        committee_actor,
+        vendor_actor,
+        vendor_id,
+        plant_id,
+        delivery_epoch_day,
+        compliance_lifecycle,
+        delivery_policy,
+    )?;
+    seed_payroll_dispute_scenario(
+        vendor_id,
+        plant_id,
+        delivery_epoch_day,
+        compliance_lifecycle,
+        delivery_policy,
+        menu_supply_policy,
+        payroll_ledger_service,
+    )?;
+    seed_anomaly_alert_scenario(
+        committee_actor,
+        vendor_id,
+        delivery_epoch_day,
+        anomaly_alert_workflow,
+    )?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn seed_lifecycle_and_mapping_scenarios(
+    committee_actor: &AuthenticatedActorContext,
+    vendor_actor: &AuthenticatedActorContext,
+    vendor_id: &VendorId,
+    plant_id: &PlantId,
+    delivery_epoch_day: i32,
+    compliance_lifecycle: &mut VendorComplianceLifecycle,
+    delivery_policy: &mut VendorPlantDeliveryPolicy,
+) -> Result<(), String> {
+    let lifecycle_vendor_id =
+        VendorId::parse(DEFAULT_SEED_LIFECYCLE_VENDOR_ID).map_err(|error| error.to_string())?;
+    let lifecycle_template_id = DocumentTemplateId::parse(DEFAULT_SEED_LIFECYCLE_TEMPLATE_ID)
+        .map_err(|error| error.to_string())?;
+    let vendor_category =
+        VendorCategory::parse("LIFECYCLE_SEED").map_err(|error| error.to_string())?;
+    let lifecycle_submitted_on =
+        ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_sub(14));
+    let lifecycle_reviewed_on =
+        ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_sub(13));
+
+    compliance_lifecycle
+        .upsert_document_template(
+            committee_actor,
+            ComplianceDocumentTemplate::new(
+                lifecycle_template_id.clone(),
+                vendor_category.clone(),
+                "Food Safety Certificate",
+                true,
+                365,
+                vec![30, 7],
+                0,
+            )
+            .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+
+    compliance_lifecycle
+        .register_vendor_application(
+            vendor_actor,
+            lifecycle_vendor_id.clone(),
+            "Lifecycle Seed Vendor",
+            vendor_category,
+            lifecycle_submitted_on,
+        )
+        .map_err(|error| error.to_string())?;
+    compliance_lifecycle
+        .submit_document(
+            vendor_actor,
+            &lifecycle_vendor_id,
+            &lifecycle_template_id,
+            VendorDocumentSubmission::new(
+                "s3://evidence/docs/lifecycle-seed-license.pdf",
+                lifecycle_submitted_on,
+                ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(7)),
+            )
+            .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+    compliance_lifecycle
+        .review_application(
+            committee_actor,
+            &lifecycle_vendor_id,
+            VendorReviewDecision::Approved,
+            "Lifecycle seed vendor approved for lifecycle compliance baseline.",
+            lifecycle_reviewed_on,
+        )
+        .map_err(|error| error.to_string())?;
+
+    compliance_lifecycle
+        .run_lifecycle(
+            committee_actor,
+            ComplianceDate::from_epoch_day(delivery_epoch_day),
+        )
+        .map_err(|error| error.to_string())?;
+    compliance_lifecycle
+        .run_lifecycle(
+            committee_actor,
+            ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(8)),
+        )
+        .map_err(|error| error.to_string())?;
+    compliance_lifecycle
+        .submit_document(
+            vendor_actor,
+            &lifecycle_vendor_id,
+            &lifecycle_template_id,
+            VendorDocumentSubmission::new(
+                "s3://evidence/docs/lifecycle-seed-license-renewed.pdf",
+                ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(8)),
+                ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(365)),
+            )
+            .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+    compliance_lifecycle
+        .run_lifecycle(
+            committee_actor,
+            ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(9)),
+        )
+        .map_err(|error| error.to_string())?;
+
+    let mapping_window_start = TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(30), 0)
+        .map_err(|error| error.to_string())?;
+    let mapping_window_end =
+        TaipeiBusinessMoment::new(delivery_epoch_day.saturating_add(30), 23 * 60 + 59)
+            .map_err(|error| error.to_string())?;
+
+    delivery_policy
+        .upsert_mapping(
+            committee_actor,
+            TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(15), 1)
+                .map_err(|error| error.to_string())?,
+            VendorPlantDeliveryMapping::new(
+                DeliveryMappingId::parse(DEFAULT_SEED_LIFECYCLE_ALLOW_MAPPING_ID)
+                    .map_err(|error| error.to_string())?,
+                lifecycle_vendor_id,
+                plant_id.clone(),
+                ServiceWindow::new(mapping_window_start, mapping_window_end)
+                    .map_err(|error| error.to_string())?,
+                DeliveryRuleEffect::Allow,
+                90,
+            ),
+        )
+        .map_err(|error| error.to_string())?;
+
+    let deny_plant_id =
+        PlantId::parse(DEFAULT_SEED_DENY_PLANT_ID).map_err(|error| error.to_string())?;
+    delivery_policy
+        .upsert_mapping(
+            committee_actor,
+            TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(15), 2)
+                .map_err(|error| error.to_string())?,
+            VendorPlantDeliveryMapping::new(
+                DeliveryMappingId::parse(DEFAULT_SEED_DENY_MAPPING_ID)
+                    .map_err(|error| error.to_string())?,
+                vendor_id.clone(),
+                deny_plant_id,
+                ServiceWindow::new(mapping_window_start, mapping_window_end)
+                    .map_err(|error| error.to_string())?,
+                DeliveryRuleEffect::Deny,
+                110,
+            ),
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn seed_payroll_dispute_scenario(
+    vendor_id: &VendorId,
+    plant_id: &PlantId,
+    delivery_epoch_day: i32,
+    compliance_lifecycle: &mut VendorComplianceLifecycle,
+    delivery_policy: &mut VendorPlantDeliveryPolicy,
+    menu_supply_policy: &MenuSupplyPolicy,
+    payroll_ledger_service: &PayrollLedgerService,
+) -> Result<(), String> {
+    let employee_actor = AuthenticatedActorContext::new(
+        ActorId::parse(DEFAULT_SEED_DISPUTE_EMPLOYEE_ACTOR_ID)
+            .map_err(|error| error.to_string())?,
+        Role::Employee,
+        PlantScope::restricted(vec![plant_id.clone()]).map_err(|error| error.to_string())?,
+        AuthenticationSource::CorporateSso,
+    )
+    .map_err(|error| error.to_string())?;
+    let payroll_actor = load_gate_payroll_actor().map_err(|(_, error)| error.message)?;
+    let triage_owner_actor_id =
+        ActorId::parse("payroll-dispute-owner-seed").map_err(|error| error.to_string())?;
+
+    let order_id =
+        OrderId::parse(DEFAULT_SEED_DISPUTE_ORDER_ID).map_err(|error| error.to_string())?;
+    let ordering_gateway = HttpOrderingExecutionGateway::new(
+        compliance_lifecycle,
+        delivery_policy,
+        menu_supply_policy,
+    );
+    let ordered_at = TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(1), 600)
+        .map_err(|error| error.to_string())?;
+    ordering_gateway
+        .execute_create_employee_order(
+            &employee_actor,
+            order_id.clone(),
+            vendor_id,
+            plant_id,
+            delivery_epoch_day,
+            vec![OrderLineItemRequest::new(
+                MenuItemId::parse("menu-1").map_err(|error| error.to_string())?,
+                1,
+                vec![SpecialRequest::NoUtensils],
+            )
+            .map_err(|error| error.to_string())?],
+            ordered_at,
+        )
+        .map_err(|error| error.to_string())?;
+
+    let seeded_snapshot = menu_supply_policy
+        .order_snapshot(&order_id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| {
+            format!(
+                "seeded payroll dispute order `{}` was not found",
+                order_id.as_str()
+            )
+        })?;
+    seed_reconcile_order_snapshot(
+        menu_supply_policy,
+        payroll_ledger_service,
+        &employee_actor,
+        "seedDisputeScenario",
+        &seeded_snapshot,
+        ordered_at,
+    )?;
+
+    let opened_at = AuditTimestamp::from_taipei_business_moment(delivery_epoch_day, 601)
+        .map_err(|error| error.to_string())?;
+    let default_owner_actor_id =
+        load_gate_payroll_dispute_owner_actor_id().map_err(|(_, error)| error.message)?;
+    let dispute = payroll_ledger_service
+        .open_dispute(
+            &employee_actor,
+            &order_id,
+            &default_owner_actor_id,
+            "Seed baseline dispute: item quality issue.",
+            opened_at,
+        )
+        .map_err(|error| error.to_string())?;
+    payroll_ledger_service
+        .assign_dispute_owner(
+            &payroll_actor,
+            dispute.dispute_id(),
+            &triage_owner_actor_id,
+            AuditTimestamp::from_taipei_business_moment(delivery_epoch_day, 602)
+                .map_err(|error| error.to_string())?,
+            Some("Seed baseline triage assignment".to_owned()),
+        )
+        .map_err(|error| error.to_string())?;
+    payroll_ledger_service
+        .resolve_dispute_refund(
+            &payroll_actor,
+            dispute.dispute_id(),
+            AuditTimestamp::from_taipei_business_moment(delivery_epoch_day, 603)
+                .map_err(|error| error.to_string())?,
+            "Seed baseline partial refund approved.",
+            Some(6000),
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+fn seed_reconcile_order_snapshot(
+    menu_supply_policy: &MenuSupplyPolicy,
+    payroll_ledger_service: &PayrollLedgerService,
+    employee_actor: &AuthenticatedActorContext,
+    operation_id: &str,
+    snapshot: &OrderSnapshot,
+    occurred_at: TaipeiBusinessMoment,
+) -> Result<(), String> {
+    let mut total_minor: u64 = 0;
+    let mut currency: Option<String> = None;
+    for (menu_item_id, quantity) in snapshot.line_items() {
+        let menu_item = menu_supply_policy
+            .menu_item(menu_item_id)
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| {
+                format!(
+                    "seed payroll reconciliation references missing menu item `{}`",
+                    menu_item_id.as_str()
+                )
+            })?;
+        match currency.as_deref() {
+            Some(existing_currency) if existing_currency != menu_item.price().currency() => {
+                return Err(format!(
+                    "seed payroll reconciliation found mixed currencies `{existing_currency}` and `{}`",
+                    menu_item.price().currency()
+                ));
+            }
+            Some(_) => {}
+            None => currency = Some(menu_item.price().currency().to_owned()),
+        }
+        total_minor = total_minor
+            .checked_add(u64::from(menu_item.price().amount_minor()) * u64::from(*quantity))
+            .ok_or_else(|| "seed payroll reconciliation amount overflowed".to_owned())?;
+    }
+    let currency = currency
+        .ok_or_else(|| "seed payroll reconciliation requires at least one line item".to_owned())?;
+    let total_minor = u32::try_from(total_minor)
+        .map_err(|_| "seed payroll reconciliation amount exceeded supported range".to_owned())?;
+    let source_event = PayrollLedgerSourceRef::new(
+        PayrollLedgerSourceKind::OrderMutation,
+        format!(
+            "order:{}:state:{}",
+            snapshot.order_id().as_str(),
+            snapshot.state().as_str()
+        ),
+    )
+    .map_err(|error| error.to_string())?;
+    payroll_ledger_service
+        .reconcile_order_charge(
+            employee_actor,
+            operation_id,
+            snapshot.order_id(),
+            snapshot.employee_actor_id(),
+            employee_actor.employment_status(),
+            snapshot.delivery_epoch_day(),
+            &currency,
+            expected_payroll_target_amount(snapshot, total_minor),
+            AuditTimestamp::from_taipei_business_moment(
+                occurred_at.epoch_day(),
+                occurred_at.minute_of_day(),
+            )
+            .map_err(|error| error.to_string())?,
+            source_event,
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn seed_anomaly_alert_scenario(
+    committee_actor: &AuthenticatedActorContext,
+    vendor_id: &VendorId,
+    delivery_epoch_day: i32,
+    anomaly_alert_workflow: &AnomalyAlertWorkflow,
+) -> Result<(), String> {
+    let observed_at = AuditTimestamp::from_taipei_business_moment(delivery_epoch_day, 900)
+        .map_err(|error| error.to_string())?;
+    let default_owner_actor_id =
+        load_gate_anomaly_alert_owner_actor_id().map_err(|(_, error)| error.message)?;
+    let evaluation = anomaly_alert_workflow
+        .evaluate_rules(
+            committee_actor,
+            AnomalySignalSnapshot::new(vendor_id.clone(), observed_at).with_on_time_rate(Some(0.8)),
+            &default_owner_actor_id,
+        )
+        .map_err(|error| error.to_string())?;
+    let seeded_alert_id = evaluation
+        .triggered_alerts()
+        .iter()
+        .find(|alert| alert.rule_kind() == AnomalyRuleKind::OnTimeDegradation)
+        .or_else(|| evaluation.triggered_alerts().first())
+        .map(|alert| alert.alert_id().clone())
+        .ok_or_else(|| "seed anomaly baseline failed to trigger any alert".to_owned())?;
+
+    let triage_owner_actor_id =
+        ActorId::parse("committee-owner-seed").map_err(|error| error.to_string())?;
+    anomaly_alert_workflow
+        .assign_owner(
+            committee_actor,
+            &seeded_alert_id,
+            &triage_owner_actor_id,
+            AuditTimestamp::from_taipei_business_moment(delivery_epoch_day, 905)
+                .map_err(|error| error.to_string())?,
+            Some("Seed baseline ownership assignment.".to_owned()),
+        )
+        .map_err(|error| error.to_string())?;
+    anomaly_alert_workflow
+        .transition_alert(
+            committee_actor,
+            &seeded_alert_id,
+            AnomalyAlertTransition::StartRemediation,
+            AuditTimestamp::from_taipei_business_moment(delivery_epoch_day, 910)
+                .map_err(|error| error.to_string())?,
+            Some("Seed baseline remediation started.".to_owned()),
+            None,
+            Vec::new(),
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+    anomaly_alert_workflow
+        .transition_alert(
+            committee_actor,
+            &seeded_alert_id,
+            AnomalyAlertTransition::Close,
+            AuditTimestamp::from_taipei_business_moment(delivery_epoch_day, 920)
+                .map_err(|error| error.to_string())?,
+            Some("Seed baseline closure approved.".to_owned()),
+            Some("Seed baseline anomaly mitigated with vendor retraining.".to_owned()),
+            vec![
+                "runbook://anomaly/on-time-degradation".to_owned(),
+                "evidence://seed/anomaly/on-time-degradation".to_owned(),
+            ],
+            Some("jira://SEED-ANOMALY-1".to_owned()),
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
 }
 
 async fn ready_probe() -> (StatusCode, Json<HealthPayload>) {
@@ -8530,9 +8980,12 @@ fn emit_pickup_verification_audit_event(
 mod tests {
     use super::*;
     use corporate_catering_system::audit::{AuditEntityRef, AuditEvidenceWrite, AuditIdentityLink};
+    use corporate_catering_system::payroll::PayrollDisputeStatus;
     use corporate_catering_system::rush_reminder::{
         RushReminderDeliveryError, RushReminderPreferences, RushReminderScenario,
     };
+    use corporate_catering_system::vendor_compliance::ComplianceHistoryKind;
+    use corporate_catering_system::vendor_delivery_mapping::VendorPlantDeliveryError;
 
     fn actor_id(value: &str) -> ActorId {
         ActorId::parse(value).expect("actor id should be valid")
@@ -9062,6 +9515,131 @@ mod tests {
         state.terminated_employee_actor_ids =
             Arc::new(HashSet::from([actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID)]));
         state
+    }
+
+    #[test]
+    fn bootstrap_runtime_state_seeds_local_dev_baseline_scenarios() {
+        std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
+
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let delivery_epoch_day = now_epoch_day.saturating_add(2);
+        let state = bootstrap_runtime_state(
+            ImmutableAuditTrail::new(AuditRetentionPolicy::default()),
+            vendor_id(DEFAULT_VENDOR_ID),
+            plant_id(DEFAULT_PLANT_ID),
+            delivery_epoch_day,
+            8,
+            false,
+            false,
+            false,
+            RushReminderPolicy::default(),
+            PayrollRetentionPolicy::default(),
+            OrderRetentionPolicy::default(),
+            payroll_export_field_encryptor(),
+            Arc::new(
+                PickupTotpVerifier::from_secret("seed-baseline-pickup-secret".as_bytes())
+                    .expect("seed pickup secret should be valid"),
+            ),
+        )
+        .expect("runtime bootstrap should seed baseline scenarios");
+
+        let lifecycle_vendor_id = vendor_id(DEFAULT_SEED_LIFECYCLE_VENDOR_ID);
+        let compliance = read_compliance_lifecycle(&state).expect("compliance state should lock");
+        let lifecycle_vendor = compliance
+            .vendor(&lifecycle_vendor_id)
+            .expect("lifecycle seed vendor should exist");
+        assert_eq!(lifecycle_vendor.status(), VendorComplianceStatus::Active);
+        assert!(
+            lifecycle_vendor.history().iter().any(|entry| matches!(
+                entry.kind(),
+                ComplianceHistoryKind::ExpiryReminderIssued { .. }
+            )),
+            "lifecycle seed vendor should include reminder history"
+        );
+        assert!(
+            lifecycle_vendor
+                .history()
+                .iter()
+                .any(|entry| matches!(entry.kind(), ComplianceHistoryKind::Suspended { .. })),
+            "lifecycle seed vendor should include suspension history"
+        );
+        assert!(
+            lifecycle_vendor
+                .history()
+                .iter()
+                .any(|entry| matches!(entry.kind(), ComplianceHistoryKind::Reinstated)),
+            "lifecycle seed vendor should include reinstatement history"
+        );
+        let runtime_plant_id = plant_id(DEFAULT_PLANT_ID);
+        let runtime_deny_plant_id = plant_id(DEFAULT_SEED_DENY_PLANT_ID);
+        let mapping_check_at = taipei_moment(delivery_epoch_day, 600);
+        assert!(
+            state
+                .delivery_policy
+                .ensure_vendor_deliverable_for_order(
+                    &compliance,
+                    &lifecycle_vendor_id,
+                    &runtime_plant_id,
+                    mapping_check_at,
+                )
+                .is_ok(),
+            "lifecycle vendor should be deliverable for runtime plant"
+        );
+        let deny_result = state.delivery_policy.ensure_vendor_deliverable_for_order(
+            &compliance,
+            &vendor_id(DEFAULT_VENDOR_ID),
+            &runtime_deny_plant_id,
+            mapping_check_at,
+        );
+        drop(compliance);
+        assert!(
+            matches!(
+                deny_result,
+                Err(VendorPlantDeliveryError::DeliverabilityDenied { .. })
+            ),
+            "default vendor should be denied for the seeded deny-plant mapping"
+        );
+
+        let dispute_employee_actor = AuthenticatedActorContext::new(
+            actor_id(DEFAULT_SEED_DISPUTE_EMPLOYEE_ACTOR_ID),
+            Role::Employee,
+            PlantScope::restricted(vec![runtime_plant_id]).expect("scope should be valid"),
+            AuthenticationSource::CorporateSso,
+        )
+        .expect("dispute employee actor should be valid");
+        let dispute_view = state
+            .payroll_ledger_service
+            .employee_order_view(
+                &dispute_employee_actor,
+                &order_id(DEFAULT_SEED_DISPUTE_ORDER_ID),
+            )
+            .expect("seeded dispute order ledger should exist");
+        assert_eq!(dispute_view.disputes().len(), 1);
+        assert_eq!(
+            dispute_view.disputes()[0].status(),
+            PayrollDisputeStatus::ResolvedRefundApproved
+        );
+
+        let closed_alerts = state
+            .anomaly_alert_workflow
+            .query_alerts(
+                &corporate_catering_system::anomaly_alert::AnomalyAlertQuery {
+                    vendor_id: Some(vendor_id(DEFAULT_VENDOR_ID)),
+                    owner_actor_id: None,
+                    status: Some(AnomalyAlertStatus::Closed),
+                    escalated_only: None,
+                    sla_status: None,
+                },
+                AuditTimestamp::from_taipei_business_moment(delivery_epoch_day, 1439)
+                    .expect("anomaly query timestamp should be valid"),
+            )
+            .expect("seeded anomaly alerts should be queryable");
+        assert!(
+            !closed_alerts.is_empty(),
+            "seed baseline should include at least one closed anomaly alert"
+        );
     }
 
     #[test]

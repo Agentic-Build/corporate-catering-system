@@ -1,5 +1,36 @@
 # corporate-catering-system
 
+## Local Dev Stack and Seed Baseline
+
+Canonical local development entrypoints:
+
+- `make dev` starts core stateful dependencies and runs the runtime service.
+- `make dev-up` starts dependencies only.
+- `make dev-app` runs the runtime service only.
+- `make dev-down` stops dependencies.
+- `make dev-reset` tears down dependencies, removes dependency volumes, and clears runtime state.
+- `make dev-logs service=<name>` tails dependency logs (`service` is optional).
+- `make dev-ps` shows dependency status.
+
+Environment baseline:
+
+- `.env.development` is committed and is the default local baseline.
+- `.env.local` is local-only (gitignored) and overrides `.env.development`.
+
+Compose local stack (`ops/local/docker-compose.dev.yml`) includes core stateful dependencies:
+
+- `postgres`
+- `redis`
+- `minio`
+- `otel-collector`
+
+Runtime bootstrap seeds deterministic scenarios for:
+
+- lifecycle/compliance: approved baseline vendor plus lifecycle reminder/suspension/reinstatement transitions
+- dispute: seeded payroll dispute opened, assigned, and refund-resolved
+- anomaly: seeded anomaly alert triggered, triaged, and closed with evidence
+- mapping: seeded delivery allow + deny mapping rules
+
 ## OpenAPI Contract Platform
 
 Canonical HTTP contract artifacts are generated from the Rust contract module and committed under `contract/`.
