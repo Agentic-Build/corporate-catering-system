@@ -1,5 +1,5 @@
 use std::cmp::Ordering as CmpOrdering;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
@@ -52,6 +52,10 @@ use corporate_catering_system::payroll::{
 };
 use corporate_catering_system::pickup_totp::{
     PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
+};
+use corporate_catering_system::rush_reminder::{
+    NoopRushReminderDeliveryGateway, RushReminderDeliveryGateway, RushReminderPolicy,
+    RushReminderWorkflow,
 };
 use corporate_catering_system::transport::http::{
     HttpAuditInvestigationExecutionGateway, HttpEmployeeDiscoveryExecutionGateway,
@@ -106,6 +110,20 @@ const PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV: &str = "PRELAUNCH_AUDIT_TRAIL_EN
 const PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_ENV: &str =
     "PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_HEX";
 const PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED_ENV: &str = "PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED";
+const PRELAUNCH_RUSH_REMINDER_ENABLED_ENV: &str = "PRELAUNCH_RUSH_REMINDER_ENABLED";
+const PRELAUNCH_RUSH_PREORDER_MIN_LEAD_DAYS_ENV: &str = "PRELAUNCH_RUSH_PREORDER_MIN_LEAD_DAYS";
+const PRELAUNCH_RUSH_PREORDER_MAX_LEAD_DAYS_ENV: &str = "PRELAUNCH_RUSH_PREORDER_MAX_LEAD_DAYS";
+const PRELAUNCH_RUSH_PREORDER_THROTTLE_MINUTES_ENV: &str =
+    "PRELAUNCH_RUSH_PREORDER_THROTTLE_MINUTES";
+const PRELAUNCH_RUSH_DEMAND_SPIKE_REMAINING_THRESHOLD_ENV: &str =
+    "PRELAUNCH_RUSH_DEMAND_SPIKE_REMAINING_THRESHOLD";
+const PRELAUNCH_RUSH_DEMAND_SPIKE_THROTTLE_MINUTES_ENV: &str =
+    "PRELAUNCH_RUSH_DEMAND_SPIKE_THROTTLE_MINUTES";
+const DEFAULT_RUSH_PREORDER_OPEN_MIN_LEAD_DAYS: u16 = 1;
+const DEFAULT_RUSH_PREORDER_OPEN_MAX_LEAD_DAYS: u16 = 7;
+const DEFAULT_RUSH_PREORDER_OPEN_THROTTLE_MINUTES: u16 = 180;
+const DEFAULT_RUSH_DEMAND_SPIKE_REMAINING_THRESHOLD: u16 = 5;
+const DEFAULT_RUSH_DEMAND_SPIKE_THROTTLE_MINUTES: u16 = 30;
 const AUTHORIZATION_BEARER_PREFIX: &str = "Bearer ";
 const MCP_OAUTH_SERVICE_ACCOUNT_TOKEN_PREFIX: &str = "mcp-oauth-sa:";
 const MCP_OAUTH_SERVICE_ACCOUNT_ISSUER_ENV: &str = "MCP_OAUTH_SERVICE_ACCOUNT_ISSUER";
@@ -185,12 +203,17 @@ type MenuRecommendationRanker = fn(
     sort_order: SortOrderQuery,
 ) -> Result<(), String>;
 
+type ReminderDeliveryGateway = Arc<dyn RushReminderDeliveryGateway + Send + Sync>;
+
 #[derive(Debug, Clone)]
 struct AppState {
     next_order_sequence: Arc<AtomicU64>,
     plant_id: PlantId,
     recommendation_engine_runtime_enabled: bool,
+    rush_reminder_runtime_enabled: bool,
     menu_recommendation_ranker: MenuRecommendationRanker,
+    rush_reminder_workflow: RushReminderWorkflow,
+    rush_reminder_delivery_gateway: ReminderDeliveryGateway,
     terminated_employee_actor_ids: Arc<HashSet<ActorId>>,
     audit_trail: ImmutableAuditTrail,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
@@ -1161,6 +1184,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         parse_positive_u16_env("PRELAUNCH_MENU_VARIANT_COUNT", DEFAULT_MENU_VARIANT_COUNT)?;
     let recommendation_engine_runtime_enabled =
         parse_bool_env_default_false(PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED_ENV)?;
+    let rush_reminder_runtime_enabled =
+        parse_bool_env_default_false(PRELAUNCH_RUSH_REMINDER_ENABLED_ENV)?;
+    let rush_reminder_policy = parse_rush_reminder_policy_from_env()?;
 
     let delivery_epoch_day = resolve_delivery_epoch_day()?;
     let audit_retention_days = parse_positive_u16_env(
@@ -1224,6 +1250,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         delivery_epoch_day,
         menu_variant_count,
         recommendation_engine_runtime_enabled,
+        rush_reminder_runtime_enabled,
+        rush_reminder_policy,
         payroll_retention_policy,
         order_retention_policy,
         payroll_export_field_encryptor,
@@ -2730,6 +2758,38 @@ fn parse_bool_env_default_false(key: &str) -> Result<bool, String> {
     }
 }
 
+fn parse_rush_reminder_policy_from_env() -> Result<RushReminderPolicy, String> {
+    let preorder_open_min_lead_days = parse_positive_u16_env(
+        PRELAUNCH_RUSH_PREORDER_MIN_LEAD_DAYS_ENV,
+        DEFAULT_RUSH_PREORDER_OPEN_MIN_LEAD_DAYS,
+    )?;
+    let preorder_open_max_lead_days = parse_positive_u16_env(
+        PRELAUNCH_RUSH_PREORDER_MAX_LEAD_DAYS_ENV,
+        DEFAULT_RUSH_PREORDER_OPEN_MAX_LEAD_DAYS,
+    )?;
+    let preorder_open_throttle_minutes = parse_positive_u16_env(
+        PRELAUNCH_RUSH_PREORDER_THROTTLE_MINUTES_ENV,
+        DEFAULT_RUSH_PREORDER_OPEN_THROTTLE_MINUTES,
+    )?;
+    let demand_spike_remaining_quantity_threshold = parse_positive_u16_env(
+        PRELAUNCH_RUSH_DEMAND_SPIKE_REMAINING_THRESHOLD_ENV,
+        DEFAULT_RUSH_DEMAND_SPIKE_REMAINING_THRESHOLD,
+    )?;
+    let demand_spike_throttle_minutes = parse_positive_u16_env(
+        PRELAUNCH_RUSH_DEMAND_SPIKE_THROTTLE_MINUTES_ENV,
+        DEFAULT_RUSH_DEMAND_SPIKE_THROTTLE_MINUTES,
+    )?;
+
+    RushReminderPolicy::new(
+        preorder_open_min_lead_days,
+        preorder_open_max_lead_days,
+        preorder_open_throttle_minutes,
+        demand_spike_remaining_quantity_threshold,
+        demand_spike_throttle_minutes,
+    )
+    .map_err(|error| format!("rush reminder policy is invalid: {error}"))
+}
+
 fn parse_audit_trail_encryption_key_from_env() -> Result<AuditSnapshotEncryptionKey, String> {
     let raw = std::env::var(PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV).map_err(|_| {
         format!("{PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV} must be set to a 64-char hex key")
@@ -2815,6 +2875,8 @@ fn bootstrap_runtime_state(
     delivery_epoch_day: i32,
     menu_variant_count: u16,
     recommendation_engine_runtime_enabled: bool,
+    rush_reminder_runtime_enabled: bool,
+    rush_reminder_policy: RushReminderPolicy,
     payroll_retention_policy: PayrollRetentionPolicy,
     order_retention_policy: OrderRetentionPolicy,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
@@ -2928,6 +2990,9 @@ fn bootstrap_runtime_state(
     let payroll_ledger_service =
         PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
     let anomaly_alert_workflow = AnomalyAlertWorkflow::with_default_rules(audit_trail.clone());
+    let rush_reminder_workflow = RushReminderWorkflow::new(rush_reminder_policy);
+    let rush_reminder_delivery_gateway: ReminderDeliveryGateway =
+        Arc::new(NoopRushReminderDeliveryGateway);
     let vendor_menu_gateway = HttpVendorMenuExecutionGateway::new(&menu_supply_policy);
 
     for index in 1..=menu_variant_count {
@@ -2963,7 +3028,10 @@ fn bootstrap_runtime_state(
         next_order_sequence: Arc::new(AtomicU64::new(1)),
         plant_id,
         recommendation_engine_runtime_enabled,
+        rush_reminder_runtime_enabled,
         menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
+        rush_reminder_workflow,
+        rush_reminder_delivery_gateway,
         terminated_employee_actor_ids: Arc::new(terminated_employee_actor_ids),
         audit_trail,
         payroll_export_field_encryptor,
@@ -3227,6 +3295,14 @@ fn handle_list_employee_menus_at(
         sort_by,
         sort_order,
     );
+    let reminder_subscribers = reminder_subscriber_actor_ids_for_load_gate_employee(state);
+    schedule_and_dispatch_rush_reminders_best_effort(
+        state,
+        &reminder_subscribers,
+        &entries,
+        moment,
+        "listEmployeeMenus",
+    );
 
     let total_items = entries.len();
     let total_pages = if total_items == 0 {
@@ -3404,6 +3480,99 @@ fn maybe_apply_menu_recommendation(
             false
         }
     }
+}
+
+fn reminder_subscriber_actor_ids_for_load_gate_employee(state: &AppState) -> HashSet<ActorId> {
+    let actor_id = ActorId::parse(LOAD_GATE_EMPLOYEE_ACTOR_ID)
+        .expect("load-gate employee actor id constant must remain valid");
+    if state.terminated_employee_actor_ids.contains(&actor_id) {
+        return HashSet::new();
+    }
+    HashSet::from([actor_id])
+}
+
+fn schedule_and_dispatch_rush_reminders_best_effort(
+    state: &AppState,
+    subscriber_actor_ids: &HashSet<ActorId>,
+    entries: &[EmployeeMenuDiscoveryEntry],
+    at: TaipeiBusinessMoment,
+    operation_id: &str,
+) {
+    let schedule_report = match state.rush_reminder_workflow.schedule_from_discovery(
+        state.rush_reminder_runtime_enabled,
+        subscriber_actor_ids,
+        entries,
+        at,
+    ) {
+        Ok(report) => report,
+        Err(error) => {
+            tracing::warn!(
+                operation_id,
+                reminder_error = %error,
+                "rush reminder scheduling failed; continuing without notification side effects"
+            );
+            return;
+        }
+    };
+
+    let dispatch_report = match state.rush_reminder_workflow.dispatch_pending(
+        state.rush_reminder_runtime_enabled,
+        state.rush_reminder_delivery_gateway.as_ref(),
+        at,
+    ) {
+        Ok(report) => report,
+        Err(error) => {
+            tracing::warn!(
+                operation_id,
+                reminder_error = %error,
+                "rush reminder dispatch failed; continuing without notification side effects"
+            );
+            return;
+        }
+    };
+
+    if dispatch_report.failed_count > 0 {
+        tracing::warn!(
+            operation_id,
+            scheduled_count = schedule_report.scheduled_count,
+            throttled_count = schedule_report.throttled_count,
+            opted_out_count = schedule_report.opted_out_count,
+            delivery_failures = dispatch_report.failed_count,
+            "rush reminder delivery failures were isolated from transaction flow"
+        );
+    }
+}
+
+fn trigger_rush_reminders_for_vendor_best_effort(
+    state: &AppState,
+    subscriber_actor_id: &ActorId,
+    vendor_id: &VendorId,
+    at: TaipeiBusinessMoment,
+    operation_id: &str,
+) {
+    let deliverable_vendor_ids = BTreeSet::from([vendor_id.clone()]);
+    let entries = match state
+        .menu_supply_policy
+        .employee_discovery_snapshot(&deliverable_vendor_ids, at)
+    {
+        Ok(entries) => entries,
+        Err(error) => {
+            tracing::warn!(
+                operation_id,
+                reminder_error = %error,
+                "rush reminder discovery snapshot failed; continuing without notification side effects"
+            );
+            return;
+        }
+    };
+    let subscriber_actor_ids = HashSet::from([subscriber_actor_id.clone()]);
+    schedule_and_dispatch_rush_reminders_best_effort(
+        state,
+        &subscriber_actor_ids,
+        &entries,
+        at,
+        operation_id,
+    );
 }
 
 fn heuristic_menu_recommendation_ranker(
@@ -3733,6 +3902,13 @@ fn handle_create_employee_order_for_actor(
         &snapshot,
         requested_at,
     )?;
+    trigger_rush_reminders_for_vendor_best_effort(
+        state,
+        employee_actor.actor_id(),
+        snapshot.vendor_id(),
+        requested_at,
+        operation_id,
+    );
     build_employee_order_payload(state, &snapshot)
 }
 
@@ -3847,6 +4023,13 @@ fn handle_update_employee_order_for_actor(
         &updated_snapshot,
         requested_at,
     )?;
+    trigger_rush_reminders_for_vendor_best_effort(
+        state,
+        actor.actor_id(),
+        updated_snapshot.vendor_id(),
+        requested_at,
+        operation_id,
+    );
     build_employee_order_payload(state, &updated_snapshot)
 }
 
@@ -7720,6 +7903,9 @@ fn emit_pickup_verification_audit_event(
 mod tests {
     use super::*;
     use corporate_catering_system::audit::{AuditEntityRef, AuditEvidenceWrite, AuditIdentityLink};
+    use corporate_catering_system::rush_reminder::{
+        RushReminderDeliveryError, RushReminderPreferences, RushReminderScenario,
+    };
 
     fn actor_id(value: &str) -> ActorId {
         ActorId::parse(value).expect("actor id should be valid")
@@ -8117,7 +8303,10 @@ mod tests {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             plant_id: plant,
             recommendation_engine_runtime_enabled: false,
+            rush_reminder_runtime_enabled: false,
             menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
+            rush_reminder_workflow: RushReminderWorkflow::new(RushReminderPolicy::default()),
+            rush_reminder_delivery_gateway: Arc::new(NoopRushReminderDeliveryGateway),
             terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail: audit_trail.clone(),
             payroll_export_field_encryptor: payroll_export_field_encryptor(),
@@ -8142,6 +8331,15 @@ mod tests {
         state
     }
 
+    fn build_state_with_rush_reminder_runtime(
+        now_epoch_day: i32,
+        rush_reminder_runtime_enabled: bool,
+    ) -> AppState {
+        let mut state = build_state(now_epoch_day);
+        state.rush_reminder_runtime_enabled = rush_reminder_runtime_enabled;
+        state
+    }
+
     fn failing_menu_recommendation_ranker(
         _entries: &mut Vec<EmployeeMenuDiscoveryEntry>,
         _at: TaipeiBusinessMoment,
@@ -8149,6 +8347,20 @@ mod tests {
         _sort_order: SortOrderQuery,
     ) -> Result<(), String> {
         Err("simulated recommendation engine outage".to_owned())
+    }
+
+    #[derive(Debug)]
+    struct FailingRushReminderDeliveryGateway;
+
+    impl RushReminderDeliveryGateway for FailingRushReminderDeliveryGateway {
+        fn deliver(
+            &self,
+            _notification: &corporate_catering_system::rush_reminder::RushReminderNotification,
+        ) -> Result<(), RushReminderDeliveryError> {
+            Err(RushReminderDeliveryError::new(
+                "simulated reminder delivery outage",
+            ))
+        }
     }
 
     fn build_state_with_terminated_load_gate_employee(now_epoch_day: i32) -> AppState {
@@ -8507,7 +8719,10 @@ mod tests {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             plant_id: plant_id("fab-a"),
             recommendation_engine_runtime_enabled: false,
+            rush_reminder_runtime_enabled: false,
             menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
+            rush_reminder_workflow: RushReminderWorkflow::new(RushReminderPolicy::default()),
+            rush_reminder_delivery_gateway: Arc::new(NoopRushReminderDeliveryGateway),
             terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail: audit_trail.clone(),
             payroll_export_field_encryptor: payroll_export_field_encryptor(),
@@ -8744,6 +8959,30 @@ mod tests {
     }
 
     #[test]
+    fn rush_reminder_feature_flag_defaults_off() {
+        let now_epoch_day = 300;
+        let state = build_state(now_epoch_day);
+        assert!(
+            !state.rush_reminder_runtime_enabled,
+            "rush reminder runtime should default to off"
+        );
+        let query = EmployeeMenuDiscoveryQuery {
+            plant_id: Some("fab-a".to_owned()),
+            view: Some(MenuDiscoveryViewQuery::Week),
+            menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+            ..EmployeeMenuDiscoveryQuery::default()
+        };
+
+        handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
+            .expect("discovery should succeed when rush reminders are disabled");
+        let delivered = state
+            .rush_reminder_workflow
+            .delivered_notifications()
+            .expect("delivered reminders should be queryable");
+        assert!(delivered.is_empty());
+    }
+
+    #[test]
     fn recommendation_ranking_is_deterministic_when_feature_flag_enabled() {
         let now_epoch_day = 300;
         let state = build_state_with_recommendation_runtime(now_epoch_day, true);
@@ -8828,6 +9067,164 @@ mod tests {
         };
         let created = handle_create_employee_order(&state, create_request)
             .expect("ordering flow should remain available");
+        assert_eq!(created.status, "PENDING");
+    }
+
+    #[test]
+    fn rush_reminder_scheduling_supports_preorder_open_and_demand_spike() {
+        let now_epoch_day = 300;
+        let state = build_state_with_rush_reminder_runtime(now_epoch_day, true);
+        let query = EmployeeMenuDiscoveryQuery {
+            plant_id: Some("fab-a".to_owned()),
+            view: Some(MenuDiscoveryViewQuery::Week),
+            menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+            ..EmployeeMenuDiscoveryQuery::default()
+        };
+
+        let response =
+            handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
+                .expect("discovery should succeed with rush reminders enabled");
+        assert!(!response.items.is_empty());
+
+        let delivered = state
+            .rush_reminder_workflow
+            .delivered_notifications()
+            .expect("delivered reminders should be queryable");
+        let scenarios = delivered
+            .iter()
+            .filter(|notification| notification.menu_item_id().as_str() == "menu-discoverytsta1")
+            .map(|notification| notification.scenario())
+            .collect::<BTreeSet<_>>();
+        assert!(
+            scenarios.contains(&RushReminderScenario::PreorderOpen),
+            "preorder-open reminder should be scheduled"
+        );
+        assert!(
+            scenarios.contains(&RushReminderScenario::DemandSpike),
+            "demand-spike reminder should be scheduled"
+        );
+    }
+
+    #[test]
+    fn rush_reminder_preferences_enforce_opt_out() {
+        let now_epoch_day = 300;
+        let state = build_state_with_rush_reminder_runtime(now_epoch_day, true);
+        state
+            .rush_reminder_workflow
+            .upsert_preferences(
+                actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID),
+                RushReminderPreferences::new(false, false),
+            )
+            .expect("reminder preference opt-out should persist");
+        let query = EmployeeMenuDiscoveryQuery {
+            plant_id: Some("fab-a".to_owned()),
+            view: Some(MenuDiscoveryViewQuery::Week),
+            menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+            ..EmployeeMenuDiscoveryQuery::default()
+        };
+
+        handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
+            .expect("discovery should still succeed when reminders are opted out");
+        let delivered = state
+            .rush_reminder_workflow
+            .delivered_notifications()
+            .expect("delivered reminders should be queryable");
+        assert!(
+            delivered.is_empty(),
+            "opted-out actor should not receive rush reminders"
+        );
+    }
+
+    #[test]
+    fn rush_reminder_policy_throttles_repeated_scheduling() {
+        let now_epoch_day = 300;
+        let state = build_state_with_rush_reminder_runtime(now_epoch_day, true);
+        let entries = state
+            .menu_supply_policy
+            .employee_discovery_snapshot(
+                &BTreeSet::from([vendor_id("ven-discoverytst-a1")]),
+                taipei_moment(now_epoch_day, 600),
+            )
+            .expect("discovery snapshot should be queryable");
+        let subscriber_actor_ids = HashSet::from([actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID)]);
+
+        let first_schedule = state
+            .rush_reminder_workflow
+            .schedule_from_discovery(
+                true,
+                &subscriber_actor_ids,
+                &entries,
+                taipei_moment(now_epoch_day, 600),
+            )
+            .expect("first reminder schedule should succeed");
+        assert!(first_schedule.scheduled_count > 0);
+
+        state
+            .rush_reminder_workflow
+            .dispatch_pending(
+                true,
+                state.rush_reminder_delivery_gateway.as_ref(),
+                taipei_moment(now_epoch_day, 600),
+            )
+            .expect("first reminder dispatch should succeed");
+
+        let second_schedule = state
+            .rush_reminder_workflow
+            .schedule_from_discovery(
+                true,
+                &subscriber_actor_ids,
+                &entries,
+                taipei_moment(now_epoch_day, 620),
+            )
+            .expect("second reminder schedule should succeed");
+        assert_eq!(
+            second_schedule.scheduled_count, 0,
+            "throttled schedules must not enqueue duplicate reminders"
+        );
+        assert!(
+            second_schedule.throttled_count > 0,
+            "throttling should account for repeated reminder candidates"
+        );
+    }
+
+    #[test]
+    fn rush_reminder_delivery_failures_do_not_block_ordering() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for rush reminder failure test")
+            .epoch_day();
+        let mut state = build_state_with_rush_reminder_runtime(now_epoch_day, true);
+        state.rush_reminder_delivery_gateway = Arc::new(FailingRushReminderDeliveryGateway);
+        let query = EmployeeMenuDiscoveryQuery {
+            plant_id: Some("fab-a".to_owned()),
+            view: Some(MenuDiscoveryViewQuery::Week),
+            menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+            ..EmployeeMenuDiscoveryQuery::default()
+        };
+
+        handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
+            .expect("discovery should remain available when reminder delivery fails");
+        let failure_count = state
+            .rush_reminder_workflow
+            .delivery_failures()
+            .expect("reminder failures should be queryable")
+            .len();
+        assert!(
+            failure_count > 0,
+            "failing delivery gateway should record reminder delivery failures"
+        );
+
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(3)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta2".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created =
+            handle_create_employee_order(&state, create_request).expect("order should be created");
         assert_eq!(created.status, "PENDING");
     }
 
