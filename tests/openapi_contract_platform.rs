@@ -794,6 +794,18 @@ fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_re
         true
     );
     assert_eq!(
+        pickup_verify_operation["x-order-governance"]["pickupVerification"]["mechanism"],
+        "TOTP_QR_SINGLE_USE"
+    );
+    assert_eq!(
+        pickup_verify_operation["x-order-governance"]["pickupVerification"]["stepSeconds"],
+        30
+    );
+    assert_eq!(
+        pickup_verify_operation["x-order-governance"]["pickupVerification"]["maxClockSkewSteps"],
+        1
+    );
+    assert_eq!(
         pickup_verify_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
         "#/components/schemas/PickupVerificationRequest"
     );
@@ -801,6 +813,17 @@ fn ordering_contract_enforces_taipei_window_governance_and_controlled_special_re
         pickup_verify_operation["responses"]["200"]["content"]["application/json"]["schema"]
             ["$ref"],
         "#/components/schemas/PickupVerificationResponse"
+    );
+    assert_eq!(
+        pickup_verify_operation["responses"]["409"]["$ref"],
+        "#/components/responses/Conflict"
+    );
+
+    let pickup_verification_code = &spec["components"]["schemas"]["PickupVerificationRequest"]
+        ["properties"]["verificationCode"];
+    assert_eq!(
+        pickup_verification_code["pattern"],
+        "^TOTP1:[0-9]{1,20}:[0-9]{6}$"
     );
 
     let patch_schema_variants = spec["components"]["schemas"]["EmployeeOrderPatchRequest"]["oneOf"]

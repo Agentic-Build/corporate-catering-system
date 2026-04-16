@@ -684,6 +684,17 @@ fn invalid_lifecycle_transition_returns_explicit_domain_error() {
             taipei_moment(70, 721),
         )
         .expect("fulfillment transition should succeed");
+    let replay_fulfillment_error = policy
+        .update_order(
+            &order_id("ord-life-003"),
+            OrderMutation::MarkFulfilled,
+            taipei_moment(70, 721),
+        )
+        .expect_err("fulfillment must be single-use to prevent replay");
+    assert!(matches!(
+        replay_fulfillment_error,
+        MenuSupplyWindowError::InvalidOrderLifecycleTransition { .. }
+    ));
 
     let transition_error = policy
         .update_order(

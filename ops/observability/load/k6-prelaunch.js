@@ -1,5 +1,7 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
+import crypto from "k6/crypto";
+import exec from "k6/execution";
 
 export const options = {
   scenarios: {
@@ -68,6 +70,9 @@ const BASE_URL = __ENV.BASE_URL || "http://127.0.0.1:18080";
 const PLANT_ID = (__ENV.PLANT_ID || "fab-a").trim();
 const DELIVERY_EPOCH_DAY = Number(__ENV.DELIVERY_EPOCH_DAY || "");
 const MENU_VARIANT_COUNT = Number(__ENV.MENU_VARIANT_COUNT || "64");
+const PICKUP_TOTP_SECRET = (__ENV.PICKUP_TOTP_SECRET || "").trim();
+const MENU_SEED_DELIVERY_CYCLE_DAYS = 7;
+const DEFAULT_PREORDER_OPEN_DAYS_AHEAD = 7;
 
 if (!PLANT_ID) {
   throw new Error("PLANT_ID must be set for prelaunch load verification");
@@ -78,9 +83,12 @@ if (!Number.isInteger(DELIVERY_EPOCH_DAY) || DELIVERY_EPOCH_DAY <= 0) {
 if (!Number.isInteger(MENU_VARIANT_COUNT) || MENU_VARIANT_COUNT < 1) {
   throw new Error("MENU_VARIANT_COUNT must be a positive integer");
 }
+if (!PICKUP_TOTP_SECRET) {
+  throw new Error("PICKUP_TOTP_SECRET must be set for pickup TOTP verification");
+}
 
-function menuItemIdForIteration(iteration) {
-  return `menu-${(iteration % MENU_VARIANT_COUNT) + 1}`;
+function scenarioIterationInTest() {
+  return Number(exec.scenario.iterationInTest);
 }
 
 function civilFromDays(daysSinceEpoch) {
@@ -107,6 +115,36 @@ function epochDayToIsoDate(epochDay) {
 }
 
 const DELIVERY_DATE = epochDayToIsoDate(DELIVERY_EPOCH_DAY);
+const CURRENT_TAIPEI_EPOCH_DAY = Math.floor((Math.floor(Date.now() / 1000) + 8 * 60 * 60) / 86400);
+const MAX_DELIVERY_EPOCH_DAY = CURRENT_TAIPEI_EPOCH_DAY + DEFAULT_PREORDER_OPEN_DAYS_AHEAD;
+const MAX_MENU_DELIVERY_OFFSET = Math.min(
+  MENU_SEED_DELIVERY_CYCLE_DAYS - 1,
+  MAX_DELIVERY_EPOCH_DAY - DELIVERY_EPOCH_DAY
+);
+
+if (!Number.isInteger(MAX_MENU_DELIVERY_OFFSET) || MAX_MENU_DELIVERY_OFFSET < 0) {
+  throw new Error(
+    `DELIVERY_EPOCH_DAY ${DELIVERY_EPOCH_DAY} is outside supported preorder horizon for policy window`
+  );
+}
+
+const ELIGIBLE_MENU_INDICES = [];
+const ELIGIBLE_MENU_INDICES_BY_OFFSET = {};
+for (let menuIndex = 1; menuIndex <= MENU_VARIANT_COUNT; menuIndex += 1) {
+  const deliveryOffset = (menuIndex - 1) % MENU_SEED_DELIVERY_CYCLE_DAYS;
+  if (deliveryOffset > MAX_MENU_DELIVERY_OFFSET) {
+    continue;
+  }
+  ELIGIBLE_MENU_INDICES.push(menuIndex);
+  if (!ELIGIBLE_MENU_INDICES_BY_OFFSET[deliveryOffset]) {
+    ELIGIBLE_MENU_INDICES_BY_OFFSET[deliveryOffset] = [];
+  }
+  ELIGIBLE_MENU_INDICES_BY_OFFSET[deliveryOffset].push(menuIndex);
+}
+
+if (ELIGIBLE_MENU_INDICES.length === 0) {
+  throw new Error("no menu variants are eligible for current preorder policy window");
+}
 
 function checkReadiness() {
   const readiness = http.get(`${BASE_URL}/health/ready`, {
@@ -121,13 +159,14 @@ function checkReadiness() {
   );
 }
 
-function buildOrderPayload(iteration) {
+function buildOrderPayload() {
+  const selection = orderSelectionForIteration();
   return JSON.stringify({
     plantId: PLANT_ID,
-    deliveryDate: DELIVERY_DATE,
+    deliveryDate: selection.deliveryDate,
     lineItems: [
       {
-        menuItemId: menuItemIdForIteration(iteration),
+        menuItemId: selection.menuItemId,
         quantity: 1,
         specialRequests: ["NO_UTENSILS"]
       }
@@ -135,10 +174,37 @@ function buildOrderPayload(iteration) {
   });
 }
 
+function orderSelectionForIteration(iterationOffset = 0) {
+  const iteration = scenarioIterationInTest() + iterationOffset;
+  const menuIndex = ELIGIBLE_MENU_INDICES[iteration % ELIGIBLE_MENU_INDICES.length];
+  const deliveryOffset = (menuIndex - 1) % MENU_SEED_DELIVERY_CYCLE_DAYS;
+  return {
+    menuIndex,
+    deliveryOffset,
+    menuItemId: `menu-${menuIndex}`,
+    deliveryDate: epochDayToIsoDate(DELIVERY_EPOCH_DAY + deliveryOffset)
+  };
+}
+
+function replacementSelectionForOrder(selection) {
+  const bucket = ELIGIBLE_MENU_INDICES_BY_OFFSET[selection.deliveryOffset] || [selection.menuIndex];
+  if (bucket.length < 2) {
+    return selection;
+  }
+  const currentBucketIndex = bucket.indexOf(selection.menuIndex);
+  const replacementMenuIndex = bucket[(currentBucketIndex + 1 + bucket.length) % bucket.length];
+  return {
+    deliveryOffset: selection.deliveryOffset,
+    deliveryDate: selection.deliveryDate,
+    menuIndex: replacementMenuIndex,
+    menuItemId: `menu-${replacementMenuIndex}`
+  };
+}
+
 export function peakOrderPlacement() {
   const orderResponse = http.post(
     `${BASE_URL}/api/v1/employee/orders`,
-    buildOrderPayload(__ITER),
+    buildOrderPayload(),
     {
       headers: { "Content-Type": "application/json" },
       tags: { operation: "createEmployeeOrder" }
@@ -190,13 +256,15 @@ export function mixedOrderAndMenuReads() {
   sleep(0.03);
 }
 
-function buildOrderPatchPayload(iteration) {
-  if (iteration % 2 === 0) {
+function buildOrderPatchPayload() {
+  if (scenarioIterationInTest() % 2 === 0) {
+    const selection = orderSelectionForIteration();
+    const replacement = replacementSelectionForOrder(selection);
     return JSON.stringify({
       operation: "REPLACE_LINE_ITEMS",
       lineItems: [
         {
-          menuItemId: menuItemIdForIteration(iteration + 1),
+          menuItemId: replacement.menuItemId,
           quantity: 1,
           specialRequests: ["NO_UTENSILS"]
         }
@@ -212,7 +280,7 @@ function buildOrderPatchPayload(iteration) {
 export function peakOrderLifecycleMutations() {
   const createResponse = http.post(
     `${BASE_URL}/api/v1/employee/orders`,
-    buildOrderPayload(__ITER),
+    buildOrderPayload(),
     {
       headers: { "Content-Type": "application/json" },
       tags: { operation: "createEmployeeOrder" }
@@ -225,7 +293,7 @@ export function peakOrderLifecycleMutations() {
   const orderId = parseOrderIdStrict(createResponse);
   const patchResponse = http.patch(
     `${BASE_URL}/api/v1/employee/orders/${orderId}`,
-    buildOrderPatchPayload(__ITER),
+    buildOrderPatchPayload(),
     {
       headers: { "Content-Type": "application/json" },
       tags: {
@@ -243,18 +311,39 @@ export function peakOrderLifecycleMutations() {
   sleep(0.03);
 }
 
-function buildPickupVerificationPayload() {
-  const numericCode = __ITER % 999999;
-  const zeroPaddedCode = `000000${numericCode}`.slice(-6);
+function taipeiTotpStepNow() {
+  const unixSeconds = Math.floor(Date.now() / 1000);
+  return Math.floor((unixSeconds + 8 * 60 * 60) / 30);
+}
+
+function computePickupTotp(orderId, step) {
+  const digestHex = crypto.hmac("sha256", PICKUP_TOTP_SECRET, `${orderId}:${step}`, "hex");
+  const digest = [];
+  for (let index = 0; index < digestHex.length; index += 2) {
+    digest.push(Number.parseInt(digestHex.slice(index, index + 2), 16));
+  }
+  const offset = digest[digest.length - 1] & 0x0f;
+  const binary =
+    ((digest[offset] & 0x7f) << 24) |
+    (digest[offset + 1] << 16) |
+    (digest[offset + 2] << 8) |
+    digest[offset + 3];
+  const otp = binary % 1000000;
+  return String(otp).padStart(6, "0");
+}
+
+function buildPickupVerificationPayload(orderId) {
+  const step = taipeiTotpStepNow();
+  const otp = computePickupTotp(orderId, step);
   return JSON.stringify({
-    verificationCode: `TOTP-${zeroPaddedCode}`
+    verificationCode: `TOTP1:${step}:${otp}`
   });
 }
 
 export function peakOrderAndPickupVerification() {
   const createResponse = http.post(
     `${BASE_URL}/api/v1/employee/orders`,
-    buildOrderPayload(__ITER),
+    buildOrderPayload(),
     {
       headers: { "Content-Type": "application/json" },
       tags: { operation: "createEmployeeOrder" }
@@ -267,7 +356,7 @@ export function peakOrderAndPickupVerification() {
   const orderId = parseOrderIdStrict(createResponse);
   const pickupResponse = http.post(
     `${BASE_URL}/api/v1/employee/orders/${orderId}/pickup-verifications`,
-    buildPickupVerificationPayload(),
+    buildPickupVerificationPayload(orderId),
     {
       headers: { "Content-Type": "application/json" },
       tags: {

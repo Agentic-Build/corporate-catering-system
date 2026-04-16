@@ -34,6 +34,7 @@ rg -q "p99LatencyMsMax" ops/observability/load/prelaunch-thresholds.yaml
 rg -q --fixed-strings "p(99)<" ops/observability/load/k6-prelaunch.js
 rg -q "peak-order-and-pickup-verification" ops/observability/load/k6-prelaunch.js
 rg -q "/api/v1/employee/orders/.*/pickup-verifications" ops/observability/load/k6-prelaunch.js
+rg -q "TOTP1:" ops/observability/load/k6-prelaunch.js
 rg -q "specialRequests" ops/observability/load/k6-prelaunch.js
 if rg -q "(parseOrderIdOrFallback|fallbackOrderId|specialRequestOption)" ops/observability/load/k6-prelaunch.js; then
   echo "legacy fallback or special-request payload shape detected in k6-prelaunch.js"
@@ -94,6 +95,7 @@ prelaunch_vendor_id="${PRELAUNCH_VENDOR_ID:-ven-load-gate-a}"
 prelaunch_plant_id="${PRELAUNCH_PLANT_ID:-fab-a}"
 prelaunch_menu_variant_count="${PRELAUNCH_MENU_VARIANT_COUNT:-64}"
 prelaunch_delivery_day_offset="${PRELAUNCH_DELIVERY_DAY_OFFSET:-2}"
+prelaunch_pickup_totp_secret="${PRELAUNCH_PICKUP_TOTP_SECRET:-prelaunch-hard-slo-secret}"
 delivery_epoch_day="$(node - "${prelaunch_delivery_day_offset}" <<'NODE'
 const offsetRaw = Number(process.argv[2]);
 if (!Number.isInteger(offsetRaw) || offsetRaw < 1 || offsetRaw > 7) {
@@ -120,6 +122,7 @@ PRELAUNCH_VENDOR_ID="${prelaunch_vendor_id}" \
 PRELAUNCH_PLANT_ID="${prelaunch_plant_id}" \
 PRELAUNCH_MENU_VARIANT_COUNT="${prelaunch_menu_variant_count}" \
 PRELAUNCH_DELIVERY_EPOCH_DAY="${delivery_epoch_day}" \
+PRELAUNCH_PICKUP_TOTP_SECRET="${prelaunch_pickup_totp_secret}" \
 OTEL_SERVICE_NAME="catering-http-api" \
 OTEL_EXPORTER_OTLP_ENDPOINT="${collector_endpoint}" \
 cargo run --quiet --bin observability_runtime_service >"${service_log_file}" 2>&1 &
@@ -142,6 +145,7 @@ BASE_URL="http://127.0.0.1:${PORT}" \
   PLANT_ID="${prelaunch_plant_id}" \
   MENU_VARIANT_COUNT="${prelaunch_menu_variant_count}" \
   DELIVERY_EPOCH_DAY="${delivery_epoch_day}" \
+  PICKUP_TOTP_SECRET="${prelaunch_pickup_totp_secret}" \
   k6 run --quiet --summary-trend-stats "avg,min,med,max,p(90),p(95),p(99)" --summary-export "${summary_file}" ops/observability/load/k6-prelaunch.js
 
 cp "${summary_file}" "${retained_summary}"

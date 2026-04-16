@@ -14,12 +14,15 @@ use corporate_catering_system::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
 };
 use corporate_catering_system::menu_supply_window::{
-    EmployeeMenuDiscoveryEntry, MenuHealthTag, MenuImageUrl, MenuItemId, MenuSupplyPolicy, Money,
-    OrderId, OrderLineItemRequest, OrderMutation, OrderSnapshot, SpecialRequest, VendorMenuItem,
-    VendorMenuItemDraft,
+    EmployeeMenuDiscoveryEntry, MenuHealthTag, MenuImageUrl, MenuItemId, MenuSupplyPolicy,
+    MenuSupplyWindowError, Money, OrderId, OrderLifecycleState, OrderLineItemRequest,
+    OrderMutation, OrderSnapshot, SpecialRequest, VendorMenuItem, VendorMenuItemDraft,
 };
 use corporate_catering_system::observability::{
     initialize_telemetry_runtime_from_env, TelemetryService,
+};
+use corporate_catering_system::pickup_totp::{
+    PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
 };
 use corporate_catering_system::transport::http::{
     HttpEmployeeDiscoveryExecutionGateway, HttpOrderExecutionError, HttpOrderingExecutionGateway,
@@ -49,6 +52,7 @@ struct AppState {
     compliance_lifecycle: Arc<VendorComplianceLifecycle>,
     delivery_policy: Arc<VendorPlantDeliveryPolicy>,
     menu_supply_policy: MenuSupplyPolicy,
+    pickup_totp_verifier: Arc<PickupTotpVerifier>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -298,10 +302,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         parse_positive_u16_env("PRELAUNCH_MENU_VARIANT_COUNT", DEFAULT_MENU_VARIANT_COUNT)?;
 
     let delivery_epoch_day = resolve_delivery_epoch_day()?;
+    let pickup_totp_verifier = PickupTotpVerifier::from_env("PRELAUNCH_PICKUP_TOTP_SECRET")
+        .map(Arc::new)
+        .map_err(|error| format!("pickup TOTP verifier initialization failed: {error}"))?;
 
-    let state =
-        bootstrap_runtime_state(vendor_id, plant_id, delivery_epoch_day, menu_variant_count)
-            .map_err(|error| format!("failed to bootstrap runtime state: {error}"))?;
+    let state = bootstrap_runtime_state(
+        vendor_id,
+        plant_id,
+        delivery_epoch_day,
+        menu_variant_count,
+        pickup_totp_verifier,
+    )
+    .map_err(|error| format!("failed to bootstrap runtime state: {error}"))?;
 
     let app = Router::new()
         .route("/health/ready", get(ready_probe))
@@ -388,6 +400,7 @@ fn bootstrap_runtime_state(
     plant_id: PlantId,
     delivery_epoch_day: i32,
     menu_variant_count: u16,
+    pickup_totp_verifier: Arc<PickupTotpVerifier>,
 ) -> Result<AppState, String> {
     let committee_actor = AuthenticatedActorContext::new(
         ActorId::parse("committee-load-gate").map_err(|error| error.to_string())?,
@@ -527,6 +540,7 @@ fn bootstrap_runtime_state(
         compliance_lifecycle: Arc::new(compliance_lifecycle),
         delivery_policy: Arc::new(delivery_policy),
         menu_supply_policy,
+        pickup_totp_verifier,
     })
 }
 
@@ -1636,84 +1650,313 @@ async fn verify_order_pickup(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-
     if request.verification_code.trim().is_empty() {
+        emit_pickup_verification_audit_event(
+            request_id.as_str(),
+            Some(order_id.as_str()),
+            "rejected",
+            "invalid-format",
+            None,
+            None,
+        );
         telemetry.finish_with_http_status(StatusCode::BAD_REQUEST.as_u16());
         return (
             StatusCode::BAD_REQUEST,
             Json(
-                serde_json::to_value(ErrorPayload {
-                    code: "INVALID_PICKUP_VERIFICATION_REQUEST",
-                    message: "verificationCode must be non-empty".to_owned(),
-                    request_id: request_id.clone(),
-                })
+                serde_json::to_value(
+                    domain_error(
+                        StatusCode::BAD_REQUEST,
+                        "INVALID_PICKUP_VERIFICATION_REQUEST",
+                        "verificationCode must be non-empty".to_owned(),
+                    )
+                    .1
+                    .with_request_id(request_id.as_str()),
+                )
                 .expect("error payload serialization should succeed"),
             ),
         );
     }
 
-    let order_id = match parse_contract_order_id(&order_id) {
-        Ok(value) => value,
-        Err(error) => {
-            telemetry.finish_with_http_status(StatusCode::BAD_REQUEST.as_u16());
-            return (
-                StatusCode::BAD_REQUEST,
+    let response = match handle_verify_order_pickup(&state, order_id, request, request_id.as_str())
+    {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
                 Json(
-                    serde_json::to_value(ErrorPayload {
-                        code: "INVALID_PICKUP_VERIFICATION_REQUEST",
-                        message: format!("orderId path parameter is invalid: {error}"),
-                        request_id: request_id.clone(),
-                    })
-                    .expect("error payload serialization should succeed"),
+                    serde_json::to_value(payload)
+                        .expect("pickup verification payload serialization should succeed"),
                 ),
-            );
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("error payload serialization should succeed"),
+                ),
+            )
         }
     };
 
-    let snapshot = match state.menu_supply_policy.order_snapshot(&order_id) {
-        Ok(value) => value,
-        Err(error) => {
-            telemetry.finish_with_http_status(StatusCode::INTERNAL_SERVER_ERROR.as_u16());
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(
-                    serde_json::to_value(ErrorPayload {
-                        code: "PICKUP_VERIFICATION_INTERNAL_ERROR",
-                        message: error.to_string(),
-                        request_id: request_id.clone(),
-                    })
-                    .expect("error payload serialization should succeed"),
-                ),
-            );
-        }
-    };
+    response
+}
 
-    if snapshot.is_none() {
-        telemetry.finish_with_http_status(StatusCode::NOT_FOUND.as_u16());
-        return (
-            StatusCode::NOT_FOUND,
-            Json(
-                serde_json::to_value(ErrorPayload {
-                    code: "ORDER_NOT_FOUND",
-                    message: "order does not exist for pickup verification".to_owned(),
-                    request_id: request_id.clone(),
-                })
-                .expect("error payload serialization should succeed"),
-            ),
+fn handle_verify_order_pickup(
+    state: &AppState,
+    order_id_raw: String,
+    request: PickupVerificationRequest,
+    request_id: &str,
+) -> Result<PickupVerificationResponse, (StatusCode, ErrorPayload)> {
+    let verification_code = request.verification_code.trim();
+    if verification_code.is_empty() {
+        emit_pickup_verification_audit_event(
+            request_id,
+            None,
+            "rejected",
+            "invalid-format",
+            None,
+            None,
         );
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_PICKUP_VERIFICATION_REQUEST",
+            "verificationCode must be non-empty".to_owned(),
+        ));
     }
 
-    telemetry.finish_with_http_status(StatusCode::OK.as_u16());
-    (
-        StatusCode::OK,
-        Json(
-            serde_json::to_value(PickupVerificationResponse {
-                order_id: order_id.as_str().to_owned(),
-                verified: true,
-            })
-            .expect("pickup verification payload serialization should succeed"),
+    let order_id = parse_contract_order_id(&order_id_raw).map_err(|error| {
+        emit_pickup_verification_audit_event(
+            request_id,
+            Some(order_id_raw.as_str()),
+            "rejected",
+            "invalid-order-id",
+            None,
+            None,
+        );
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_PICKUP_VERIFICATION_REQUEST",
+            format!("orderId path parameter is invalid: {error}"),
+        )
+    })?;
+
+    let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
+    if snapshot.state() == OrderLifecycleState::Fulfilled {
+        emit_pickup_verification_audit_event(
+            request_id,
+            Some(order_id.as_str()),
+            "rejected",
+            "replay-detected",
+            None,
+            None,
+        );
+        return Err(domain_error(
+            StatusCode::CONFLICT,
+            "PICKUP_VERIFICATION_REPLAYED",
+            format!(
+                "order `{}` has already been claimed via pickup verification",
+                order_id.as_str()
+            ),
+        ));
+    }
+    if !matches!(
+        snapshot.state(),
+        OrderLifecycleState::Pending | OrderLifecycleState::Modified
+    ) {
+        emit_pickup_verification_audit_event(
+            request_id,
+            Some(order_id.as_str()),
+            "rejected",
+            "order-state-not-eligible",
+            None,
+            None,
+        );
+        return Err(domain_error(
+            StatusCode::CONFLICT,
+            "PICKUP_VERIFICATION_STATE_CONFLICT",
+            format!(
+                "order `{}` is in `{}` state and cannot be pickup-verified",
+                order_id.as_str(),
+                snapshot.state().as_str()
+            ),
+        ));
+    }
+
+    let current_step = PickupTotpVerifier::current_taipei_step().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            format!("failed to resolve pickup TOTP step: {error}"),
+        )
+    })?;
+    let VerifiedTotp {
+        step: verified_step,
+    } = state
+        .pickup_totp_verifier
+        .verify(&order_id, verification_code, current_step)
+        .map_err(|error| {
+            map_pickup_totp_verification_error(&order_id, request_id, error, Some(current_step))
+        })?;
+
+    let requested_at = current_taipei_business_moment().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+
+    state
+        .menu_supply_policy
+        .update_order(&order_id, OrderMutation::MarkFulfilled, requested_at)
+        .map_err(|error| map_pickup_claim_update_error(&order_id, request_id, error))?;
+
+    emit_pickup_verification_audit_event(
+        request_id,
+        Some(order_id.as_str()),
+        "accepted",
+        "verified-and-claimed",
+        Some(verified_step),
+        Some(current_step),
+    );
+
+    Ok(PickupVerificationResponse {
+        order_id: order_id.as_str().to_owned(),
+        verified: true,
+    })
+}
+
+fn map_pickup_totp_verification_error(
+    order_id: &OrderId,
+    request_id: &str,
+    error: PickupTotpVerificationError,
+    current_step: Option<u64>,
+) -> (StatusCode, ErrorPayload) {
+    emit_pickup_verification_audit_event(
+        request_id,
+        Some(order_id.as_str()),
+        "rejected",
+        error.as_audit_reason(),
+        None,
+        current_step,
+    );
+    match error {
+        PickupTotpVerificationError::InvalidFormat(reason) => domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_PICKUP_VERIFICATION_REQUEST",
+            reason.to_owned(),
         ),
-    )
+        PickupTotpVerificationError::Expired {
+            token_step,
+            current_step,
+        } => domain_error(
+            StatusCode::BAD_REQUEST,
+            "PICKUP_VERIFICATION_EXPIRED",
+            format!("verificationCode step {token_step} is expired at current step {current_step}"),
+        ),
+        PickupTotpVerificationError::NotYetValid {
+            token_step,
+            current_step,
+        } => domain_error(
+            StatusCode::BAD_REQUEST,
+            "PICKUP_VERIFICATION_INVALID_WINDOW",
+            format!(
+                "verificationCode step {token_step} is not yet valid at current step {current_step}"
+            ),
+        ),
+        PickupTotpVerificationError::InvalidCode => domain_error(
+            StatusCode::BAD_REQUEST,
+            "PICKUP_VERIFICATION_INVALID_CODE",
+            "verificationCode does not match the expected pickup TOTP".to_owned(),
+        ),
+    }
+}
+
+fn map_pickup_claim_update_error(
+    order_id: &OrderId,
+    request_id: &str,
+    error: MenuSupplyWindowError,
+) -> (StatusCode, ErrorPayload) {
+    match error {
+        MenuSupplyWindowError::InvalidOrderLifecycleTransition { current_state, .. }
+            if current_state == OrderLifecycleState::Fulfilled =>
+        {
+            emit_pickup_verification_audit_event(
+                request_id,
+                Some(order_id.as_str()),
+                "rejected",
+                "replay-detected",
+                None,
+                None,
+            );
+            domain_error(
+                StatusCode::CONFLICT,
+                "PICKUP_VERIFICATION_REPLAYED",
+                format!(
+                    "order `{}` has already been claimed via pickup verification",
+                    order_id.as_str()
+                ),
+            )
+        }
+        MenuSupplyWindowError::InvalidOrderLifecycleTransition { current_state, .. } => {
+            emit_pickup_verification_audit_event(
+                request_id,
+                Some(order_id.as_str()),
+                "rejected",
+                "order-state-not-eligible",
+                None,
+                None,
+            );
+            domain_error(
+                StatusCode::CONFLICT,
+                "PICKUP_VERIFICATION_STATE_CONFLICT",
+                format!(
+                    "order `{}` is in `{}` state and cannot be pickup-verified",
+                    order_id.as_str(),
+                    current_state.as_str()
+                ),
+            )
+        }
+        other => {
+            emit_pickup_verification_audit_event(
+                request_id,
+                Some(order_id.as_str()),
+                "rejected",
+                "claim-update-failed",
+                None,
+                None,
+            );
+            domain_error(
+                StatusCode::CONFLICT,
+                "ORDER_POLICY_VIOLATION",
+                other.to_string(),
+            )
+        }
+    }
+}
+
+fn emit_pickup_verification_audit_event(
+    request_id: &str,
+    order_id: Option<&str>,
+    outcome: &'static str,
+    reason: &'static str,
+    token_step: Option<u64>,
+    current_step: Option<u64>,
+) {
+    tracing::info!(
+        audit_event = "pickup_totp_checkin",
+        verification_mode = "totp_qr",
+        request_id = request_id,
+        order_id = order_id.unwrap_or("n/a"),
+        outcome = outcome,
+        reason = reason,
+        token_step = token_step,
+        current_step = current_step,
+        "pickup TOTP verification audit event"
+    );
 }
 
 #[cfg(test)]
@@ -1942,6 +2185,10 @@ mod tests {
             compliance_lifecycle: Arc::new(compliance_lifecycle),
             delivery_policy: Arc::new(delivery_policy),
             menu_supply_policy,
+            pickup_totp_verifier: Arc::new(
+                PickupTotpVerifier::from_secret("unit-test-pickup-totp-secret".as_bytes())
+                    .expect("test pickup verifier should be valid"),
+            ),
         }
     }
 
@@ -2129,5 +2376,131 @@ mod tests {
             .expect_err("missing plantId must fail without legacy fallback");
         assert_eq!(error.0, StatusCode::BAD_REQUEST);
         assert_eq!(error.1.code, "INVALID_MENU_DISCOVERY_QUERY");
+    }
+
+    #[test]
+    fn pickup_verification_accepts_valid_totp_and_marks_order_fulfilled() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order = handle_create_employee_order(&state, create_request)
+            .expect("create order should succeed for pickup verification");
+        let parsed_order_id = parse_contract_order_id(&created_order.order_id)
+            .expect("created order id should match contract format");
+        let current_step =
+            PickupTotpVerifier::current_taipei_step().expect("current step should resolve");
+        let verification_code = state
+            .pickup_totp_verifier
+            .generate_qr_payload(&parsed_order_id, current_step);
+
+        let response = handle_verify_order_pickup(
+            &state,
+            created_order.order_id.clone(),
+            PickupVerificationRequest { verification_code },
+            "req-pickup-success",
+        )
+        .expect("valid TOTP payload should verify successfully");
+
+        assert_eq!(response.order_id, created_order.order_id);
+        assert!(response.verified);
+        let updated_snapshot = load_order_snapshot_or_not_found(&state, &parsed_order_id)
+            .expect("fulfilled order should remain queryable");
+        assert_eq!(updated_snapshot.state(), OrderLifecycleState::Fulfilled);
+    }
+
+    #[test]
+    fn pickup_verification_rejects_expired_totp_code() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order = handle_create_employee_order(&state, create_request)
+            .expect("create order should succeed for pickup verification");
+        let parsed_order_id = parse_contract_order_id(&created_order.order_id)
+            .expect("created order id should match contract format");
+        let current_step =
+            PickupTotpVerifier::current_taipei_step().expect("current step should resolve");
+        let expired_step = current_step.saturating_sub(2);
+        let verification_code = state
+            .pickup_totp_verifier
+            .generate_qr_payload(&parsed_order_id, expired_step);
+
+        let error = handle_verify_order_pickup(
+            &state,
+            created_order.order_id.clone(),
+            PickupVerificationRequest { verification_code },
+            "req-pickup-expired",
+        )
+        .expect_err("expired TOTP payload should be rejected");
+        assert_eq!(error.0, StatusCode::BAD_REQUEST);
+        assert_eq!(error.1.code, "PICKUP_VERIFICATION_EXPIRED");
+    }
+
+    #[test]
+    fn pickup_verification_rejects_replay_after_successful_claim() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order = handle_create_employee_order(&state, create_request)
+            .expect("create order should succeed for pickup verification");
+        let parsed_order_id = parse_contract_order_id(&created_order.order_id)
+            .expect("created order id should match contract format");
+        let current_step =
+            PickupTotpVerifier::current_taipei_step().expect("current step should resolve");
+        let verification_code = state
+            .pickup_totp_verifier
+            .generate_qr_payload(&parsed_order_id, current_step);
+
+        handle_verify_order_pickup(
+            &state,
+            created_order.order_id.clone(),
+            PickupVerificationRequest {
+                verification_code: verification_code.clone(),
+            },
+            "req-pickup-replay-first",
+        )
+        .expect("first pickup verification should succeed");
+
+        let replay_error = handle_verify_order_pickup(
+            &state,
+            created_order.order_id.clone(),
+            PickupVerificationRequest { verification_code },
+            "req-pickup-replay-second",
+        )
+        .expect_err("second pickup verification should be rejected as replay");
+        assert_eq!(replay_error.0, StatusCode::CONFLICT);
+        assert_eq!(replay_error.1.code, "PICKUP_VERIFICATION_REPLAYED");
     }
 }

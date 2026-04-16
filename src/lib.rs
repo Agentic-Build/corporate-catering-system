@@ -7,6 +7,7 @@ pub mod health;
 pub mod identity;
 pub mod menu_supply_window;
 pub mod observability;
+pub mod pickup_totp;
 pub mod transport;
 pub mod vendor_compliance;
 pub mod vendor_delivery_mapping;

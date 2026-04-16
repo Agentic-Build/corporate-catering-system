@@ -1364,7 +1364,11 @@ impl MenuSupplyPolicy {
             }
             OrderMutation::MarkFulfilled => {
                 if stored_order.state == OrderLifecycleState::Fulfilled {
-                    return Ok(());
+                    return Err(MenuSupplyWindowError::InvalidOrderLifecycleTransition {
+                        order_id: order_id.clone(),
+                        current_state: stored_order.state,
+                        operation: "MARK_FULFILLED",
+                    });
                 }
                 if !matches!(
                     stored_order.state,

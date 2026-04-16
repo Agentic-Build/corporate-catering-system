@@ -462,7 +462,10 @@ pub fn canonical_openapi_spec() -> Value {
               "strictLifecycle": true,
               "inventoryReservationMode": "ATOMIC_IDEMPOTENT",
               "pickupVerification": {
-                "required": true
+                "required": true,
+                "mechanism": "TOTP_QR_SINGLE_USE",
+                "stepSeconds": 30,
+                "maxClockSkewSteps": 1
               }
             },
             "security": [{ "corporateSsoBearer": [] }],
@@ -490,6 +493,7 @@ pub fn canonical_openapi_spec() -> Value {
               "401": { "$ref": "#/components/responses/Unauthorized" },
               "403": { "$ref": "#/components/responses/Forbidden" },
               "404": { "$ref": "#/components/responses/NotFound" },
+              "409": { "$ref": "#/components/responses/Conflict" },
               "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
@@ -1596,8 +1600,10 @@ pub fn canonical_openapi_spec() -> Value {
             "properties": {
               "verificationCode": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 64
+                "minLength": 15,
+                "maxLength": 64,
+                "pattern": "^TOTP1:[0-9]{1,20}:[0-9]{6}$",
+                "description": "Single-use pickup TOTP QR payload bound to orderId and fixed Asia/Taipei 30-second step boundaries."
               }
             },
             "additionalProperties": false

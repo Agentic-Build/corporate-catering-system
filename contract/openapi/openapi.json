@@ -1018,8 +1018,10 @@
         "additionalProperties": false,
         "properties": {
           "verificationCode": {
+            "description": "Single-use pickup TOTP QR payload bound to orderId and fixed Asia/Taipei 30-second step boundaries.",
             "maxLength": 64,
-            "minLength": 1,
+            "minLength": 15,
+            "pattern": "^TOTP1:[0-9]{1,20}:[0-9]{6}$",
             "type": "string"
           }
         },
@@ -2646,6 +2648,9 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -2662,7 +2667,10 @@
         "x-order-governance": {
           "inventoryReservationMode": "ATOMIC_IDEMPOTENT",
           "pickupVerification": {
-            "required": true
+            "maxClockSkewSteps": 1,
+            "mechanism": "TOTP_QR_SINGLE_USE",
+            "required": true,
+            "stepSeconds": 30
           },
           "strictLifecycle": true,
           "timezone": "Asia/Taipei"

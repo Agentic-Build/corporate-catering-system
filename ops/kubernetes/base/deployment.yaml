@@ -48,6 +48,11 @@ spec:
               value: tracecontext,baggage
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.namespace=corporate-catering,deployment.environment=production,k8s.namespace.name=$(POD_NAMESPACE)
+            - name: PRELAUNCH_PICKUP_TOTP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: pickup_totp_secret
           readinessProbe:
             httpGet:
               path: /health/ready

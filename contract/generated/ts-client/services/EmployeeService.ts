@@ -164,6 +164,7 @@ export class EmployeeService {
                 401: `Authentication token is missing or invalid.`,
                 403: `Authenticated actor is not authorized to perform this operation.`,
                 404: `Requested resource was not found.`,
+                409: `Request conflicts with business constraints.`,
                 500: `Internal server error while processing request.`,
             },
         });

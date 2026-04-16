@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-04-15T22:35:57.977Z",
+  "generatedAt": "2026-04-16T00:13:18.492Z",
   "summaryPath": "ops/observability/load/reports/prelaunch-k6-summary.json",
   "scenarios": [
     {
       "name": "peak-order-placement",
       "observed": {
-        "requestRate": 183.6423769990584,
-        "p95LatencyMs": 1.714449999999998,
-        "p99LatencyMs": 3.41,
+        "requestRate": 183.6416404683504,
+        "p95LatencyMs": 2.298,
+        "p99LatencyMs": 3.631179999999999,
         "errorRate": 0
       },
       "thresholds": {
@@ -22,9 +22,9 @@
     {
       "name": "mixed-order-and-menu-reads",
       "observed": {
-        "requestRate": 315.3831051986823,
-        "p95LatencyMs": 1.2789499999999987,
-        "p99LatencyMs": 1.6291799999999994,
+        "requestRate": 315.38184029814266,
+        "p95LatencyMs": 2.133,
+        "p99LatencyMs": 2.5585899999999997,
         "errorRate": 0
       },
       "thresholds": {
@@ -39,9 +39,9 @@
     {
       "name": "peak-order-lifecycle-mutations",
       "observed": {
-        "requestRate": 314.89582443239004,
-        "p95LatencyMs": 1.003,
-        "p99LatencyMs": 1.398919999999999,
+        "requestRate": 314.8570785006416,
+        "p95LatencyMs": 1.995,
+        "p99LatencyMs": 2.239,
         "errorRate": 0
       },
       "thresholds": {
@@ -56,9 +56,9 @@
     {
       "name": "peak-order-and-pickup-verification",
       "observed": {
-        "requestRate": 359.87558747475026,
-        "p95LatencyMs": 1.021,
-        "p99LatencyMs": 1.377,
+        "requestRate": 359.8741441291262,
+        "p95LatencyMs": 1.2708999999999986,
+        "p99LatencyMs": 2.2559799999999997,
         "errorRate": 0
       },
       "thresholds": {
