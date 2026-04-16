@@ -2217,6 +2217,167 @@
         ],
         "type": "object"
       },
+      "ObjectStorageAccessLinkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "locale": {
+            "maxLength": 32,
+            "minLength": 2,
+            "type": "string"
+          },
+          "objectRef": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "objectRef"
+        ],
+        "type": "object"
+      },
+      "ObjectStorageAccessLinkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "downloadExpiresAtEpochSeconds": {
+            "type": "integer"
+          },
+          "downloadUrl": {
+            "format": "uri",
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "objectRef": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "objectRef",
+          "downloadUrl",
+          "downloadExpiresAtEpochSeconds"
+        ],
+        "type": "object"
+      },
+      "ObjectStorageUploadMetadata": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactClass": {
+            "$ref": "#/components/schemas/StorageArtifactClass"
+          },
+          "fileName": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "mimeType": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "sizeBytes": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "thumbnailRef": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactClass",
+          "fileName",
+          "mimeType",
+          "sizeBytes"
+        ],
+        "type": "object"
+      },
+      "ObjectStorageUploadPlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactClass": {
+            "$ref": "#/components/schemas/StorageArtifactClass"
+          },
+          "fileName": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "locale": {
+            "maxLength": 32,
+            "minLength": 2,
+            "type": "string"
+          },
+          "mimeType": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "sizeBytes": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactClass",
+          "fileName",
+          "mimeType",
+          "sizeBytes"
+        ],
+        "type": "object"
+      },
+      "ObjectStorageUploadPlanResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/ObjectStorageUploadMetadata"
+          },
+          "primary": {
+            "$ref": "#/components/schemas/ObjectStorageUploadTarget"
+          },
+          "thumbnail": {
+            "$ref": "#/components/schemas/ObjectStorageUploadTarget"
+          }
+        },
+        "required": [
+          "primary",
+          "metadata"
+        ],
+        "type": "object"
+      },
+      "ObjectStorageUploadTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "objectRef": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          },
+          "requiredHeaders": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "uploadExpiresAtEpochSeconds": {
+            "type": "integer"
+          },
+          "uploadUrl": {
+            "format": "uri",
+            "maxLength": 4096,
+            "type": "string"
+          }
+        },
+        "required": [
+          "objectRef",
+          "uploadUrl",
+          "uploadExpiresAtEpochSeconds",
+          "requiredHeaders"
+        ],
+        "type": "object"
+      },
       "OperationsAnalyticsDashboard": {
         "additionalProperties": false,
         "properties": {
@@ -3188,6 +3349,18 @@
           "SAUCE_ON_SIDE",
           "NO_UTENSILS",
           "EXTRA_SPICY"
+        ],
+        "type": "string"
+      },
+      "StorageArtifactClass": {
+        "enum": [
+          "MENU_IMAGE",
+          "MENU_IMAGE_THUMBNAIL",
+          "COMPLIANCE_DOCUMENT",
+          "FULFILLMENT_DAILY_SUMMARY",
+          "FULFILLMENT_PLANT_PARTITION_SHEET",
+          "FULFILLMENT_LABELS",
+          "FULFILLMENT_BASKET_LIST"
         ],
         "type": "string"
       },
@@ -5240,6 +5413,54 @@
         ]
       }
     },
+    "/api/v1/admin/object-storage/access-links": {
+      "post": {
+        "operationId": "createAdminObjectStorageAccessLink",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObjectStorageAccessLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectStorageAccessLinkResponse"
+                }
+              }
+            },
+            "description": "Presigned download link for an existing object-storage reference"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "corporateSsoBearer": []
+          }
+        ],
+        "summary": "Create a presigned object-storage access link for managed administrative artifacts",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/api/v1/admin/orders/retention-purge": {
       "post": {
         "operationId": "purgeOrderData",
@@ -6784,6 +7005,102 @@
           }
         ],
         "summary": "Create or update a vendor menu item",
+        "tags": [
+          "Vendor"
+        ]
+      }
+    },
+    "/api/v1/vendor/object-storage/access-links": {
+      "post": {
+        "operationId": "createVendorObjectStorageAccessLink",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObjectStorageAccessLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectStorageAccessLinkResponse"
+                }
+              }
+            },
+            "description": "Presigned download link for an existing object-storage reference"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "vendorMfaBearer": []
+          }
+        ],
+        "summary": "Create a presigned object-storage access link for vendor-managed artifacts",
+        "tags": [
+          "Vendor"
+        ]
+      }
+    },
+    "/api/v1/vendor/object-storage/upload-plans": {
+      "post": {
+        "operationId": "createVendorObjectStorageUploadPlan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObjectStorageUploadPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectStorageUploadPlanResponse"
+                }
+              }
+            },
+            "description": "Presigned upload plan with metadata and optional thumbnail target"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "vendorMfaBearer": []
+          }
+        ],
+        "summary": "Create a presigned object-storage upload plan for vendor artifacts",
         "tags": [
           "Vendor"
         ]

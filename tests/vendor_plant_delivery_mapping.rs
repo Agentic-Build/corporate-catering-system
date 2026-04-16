@@ -104,7 +104,7 @@ fn activate_vendor(
             vendor_id,
             &template_id("tmpl-vendor-delivery-license"),
             VendorDocumentSubmission::new(
-                "s3://evidence/docs/vendor-license.pdf",
+                "s3://compliance-evidence/docs/vendor-license.pdf",
                 ComplianceDate::from_epoch_day(0),
                 ComplianceDate::from_epoch_day(300),
             )

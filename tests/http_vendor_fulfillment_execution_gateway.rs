@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use corporate_catering_system::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
 };
@@ -9,7 +11,8 @@ use corporate_catering_system::transport::http::HttpVendorFulfillmentExecutionGa
 use corporate_catering_system::vendor_compliance::VendorId;
 use corporate_catering_system::vendor_delivery_mapping::TaipeiBusinessMoment;
 use corporate_catering_system::vendor_fulfillment::{
-    FulfillmentBatchId, FulfillmentDeliveryStatus, VendorFulfillmentError, VendorFulfillmentPolicy,
+    FulfillmentBatchId, FulfillmentDeliveryStatus, InMemoryFulfillmentArtifactStore,
+    VendorFulfillmentError, VendorFulfillmentPolicy,
 };
 
 fn actor_id(value: &str) -> ActorId {
@@ -59,6 +62,13 @@ fn order_id(value: &str) -> OrderId {
 
 fn taipei_moment(epoch_day: i32, minute_of_day: u16) -> TaipeiBusinessMoment {
     TaipeiBusinessMoment::new(epoch_day, minute_of_day).expect("Taipei business moment is valid")
+}
+
+fn fulfillment_policy() -> VendorFulfillmentPolicy {
+    VendorFulfillmentPolicy::new(Arc::new(
+        InMemoryFulfillmentArtifactStore::new("fulfillment-exports")
+            .expect("in-memory artifact store should initialize"),
+    ))
 }
 
 fn ensure_test_otel_endpoint() {
@@ -123,7 +133,7 @@ fn http_gateway_drives_vendor_fulfillment_board_status_transition_and_export_bat
         )
         .expect("order should be created");
 
-    let fulfillment_policy = VendorFulfillmentPolicy::new();
+    let fulfillment_policy = fulfillment_policy();
     let gateway = HttpVendorFulfillmentExecutionGateway::new(&fulfillment_policy, &menu_supply);
 
     let board = gateway
@@ -212,7 +222,7 @@ fn http_gateway_rejects_status_transition_for_order_outside_actor_scope() {
         .expect("order should be created");
 
     let scoped_actor = vendor_operator(&["fab-a"]);
-    let fulfillment_policy = VendorFulfillmentPolicy::new();
+    let fulfillment_policy = fulfillment_policy();
     let gateway = HttpVendorFulfillmentExecutionGateway::new(&fulfillment_policy, &menu_supply);
 
     let error = gateway

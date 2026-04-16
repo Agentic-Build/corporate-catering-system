@@ -114,7 +114,7 @@ fn build_approved_compliance_lifecycle(
             vendor_id,
             &template_id,
             VendorDocumentSubmission::new(
-                "s3://evidence/docs/runtime-sql-license.pdf",
+                "s3://compliance-evidence/docs/runtime-sql-license.pdf",
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_sub(5)),
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(300)),
             )

@@ -3901,6 +3901,15 @@ fn seeded_menu_type(index: u16) -> &'static str {
     MENU_TYPES[usize::from((index - 1) % (MENU_TYPES.len() as u16))]
 }
 
+fn seeded_compliance_document_ref(file_name: &str) -> String {
+    let compliance_bucket = std::env::var(MINIO_BUCKET_COMPLIANCE_EVIDENCE_ENV)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_COMPLIANCE_BUCKET.to_owned());
+    format!("s3://{compliance_bucket}/docs/{file_name}")
+}
+
 fn seeded_menu_health_tags(index: u16) -> Vec<MenuHealthTag> {
     match index % 5 {
         0 => vec![MenuHealthTag::LowCalorie, MenuHealthTag::HighProtein],
@@ -3996,7 +4005,7 @@ fn build_seeded_load_gate_compliance_lifecycle(
             &vendor_id,
             &template_id,
             VendorDocumentSubmission::new(
-                "s3://evidence/docs/load-gate-license.pdf",
+                seeded_compliance_document_ref("load-gate-license.pdf"),
                 submitted_on,
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(300)),
             )
@@ -4477,7 +4486,7 @@ fn seed_lifecycle_and_mapping_scenarios(
             &lifecycle_vendor_id,
             &lifecycle_template_id,
             VendorDocumentSubmission::new(
-                "s3://evidence/docs/lifecycle-seed-license.pdf",
+                seeded_compliance_document_ref("lifecycle-seed-license.pdf"),
                 lifecycle_submitted_on,
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(7)),
             )
@@ -4512,7 +4521,7 @@ fn seed_lifecycle_and_mapping_scenarios(
             &lifecycle_vendor_id,
             &lifecycle_template_id,
             VendorDocumentSubmission::new(
-                "s3://evidence/docs/lifecycle-seed-license-renewed.pdf",
+                seeded_compliance_document_ref("lifecycle-seed-license-renewed.pdf"),
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(8)),
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(365)),
             )
@@ -11147,7 +11156,7 @@ mod tests {
                     vendor,
                     &template,
                     VendorDocumentSubmission::new(
-                        "s3://evidence/docs/discovery-license.pdf",
+                        seeded_compliance_document_ref("discovery-license.pdf"),
                         ComplianceDate::from_epoch_day(now_epoch_day.saturating_sub(5)),
                         ComplianceDate::from_epoch_day(now_epoch_day.saturating_add(300)),
                     )

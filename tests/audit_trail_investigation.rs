@@ -262,7 +262,7 @@ fn shared_vendor_correlation_links_order_verification_review_and_settlement_even
             &vendor,
             &template_id,
             VendorDocumentSubmission::new(
-                "s3://evidence/docs/vendor-audit-license.pdf",
+                "s3://compliance-evidence/docs/vendor-audit-license.pdf",
                 ComplianceDate::from_epoch_day(10),
                 ComplianceDate::from_epoch_day(300),
             )

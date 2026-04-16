@@ -52,7 +52,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 43] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 46] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -94,6 +94,16 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 43] = [
         "createEmployeeOrderDispute",
     ),
     RuntimeHttpRoute::new(HttpMethod::Get, "/api/v1/vendor/orders", "listVendorOrders"),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/vendor/object-storage/upload-plans",
+        "createVendorObjectStorageUploadPlan",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/vendor/object-storage/access-links",
+        "createVendorObjectStorageAccessLink",
+    ),
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/vendor/fulfillment-board",
@@ -154,6 +164,11 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 43] = [
         HttpMethod::Post,
         "/api/v1/admin/vendors/{vendorId}/reviews",
         "reviewVendorApplication",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/admin/object-storage/access-links",
+        "createAdminObjectStorageAccessLink",
     ),
     RuntimeHttpRoute::new(
         HttpMethod::Post,

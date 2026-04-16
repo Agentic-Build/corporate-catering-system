@@ -3,8 +3,8 @@ use corporate_catering_system::identity::{
 };
 use corporate_catering_system::vendor_compliance::{
     ComplianceDate, ComplianceDocumentTemplate, ComplianceHistoryKind, DocumentTemplateId,
-    HistoryRetentionPolicy, VendorCategory, VendorComplianceLifecycle, VendorComplianceStatus,
-    VendorDocumentSubmission, VendorId, VendorReviewDecision,
+    HistoryRetentionPolicy, VendorCategory, VendorComplianceError, VendorComplianceLifecycle,
+    VendorComplianceStatus, VendorDocumentSubmission, VendorId, VendorReviewDecision,
 };
 
 fn actor_id(value: &str) -> ActorId {
@@ -82,7 +82,7 @@ fn submit_required_document(
             vendor_id,
             &template_id("tmpl-business-license"),
             VendorDocumentSubmission::new(
-                "s3://evidence/docs/business-license.pdf",
+                "s3://compliance-evidence/docs/business-license.pdf",
                 ComplianceDate::from_epoch_day(submitted_on),
                 ComplianceDate::from_epoch_day(expires_on),
             )
@@ -276,6 +276,21 @@ fn lifecycle_automation_emits_reminders_and_suspends_then_reinstates_vendors() {
         VendorComplianceStatus::Active
     );
     assert_eq!(lifecycle.visible_vendor_ids_for_ordering(), vec![&vendor]);
+}
+
+#[test]
+fn document_submission_requires_managed_compliance_bucket() {
+    ensure_test_otel_endpoint();
+    let error = VendorDocumentSubmission::new(
+        "s3://external-evidence/docs/business-license.pdf",
+        ComplianceDate::from_epoch_day(100),
+        ComplianceDate::from_epoch_day(120),
+    )
+    .expect_err("unmanaged bucket reference should be rejected");
+    assert!(matches!(
+        error,
+        VendorComplianceError::InvalidDocumentReference
+    ));
 }
 
 #[test]

@@ -117,7 +117,7 @@ async fn vendor_compliance_domain_flow_persists_on_real_postgres_with_transactio
             &vendor_id,
             &template_id,
             VendorDocumentSubmission::new(
-                "s3://evidence/docs/sqlx-integration-license.pdf",
+                "s3://compliance-evidence/docs/sqlx-integration-license.pdf",
                 ComplianceDate::from_epoch_day(0),
                 ComplianceDate::from_epoch_day(20),
             )

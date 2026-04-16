@@ -3,6 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { EmployeeOrderStatus } from '../models/EmployeeOrderStatus';
+import type { ObjectStorageAccessLinkRequest } from '../models/ObjectStorageAccessLinkRequest';
+import type { ObjectStorageAccessLinkResponse } from '../models/ObjectStorageAccessLinkResponse';
+import type { ObjectStorageUploadPlanRequest } from '../models/ObjectStorageUploadPlanRequest';
+import type { ObjectStorageUploadPlanResponse } from '../models/ObjectStorageUploadPlanResponse';
 import type { OperationsAnalyticsDashboard } from '../models/OperationsAnalyticsDashboard';
 import type { PlantId } from '../models/PlantId';
 import type { SortOrder } from '../models/SortOrder';
@@ -144,6 +148,50 @@ export class VendorService {
                 401: `Authentication token is missing or invalid.`,
                 403: `Authenticated actor is not authorized to perform this operation.`,
                 422: `Request is syntactically valid but violates business validation rules.`,
+            },
+        });
+    }
+    /**
+     * Create a presigned object-storage access link for vendor-managed artifacts
+     * @param requestBody
+     * @returns ObjectStorageAccessLinkResponse Presigned download link for an existing object-storage reference
+     * @throws ApiError
+     */
+    public static createVendorObjectStorageAccessLink(
+        requestBody: ObjectStorageAccessLinkRequest,
+    ): CancelablePromise<ObjectStorageAccessLinkResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/vendor/object-storage/access-links',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Create a presigned object-storage upload plan for vendor artifacts
+     * @param requestBody
+     * @returns ObjectStorageUploadPlanResponse Presigned upload plan with metadata and optional thumbnail target
+     * @throws ApiError
+     */
+    public static createVendorObjectStorageUploadPlan(
+        requestBody: ObjectStorageUploadPlanRequest,
+    ): CancelablePromise<ObjectStorageUploadPlanResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/vendor/object-storage/upload-plans',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
             },
         });
     }

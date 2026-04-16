@@ -130,7 +130,7 @@ fn activate_vendor(
             vendor_id,
             &template_id("tmpl-http-menu-supply-license"),
             VendorDocumentSubmission::new(
-                "s3://evidence/docs/http-menu-supply-license.pdf",
+                "s3://compliance-evidence/docs/http-menu-supply-license.pdf",
                 ComplianceDate::from_epoch_day(0),
                 ComplianceDate::from_epoch_day(300),
             )

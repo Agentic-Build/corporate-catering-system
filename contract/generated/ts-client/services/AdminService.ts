@@ -21,6 +21,8 @@ import type { AuditInvestigationResponse } from '../models/AuditInvestigationRes
 import type { AuditResponsibilityResponse } from '../models/AuditResponsibilityResponse';
 import type { AuditRetentionPurgeRequest } from '../models/AuditRetentionPurgeRequest';
 import type { AuditRetentionPurgeResponse } from '../models/AuditRetentionPurgeResponse';
+import type { ObjectStorageAccessLinkRequest } from '../models/ObjectStorageAccessLinkRequest';
+import type { ObjectStorageAccessLinkResponse } from '../models/ObjectStorageAccessLinkResponse';
 import type { OperationsAnalyticsDashboard } from '../models/OperationsAnalyticsDashboard';
 import type { OrderRetentionPurgeRequest } from '../models/OrderRetentionPurgeRequest';
 import type { OrderRetentionPurgeResponse } from '../models/OrderRetentionPurgeResponse';
@@ -388,6 +390,28 @@ export class AdminService {
                 401: `Authentication token is missing or invalid.`,
                 403: `Authenticated actor is not authorized to perform this operation.`,
                 422: `Request is syntactically valid but violates business validation rules.`,
+            },
+        });
+    }
+    /**
+     * Create a presigned object-storage access link for managed administrative artifacts
+     * @param requestBody
+     * @returns ObjectStorageAccessLinkResponse Presigned download link for an existing object-storage reference
+     * @throws ApiError
+     */
+    public static createAdminObjectStorageAccessLink(
+        requestBody: ObjectStorageAccessLinkRequest,
+    ): CancelablePromise<ObjectStorageAccessLinkResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/object-storage/access-links',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
             },
         });
     }

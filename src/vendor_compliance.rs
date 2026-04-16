@@ -17,6 +17,8 @@ const SUBMIT_VENDOR_DOCUMENT_OPERATION_ID: &str = "submitVendorComplianceDocumen
 const REVIEW_VENDOR_APPLICATION_OPERATION_ID: &str = "reviewVendorApplication";
 const RUN_VENDOR_LIFECYCLE_OPERATION_ID: &str = "runVendorComplianceLifecycle";
 const PRUNE_VENDOR_HISTORY_OPERATION_ID: &str = "pruneVendorComplianceHistory";
+const MINIO_BUCKET_COMPLIANCE_EVIDENCE_ENV: &str = "MINIO_BUCKET_COMPLIANCE_EVIDENCE";
+const DEFAULT_COMPLIANCE_BUCKET: &str = "compliance-evidence";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct VendorId(String);
@@ -215,8 +217,13 @@ impl VendorDocumentSubmission {
         if document_ref.trim().is_empty() {
             return Err(VendorComplianceError::InvalidDocumentReference);
         }
-        ObjectStorageReference::parse(document_ref.as_str())
+        let object_ref = ObjectStorageReference::parse(document_ref.as_str())
             .map_err(|_| VendorComplianceError::InvalidDocumentReference)?;
+        let expected_bucket = configured_compliance_bucket();
+        let (bucket, _) = object_ref.split_parts();
+        if bucket != expected_bucket.as_str() {
+            return Err(VendorComplianceError::InvalidDocumentReference);
+        }
         if submitted_on >= expires_on {
             return Err(VendorComplianceError::InvalidDocumentExpiryWindow);
         }
@@ -239,6 +246,14 @@ impl VendorDocumentSubmission {
     pub fn expires_on(&self) -> ComplianceDate {
         self.expires_on
     }
+}
+
+fn configured_compliance_bucket() -> String {
+    std::env::var(MINIO_BUCKET_COMPLIANCE_EVIDENCE_ENV)
+        .ok()
+        .map(|bucket| bucket.trim().to_owned())
+        .filter(|bucket| !bucket.is_empty())
+        .unwrap_or_else(|| DEFAULT_COMPLIANCE_BUCKET.to_owned())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1176,7 +1191,9 @@ impl fmt::Display for VendorComplianceError {
                 f.write_str("reminder lead days cannot exceed template validity days")
             }
             Self::InvalidDocumentReference => {
-                f.write_str("document reference must be a valid s3:// object reference")
+                f.write_str(
+                    "document reference must be a valid s3:// object reference in the managed compliance bucket",
+                )
             }
             Self::InvalidDocumentExpiryWindow => {
                 f.write_str("document expiry must be after submission date")

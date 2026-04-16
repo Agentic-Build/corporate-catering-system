@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use hmac::{Hmac, Mac};
@@ -15,6 +16,7 @@ const SIGV4_ALGORITHM: &str = "AWS4-HMAC-SHA256";
 const MAX_PRESIGN_EXPIRY_SECONDS: u32 = 60 * 60;
 const DEFAULT_UPLOAD_TTL_SECONDS: u32 = 15 * 60;
 const DEFAULT_DOWNLOAD_TTL_SECONDS: u32 = 10 * 60;
+static OBJECT_KEY_UNIQUENESS_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -457,6 +459,14 @@ impl ObjectStorageUploadPipeline {
         )))
     }
 
+    pub fn ensure_managed_reference(
+        &self,
+        object_ref: &ObjectStorageReference,
+    ) -> Result<(), ObjectStorageError> {
+        let (bucket, _) = object_ref.split_parts();
+        self.ensure_managed_bucket(bucket)
+    }
+
     fn make_reference(
         &self,
         bucket_target: BucketTarget,
@@ -480,12 +490,14 @@ impl ObjectStorageUploadPipeline {
         short_date: &str,
         is_thumbnail: bool,
     ) -> String {
+        let uniqueness_sequence = OBJECT_KEY_UNIQUENESS_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let mut digest = Sha256::new();
         digest.update(artifact_class.as_str().as_bytes());
         digest.update(file_name.as_bytes());
         digest.update(mime_type.as_bytes());
         digest.update(size_bytes.to_string().as_bytes());
         digest.update(now_epoch_seconds.to_string().as_bytes());
+        digest.update(uniqueness_sequence.to_be_bytes());
         let digest_hex = hex_encode(&digest.finalize()[..8]);
         let file_name = if is_thumbnail {
             "thumbnail.webp".to_owned()
@@ -1087,5 +1099,38 @@ mod tests {
             .create_download_plan(&reference, SystemTime::now())
             .expect_err("unmanaged bucket should be rejected");
         assert_eq!(error.error_code(), "OBJECT_STORAGE_INVALID_OBJECT_REF");
+    }
+
+    #[test]
+    fn upload_object_key_includes_uniqueness_sequence() {
+        let pipeline = pipeline();
+        let now = UNIX_EPOCH + std::time::Duration::from_secs(1_712_000_000);
+        let plan_one = pipeline
+            .create_upload_plan(
+                ObjectUploadIntent {
+                    artifact_class: StorageArtifactClass::MenuImage,
+                    file_name: "menu-photo.jpg".to_owned(),
+                    mime_type: "image/jpeg".to_owned(),
+                    size_bytes: 128_000,
+                },
+                now,
+            )
+            .expect("first upload plan should be generated");
+        let plan_two = pipeline
+            .create_upload_plan(
+                ObjectUploadIntent {
+                    artifact_class: StorageArtifactClass::MenuImage,
+                    file_name: "menu-photo.jpg".to_owned(),
+                    mime_type: "image/jpeg".to_owned(),
+                    size_bytes: 128_000,
+                },
+                now,
+            )
+            .expect("second upload plan should be generated");
+        assert_ne!(
+            plan_one.primary.object_ref.as_str(),
+            plan_two.primary.object_ref.as_str(),
+            "object refs must remain collision-safe under identical metadata and second-level timestamp"
+        );
     }
 }

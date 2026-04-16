@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use corporate_catering_system::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
@@ -10,8 +11,8 @@ use corporate_catering_system::menu_supply_window::{
 use corporate_catering_system::vendor_compliance::VendorId;
 use corporate_catering_system::vendor_delivery_mapping::TaipeiBusinessMoment;
 use corporate_catering_system::vendor_fulfillment::{
-    FulfillmentArtifactType, FulfillmentDeliveryStatus, VendorFulfillmentError,
-    VendorFulfillmentPolicy,
+    FulfillmentArtifactType, FulfillmentDeliveryStatus, InMemoryFulfillmentArtifactStore,
+    VendorFulfillmentError, VendorFulfillmentPolicy,
 };
 
 fn actor_id(value: &str) -> ActorId {
@@ -86,6 +87,13 @@ fn menu_item(
         )
         .expect("menu draft should be valid"),
     )
+}
+
+fn fulfillment_policy() -> VendorFulfillmentPolicy {
+    VendorFulfillmentPolicy::new(Arc::new(
+        InMemoryFulfillmentArtifactStore::new("fulfillment-exports")
+            .expect("in-memory artifact store should initialize"),
+    ))
 }
 
 fn setup_policy_with_orders(
@@ -179,7 +187,7 @@ fn setup_policy_with_orders(
 fn vendor_operations_board_aggregates_per_plant_special_needs_and_delivery_status() {
     let delivery_epoch_day = 210;
     let (menu_supply, vendor, vendor_actor, _) = setup_policy_with_orders(delivery_epoch_day);
-    let fulfillment_policy = VendorFulfillmentPolicy::new();
+    let fulfillment_policy = fulfillment_policy();
 
     let board_before_transition = fulfillment_policy
         .vendor_operations_board(
@@ -296,7 +304,7 @@ fn export_batches_are_immutable_and_generated_from_snapshot_state() {
     let delivery_epoch_day = 220;
     let (menu_supply, vendor, vendor_actor, employee_actor) =
         setup_policy_with_orders(delivery_epoch_day);
-    let fulfillment_policy = VendorFulfillmentPolicy::new();
+    let fulfillment_policy = fulfillment_policy();
 
     let first_batch = fulfillment_policy
         .create_export_batch(
@@ -407,7 +415,7 @@ fn export_batches_are_immutable_and_generated_from_snapshot_state() {
 fn transition_rejects_orders_outside_vendor_scope() {
     let delivery_epoch_day = 230;
     let (menu_supply, _vendor, _, _) = setup_policy_with_orders(delivery_epoch_day);
-    let fulfillment_policy = VendorFulfillmentPolicy::new();
+    let fulfillment_policy = fulfillment_policy();
     let scoped_actor = vendor_operator_with_scope(&["fab-a"]);
 
     let error = fulfillment_policy

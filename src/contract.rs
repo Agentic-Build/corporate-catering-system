@@ -45,12 +45,15 @@ pub enum HttpOperation {
     GetEmployeeOrderPayrollLedger,
     CreateEmployeeOrderDispute,
     ListVendorOrders,
+    CreateVendorObjectStorageUploadPlan,
+    CreateVendorObjectStorageAccessLink,
     ListVendorFulfillmentBoard,
     GetVendorOperationsAnalyticsDashboard,
     UpsertVendorMenuItem,
     AdvanceVendorFulfillmentDeliveryStatus,
     CreateVendorFulfillmentExportBatch,
     GetVendorFulfillmentExportBatch,
+    CreateAdminObjectStorageAccessLink,
     ListAdminVendors,
     ListVendorPlantDeliveryMappings,
     ListComplianceDocumentTemplates,
@@ -79,7 +82,7 @@ pub enum HttpOperation {
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 40] = [
+    pub const ALL: [Self; 43] = [
         Self::ListEmployeeMenus,
         Self::ListEmployeeOrders,
         Self::UpsertEmployeeRushReminderPreferences,
@@ -89,12 +92,15 @@ impl HttpOperation {
         Self::GetEmployeeOrderPayrollLedger,
         Self::CreateEmployeeOrderDispute,
         Self::ListVendorOrders,
+        Self::CreateVendorObjectStorageUploadPlan,
+        Self::CreateVendorObjectStorageAccessLink,
         Self::ListVendorFulfillmentBoard,
         Self::GetVendorOperationsAnalyticsDashboard,
         Self::UpsertVendorMenuItem,
         Self::AdvanceVendorFulfillmentDeliveryStatus,
         Self::CreateVendorFulfillmentExportBatch,
         Self::GetVendorFulfillmentExportBatch,
+        Self::CreateAdminObjectStorageAccessLink,
         Self::ListAdminVendors,
         Self::ListVendorPlantDeliveryMappings,
         Self::ListComplianceDocumentTemplates,
@@ -133,6 +139,8 @@ impl HttpOperation {
             Self::GetEmployeeOrderPayrollLedger => "getEmployeeOrderPayrollLedger",
             Self::CreateEmployeeOrderDispute => "createEmployeeOrderDispute",
             Self::ListVendorOrders => "listVendorOrders",
+            Self::CreateVendorObjectStorageUploadPlan => "createVendorObjectStorageUploadPlan",
+            Self::CreateVendorObjectStorageAccessLink => "createVendorObjectStorageAccessLink",
             Self::ListVendorFulfillmentBoard => "listVendorFulfillmentBoard",
             Self::GetVendorOperationsAnalyticsDashboard => "getVendorOperationsAnalyticsDashboard",
             Self::UpsertVendorMenuItem => "upsertVendorMenuItem",
@@ -141,6 +149,7 @@ impl HttpOperation {
             }
             Self::CreateVendorFulfillmentExportBatch => "createVendorFulfillmentExportBatch",
             Self::GetVendorFulfillmentExportBatch => "getVendorFulfillmentExportBatch",
+            Self::CreateAdminObjectStorageAccessLink => "createAdminObjectStorageAccessLink",
             Self::ListAdminVendors => "listAdminVendors",
             Self::ListVendorPlantDeliveryMappings => "listVendorPlantDeliveryMappings",
             Self::ListComplianceDocumentTemplates => "listComplianceDocumentTemplates",
@@ -192,9 +201,12 @@ impl HttpOperation {
             | Self::UpsertAnomalyRule => HttpMethod::Put,
             Self::CreateEmployeeOrder
             | Self::CreateEmployeeOrderDispute
+            | Self::CreateVendorObjectStorageUploadPlan
+            | Self::CreateVendorObjectStorageAccessLink
             | Self::VerifyPickupOrder
             | Self::AdvanceVendorFulfillmentDeliveryStatus
             | Self::CreateVendorFulfillmentExportBatch
+            | Self::CreateAdminObjectStorageAccessLink
             | Self::ReviewVendorApplication
             | Self::RunVendorComplianceLifecycle
             | Self::PurgeAuditEvidence
@@ -228,6 +240,12 @@ impl HttpOperation {
             }
             Self::CreateEmployeeOrderDispute => "/api/v1/employee/orders/{orderId}/disputes",
             Self::ListVendorOrders => "/api/v1/vendor/orders",
+            Self::CreateVendorObjectStorageUploadPlan => {
+                "/api/v1/vendor/object-storage/upload-plans"
+            }
+            Self::CreateVendorObjectStorageAccessLink => {
+                "/api/v1/vendor/object-storage/access-links"
+            }
             Self::ListVendorFulfillmentBoard => "/api/v1/vendor/fulfillment-board",
             Self::GetVendorOperationsAnalyticsDashboard => {
                 "/api/v1/vendor/analytics/operations-dashboard"
@@ -238,6 +256,7 @@ impl HttpOperation {
             }
             Self::CreateVendorFulfillmentExportBatch => "/api/v1/vendor/fulfillment-batches",
             Self::GetVendorFulfillmentExportBatch => "/api/v1/vendor/fulfillment-batches/{batchId}",
+            Self::CreateAdminObjectStorageAccessLink => "/api/v1/admin/object-storage/access-links",
             Self::ListAdminVendors => "/api/v1/admin/vendors",
             Self::ListVendorPlantDeliveryMappings => "/api/v1/admin/vendor-plant-delivery-mappings",
             Self::ListComplianceDocumentTemplates => "/api/v1/admin/compliance/document-templates",
@@ -293,6 +312,8 @@ impl HttpOperation {
             | Self::GetEmployeeOrderPayrollLedger
             | Self::CreateEmployeeOrderDispute => HttpAudience::Employee,
             Self::ListVendorOrders
+            | Self::CreateVendorObjectStorageUploadPlan
+            | Self::CreateVendorObjectStorageAccessLink
             | Self::ListVendorFulfillmentBoard
             | Self::GetVendorOperationsAnalyticsDashboard
             | Self::UpsertVendorMenuItem
@@ -306,6 +327,7 @@ impl HttpOperation {
             | Self::UpsertVendorPlantDeliveryMapping
             | Self::DeleteVendorPlantDeliveryMapping
             | Self::ReviewVendorApplication
+            | Self::CreateAdminObjectStorageAccessLink
             | Self::RunVendorComplianceLifecycle
             | Self::QueryAuditInvestigations
             | Self::QueryAuditResponsibilities
@@ -335,13 +357,16 @@ impl HttpOperation {
             | Self::UpdateEmployeeOrder
             | Self::VerifyPickupOrder
             | Self::CreateEmployeeOrderDispute => Some(Action::PlaceEmployeeOrder),
-            Self::UpsertVendorMenuItem
+            Self::CreateVendorObjectStorageUploadPlan
+            | Self::CreateVendorObjectStorageAccessLink
+            | Self::UpsertVendorMenuItem
             | Self::AdvanceVendorFulfillmentDeliveryStatus
             | Self::CreateVendorFulfillmentExportBatch => Some(Action::ManageVendorMenu),
             Self::UpsertComplianceDocumentTemplate
             | Self::UpsertVendorPlantDeliveryMapping
             | Self::DeleteVendorPlantDeliveryMapping
             | Self::ReviewVendorApplication
+            | Self::CreateAdminObjectStorageAccessLink
             | Self::RunVendorComplianceLifecycle
             | Self::PurgeAuditEvidence
             | Self::PurgeOrderData
@@ -390,6 +415,12 @@ impl HttpOperation {
             "getEmployeeOrderPayrollLedger" => Some(Self::GetEmployeeOrderPayrollLedger),
             "createEmployeeOrderDispute" => Some(Self::CreateEmployeeOrderDispute),
             "listVendorOrders" => Some(Self::ListVendorOrders),
+            "createVendorObjectStorageUploadPlan" => {
+                Some(Self::CreateVendorObjectStorageUploadPlan)
+            }
+            "createVendorObjectStorageAccessLink" => {
+                Some(Self::CreateVendorObjectStorageAccessLink)
+            }
             "listVendorFulfillmentBoard" => Some(Self::ListVendorFulfillmentBoard),
             "getVendorOperationsAnalyticsDashboard" => {
                 Some(Self::GetVendorOperationsAnalyticsDashboard)
@@ -400,6 +431,7 @@ impl HttpOperation {
             }
             "createVendorFulfillmentExportBatch" => Some(Self::CreateVendorFulfillmentExportBatch),
             "getVendorFulfillmentExportBatch" => Some(Self::GetVendorFulfillmentExportBatch),
+            "createAdminObjectStorageAccessLink" => Some(Self::CreateAdminObjectStorageAccessLink),
             "listAdminVendors" => Some(Self::ListAdminVendors),
             "listVendorPlantDeliveryMappings" => Some(Self::ListVendorPlantDeliveryMappings),
             "listComplianceDocumentTemplates" => Some(Self::ListComplianceDocumentTemplates),
@@ -889,6 +921,66 @@ pub fn canonical_openapi_spec() -> Value {
             }
           }
         },
+        "/api/v1/vendor/object-storage/upload-plans": {
+          "post": {
+            "tags": ["Vendor"],
+            "summary": "Create a presigned object-storage upload plan for vendor artifacts",
+            "operationId": HttpOperation::CreateVendorObjectStorageUploadPlan.operation_id(),
+            "security": [{ "vendorMfaBearer": [] }],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/ObjectStorageUploadPlanRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Presigned upload plan with metadata and optional thumbnail target",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/ObjectStorageUploadPlanResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/vendor/object-storage/access-links": {
+          "post": {
+            "tags": ["Vendor"],
+            "summary": "Create a presigned object-storage access link for vendor-managed artifacts",
+            "operationId": HttpOperation::CreateVendorObjectStorageAccessLink.operation_id(),
+            "security": [{ "vendorMfaBearer": [] }],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/ObjectStorageAccessLinkRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Presigned download link for an existing object-storage reference",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/ObjectStorageAccessLinkResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
         "/api/v1/vendor/fulfillment-board": {
           "get": {
             "tags": ["Vendor"],
@@ -1295,6 +1387,36 @@ pub fn canonical_openapi_spec() -> Value {
               "403": { "$ref": "#/components/responses/Forbidden" },
               "404": { "$ref": "#/components/responses/NotFound" },
               "422": { "$ref": "#/components/responses/ValidationFailed" }
+            }
+          }
+        },
+        "/api/v1/admin/object-storage/access-links": {
+          "post": {
+            "tags": ["Admin"],
+            "summary": "Create a presigned object-storage access link for managed administrative artifacts",
+            "operationId": HttpOperation::CreateAdminObjectStorageAccessLink.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/ObjectStorageAccessLinkRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Presigned download link for an existing object-storage reference",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/ObjectStorageAccessLinkResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
         },
@@ -3353,6 +3475,90 @@ pub fn canonical_openapi_spec() -> Value {
                 "items": { "$ref": "#/components/schemas/VendorOrderBoardEntry" }
               },
               "page": { "$ref": "#/components/schemas/PageMeta" }
+            },
+            "additionalProperties": false
+          },
+          "StorageArtifactClass": {
+            "type": "string",
+            "enum": [
+              "MENU_IMAGE",
+              "MENU_IMAGE_THUMBNAIL",
+              "COMPLIANCE_DOCUMENT",
+              "FULFILLMENT_DAILY_SUMMARY",
+              "FULFILLMENT_PLANT_PARTITION_SHEET",
+              "FULFILLMENT_LABELS",
+              "FULFILLMENT_BASKET_LIST"
+            ]
+          },
+          "ObjectStorageUploadPlanRequest": {
+            "type": "object",
+            "required": ["artifactClass", "fileName", "mimeType", "sizeBytes"],
+            "properties": {
+              "artifactClass": { "$ref": "#/components/schemas/StorageArtifactClass" },
+              "fileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+              "mimeType": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "sizeBytes": { "type": "integer", "minimum": 1 },
+              "locale": { "type": "string", "minLength": 2, "maxLength": 32 }
+            },
+            "additionalProperties": false
+          },
+          "ObjectStorageAccessLinkRequest": {
+            "type": "object",
+            "required": ["objectRef"],
+            "properties": {
+              "objectRef": { "type": "string", "minLength": 1, "maxLength": 1024 },
+              "locale": { "type": "string", "minLength": 2, "maxLength": 32 }
+            },
+            "additionalProperties": false
+          },
+          "ObjectStorageUploadTarget": {
+            "type": "object",
+            "required": [
+              "objectRef",
+              "uploadUrl",
+              "uploadExpiresAtEpochSeconds",
+              "requiredHeaders"
+            ],
+            "properties": {
+              "objectRef": { "type": "string", "minLength": 1, "maxLength": 1024 },
+              "uploadUrl": { "type": "string", "format": "uri", "maxLength": 4096 },
+              "uploadExpiresAtEpochSeconds": { "type": "integer" },
+              "requiredHeaders": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "ObjectStorageUploadMetadata": {
+            "type": "object",
+            "required": ["artifactClass", "fileName", "mimeType", "sizeBytes"],
+            "properties": {
+              "artifactClass": { "$ref": "#/components/schemas/StorageArtifactClass" },
+              "fileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+              "mimeType": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "sizeBytes": { "type": "integer", "minimum": 1 },
+              "thumbnailRef": { "type": "string", "minLength": 1, "maxLength": 1024 }
+            },
+            "additionalProperties": false
+          },
+          "ObjectStorageUploadPlanResponse": {
+            "type": "object",
+            "required": ["primary", "metadata"],
+            "properties": {
+              "primary": { "$ref": "#/components/schemas/ObjectStorageUploadTarget" },
+              "thumbnail": { "$ref": "#/components/schemas/ObjectStorageUploadTarget" },
+              "metadata": { "$ref": "#/components/schemas/ObjectStorageUploadMetadata" }
+            },
+            "additionalProperties": false
+          },
+          "ObjectStorageAccessLinkResponse": {
+            "type": "object",
+            "required": ["objectRef", "downloadUrl", "downloadExpiresAtEpochSeconds"],
+            "properties": {
+              "objectRef": { "type": "string", "minLength": 1, "maxLength": 1024 },
+              "downloadUrl": { "type": "string", "format": "uri", "maxLength": 4096 },
+              "downloadExpiresAtEpochSeconds": { "type": "integer" }
             },
             "additionalProperties": false
           },

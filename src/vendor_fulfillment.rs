@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -14,14 +15,15 @@ use crate::menu_supply_window::{
     MenuItemId, MenuSupplyPolicy, MenuSupplyWindowError, OrderId, OrderLifecycleState,
     OrderSnapshot, SpecialRequest,
 };
-use crate::object_storage::ObjectStorageReference;
+use crate::object_storage::{
+    ObjectStorageReference, ObjectStorageUploadPipeline, ObjectUploadIntent, StorageArtifactClass,
+};
 use crate::vendor_compliance::VendorId;
 use crate::vendor_delivery_mapping::TaipeiBusinessMoment;
 
 const ADVANCE_DELIVERY_STATUS_OPERATION_ID: &str = "advanceVendorFulfillmentDeliveryStatus";
 const CREATE_EXPORT_BATCH_OPERATION_ID: &str = "createVendorFulfillmentExportBatch";
 const BASKET_CAPACITY_PORTIONS: u16 = 12;
-const FULFILLMENT_EXPORT_BUCKET: &str = "fulfillment-exports";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum FulfillmentDeliveryStatus {
@@ -482,6 +484,15 @@ impl FulfillmentArtifactType {
             Self::BasketList => "basket-list",
         }
     }
+
+    const fn storage_artifact_class(self) -> StorageArtifactClass {
+        match self {
+            Self::DailySummary => StorageArtifactClass::FulfillmentDailySummary,
+            Self::PlantPartitionSheet => StorageArtifactClass::FulfillmentPlantPartitionSheet,
+            Self::Labels => StorageArtifactClass::FulfillmentLabels,
+            Self::BasketList => StorageArtifactClass::FulfillmentBasketList,
+        }
+    }
 }
 
 impl fmt::Display for FulfillmentArtifactType {
@@ -541,6 +552,157 @@ impl FulfillmentBatchArtifacts {
     }
 }
 
+pub trait FulfillmentArtifactStore: Send + Sync {
+    fn store_json_artifact(
+        &self,
+        vendor_id: &VendorId,
+        batch_id: &FulfillmentBatchId,
+        delivery_epoch_day: i32,
+        artifact_type: FulfillmentArtifactType,
+        payload: &[u8],
+    ) -> Result<FulfillmentArtifactReference, VendorFulfillmentError>;
+}
+
+#[derive(Debug)]
+pub struct InMemoryFulfillmentArtifactStore {
+    bucket: String,
+    objects: Arc<Mutex<BTreeMap<String, Vec<u8>>>>,
+}
+
+impl InMemoryFulfillmentArtifactStore {
+    pub fn new(bucket: impl Into<String>) -> Result<Self, VendorFulfillmentError> {
+        let bucket = bucket.into().trim().to_owned();
+        if bucket.is_empty() {
+            return Err(VendorFulfillmentError::ArtifactStorageConfiguration(
+                "fulfillment artifact store bucket must not be empty".to_owned(),
+            ));
+        }
+        ObjectStorageReference::parse(format!("s3://{bucket}/validation/object.json")).map_err(
+            |error| VendorFulfillmentError::ArtifactStorageConfiguration(error.to_string()),
+        )?;
+        Ok(Self {
+            bucket,
+            objects: Arc::new(Mutex::new(BTreeMap::new())),
+        })
+    }
+}
+
+impl FulfillmentArtifactStore for InMemoryFulfillmentArtifactStore {
+    fn store_json_artifact(
+        &self,
+        vendor_id: &VendorId,
+        batch_id: &FulfillmentBatchId,
+        delivery_epoch_day: i32,
+        artifact_type: FulfillmentArtifactType,
+        payload: &[u8],
+    ) -> Result<FulfillmentArtifactReference, VendorFulfillmentError> {
+        let object_ref = format!(
+            "s3://{}/{}/{}/{}/{}.json",
+            self.bucket,
+            vendor_id.as_str(),
+            delivery_epoch_day,
+            batch_id.as_str(),
+            artifact_type.file_stem()
+        );
+        let object_ref = ObjectStorageReference::parse(object_ref.as_str()).map_err(|error| {
+            VendorFulfillmentError::InvalidArtifactObjectReference {
+                artifact_type,
+                reason: error.to_string(),
+            }
+        })?;
+        let mut objects = self
+            .objects
+            .lock()
+            .map_err(|_| VendorFulfillmentError::StatePoisoned)?;
+        objects.insert(object_ref.as_str().to_owned(), payload.to_vec());
+        Ok(FulfillmentArtifactReference {
+            artifact_type,
+            object_ref: object_ref.as_str().to_owned(),
+            mime_type: "application/json".to_owned(),
+            size_bytes: u64::try_from(payload.len()).expect("artifact payload length should fit"),
+            sha256: sha256_hex(payload),
+        })
+    }
+}
+
+pub struct ObjectStorageFulfillmentArtifactStore {
+    object_storage_upload_pipeline: Arc<ObjectStorageUploadPipeline>,
+    client: reqwest::blocking::Client,
+}
+
+impl ObjectStorageFulfillmentArtifactStore {
+    pub fn new(
+        object_storage_upload_pipeline: Arc<ObjectStorageUploadPipeline>,
+    ) -> Result<Self, VendorFulfillmentError> {
+        let client = reqwest::blocking::Client::builder()
+            .build()
+            .map_err(|error| {
+                VendorFulfillmentError::ArtifactStorageConfiguration(error.to_string())
+            })?;
+        Ok(Self {
+            object_storage_upload_pipeline,
+            client,
+        })
+    }
+}
+
+impl FulfillmentArtifactStore for ObjectStorageFulfillmentArtifactStore {
+    fn store_json_artifact(
+        &self,
+        _vendor_id: &VendorId,
+        _batch_id: &FulfillmentBatchId,
+        _delivery_epoch_day: i32,
+        artifact_type: FulfillmentArtifactType,
+        payload: &[u8],
+    ) -> Result<FulfillmentArtifactReference, VendorFulfillmentError> {
+        let artifact_class = artifact_type.storage_artifact_class();
+        let upload_plan = self
+            .object_storage_upload_pipeline
+            .create_upload_plan(
+                ObjectUploadIntent {
+                    artifact_class,
+                    file_name: format!("{}.json", artifact_type.file_stem()),
+                    mime_type: "application/json".to_owned(),
+                    size_bytes: u64::try_from(payload.len())
+                        .expect("artifact payload length should fit"),
+                },
+                SystemTime::now(),
+            )
+            .map_err(|error| VendorFulfillmentError::ArtifactStorageWrite {
+                artifact_type,
+                reason: error.to_string(),
+            })?;
+
+        let mut request = self.client.put(upload_plan.primary.upload_url.as_str());
+        for (name, value) in &upload_plan.primary.required_headers {
+            request = request.header(name.as_str(), value.as_str());
+        }
+        let response = request.body(payload.to_vec()).send().map_err(|error| {
+            VendorFulfillmentError::ArtifactStorageWrite {
+                artifact_type,
+                reason: format!("failed to upload artifact payload: {error}"),
+            }
+        })?;
+        if !response.status().is_success() {
+            return Err(VendorFulfillmentError::ArtifactStorageWrite {
+                artifact_type,
+                reason: format!(
+                    "object storage rejected artifact upload with status {}",
+                    response.status()
+                ),
+            });
+        }
+
+        Ok(FulfillmentArtifactReference {
+            artifact_type,
+            object_ref: upload_plan.primary.object_ref.as_str().to_owned(),
+            mime_type: upload_plan.metadata.mime_type,
+            size_bytes: u64::try_from(payload.len()).expect("artifact payload length should fit"),
+            sha256: sha256_hex(payload),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VendorFulfillmentBatchSnapshot {
     batch_id: FulfillmentBatchId,
@@ -597,21 +759,26 @@ struct VendorFulfillmentState {
     next_batch_sequence: u64,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone)]
 pub struct VendorFulfillmentPolicy {
     state: Arc<Mutex<VendorFulfillmentState>>,
     audit_trail: ImmutableAuditTrail,
+    artifact_store: Arc<dyn FulfillmentArtifactStore>,
 }
 
 impl VendorFulfillmentPolicy {
-    pub fn new() -> Self {
-        Self::with_audit_trail(ImmutableAuditTrail::default())
+    pub fn new(artifact_store: Arc<dyn FulfillmentArtifactStore>) -> Self {
+        Self::with_audit_trail(ImmutableAuditTrail::default(), artifact_store)
     }
 
-    pub fn with_audit_trail(audit_trail: ImmutableAuditTrail) -> Self {
+    pub fn with_audit_trail(
+        audit_trail: ImmutableAuditTrail,
+        artifact_store: Arc<dyn FulfillmentArtifactStore>,
+    ) -> Self {
         Self {
             state: Arc::new(Mutex::new(VendorFulfillmentState::default())),
             audit_trail,
+            artifact_store,
         }
     }
 
@@ -762,6 +929,7 @@ impl VendorFulfillmentPolicy {
             &batch_id,
             delivery_epoch_day,
             board.order_entries(),
+            self.artifact_store.as_ref(),
         )?;
 
         let snapshot = VendorFulfillmentBatchSnapshot {
@@ -945,6 +1113,7 @@ fn build_batch_artifacts(
     batch_id: &FulfillmentBatchId,
     delivery_epoch_day: i32,
     order_entries: &[VendorFulfillmentOrderEntry],
+    artifact_store: &dyn FulfillmentArtifactStore,
 ) -> Result<FulfillmentBatchArtifacts, VendorFulfillmentError> {
     let mut per_plant_summary = BTreeMap::<PlantId, FulfillmentDailySummaryPlantRow>::new();
     let mut plant_partition = BTreeMap::<PlantId, FulfillmentPlantPartitionSheetRow>::new();
@@ -1041,6 +1210,7 @@ fn build_batch_artifacts(
             delivery_epoch_day,
             FulfillmentArtifactType::DailySummary,
             &daily_summary,
+            artifact_store,
         )?,
         build_artifact_reference(
             vendor_id,
@@ -1048,6 +1218,7 @@ fn build_batch_artifacts(
             delivery_epoch_day,
             FulfillmentArtifactType::PlantPartitionSheet,
             &plant_partition_sheet,
+            artifact_store,
         )?,
         build_artifact_reference(
             vendor_id,
@@ -1055,6 +1226,7 @@ fn build_batch_artifacts(
             delivery_epoch_day,
             FulfillmentArtifactType::Labels,
             &label_sheet,
+            artifact_store,
         )?,
         build_artifact_reference(
             vendor_id,
@@ -1062,6 +1234,7 @@ fn build_batch_artifacts(
             delivery_epoch_day,
             FulfillmentArtifactType::BasketList,
             &basket_list,
+            artifact_store,
         )?,
     ];
     Ok(FulfillmentBatchArtifacts { artifacts })
@@ -1073,6 +1246,7 @@ fn build_artifact_reference<T: Serialize>(
     delivery_epoch_day: i32,
     artifact_type: FulfillmentArtifactType,
     payload: &T,
+    artifact_store: &dyn FulfillmentArtifactStore,
 ) -> Result<FulfillmentArtifactReference, VendorFulfillmentError> {
     let serialized = serde_json::to_vec(payload).map_err(|error| {
         VendorFulfillmentError::ArtifactSerialization {
@@ -1080,27 +1254,13 @@ fn build_artifact_reference<T: Serialize>(
             reason: error.to_string(),
         }
     })?;
-    let object_ref = format!(
-        "s3://{}/{}/{}/{}/{}.json",
-        FULFILLMENT_EXPORT_BUCKET,
-        vendor_id.as_str(),
+    artifact_store.store_json_artifact(
+        vendor_id,
+        batch_id,
         delivery_epoch_day,
-        batch_id.as_str(),
-        artifact_type.file_stem()
-    );
-    ObjectStorageReference::parse(object_ref.as_str()).map_err(|error| {
-        VendorFulfillmentError::InvalidArtifactObjectReference {
-            artifact_type,
-            reason: error.to_string(),
-        }
-    })?;
-    Ok(FulfillmentArtifactReference {
         artifact_type,
-        object_ref,
-        mime_type: "application/json".to_owned(),
-        size_bytes: u64::try_from(serialized.len()).expect("serialized artifact length should fit"),
-        sha256: sha256_hex(serialized.as_slice()),
-    })
+        serialized.as_slice(),
+    )
 }
 
 fn sha256_hex(payload: &[u8]) -> String {
@@ -1269,6 +1429,11 @@ pub enum VendorFulfillmentError {
         artifact_type: FulfillmentArtifactType,
         reason: String,
     },
+    ArtifactStorageConfiguration(String),
+    ArtifactStorageWrite {
+        artifact_type: FulfillmentArtifactType,
+        reason: String,
+    },
     InvalidArtifactObjectReference {
         artifact_type: FulfillmentArtifactType,
         reason: String,
@@ -1335,6 +1500,16 @@ impl fmt::Display for VendorFulfillmentError {
             } => write!(
                 f,
                 "failed to serialize export artifact {artifact_type}: {reason}"
+            ),
+            Self::ArtifactStorageConfiguration(reason) => {
+                write!(f, "artifact storage configuration is invalid: {reason}")
+            }
+            Self::ArtifactStorageWrite {
+                artifact_type,
+                reason,
+            } => write!(
+                f,
+                "failed to persist export artifact {artifact_type} to object storage: {reason}"
             ),
             Self::InvalidArtifactObjectReference {
                 artifact_type,

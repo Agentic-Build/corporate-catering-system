@@ -161,7 +161,7 @@ fn activate_vendor(
             vendor,
             &template_id("tmpl-mcp-domain-parity-license"),
             VendorDocumentSubmission::new(
-                "s3://evidence/docs/mcp-domain-parity-license.pdf",
+                "s3://compliance-evidence/docs/mcp-domain-parity-license.pdf",
                 ComplianceDate::from_epoch_day(0),
                 ComplianceDate::from_epoch_day(300),
             )
