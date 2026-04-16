@@ -26,11 +26,17 @@ pub struct AnomalyRuleId(String);
 impl AnomalyRuleId {
     pub fn parse(value: impl Into<String>) -> Result<Self, AnomalyAlertError> {
         let value = value.into();
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
+        let Some(suffix) = value.strip_prefix("rule-") else {
             return Err(AnomalyAlertError::InvalidRuleId);
-        }
-        Ok(Self(trimmed.to_owned()))
+        };
+        if !(3..=64).contains(&suffix.len())
+            || !suffix.chars().all(|character| {
+                character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+            })
+        {
+            return Err(AnomalyAlertError::InvalidRuleId);
+        };
+        Ok(Self(value))
     }
 
     pub fn as_str(&self) -> &str {
@@ -1433,7 +1439,9 @@ pub enum AnomalyAlertError {
 impl fmt::Display for AnomalyAlertError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidRuleId => f.write_str("anomaly rule id must not be empty"),
+            Self::InvalidRuleId => {
+                f.write_str("anomaly rule id must match `^rule-[a-z0-9-]{3,64}$`")
+            }
             Self::InvalidAlertId => f.write_str("anomaly alert id must not be empty"),
             Self::InvalidRuleText { field } => write!(
                 f,
@@ -1552,6 +1560,32 @@ mod tests {
         assert!(rules
             .iter()
             .all(|rule| rule.governance_issue_id() == "issue-anomaly-governance-playbook"));
+    }
+
+    #[test]
+    fn anomaly_rule_id_parse_enforces_contract_pattern() {
+        let valid = AnomalyRuleId::parse("rule-expiry-risk")
+            .expect("contract-conformant anomaly rule id should parse");
+        assert_eq!(valid.as_str(), "rule-expiry-risk");
+
+        let mut invalid_cases = vec![
+            "".to_owned(),
+            "rule-".to_owned(),
+            "rule-ab".to_owned(),
+            "RULE-expiry-risk".to_owned(),
+            "rule-expiry_risk".to_owned(),
+            "legacy-rule-expiry-risk".to_owned(),
+            " rule-expiry-risk".to_owned(),
+            "rule-expiry-risk ".to_owned(),
+        ];
+        invalid_cases.push(format!("rule-{}", "a".repeat(65)));
+
+        for candidate in invalid_cases {
+            assert!(
+                AnomalyRuleId::parse(candidate.clone()).is_err(),
+                "expected `{candidate}` to be rejected by anomaly rule id parser"
+            );
+        }
     }
 
     #[test]

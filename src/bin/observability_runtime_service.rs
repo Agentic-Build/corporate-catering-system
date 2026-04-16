@@ -3899,11 +3899,18 @@ fn parse_contract_payroll_exchange_batch_id(value: &str) -> Result<PayrollExchan
 }
 
 fn parse_contract_anomaly_rule_id(value: &str) -> Result<AnomalyRuleId, String> {
-    let trimmed = value.trim();
-    if !trimmed.starts_with("rule-") {
+    let Some(suffix) = value.strip_prefix("rule-") else {
         return Err("must start with `rule-`".to_owned());
+    };
+    if !(3..=64).contains(&suffix.len()) {
+        return Err("suffix length must be between 3 and 64 characters".to_owned());
     }
-    AnomalyRuleId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
+    if !suffix.chars().all(|character| {
+        character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+    }) {
+        return Err("suffix must contain only lowercase letters, digits, or `-`".to_owned());
+    }
+    AnomalyRuleId::parse(value.to_owned()).map_err(|error| error.to_string())
 }
 
 fn parse_contract_anomaly_alert_id(value: &str) -> Result<AnomalyAlertId, String> {
@@ -6724,6 +6731,32 @@ mod tests {
         .expect("hr api adjunct sync should succeed");
         assert_eq!(synced.exchange_batch.hr_api_sync_status, "SUCCEEDED");
         assert!(synced.exchange_batch.hr_api_synced_at.is_some());
+    }
+
+    #[test]
+    fn parse_contract_anomaly_rule_id_enforces_openapi_pattern() {
+        let parsed = parse_contract_anomaly_rule_id("rule-expiry-risk")
+            .expect("contract-conformant anomaly rule id should parse");
+        assert_eq!(parsed.as_str(), "rule-expiry-risk");
+
+        let mut invalid_cases = vec![
+            "".to_owned(),
+            "rule-".to_owned(),
+            "rule-ab".to_owned(),
+            "RULE-expiry-risk".to_owned(),
+            "rule-expiry_risk".to_owned(),
+            "legacy-rule-expiry-risk".to_owned(),
+            " rule-expiry-risk".to_owned(),
+            "rule-expiry-risk ".to_owned(),
+        ];
+        invalid_cases.push(format!("rule-{}", "a".repeat(65)));
+
+        for candidate in invalid_cases {
+            assert!(
+                parse_contract_anomaly_rule_id(&candidate).is_err(),
+                "expected `{candidate}` to be rejected by contract rule id parser"
+            );
+        }
     }
 
     #[test]
