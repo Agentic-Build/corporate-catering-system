@@ -268,6 +268,54 @@ fn admin_contract_exposes_vendor_compliance_and_delivery_mapping_capabilities() 
 }
 
 #[test]
+fn audit_endpoints_have_tested_error_code_to_schema_refs() {
+    let spec = canonical_openapi_spec();
+    for (path, method) in [
+        ("/api/v1/admin/audit/investigations", "get"),
+        ("/api/v1/admin/audit/responsibilities", "get"),
+        ("/api/v1/admin/audit/retention-purge", "post"),
+    ] {
+        let operation = operation_by_path_and_method(&spec, path, method);
+        assert_error_response_ref(operation, "400", "#/components/responses/BadRequest");
+        assert_error_response_ref(operation, "401", "#/components/responses/Unauthorized");
+        assert_error_response_ref(operation, "403", "#/components/responses/Forbidden");
+        assert_error_response_ref(
+            operation,
+            "500",
+            "#/components/responses/InternalServerError",
+        );
+    }
+
+    for response_name in [
+        "BadRequest",
+        "Unauthorized",
+        "Forbidden",
+        "InternalServerError",
+    ] {
+        let response_schema_ref = spec["components"]["responses"][response_name]["content"]
+            ["application/json"]["schema"]["$ref"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{response_name} response should reference a schema"));
+        assert_eq!(response_schema_ref, "#/components/schemas/ErrorResponse");
+    }
+
+    let error_codes = spec["components"]["schemas"]["ErrorCode"]["enum"]
+        .as_array()
+        .expect("error code enum should exist")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("error code enum value should be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(error_codes.contains("INVALID_AUDIT_INVESTIGATION_QUERY"));
+    assert!(error_codes.contains("AUDIT_INVESTIGATION_INTERNAL_ERROR"));
+    assert!(error_codes.contains("AUDIT_RETENTION_PURGE_INTERNAL_ERROR"));
+}
+
+#[test]
 fn vendor_fulfillment_board_and_export_batch_contracts_are_declared_with_controlled_special_requests(
 ) {
     let spec = canonical_openapi_spec();

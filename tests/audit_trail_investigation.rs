@@ -448,3 +448,24 @@ fn json_storage_recovers_immutable_evidence_after_restart() {
 
     fs::remove_file(storage_path).expect("temporary audit trail file should be removable");
 }
+
+#[test]
+fn json_storage_rejects_empty_existing_snapshot_file() {
+    ensure_test_otel_endpoint();
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be monotonic")
+        .as_nanos();
+    let storage_path =
+        std::env::temp_dir().join(format!("corporate-catering-audit-empty-{nonce}.json"));
+    fs::write(&storage_path, " \n ").expect("empty snapshot fixture should be writable");
+
+    let retention = AuditRetentionPolicy::new(365).expect("policy should be valid");
+    let result = ImmutableAuditTrail::with_json_storage(storage_path.clone(), retention);
+    assert!(matches!(
+        result,
+        Err(AuditTrailError::PersistenceDataCorrupted(message)) if message.contains("empty")
+    ));
+
+    fs::remove_file(storage_path).expect("temporary empty snapshot should be removable");
+}

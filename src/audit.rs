@@ -908,7 +908,9 @@ fn load_snapshot_from_json_file(
     let content = fs::read_to_string(path)
         .map_err(|error| AuditTrailError::PersistenceIo(error.to_string()))?;
     if content.trim().is_empty() {
-        return Ok(None);
+        return Err(AuditTrailError::PersistenceDataCorrupted(
+            "persisted audit snapshot file is empty".to_owned(),
+        ));
     }
     let snapshot = serde_json::from_str(&content)
         .map_err(|error| AuditTrailError::PersistenceSerde(error.to_string()))?;
