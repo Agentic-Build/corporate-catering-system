@@ -541,23 +541,32 @@ INSERT INTO order_state_event_projection (
     vendor_id,
     plant_id,
     order_state,
+    occurred_at_epoch_millis,
     event_id
 )
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (order_id)
 DO UPDATE
 SET
     vendor_id = EXCLUDED.vendor_id,
     plant_id = EXCLUDED.plant_id,
     order_state = EXCLUDED.order_state,
+    occurred_at_epoch_millis = EXCLUDED.occurred_at_epoch_millis,
     event_id = EXCLUDED.event_id,
     updated_at_utc = CURRENT_TIMESTAMP
+WHERE
+    EXCLUDED.occurred_at_epoch_millis > order_state_event_projection.occurred_at_epoch_millis
+    OR (
+        EXCLUDED.occurred_at_epoch_millis = order_state_event_projection.occurred_at_epoch_millis
+        AND EXCLUDED.event_id > order_state_event_projection.event_id
+    )
             "#,
         )
         .bind(event.order_id.as_str())
         .bind(event.vendor_id.as_str())
         .bind(event.plant_id.as_str())
         .bind(event.order_state.as_str())
+        .bind(event.occurred_at_epoch_millis)
         .bind(event.event_id.as_str())
         .execute(&mut *transaction)
         .await

@@ -182,6 +182,113 @@ WHERE consumer_name = $1 AND event_id = $2
         "duplicate message deliveries must be idempotent at the consumer boundary"
     );
 
+    let monotonic_order_id = format!("ord-monotonic-{suffix}");
+    let newer_event = OrderStateChangedEvent {
+        event_id: format!("evt-monotonic-newer-{suffix}"),
+        order_id: monotonic_order_id.clone(),
+        vendor_id: "ven-backbone".to_owned(),
+        plant_id: "fab-a".to_owned(),
+        order_state: "READY_FOR_PICKUP".to_owned(),
+        operation_id: "updateEmployeeOrder".to_owned(),
+        actor_id: "emp-backbone".to_owned(),
+        occurred_at_epoch_millis: 2_000,
+    };
+    backbone
+        .enqueue_order_state_changed_event(&newer_event)
+        .await
+        .expect("newer monotonic event should enqueue");
+    wait_until(Duration::from_secs(8), || {
+        let pool = pool.clone();
+        let order_id = monotonic_order_id.clone();
+        let expected_event_id = newer_event.event_id.clone();
+        async move {
+            let projected_event_id: Option<String> = sqlx::query_scalar(
+                r#"
+SELECT event_id
+FROM order_state_event_projection
+WHERE order_id = $1
+                "#,
+            )
+            .bind(order_id.as_str())
+            .fetch_optional(&pool)
+            .await
+            .expect("projection query should succeed");
+            projected_event_id
+                .as_deref()
+                .is_some_and(|event_id| event_id == expected_event_id.as_str())
+        }
+    })
+    .await;
+
+    let older_event = OrderStateChangedEvent {
+        event_id: format!("evt-monotonic-older-{suffix}"),
+        order_id: monotonic_order_id.clone(),
+        vendor_id: "ven-backbone".to_owned(),
+        plant_id: "fab-a".to_owned(),
+        order_state: "PLACED".to_owned(),
+        operation_id: "createEmployeeOrder".to_owned(),
+        actor_id: "emp-backbone".to_owned(),
+        occurred_at_epoch_millis: 1_000,
+    };
+    backbone
+        .enqueue_order_state_changed_event(&older_event)
+        .await
+        .expect("older monotonic event should enqueue");
+    wait_until(Duration::from_secs(8), || {
+        let pool = pool.clone();
+        let consumer_name = config.order_consumer_name.clone();
+        let older_event_id = older_event.event_id.clone();
+        async move {
+            let dedup_count: i64 = sqlx::query_scalar(
+                r#"
+SELECT COUNT(*)::BIGINT
+FROM jetstream_consumer_dedup
+WHERE consumer_name = $1 AND event_id = $2
+                "#,
+            )
+            .bind(consumer_name.as_str())
+            .bind(older_event_id.as_str())
+            .fetch_one(&pool)
+            .await
+            .expect("dedup count query should succeed for older event");
+            dedup_count == 1
+        }
+    })
+    .await;
+
+    let monotonic_row = sqlx::query(
+        r#"
+SELECT event_id, order_state, occurred_at_epoch_millis
+FROM order_state_event_projection
+WHERE order_id = $1
+        "#,
+    )
+    .bind(monotonic_order_id.as_str())
+    .fetch_one(&pool)
+    .await
+    .expect("monotonic projection row should exist");
+    let projected_event_id: String = monotonic_row
+        .try_get("event_id")
+        .expect("event_id should decode");
+    let projected_order_state: String = monotonic_row
+        .try_get("order_state")
+        .expect("order_state should decode");
+    let projected_occurred_at: i64 = monotonic_row
+        .try_get("occurred_at_epoch_millis")
+        .expect("occurred_at_epoch_millis should decode");
+    assert_eq!(
+        projected_event_id, newer_event.event_id,
+        "older retried/reordered events must not overwrite newer projection state"
+    );
+    assert_eq!(
+        projected_order_state, newer_event.order_state,
+        "projection state should stay on the newest successfully applied event"
+    );
+    assert_eq!(
+        projected_occurred_at, newer_event.occurred_at_epoch_millis,
+        "projection should retain highest occurred_at_epoch_millis for one order"
+    );
+
     js.publish(
         config.order_subject.clone(),
         serde_json::to_vec(&serde_json::json!("poison-non-object-payload"))

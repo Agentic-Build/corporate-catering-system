@@ -3222,41 +3222,28 @@ where
 {
     match &state.runtime_state_persistence {
         RuntimeStatePersistence::Sql(repositories) => {
-            let snapshot = match load_runtime_state_snapshot_from_cache::<PersistedPolicySnapshot>(
-                state,
-                DELIVERY_POLICY_STATE_KEY,
-            ) {
-                Some(snapshot) => snapshot,
-                None => {
-                    let snapshot = tokio::task::block_in_place(|| {
-                        Handle::current().block_on(
-                            repositories
-                                .delivery_policy
-                                .load_snapshot::<PersistedPolicySnapshot>(),
-                        )
-                    })
-                    .map_err(|error| {
-                        domain_error(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "ORDER_POLICY_VIOLATION",
-                            format!("failed to load delivery policy state from SQL: {error}"),
-                        )
-                    })?
-                    .ok_or_else(|| {
-                        domain_error(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "ORDER_POLICY_VIOLATION",
-                            "delivery policy state is uninitialized".to_owned(),
-                        )
-                    })?;
-                    write_runtime_state_snapshot_to_cache(
-                        state,
-                        DELIVERY_POLICY_STATE_KEY,
-                        &snapshot,
-                    );
-                    snapshot
-                }
-            };
+            let snapshot = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .delivery_policy
+                        .load_snapshot::<PersistedPolicySnapshot>(),
+                )
+            })
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!("failed to load delivery policy state from SQL: {error}"),
+                )
+            })?
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    "delivery policy state is uninitialized".to_owned(),
+                )
+            })?;
+            write_runtime_state_snapshot_to_cache(state, DELIVERY_POLICY_STATE_KEY, &snapshot);
             let delivery_policy =
                 VendorPlantDeliveryPolicy::from_snapshot(snapshot, state.audit_trail.clone())
                     .map_err(|error| {
@@ -3282,37 +3269,28 @@ where
 {
     match &state.runtime_state_persistence {
         RuntimeStatePersistence::Sql(repositories) => {
-            let snapshot = match load_runtime_state_snapshot_from_cache::<MenuSupplyPolicySnapshot>(
-                state,
-                MENU_SUPPLY_STATE_KEY,
-            ) {
-                Some(snapshot) => snapshot,
-                None => {
-                    let snapshot = tokio::task::block_in_place(|| {
-                        Handle::current().block_on(
-                            repositories
-                                .menu_supply
-                                .load_snapshot::<MenuSupplyPolicySnapshot>(),
-                        )
-                    })
-                    .map_err(|error| {
-                        domain_error(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "ORDER_POLICY_VIOLATION",
-                            format!("failed to load menu supply state from SQL: {error}"),
-                        )
-                    })?
-                    .ok_or_else(|| {
-                        domain_error(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "ORDER_POLICY_VIOLATION",
-                            "menu supply state is uninitialized".to_owned(),
-                        )
-                    })?;
-                    write_runtime_state_snapshot_to_cache(state, MENU_SUPPLY_STATE_KEY, &snapshot);
-                    snapshot
-                }
-            };
+            let snapshot = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .menu_supply
+                        .load_snapshot::<MenuSupplyPolicySnapshot>(),
+                )
+            })
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!("failed to load menu supply state from SQL: {error}"),
+                )
+            })?
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    "menu supply state is uninitialized".to_owned(),
+                )
+            })?;
+            write_runtime_state_snapshot_to_cache(state, MENU_SUPPLY_STATE_KEY, &snapshot);
             let menu_supply_policy =
                 MenuSupplyPolicy::from_snapshot(snapshot, state.audit_trail.clone()).map_err(
                     |error| {
