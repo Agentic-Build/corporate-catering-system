@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_nats::jetstream;
@@ -7,6 +8,9 @@ use async_nats::jetstream::consumer::{pull, AckPolicy};
 use async_nats::jetstream::stream::Config as StreamConfig;
 use async_nats::jetstream::AckKind;
 use futures::StreamExt;
+use opentelemetry::global;
+use opentelemetry::metrics::{Counter, UpDownCounter};
+use opentelemetry::KeyValue;
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 use tokio::time::{self, MissedTickBehavior};
@@ -15,6 +19,8 @@ pub const DEFAULT_ORDER_EVENT_STREAM_NAME: &str = "CATERING_ORDER_EVENTS";
 pub const DEFAULT_ORDER_EVENT_SUBJECT: &str = "catering.order.state.changed.v1";
 pub const DEFAULT_ORDER_EVENT_DLQ_SUBJECT: &str = "catering.order.state.changed.v1.dlq";
 pub const DEFAULT_ORDER_EVENT_CONSUMER_NAME: &str = "catering-order-state-projection";
+pub const DLQ_ROWS_TOTAL_METRIC_NAME: &str = "jetstream_dead_letter_rows_total";
+pub const DLQ_BACKLOG_METRIC_NAME: &str = "jetstream_dead_letter_backlog";
 
 const NATS_URL_ENV: &str = "NATS_URL";
 const JETSTREAM_STREAM_NAME_ENV: &str = "PRELAUNCH_JETSTREAM_STREAM_NAME";
@@ -33,6 +39,9 @@ const DEFAULT_JETSTREAM_MAX_DELIVER: i64 = 5;
 const DEFAULT_JETSTREAM_ACK_WAIT_SECONDS: u64 = 30;
 const DEFAULT_EVENT_OUTBOX_POLL_INTERVAL_MS: u64 = 500;
 const DEFAULT_EVENT_OUTBOX_BATCH_SIZE: i64 = 64;
+const DEFAULT_TELEMETRY_SERVICE_NAME: &str = "catering-http-api";
+
+static EVENT_BACKBONE_METRICS: OnceLock<EventBackboneMetrics> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -131,6 +140,50 @@ pub struct OrderEventBackbone {
     pool: PgPool,
     jetstream: jetstream::Context,
     config: EventBackboneConfig,
+}
+
+#[derive(Debug)]
+struct EventBackboneMetrics {
+    service_name: String,
+    dead_letter_rows_total: Counter<u64>,
+    dead_letter_backlog: UpDownCounter<i64>,
+}
+
+impl EventBackboneMetrics {
+    fn global() -> &'static Self {
+        EVENT_BACKBONE_METRICS.get_or_init(Self::new)
+    }
+
+    fn new() -> Self {
+        let service_name = std::env::var("OTEL_SERVICE_NAME")
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| DEFAULT_TELEMETRY_SERVICE_NAME.to_owned());
+        let meter = global::meter(service_name.clone());
+        let dead_letter_rows_total = meter
+            .u64_counter(DLQ_ROWS_TOTAL_METRIC_NAME)
+            .with_description("Persisted JetStream dead-letter rows")
+            .init();
+        let dead_letter_backlog = meter
+            .i64_up_down_counter(DLQ_BACKLOG_METRIC_NAME)
+            .with_description("JetStream dead-letter backlog size approximation")
+            .init();
+        Self {
+            service_name,
+            dead_letter_rows_total,
+            dead_letter_backlog,
+        }
+    }
+
+    fn record_dead_letter_persisted(&self, consumer_name: &str) {
+        let attributes = [
+            KeyValue::new("service_name", self.service_name.clone()),
+            KeyValue::new("consumer_name", consumer_name.to_owned()),
+        ];
+        self.dead_letter_rows_total.add(1, &attributes);
+        self.dead_letter_backlog.add(1, &attributes);
+    }
 }
 
 impl OrderEventBackbone {
@@ -565,6 +618,8 @@ VALUES ($1, $2, $3, $4, $5)
         .execute(&self.pool)
         .await
         .map_err(|error| format!("failed to persist dead-letter record: {error}"))?;
+        EventBackboneMetrics::global()
+            .record_dead_letter_persisted(self.config.order_consumer_name.as_str());
         Ok(())
     }
 

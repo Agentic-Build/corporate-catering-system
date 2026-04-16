@@ -2,6 +2,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use corporate_catering_system::event_backbone::{
+    DLQ_BACKLOG_METRIC_NAME, DLQ_ROWS_TOTAL_METRIC_NAME,
+};
 use corporate_catering_system::health::runtime_health_routes;
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
@@ -310,6 +313,47 @@ fn hard_slo_alert_rules_cover_release_blocking_and_kubernetes_peak_signals() {
             "missing required hard-SLO alert `{required}`"
         );
     }
+}
+
+#[test]
+fn hard_slo_dlq_alert_rules_reference_runtime_metric_names() {
+    let alerts = read_yaml("ops/observability/slo/alerts.yaml");
+    let groups = yaml_get(&alerts, "groups")
+        .as_sequence()
+        .expect("groups must be sequence");
+    let mut ingress_expr = None;
+    let mut backlog_expr = None;
+
+    for group in groups {
+        for rule in yaml_get(group, "rules")
+            .as_sequence()
+            .expect("rules must be sequence")
+        {
+            let alert_name = yaml_get(rule, "alert")
+                .as_str()
+                .expect("alert name must be string");
+            let expr = yaml_get(rule, "expr")
+                .as_str()
+                .expect("alert expr must be string");
+            match alert_name {
+                "EventBackboneDeadLetterIngress" => ingress_expr = Some(expr.to_owned()),
+                "EventBackboneDeadLetterBacklogHigh" => backlog_expr = Some(expr.to_owned()),
+                _ => {}
+            }
+        }
+    }
+
+    let ingress_expr = ingress_expr.expect("DLQ ingress alert rule must exist");
+    assert!(
+        ingress_expr.contains(DLQ_ROWS_TOTAL_METRIC_NAME),
+        "DLQ ingress alert must reference runtime metric `{DLQ_ROWS_TOTAL_METRIC_NAME}`"
+    );
+
+    let backlog_expr = backlog_expr.expect("DLQ backlog alert rule must exist");
+    assert!(
+        backlog_expr.contains(DLQ_BACKLOG_METRIC_NAME),
+        "DLQ backlog alert must reference runtime metric `{DLQ_BACKLOG_METRIC_NAME}`"
+    );
 }
 
 #[test]
