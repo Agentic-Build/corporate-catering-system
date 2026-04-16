@@ -1175,6 +1175,7 @@ fn handle_create_employee_order(
     })?;
 
     let order_id = generate_contract_order_id(state)?;
+    let employee_actor = load_gate_employee_actor_for_plant(&state.plant_id)?;
 
     let ordering_gateway = HttpOrderingExecutionGateway::new(
         state.compliance_lifecycle.as_ref(),
@@ -1184,6 +1185,7 @@ fn handle_create_employee_order(
 
     ordering_gateway
         .execute_create_employee_order(
+            &employee_actor,
             order_id.clone(),
             &request_vendor_id,
             &state.plant_id,
@@ -1249,6 +1251,7 @@ fn handle_update_employee_order(
     })?;
     let mutation = parse_order_mutation(request)?;
     let current_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
+    let employee_actor = load_gate_employee_actor_for_plant(current_snapshot.plant_id())?;
     let requested_at = current_taipei_business_moment().map_err(|error| {
         domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1265,6 +1268,7 @@ fn handle_update_employee_order(
 
     ordering_gateway
         .execute_update_employee_order(
+            &employee_actor,
             &order_id,
             current_snapshot.vendor_id(),
             &state.plant_id,
@@ -1275,6 +1279,38 @@ fn handle_update_employee_order(
 
     let updated_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
     build_employee_order_payload(state, &updated_snapshot)
+}
+
+fn load_gate_employee_actor_for_plant(
+    plant_id: &PlantId,
+) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+    let actor_id = ActorId::parse(LOAD_GATE_EMPLOYEE_ACTOR_ID).map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "IDENTITY_MODEL_ERROR",
+            format!("failed to parse load-gate employee actor id: {error}"),
+        )
+    })?;
+    let plant_scope = PlantScope::restricted(vec![plant_id.clone()]).map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "IDENTITY_MODEL_ERROR",
+            format!("failed to build load-gate employee plant scope: {error}"),
+        )
+    })?;
+    AuthenticatedActorContext::new(
+        actor_id,
+        Role::Employee,
+        plant_scope,
+        AuthenticationSource::CorporateSso,
+    )
+    .map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "IDENTITY_MODEL_ERROR",
+            format!("failed to construct load-gate employee actor context: {error}"),
+        )
+    })
 }
 
 fn generate_contract_order_id(state: &AppState) -> Result<OrderId, (StatusCode, ErrorPayload)> {
@@ -1808,10 +1844,16 @@ fn handle_verify_order_pickup(
             error,
         )
     })?;
+    let employee_actor = load_gate_employee_actor_for_plant(snapshot.plant_id())?;
 
     state
         .menu_supply_policy
-        .update_order(&order_id, OrderMutation::MarkFulfilled, requested_at)
+        .update_order(
+            &employee_actor,
+            &order_id,
+            OrderMutation::MarkFulfilled,
+            requested_at,
+        )
         .map_err(|error| map_pickup_claim_update_error(&order_id, request_id, error))?;
 
     emit_pickup_verification_audit_event(
@@ -2007,11 +2049,22 @@ mod tests {
         .expect("vendor actor should be valid")
     }
 
+    fn employee_actor() -> AuthenticatedActorContext {
+        AuthenticatedActorContext::new(
+            actor_id("employee-discovery-test"),
+            Role::Employee,
+            PlantScope::restricted(vec![plant_id("fab-a")]).expect("scope should be valid"),
+            AuthenticationSource::CorporateSso,
+        )
+        .expect("employee actor should be valid")
+    }
+
     fn build_state(now_epoch_day: i32) -> AppState {
         std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
 
         let committee = committee_admin();
         let vendor_actor = vendor_operator();
+        let employee = employee_actor();
         let plant = plant_id("fab-a");
         let vendor_visible = vendor_id("ven-discoverytst-a1");
         let vendor_hidden = vendor_id("ven-discoverytst-b1");
@@ -2168,6 +2221,7 @@ mod tests {
 
         menu_supply_policy
             .create_order(
+                &employee,
                 order_id("ord-discovery-tst-001"),
                 &vendor_visible,
                 &plant,

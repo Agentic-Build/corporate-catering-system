@@ -36,14 +36,28 @@ fn vendor_operator() -> AuthenticatedActorContext {
     .expect("vendor operator should be valid")
 }
 
-fn employee_actor() -> AuthenticatedActorContext {
+fn employee_actor_with_scope(plants: &[&str]) -> AuthenticatedActorContext {
     AuthenticatedActorContext::new(
         actor_id("employee-menu-supply"),
         Role::Employee,
-        restricted_scope(&["fab-a"]),
+        restricted_scope(plants),
         AuthenticationSource::CorporateSso,
     )
     .expect("employee actor should be valid")
+}
+
+fn employee_actor() -> AuthenticatedActorContext {
+    employee_actor_with_scope(&["fab-a"])
+}
+
+fn payroll_actor() -> AuthenticatedActorContext {
+    AuthenticatedActorContext::new(
+        actor_id("payroll-menu-supply"),
+        Role::PayrollOperator,
+        PlantScope::all(),
+        AuthenticationSource::CorporateSso,
+    )
+    .expect("payroll actor should be valid")
 }
 
 fn vendor_id(value: &str) -> VendorId {
@@ -184,6 +198,7 @@ fn quota_accounting_prevents_oversell_under_concurrent_ordering() {
         let policy_clone = policy.clone();
         let vendor_clone = vendor.clone();
         let menu_item_id_clone = menu_item_id_value.clone();
+        let employee_actor = employee_actor();
         let barrier_clone = Arc::clone(&barrier);
         handles.push(thread::spawn(move || {
             barrier_clone.wait();
@@ -191,6 +206,7 @@ fn quota_accounting_prevents_oversell_under_concurrent_ordering() {
                 OrderLineItemRequest::new(menu_item_id_clone, 1, vec![SpecialRequest::NoUtensils])
                     .expect("line item should be valid");
             policy_clone.create_order(
+                &employee_actor,
                 order_id(format!("ord-atomic-{index:02}").as_str()),
                 &vendor_clone,
                 &plant_id("fab-a"),
@@ -243,6 +259,7 @@ fn preorder_window_and_cutoff_rules_enforce_default_and_bounded_vendor_overrides
 
     let default_window_error = policy
         .create_order(
+            &employee_actor(),
             order_id("ord-window-default-reject"),
             &vendor,
             &plant_id("fab-a"),
@@ -285,6 +302,7 @@ fn preorder_window_and_cutoff_rules_enforce_default_and_bounded_vendor_overrides
 
     let overridden_window_error = policy
         .create_order(
+            &employee_actor(),
             order_id("ord-window-override-reject"),
             &vendor,
             &plant_id("fab-a"),
@@ -310,6 +328,7 @@ fn preorder_window_and_cutoff_rules_enforce_default_and_bounded_vendor_overrides
 
     let cutoff_error = policy
         .create_order(
+            &employee_actor(),
             order_id("ord-cutoff-reject"),
             &vendor,
             &plant_id("fab-a"),
@@ -361,6 +380,7 @@ fn update_and_cancel_respect_cutoff_and_release_allocated_quota() {
 
     policy
         .create_order(
+            &employee_actor(),
             order_id("ord-update-001"),
             &vendor,
             &plant_id("fab-a"),
@@ -382,6 +402,7 @@ fn update_and_cancel_respect_cutoff_and_release_allocated_quota() {
 
     policy
         .update_order(
+            &employee_actor(),
             &order_id("ord-update-001"),
             OrderMutation::ReplaceLineItems {
                 line_items: vec![OrderLineItemRequest::new(
@@ -404,6 +425,7 @@ fn update_and_cancel_respect_cutoff_and_release_allocated_quota() {
 
     policy
         .update_order(
+            &employee_actor(),
             &order_id("ord-update-001"),
             OrderMutation::Cancel,
             taipei_moment(39, 901),
@@ -419,6 +441,7 @@ fn update_and_cancel_respect_cutoff_and_release_allocated_quota() {
 
     policy
         .create_order(
+            &employee_actor(),
             order_id("ord-update-002"),
             &vendor,
             &plant_id("fab-a"),
@@ -433,6 +456,7 @@ fn update_and_cancel_respect_cutoff_and_release_allocated_quota() {
 
     let update_after_cutoff_error = policy
         .update_order(
+            &employee_actor(),
             &order_id("ord-update-002"),
             OrderMutation::Cancel,
             taipei_moment(39, 1020),
@@ -458,6 +482,7 @@ fn lifecycle_timeline_covers_modification_cancel_sold_out_and_refund_states() {
 
     policy
         .create_order(
+            &employee_actor(),
             order_id("ord-life-001"),
             &vendor,
             &plant_id("fab-a"),
@@ -472,6 +497,7 @@ fn lifecycle_timeline_covers_modification_cancel_sold_out_and_refund_states() {
 
     policy
         .update_order(
+            &employee_actor(),
             &order_id("ord-life-001"),
             OrderMutation::ReplaceLineItems {
                 line_items: vec![OrderLineItemRequest::new(
@@ -486,6 +512,7 @@ fn lifecycle_timeline_covers_modification_cancel_sold_out_and_refund_states() {
         .expect("replace line items should succeed before cutoff");
     policy
         .update_order(
+            &employee_actor(),
             &order_id("ord-life-001"),
             OrderMutation::Cancel,
             taipei_moment(54, 902),
@@ -493,6 +520,7 @@ fn lifecycle_timeline_covers_modification_cancel_sold_out_and_refund_states() {
         .expect("cancel should succeed before cutoff");
     policy
         .update_order(
+            &payroll_actor(),
             &order_id("ord-life-001"),
             OrderMutation::MarkRefundPending,
             taipei_moment(54, 903),
@@ -500,6 +528,7 @@ fn lifecycle_timeline_covers_modification_cancel_sold_out_and_refund_states() {
         .expect("refund pending transition should succeed");
     policy
         .update_order(
+            &payroll_actor(),
             &order_id("ord-life-001"),
             OrderMutation::MarkRefunded,
             taipei_moment(54, 904),
@@ -535,6 +564,7 @@ fn lifecycle_timeline_covers_modification_cancel_sold_out_and_refund_states() {
 
     policy
         .create_order(
+            &employee_actor(),
             order_id("ord-life-002"),
             &vendor,
             &plant_id("fab-a"),
@@ -548,6 +578,7 @@ fn lifecycle_timeline_covers_modification_cancel_sold_out_and_refund_states() {
         .expect("second order create should reserve inventory");
     policy
         .update_order(
+            &vendor_operator(),
             &order_id("ord-life-002"),
             OrderMutation::MarkSoldOut,
             taipei_moment(55, 700),
@@ -599,6 +630,7 @@ fn inventory_reservation_release_and_create_are_idempotent() {
 
     policy
         .create_order(
+            &employee_actor(),
             order_id("ord-idemp-001"),
             &vendor,
             &plant_id("fab-a"),
@@ -609,6 +641,7 @@ fn inventory_reservation_release_and_create_are_idempotent() {
         .expect("first create should succeed");
     policy
         .create_order(
+            &employee_actor(),
             order_id("ord-idemp-001"),
             &vendor,
             &plant_id("fab-a"),
@@ -626,6 +659,7 @@ fn inventory_reservation_release_and_create_are_idempotent() {
 
     let create_conflict = policy
         .create_order(
+            &employee_actor(),
             order_id("ord-idemp-001"),
             &vendor,
             &plant_id("fab-a"),
@@ -644,6 +678,7 @@ fn inventory_reservation_release_and_create_are_idempotent() {
 
     policy
         .update_order(
+            &employee_actor(),
             &order_id("ord-idemp-001"),
             OrderMutation::Cancel,
             taipei_moment(65, 903),
@@ -651,6 +686,7 @@ fn inventory_reservation_release_and_create_are_idempotent() {
         .expect("cancel should release inventory");
     policy
         .update_order(
+            &employee_actor(),
             &order_id("ord-idemp-001"),
             OrderMutation::Cancel,
             taipei_moment(65, 904),
@@ -678,6 +714,7 @@ fn invalid_lifecycle_transition_returns_explicit_domain_error() {
 
     policy
         .create_order(
+            &employee_actor(),
             order_id("ord-life-003"),
             &vendor,
             &plant_id("fab-a"),
@@ -691,6 +728,7 @@ fn invalid_lifecycle_transition_returns_explicit_domain_error() {
         .expect("order should be created");
     policy
         .update_order(
+            &employee_actor(),
             &order_id("ord-life-003"),
             OrderMutation::MarkFulfilled,
             taipei_moment(70, 721),
@@ -698,6 +736,7 @@ fn invalid_lifecycle_transition_returns_explicit_domain_error() {
         .expect("fulfillment transition should succeed");
     let replay_fulfillment_error = policy
         .update_order(
+            &employee_actor(),
             &order_id("ord-life-003"),
             OrderMutation::MarkFulfilled,
             taipei_moment(70, 721),
@@ -710,6 +749,7 @@ fn invalid_lifecycle_transition_returns_explicit_domain_error() {
 
     let transition_error = policy
         .update_order(
+            &employee_actor(),
             &order_id("ord-life-003"),
             OrderMutation::Cancel,
             taipei_moment(70, 722),
@@ -784,6 +824,7 @@ fn order_snapshot_retains_plant_and_controlled_special_request_structure() {
 
     policy
         .create_order(
+            &employee_actor_with_scope(&["fab-b"]),
             order_id("ord-special-struct-001"),
             &vendor,
             &plant_id("fab-b"),
@@ -860,6 +901,7 @@ fn employee_discovery_snapshot_is_multi_day_and_uses_exact_inventory_with_cutoff
 
     policy
         .create_order(
+            &employee_actor(),
             order_id("ord-disc-001"),
             &deliverable_vendor,
             &plant_id("fab-a"),

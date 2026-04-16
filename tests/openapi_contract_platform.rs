@@ -100,6 +100,10 @@ fn different_action(action: Action) -> Action {
     }
 }
 
+fn ensure_test_otel_endpoint() {
+    std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
+}
+
 #[test]
 fn contract_is_openapi_31_and_uses_only_locked_auth_model() {
     let spec = canonical_openapi_spec();
@@ -564,6 +568,7 @@ fn runtime_http_route_catalog_matches_openapi_contract() {
 
 #[test]
 fn http_gateway_enforces_contract_operation_id_and_action_mapping() {
+    ensure_test_otel_endpoint();
     let access_controller = AccessController::with_default_policy();
     let gateway = HttpAuthorizationGateway::new(access_controller);
     let actor = employee_actor();
@@ -602,6 +607,7 @@ fn http_gateway_enforces_contract_operation_id_and_action_mapping() {
 
 #[test]
 fn mcp_contract_checks_are_wired_for_future_runtime_tools() {
+    ensure_test_otel_endpoint();
     let issues = runtime_mcp_tool_contract_issues();
     assert!(
         issues.is_empty(),

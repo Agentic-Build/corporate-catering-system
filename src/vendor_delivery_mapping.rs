@@ -6,7 +6,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::audit::AuditIdentityLink;
+use crate::audit::{
+    AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
+    AuditIdentityLink, AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
+};
 use crate::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
 };
@@ -252,22 +255,40 @@ pub struct VendorPlantDeliveryPolicy {
     audit_log: Vec<DeliveryMappingAuditEntry>,
     next_revision: u64,
     storage_backend: StorageBackend,
+    audit_trail: ImmutableAuditTrail,
 }
 
 impl VendorPlantDeliveryPolicy {
     pub fn new() -> Self {
-        Self::default()
+        Self::with_audit_trail(ImmutableAuditTrail::default())
+    }
+
+    pub fn with_audit_trail(audit_trail: ImmutableAuditTrail) -> Self {
+        Self {
+            audit_trail,
+            ..Self::default()
+        }
     }
 
     pub fn with_json_storage(path: impl Into<PathBuf>) -> Result<Self, VendorPlantDeliveryError> {
+        Self::with_json_storage_and_audit(path, ImmutableAuditTrail::default())
+    }
+
+    pub fn with_json_storage_and_audit(
+        path: impl Into<PathBuf>,
+        audit_trail: ImmutableAuditTrail,
+    ) -> Result<Self, VendorPlantDeliveryError> {
         let path = path.into();
         let persisted_snapshot = load_snapshot_from_json_file(&path)?;
         let policy = match persisted_snapshot {
-            Some(snapshot) => {
-                Self::from_persisted_snapshot(snapshot, StorageBackend::JsonFile(path.clone()))?
-            }
+            Some(snapshot) => Self::from_persisted_snapshot(
+                snapshot,
+                StorageBackend::JsonFile(path.clone()),
+                audit_trail.clone(),
+            )?,
             None => Self {
                 storage_backend: StorageBackend::JsonFile(path.clone()),
+                audit_trail: audit_trail.clone(),
                 ..Self::default()
             },
         };
@@ -289,10 +310,10 @@ impl VendorPlantDeliveryPolicy {
         let vendor_id = mapping.vendor_id().clone();
         let mapping_id = mapping.mapping_id().clone();
         self.mappings_by_vendor
-            .entry(vendor_id)
+            .entry(vendor_id.clone())
             .or_default()
             .insert(
-                mapping_id,
+                mapping_id.clone(),
                 VersionedMapping {
                     mapping: mapping.clone(),
                     revision,
@@ -304,6 +325,25 @@ impl VendorPlantDeliveryPolicy {
             kind: DeliveryMappingAuditKind::Upserted,
             mapping,
         });
+        let evidence_entity =
+            AuditEntityRef::new(AuditEntityType::DeliveryMapping, mapping_id.as_str())
+                .map_err(VendorPlantDeliveryError::AuditTrail)?;
+        let correlation = AuditCorrelationId::for_vendor(vendor_id.as_str())
+            .map_err(VendorPlantDeliveryError::AuditTrail)?;
+        if let Err(error) = self.audit_trail.append(AuditEvidenceWrite::new(
+            AuditTimestamp::from_taipei_business_moment(
+                changed_at.epoch_day(),
+                changed_at.minute_of_day(),
+            )
+            .map_err(VendorPlantDeliveryError::AuditTrail)?,
+            AuditIdentityLink::from_actor(actor, UPSERT_MAPPING_OPERATION_ID),
+            AuditAction::UpsertVendorPlantDeliveryMapping,
+            evidence_entity,
+            correlation,
+        )) {
+            self.restore_state(previous_state);
+            return Err(VendorPlantDeliveryError::AuditTrail(error));
+        }
         if let Err(error) = self.persist_if_needed() {
             self.restore_state(previous_state);
             return Err(error);
@@ -347,6 +387,22 @@ impl VendorPlantDeliveryPolicy {
             kind: DeliveryMappingAuditKind::Removed,
             mapping: removed_mapping,
         });
+        if let Err(error) = self.audit_trail.append(AuditEvidenceWrite::new(
+            AuditTimestamp::from_taipei_business_moment(
+                changed_at.epoch_day(),
+                changed_at.minute_of_day(),
+            )
+            .map_err(VendorPlantDeliveryError::AuditTrail)?,
+            AuditIdentityLink::from_actor(actor, REMOVE_MAPPING_OPERATION_ID),
+            AuditAction::DeleteVendorPlantDeliveryMapping,
+            AuditEntityRef::new(AuditEntityType::DeliveryMapping, mapping_id.as_str())
+                .map_err(VendorPlantDeliveryError::AuditTrail)?,
+            AuditCorrelationId::for_vendor(vendor_id.as_str())
+                .map_err(VendorPlantDeliveryError::AuditTrail)?,
+        )) {
+            self.restore_state(previous_state);
+            return Err(VendorPlantDeliveryError::AuditTrail(error));
+        }
         if let Err(error) = self.persist_if_needed() {
             self.restore_state(previous_state);
             return Err(error);
@@ -582,6 +638,7 @@ impl VendorPlantDeliveryPolicy {
     fn from_persisted_snapshot(
         snapshot: PersistedPolicySnapshot,
         storage_backend: StorageBackend,
+        audit_trail: ImmutableAuditTrail,
     ) -> Result<Self, VendorPlantDeliveryError> {
         let mut mappings_by_vendor: BTreeMap<
             VendorId,
@@ -626,6 +683,7 @@ impl VendorPlantDeliveryPolicy {
             audit_log,
             next_revision: snapshot.next_revision,
             storage_backend,
+            audit_trail,
         })
     }
 }
@@ -941,6 +999,7 @@ pub enum VendorPlantDeliveryError {
         mapping_id: DeliveryMappingId,
         api: DeliverabilityApi,
     },
+    AuditTrail(AuditTrailError),
     PersistenceIo(String),
     PersistenceSerde(String),
     PersistenceDataCorrupted(String),
@@ -996,6 +1055,7 @@ impl fmt::Display for VendorPlantDeliveryError {
                 "vendor {vendor_id} is denied for plant {plant_id} by mapping {mapping_id} during {} API evaluation",
                 api.as_str()
             ),
+            Self::AuditTrail(error) => write!(f, "audit trail write failed: {error}"),
             Self::PersistenceIo(message) => {
                 write!(f, "delivery mapping persistence I/O error: {message}")
             }

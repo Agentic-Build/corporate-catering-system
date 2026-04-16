@@ -2,6 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
+use crate::audit::{
+    AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
+    AuditIdentityLink, AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
+};
 use crate::identity::{AuthenticatedActorContext, PlantId, Role};
 use crate::vendor_compliance::VendorId;
 use crate::vendor_delivery_mapping::TaipeiBusinessMoment;
@@ -21,6 +25,14 @@ const DEFAULT_PREORDER_OPEN_DAYS_AHEAD: u16 = 7;
 const DEFAULT_MODIFY_CANCEL_CUTOFF_MINUTE_OF_DAY: u16 = 17 * 60;
 const MIN_VENDOR_OVERRIDE_CUTOFF_MINUTE_OF_DAY: u16 = 15 * 60;
 const MAX_VENDOR_OVERRIDE_CUTOFF_MINUTE_OF_DAY: u16 = 20 * 60;
+const UPSERT_VENDOR_MENU_ITEM_OPERATION_ID: &str = "upsertVendorMenuItem";
+const UPSERT_VENDOR_ORDERING_POLICY_OPERATION_ID: &str = "upsertVendorOrderingPolicy";
+const CREATE_EMPLOYEE_ORDER_OPERATION_ID: &str = "createEmployeeOrder";
+const UPDATE_EMPLOYEE_ORDER_OPERATION_ID: &str = "updateEmployeeOrder";
+const VERIFY_PICKUP_ORDER_OPERATION_ID: &str = "verifyPickupOrder";
+const MARK_ORDER_SOLD_OUT_OPERATION_ID: &str = "markOrderSoldOut";
+const MARK_ORDER_REFUND_PENDING_OPERATION_ID: &str = "markOrderRefundPending";
+const MARK_ORDER_REFUNDED_OPERATION_ID: &str = "markOrderRefunded";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MenuItemId(String);
@@ -884,6 +896,7 @@ struct MenuSupplyState {
 pub struct MenuSupplyPolicy {
     governance: OrderingGovernancePolicy,
     state: Arc<Mutex<MenuSupplyState>>,
+    audit_trail: ImmutableAuditTrail,
 }
 
 impl Default for MenuSupplyPolicy {
@@ -894,14 +907,26 @@ impl Default for MenuSupplyPolicy {
 
 impl MenuSupplyPolicy {
     pub fn new(governance: OrderingGovernancePolicy) -> Self {
+        Self::with_audit_trail(governance, ImmutableAuditTrail::default())
+    }
+
+    pub fn with_audit_trail(
+        governance: OrderingGovernancePolicy,
+        audit_trail: ImmutableAuditTrail,
+    ) -> Self {
         Self {
             governance,
             state: Arc::new(Mutex::new(MenuSupplyState::default())),
+            audit_trail,
         }
     }
 
     pub fn governance(&self) -> OrderingGovernancePolicy {
         self.governance
+    }
+
+    pub fn audit_trail(&self) -> ImmutableAuditTrail {
+        self.audit_trail.clone()
     }
 
     pub fn upsert_vendor_ordering_policy(
@@ -912,11 +937,26 @@ impl MenuSupplyPolicy {
     ) -> Result<VendorOrderingPolicy, MenuSupplyWindowError> {
         ensure_role(actor, Role::VendorOperator)?;
 
+        let audit_event = AuditEvidenceWrite::new(
+            AuditTimestamp::now_taipei().map_err(MenuSupplyWindowError::AuditTrail)?,
+            AuditIdentityLink::from_actor(actor, UPSERT_VENDOR_ORDERING_POLICY_OPERATION_ID),
+            AuditAction::UpsertVendorOrderingPolicy,
+            AuditEntityRef::new(AuditEntityType::VendorOrderingPolicy, vendor_id.as_str())
+                .map_err(MenuSupplyWindowError::AuditTrail)?,
+            AuditCorrelationId::for_vendor(vendor_id.as_str())
+                .map_err(MenuSupplyWindowError::AuditTrail)?,
+        );
+
         let resolved = self.governance.resolve_vendor_policy(policy_override)?;
         let mut state = lock_state(&self.state)?;
+        let previous_state = state.clone();
         state
             .vendor_ordering_policies
             .insert(vendor_id.clone(), resolved);
+        if let Err(error) = self.audit_trail.append(audit_event) {
+            *state = previous_state;
+            return Err(MenuSupplyWindowError::AuditTrail(error));
+        }
         Ok(resolved)
     }
 
@@ -934,8 +974,18 @@ impl MenuSupplyPolicy {
         menu_item: VendorMenuItem,
     ) -> Result<(), MenuSupplyWindowError> {
         ensure_role(actor, Role::VendorOperator)?;
+        let audit_event = AuditEvidenceWrite::new(
+            AuditTimestamp::now_taipei().map_err(MenuSupplyWindowError::AuditTrail)?,
+            AuditIdentityLink::from_actor(actor, UPSERT_VENDOR_MENU_ITEM_OPERATION_ID),
+            AuditAction::UpsertVendorMenuItem,
+            AuditEntityRef::new(AuditEntityType::MenuItem, menu_item.menu_item_id().as_str())
+                .map_err(MenuSupplyWindowError::AuditTrail)?,
+            AuditCorrelationId::for_vendor(menu_item.vendor_id().as_str())
+                .map_err(MenuSupplyWindowError::AuditTrail)?,
+        );
 
         let mut state = lock_state(&self.state)?;
+        let previous_state = state.clone();
         let currently_allocated = state
             .allocated_quantity_by_menu_item
             .get(menu_item.menu_item_id())
@@ -969,6 +1019,10 @@ impl MenuSupplyPolicy {
         state
             .menu_items
             .insert(menu_item.menu_item_id().clone(), menu_item);
+        if let Err(error) = self.audit_trail.append(audit_event) {
+            *state = previous_state;
+            return Err(MenuSupplyWindowError::AuditTrail(error));
+        }
         Ok(())
     }
 
@@ -1153,6 +1207,7 @@ impl MenuSupplyPolicy {
 
     pub fn create_order(
         &self,
+        actor: &AuthenticatedActorContext,
         order_id: OrderId,
         vendor_id: &VendorId,
         plant_id: &PlantId,
@@ -1160,7 +1215,23 @@ impl MenuSupplyPolicy {
         line_items: Vec<OrderLineItemRequest>,
         placed_at: TaipeiBusinessMoment,
     ) -> Result<(), MenuSupplyWindowError> {
+        ensure_role(actor, Role::Employee)?;
+        ensure_target_plant_in_scope(actor, plant_id)?;
+        let audit_event = AuditEvidenceWrite::new(
+            AuditTimestamp::from_taipei_business_moment(
+                placed_at.epoch_day(),
+                placed_at.minute_of_day(),
+            )
+            .map_err(MenuSupplyWindowError::AuditTrail)?,
+            AuditIdentityLink::from_actor(actor, CREATE_EMPLOYEE_ORDER_OPERATION_ID),
+            AuditAction::CreateEmployeeOrder,
+            AuditEntityRef::new(AuditEntityType::Order, order_id.as_str())
+                .map_err(MenuSupplyWindowError::AuditTrail)?,
+            AuditCorrelationId::for_vendor(vendor_id.as_str())
+                .map_err(MenuSupplyWindowError::AuditTrail)?,
+        );
         let mut state = lock_state(&self.state)?;
+        let previous_state = state.clone();
         let aggregated_line_items = self.validate_and_aggregate_line_items_locked(
             &state,
             vendor_id,
@@ -1177,6 +1248,9 @@ impl MenuSupplyPolicy {
                 && existing_order.state == OrderLifecycleState::Pending
                 && existing_order.inventory_reserved
             {
+                self.audit_trail
+                    .append(audit_event)
+                    .map_err(MenuSupplyWindowError::AuditTrail)?;
                 return Ok(());
             }
             return Err(MenuSupplyWindowError::OrderAlreadyExists(order_id));
@@ -1212,26 +1286,50 @@ impl MenuSupplyPolicy {
                 inventory_reserved: true,
             },
         );
+        if let Err(error) = self.audit_trail.append(audit_event) {
+            *state = previous_state;
+            return Err(MenuSupplyWindowError::AuditTrail(error));
+        }
 
         Ok(())
     }
 
     pub fn update_order(
         &self,
+        actor: &AuthenticatedActorContext,
         order_id: &OrderId,
         mutation: OrderMutation,
         requested_at: TaipeiBusinessMoment,
     ) -> Result<(), MenuSupplyWindowError> {
         let mut state = lock_state(&self.state)?;
+        let previous_state = state.clone();
         let stored_order = state
             .orders
             .get(order_id)
             .cloned()
             .ok_or_else(|| MenuSupplyWindowError::OrderNotFound(order_id.clone()))?;
+        ensure_order_mutation_authorized(actor, &stored_order, &mutation)?;
+        let (operation_id, action) = audit_identity_for_order_mutation(&mutation);
+        let audit_event = AuditEvidenceWrite::new(
+            AuditTimestamp::from_taipei_business_moment(
+                requested_at.epoch_day(),
+                requested_at.minute_of_day(),
+            )
+            .map_err(MenuSupplyWindowError::AuditTrail)?,
+            AuditIdentityLink::from_actor(actor, operation_id),
+            action,
+            AuditEntityRef::new(AuditEntityType::Order, order_id.as_str())
+                .map_err(MenuSupplyWindowError::AuditTrail)?,
+            AuditCorrelationId::for_vendor(stored_order.vendor_id.as_str())
+                .map_err(MenuSupplyWindowError::AuditTrail)?,
+        );
 
         match mutation {
             OrderMutation::Cancel => {
                 if stored_order.state == OrderLifecycleState::Cancelled {
+                    self.audit_trail
+                        .append(audit_event)
+                        .map_err(MenuSupplyWindowError::AuditTrail)?;
                     return Ok(());
                 }
                 if !matches!(
@@ -1277,6 +1375,10 @@ impl MenuSupplyPolicy {
                     OrderLifecycleState::Cancelled,
                 ));
                 state.orders.insert(order_id.clone(), next_order);
+                if let Err(error) = self.audit_trail.append(audit_event) {
+                    *state = previous_state;
+                    return Err(MenuSupplyWindowError::AuditTrail(error));
+                }
                 Ok(())
             }
             OrderMutation::ReplaceLineItems { line_items } => {
@@ -1301,6 +1403,9 @@ impl MenuSupplyPolicy {
                     && stored_order.special_requests_by_menu_item
                         == next_line_items.special_requests_by_menu_item
                 {
+                    self.audit_trail
+                        .append(audit_event)
+                        .map_err(MenuSupplyWindowError::AuditTrail)?;
                     return Ok(());
                 }
                 if !stored_order.inventory_reserved {
@@ -1338,10 +1443,17 @@ impl MenuSupplyPolicy {
                     OrderLifecycleState::Modified,
                 ));
                 state.orders.insert(order_id.clone(), next_order);
+                if let Err(error) = self.audit_trail.append(audit_event) {
+                    *state = previous_state;
+                    return Err(MenuSupplyWindowError::AuditTrail(error));
+                }
                 Ok(())
             }
             OrderMutation::MarkSoldOut => {
                 if stored_order.state == OrderLifecycleState::SoldOut {
+                    self.audit_trail
+                        .append(audit_event)
+                        .map_err(MenuSupplyWindowError::AuditTrail)?;
                     return Ok(());
                 }
                 if !matches!(
@@ -1376,10 +1488,17 @@ impl MenuSupplyPolicy {
                     OrderLifecycleState::SoldOut,
                 ));
                 state.orders.insert(order_id.clone(), next_order);
+                if let Err(error) = self.audit_trail.append(audit_event) {
+                    *state = previous_state;
+                    return Err(MenuSupplyWindowError::AuditTrail(error));
+                }
                 Ok(())
             }
             OrderMutation::MarkRefundPending => {
                 if stored_order.state == OrderLifecycleState::RefundPending {
+                    self.audit_trail
+                        .append(audit_event)
+                        .map_err(MenuSupplyWindowError::AuditTrail)?;
                     return Ok(());
                 }
                 if !matches!(
@@ -1403,10 +1522,17 @@ impl MenuSupplyPolicy {
                     OrderLifecycleState::RefundPending,
                 ));
                 state.orders.insert(order_id.clone(), next_order);
+                if let Err(error) = self.audit_trail.append(audit_event) {
+                    *state = previous_state;
+                    return Err(MenuSupplyWindowError::AuditTrail(error));
+                }
                 Ok(())
             }
             OrderMutation::MarkRefunded => {
                 if stored_order.state == OrderLifecycleState::Refunded {
+                    self.audit_trail
+                        .append(audit_event)
+                        .map_err(MenuSupplyWindowError::AuditTrail)?;
                     return Ok(());
                 }
                 if stored_order.state != OrderLifecycleState::RefundPending {
@@ -1425,6 +1551,10 @@ impl MenuSupplyPolicy {
                     OrderLifecycleState::Refunded,
                 ));
                 state.orders.insert(order_id.clone(), next_order);
+                if let Err(error) = self.audit_trail.append(audit_event) {
+                    *state = previous_state;
+                    return Err(MenuSupplyWindowError::AuditTrail(error));
+                }
                 Ok(())
             }
             OrderMutation::MarkFulfilled => {
@@ -1460,6 +1590,10 @@ impl MenuSupplyPolicy {
                     OrderLifecycleState::Fulfilled,
                 ));
                 state.orders.insert(order_id.clone(), next_order);
+                if let Err(error) = self.audit_trail.append(audit_event) {
+                    *state = previous_state;
+                    return Err(MenuSupplyWindowError::AuditTrail(error));
+                }
                 Ok(())
             }
         }
@@ -1750,6 +1884,59 @@ fn ensure_role(actor: &AuthenticatedActorContext, role: Role) -> Result<(), Menu
     Ok(())
 }
 
+fn ensure_target_plant_in_scope(
+    actor: &AuthenticatedActorContext,
+    target_plant: &PlantId,
+) -> Result<(), MenuSupplyWindowError> {
+    if !actor.plant_scope().contains(target_plant) {
+        return Err(MenuSupplyWindowError::TargetPlantOutOfScope {
+            actor_id: actor.actor_id().clone(),
+            target_plant: target_plant.clone(),
+        });
+    }
+    Ok(())
+}
+
+fn ensure_order_mutation_authorized(
+    actor: &AuthenticatedActorContext,
+    stored_order: &StoredOrder,
+    mutation: &OrderMutation,
+) -> Result<(), MenuSupplyWindowError> {
+    let required_role = match mutation {
+        OrderMutation::ReplaceLineItems { .. } | OrderMutation::Cancel => Role::Employee,
+        OrderMutation::MarkSoldOut => Role::VendorOperator,
+        OrderMutation::MarkRefundPending | OrderMutation::MarkRefunded => Role::PayrollOperator,
+        OrderMutation::MarkFulfilled => Role::Employee,
+    };
+    ensure_role(actor, required_role)?;
+    ensure_target_plant_in_scope(actor, &stored_order.plant_id)
+}
+
+fn audit_identity_for_order_mutation(mutation: &OrderMutation) -> (&'static str, AuditAction) {
+    match mutation {
+        OrderMutation::ReplaceLineItems { .. } | OrderMutation::Cancel => (
+            UPDATE_EMPLOYEE_ORDER_OPERATION_ID,
+            AuditAction::UpdateEmployeeOrder,
+        ),
+        OrderMutation::MarkSoldOut => (
+            MARK_ORDER_SOLD_OUT_OPERATION_ID,
+            AuditAction::MarkOrderSoldOut,
+        ),
+        OrderMutation::MarkRefundPending => (
+            MARK_ORDER_REFUND_PENDING_OPERATION_ID,
+            AuditAction::MarkOrderRefundPending,
+        ),
+        OrderMutation::MarkRefunded => (
+            MARK_ORDER_REFUNDED_OPERATION_ID,
+            AuditAction::MarkOrderRefunded,
+        ),
+        OrderMutation::MarkFulfilled => (
+            VERIFY_PICKUP_ORDER_OPERATION_ID,
+            AuditAction::VerifyPickupOrder,
+        ),
+    }
+}
+
 fn lock_state(
     state: &Arc<Mutex<MenuSupplyState>>,
 ) -> Result<std::sync::MutexGuard<'_, MenuSupplyState>, MenuSupplyWindowError> {
@@ -1799,6 +1986,11 @@ pub enum MenuSupplyWindowError {
         expected: Role,
         actual: Role,
     },
+    TargetPlantOutOfScope {
+        actor_id: crate::identity::ActorId,
+        target_plant: PlantId,
+    },
+    AuditTrail(AuditTrailError),
     StatePoisoned,
     EmptyOrderLineItems,
     DuplicateMenuItemInOrder {
@@ -1912,6 +2104,15 @@ impl fmt::Display for MenuSupplyWindowError {
                 f,
                 "operation requires role {expected:?}, but actor has role {actual:?}"
             ),
+            Self::TargetPlantOutOfScope {
+                actor_id,
+                target_plant,
+            } => write!(
+                f,
+                "actor {actor_id} is not authorized for plant {}",
+                target_plant.as_str()
+            ),
+            Self::AuditTrail(error) => write!(f, "audit trail write failed: {error}"),
             Self::StatePoisoned => {
                 f.write_str("menu supply state is poisoned due to a previous panic")
             }

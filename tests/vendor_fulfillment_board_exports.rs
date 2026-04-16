@@ -36,6 +36,16 @@ fn vendor_operator_with_scope(plants: &[&str]) -> AuthenticatedActorContext {
     .expect("vendor operator actor should be valid")
 }
 
+fn employee_with_scope(plants: &[&str]) -> AuthenticatedActorContext {
+    AuthenticatedActorContext::new(
+        actor_id("employee-fulfillment-operator"),
+        Role::Employee,
+        restricted_scope(plants),
+        AuthenticationSource::CorporateSso,
+    )
+    .expect("employee actor should be valid")
+}
+
 fn vendor_id(value: &str) -> VendorId {
     VendorId::parse(value).expect("vendor id should be valid")
 }
@@ -79,10 +89,16 @@ fn menu_item(
 
 fn setup_policy_with_orders(
     delivery_epoch_day: i32,
-) -> (MenuSupplyPolicy, VendorId, AuthenticatedActorContext) {
+) -> (
+    MenuSupplyPolicy,
+    VendorId,
+    AuthenticatedActorContext,
+    AuthenticatedActorContext,
+) {
     let menu_supply = MenuSupplyPolicy::default();
     let vendor = vendor_id("ven-fulfillmenta1");
     let vendor_actor = vendor_operator_with_scope(&["fab-a", "fab-b"]);
+    let employee_actor = employee_with_scope(&["fab-a", "fab-b"]);
 
     menu_supply
         .upsert_menu_item(
@@ -99,6 +115,7 @@ fn setup_policy_with_orders(
 
     menu_supply
         .create_order(
+            &employee_actor,
             order_id("ord-fulfill-001"),
             &vendor,
             &plant_id("fab-a"),
@@ -115,6 +132,7 @@ fn setup_policy_with_orders(
 
     menu_supply
         .create_order(
+            &employee_actor,
             order_id("ord-fulfill-002"),
             &vendor,
             &plant_id("fab-b"),
@@ -131,6 +149,7 @@ fn setup_policy_with_orders(
 
     menu_supply
         .create_order(
+            &employee_actor,
             order_id("ord-fulfill-003"),
             &vendor,
             &plant_id("fab-b"),
@@ -145,19 +164,20 @@ fn setup_policy_with_orders(
 
     menu_supply
         .update_order(
+            &employee_actor,
             &order_id("ord-fulfill-003"),
             OrderMutation::MarkFulfilled,
             taipei_moment(delivery_epoch_day, 660),
         )
         .expect("third order should be marked fulfilled");
 
-    (menu_supply, vendor, vendor_actor)
+    (menu_supply, vendor, vendor_actor, employee_actor)
 }
 
 #[test]
 fn vendor_operations_board_aggregates_per_plant_special_needs_and_delivery_status() {
     let delivery_epoch_day = 210;
-    let (menu_supply, vendor, vendor_actor) = setup_policy_with_orders(delivery_epoch_day);
+    let (menu_supply, vendor, vendor_actor, _) = setup_policy_with_orders(delivery_epoch_day);
     let fulfillment_policy = VendorFulfillmentPolicy::new();
 
     let board_before_transition = fulfillment_policy
@@ -273,7 +293,8 @@ fn vendor_operations_board_aggregates_per_plant_special_needs_and_delivery_statu
 #[test]
 fn export_batches_are_immutable_and_generated_from_snapshot_state() {
     let delivery_epoch_day = 220;
-    let (menu_supply, vendor, vendor_actor) = setup_policy_with_orders(delivery_epoch_day);
+    let (menu_supply, vendor, vendor_actor, employee_actor) =
+        setup_policy_with_orders(delivery_epoch_day);
     let fulfillment_policy = VendorFulfillmentPolicy::new();
 
     let first_batch = fulfillment_policy
@@ -299,6 +320,7 @@ fn export_batches_are_immutable_and_generated_from_snapshot_state() {
 
     menu_supply
         .create_order(
+            &employee_actor,
             order_id("ord-fulfill-004"),
             &vendor,
             &plant_id("fab-a"),
@@ -366,7 +388,7 @@ fn export_batches_are_immutable_and_generated_from_snapshot_state() {
 #[test]
 fn transition_rejects_orders_outside_vendor_scope() {
     let delivery_epoch_day = 230;
-    let (menu_supply, _vendor, _) = setup_policy_with_orders(delivery_epoch_day);
+    let (menu_supply, _vendor, _, _) = setup_policy_with_orders(delivery_epoch_day);
     let fulfillment_policy = VendorFulfillmentPolicy::new();
     let scoped_actor = vendor_operator_with_scope(&["fab-a"]);
 

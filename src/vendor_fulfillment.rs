@@ -2,7 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
-use crate::audit::AuditIdentityLink;
+use crate::audit::{
+    AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
+    AuditIdentityLink, AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
+};
 use crate::identity::{AuthenticatedActorContext, PlantId, Role};
 use crate::menu_supply_window::{
     MenuItemId, MenuSupplyPolicy, MenuSupplyWindowError, OrderId, OrderLifecycleState,
@@ -533,11 +536,23 @@ struct VendorFulfillmentState {
 #[derive(Debug, Clone, Default)]
 pub struct VendorFulfillmentPolicy {
     state: Arc<Mutex<VendorFulfillmentState>>,
+    audit_trail: ImmutableAuditTrail,
 }
 
 impl VendorFulfillmentPolicy {
     pub fn new() -> Self {
-        Self::default()
+        Self::with_audit_trail(ImmutableAuditTrail::default())
+    }
+
+    pub fn with_audit_trail(audit_trail: ImmutableAuditTrail) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(VendorFulfillmentState::default())),
+            audit_trail,
+        }
+    }
+
+    pub fn audit_trail(&self) -> ImmutableAuditTrail {
+        self.audit_trail.clone()
     }
 
     pub fn vendor_operations_board(
@@ -581,6 +596,7 @@ impl VendorFulfillmentPolicy {
         }
 
         let mut state = lock_state(&self.state)?;
+        let previous_state = state.clone();
         let from_status = state
             .order_delivery_statuses
             .get(order_id)
@@ -622,6 +638,24 @@ impl VendorFulfillmentPolicy {
             ),
         };
         state.status_audit_log.push(audit_entry.clone());
+        self.audit_trail
+            .append(AuditEvidenceWrite::new(
+                AuditTimestamp::from_taipei_business_moment(
+                    occurred_at.epoch_day(),
+                    occurred_at.minute_of_day(),
+                )
+                .map_err(VendorFulfillmentError::AuditTrail)?,
+                AuditIdentityLink::from_actor(actor, ADVANCE_DELIVERY_STATUS_OPERATION_ID),
+                AuditAction::AdvanceVendorFulfillmentDeliveryStatus,
+                AuditEntityRef::new(AuditEntityType::Order, order_id.as_str())
+                    .map_err(VendorFulfillmentError::AuditTrail)?,
+                AuditCorrelationId::for_vendor(order_snapshot.vendor_id().as_str())
+                    .map_err(VendorFulfillmentError::AuditTrail)?,
+            ))
+            .map_err(|error| {
+                *state = previous_state;
+                VendorFulfillmentError::AuditTrail(error)
+            })?;
         Ok(audit_entry)
     }
 
@@ -652,6 +686,7 @@ impl VendorFulfillmentPolicy {
         let artifacts = build_batch_artifacts(vendor_id, delivery_epoch_day, board.order_entries());
 
         let mut state = lock_state(&self.state)?;
+        let previous_state = state.clone();
         state.next_batch_sequence = state
             .next_batch_sequence
             .checked_add(1)
@@ -671,6 +706,27 @@ impl VendorFulfillmentPolicy {
             audit_identity: AuditIdentityLink::from_actor(actor, CREATE_EXPORT_BATCH_OPERATION_ID),
         };
         state.batches.insert(batch_id, snapshot.clone());
+        self.audit_trail
+            .append(AuditEvidenceWrite::new(
+                AuditTimestamp::from_taipei_business_moment(
+                    captured_at.epoch_day(),
+                    captured_at.minute_of_day(),
+                )
+                .map_err(VendorFulfillmentError::AuditTrail)?,
+                AuditIdentityLink::from_actor(actor, CREATE_EXPORT_BATCH_OPERATION_ID),
+                AuditAction::CreateVendorFulfillmentExportBatch,
+                AuditEntityRef::new(
+                    AuditEntityType::FulfillmentBatch,
+                    snapshot.batch_id().as_str(),
+                )
+                .map_err(VendorFulfillmentError::AuditTrail)?,
+                AuditCorrelationId::for_vendor(vendor_id.as_str())
+                    .map_err(VendorFulfillmentError::AuditTrail)?,
+            ))
+            .map_err(|error| {
+                *state = previous_state;
+                VendorFulfillmentError::AuditTrail(error)
+            })?;
         Ok(snapshot)
     }
 
@@ -1068,6 +1124,7 @@ pub enum VendorFulfillmentError {
         order_id: OrderId,
         status: FulfillmentDeliveryStatus,
     },
+    AuditTrail(AuditTrailError),
     MenuSupply(MenuSupplyWindowError),
     StatePoisoned,
 }
@@ -1123,6 +1180,7 @@ impl fmt::Display for VendorFulfillmentError {
             Self::DeliveryStatusUnchanged { order_id, status } => {
                 write!(f, "order {order_id} is already in delivery status {status}")
             }
+            Self::AuditTrail(error) => write!(f, "audit trail write failed: {error}"),
             Self::MenuSupply(error) => write!(f, "menu supply read failed: {error}"),
             Self::StatePoisoned => {
                 f.write_str("vendor fulfillment state is poisoned due to a previous panic")

@@ -65,6 +65,10 @@ fn required_template_for(category: &VendorCategory) -> ComplianceDocumentTemplat
     .expect("template should be valid")
 }
 
+fn ensure_test_otel_endpoint() {
+    std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
+}
+
 fn submit_required_document(
     lifecycle: &mut VendorComplianceLifecycle,
     vendor_actor: &AuthenticatedActorContext,
@@ -89,6 +93,7 @@ fn submit_required_document(
 
 #[test]
 fn committee_admin_can_review_vendor_applications_with_full_history() {
+    ensure_test_otel_endpoint();
     let committee = committee_admin();
     let vendor_actor = vendor_operator();
     let category = vendor_category("RESTAURANT");
@@ -198,6 +203,7 @@ fn committee_admin_can_review_vendor_applications_with_full_history() {
 
 #[test]
 fn lifecycle_automation_emits_reminders_and_suspends_then_reinstates_vendors() {
+    ensure_test_otel_endpoint();
     let committee = committee_admin();
     let vendor_actor = vendor_operator();
     let category = vendor_category("RESTAURANT");
@@ -274,6 +280,7 @@ fn lifecycle_automation_emits_reminders_and_suspends_then_reinstates_vendors() {
 
 #[test]
 fn retention_policy_prunes_history_and_deletes_rejected_vendor_records() {
+    ensure_test_otel_endpoint();
     let committee = committee_admin();
     let vendor_actor = vendor_operator();
     let category = vendor_category("RESTAURANT");

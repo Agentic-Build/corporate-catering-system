@@ -72,6 +72,10 @@ fn mcp_operation_id_for(action: Action) -> &'static str {
         .operation_id()
 }
 
+fn ensure_test_otel_endpoint() {
+    std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
+}
+
 #[test]
 fn identity_model_enforces_only_supported_authentication_sources() {
     assert!(AuthenticatedActorContext::new(
@@ -233,6 +237,7 @@ fn policy_enforces_plant_scope_boundaries() {
 
 #[test]
 fn write_operations_require_authenticated_actor_context_and_auditable_link() {
+    ensure_test_otel_endpoint();
     let access_controller = AccessController::with_default_policy();
     let http_gateway = HttpAuthorizationGateway::new(access_controller.clone());
     let mcp_gateway = McpAuthorizationGateway::new(access_controller);
@@ -275,6 +280,7 @@ fn write_operations_require_authenticated_actor_context_and_auditable_link() {
 
 #[test]
 fn http_and_mcp_paths_share_the_same_policy_engine() {
+    ensure_test_otel_endpoint();
     #[derive(Debug)]
     struct CountingPolicyEngine {
         inner: CentralAuthorizationPolicyEngine,

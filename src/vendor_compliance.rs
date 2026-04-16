@@ -1,8 +1,19 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use crate::audit::{
+    AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
+    AuditIdentityLink, AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
+};
 use crate::identity::{ActorId, AuthenticatedActorContext, Role};
 use crate::observability::{TelemetryOutcome, TelemetryService};
+
+const UPSERT_COMPLIANCE_TEMPLATE_OPERATION_ID: &str = "upsertComplianceDocumentTemplate";
+const REGISTER_VENDOR_APPLICATION_OPERATION_ID: &str = "registerVendorApplication";
+const SUBMIT_VENDOR_DOCUMENT_OPERATION_ID: &str = "submitVendorComplianceDocument";
+const REVIEW_VENDOR_APPLICATION_OPERATION_ID: &str = "reviewVendorApplication";
+const RUN_VENDOR_LIFECYCLE_OPERATION_ID: &str = "runVendorComplianceLifecycle";
+const PRUNE_VENDOR_HISTORY_OPERATION_ID: &str = "pruneVendorComplianceHistory";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VendorId(String);
@@ -484,19 +495,32 @@ pub struct VendorComplianceLifecycle {
         BTreeMap<VendorCategory, BTreeMap<DocumentTemplateId, ComplianceDocumentTemplate>>,
     vendors: BTreeMap<VendorId, VendorComplianceRecord>,
     retention_policy: HistoryRetentionPolicy,
+    audit_trail: ImmutableAuditTrail,
 }
 
 impl VendorComplianceLifecycle {
     pub fn new(retention_policy: HistoryRetentionPolicy) -> Self {
+        Self::with_audit_trail(retention_policy, ImmutableAuditTrail::default())
+    }
+
+    pub fn with_audit_trail(
+        retention_policy: HistoryRetentionPolicy,
+        audit_trail: ImmutableAuditTrail,
+    ) -> Self {
         Self {
             templates_by_category: BTreeMap::new(),
             vendors: BTreeMap::new(),
             retention_policy,
+            audit_trail,
         }
     }
 
     pub fn retention_policy(&self) -> &HistoryRetentionPolicy {
         &self.retention_policy
+    }
+
+    pub fn audit_trail(&self) -> ImmutableAuditTrail {
+        self.audit_trail.clone()
     }
 
     pub fn templates_for_category(
@@ -524,11 +548,28 @@ impl VendorComplianceLifecycle {
         template: ComplianceDocumentTemplate,
     ) -> Result<(), VendorComplianceError> {
         ensure_role(actor, Role::CommitteeAdmin)?;
+        let audit_event = AuditEvidenceWrite::new(
+            AuditTimestamp::now_taipei().map_err(VendorComplianceError::AuditTrail)?,
+            AuditIdentityLink::from_actor(actor, UPSERT_COMPLIANCE_TEMPLATE_OPERATION_ID),
+            AuditAction::UpsertComplianceDocumentTemplate,
+            AuditEntityRef::new(
+                AuditEntityType::ComplianceDocumentTemplate,
+                template.template_id().as_str(),
+            )
+            .map_err(VendorComplianceError::AuditTrail)?,
+            AuditCorrelationId::parse(format!("template:{}", template.template_id().as_str()))
+                .map_err(VendorComplianceError::AuditTrail)?,
+        );
+        let previous_templates = self.templates_by_category.clone();
         let category_entry = self
             .templates_by_category
             .entry(template.vendor_category().clone())
             .or_default();
         category_entry.insert(template.template_id().clone(), template);
+        if let Err(error) = self.audit_trail.append(audit_event) {
+            self.templates_by_category = previous_templates;
+            return Err(VendorComplianceError::AuditTrail(error));
+        }
         Ok(())
     }
 
@@ -541,6 +582,15 @@ impl VendorComplianceLifecycle {
         submitted_on: ComplianceDate,
     ) -> Result<(), VendorComplianceError> {
         ensure_role(actor, Role::VendorOperator)?;
+        let audit_event = AuditEvidenceWrite::new(
+            AuditTimestamp::from_epoch_day(submitted_on.epoch_day()),
+            AuditIdentityLink::from_actor(actor, REGISTER_VENDOR_APPLICATION_OPERATION_ID),
+            AuditAction::RegisterVendorApplication,
+            AuditEntityRef::new(AuditEntityType::Vendor, vendor_id.as_str())
+                .map_err(VendorComplianceError::AuditTrail)?,
+            AuditCorrelationId::for_vendor(vendor_id.as_str())
+                .map_err(VendorComplianceError::AuditTrail)?,
+        );
         let display_name = display_name.into();
         if display_name.trim().is_empty() {
             return Err(VendorComplianceError::InvalidVendorDisplayName);
@@ -570,7 +620,12 @@ impl VendorComplianceLifecycle {
             submitted_on,
             ComplianceHistoryKind::ApplicationSubmitted { category },
         );
+        let previous_vendors = self.vendors.clone();
         self.vendors.insert(vendor_id, record);
+        if let Err(error) = self.audit_trail.append(audit_event) {
+            self.vendors = previous_vendors;
+            return Err(VendorComplianceError::AuditTrail(error));
+        }
         Ok(())
     }
 
@@ -582,6 +637,15 @@ impl VendorComplianceLifecycle {
         submission: VendorDocumentSubmission,
     ) -> Result<(), VendorComplianceError> {
         ensure_role(actor, Role::VendorOperator)?;
+        let audit_event = AuditEvidenceWrite::new(
+            AuditTimestamp::from_epoch_day(submission.submitted_on().epoch_day()),
+            AuditIdentityLink::from_actor(actor, SUBMIT_VENDOR_DOCUMENT_OPERATION_ID),
+            AuditAction::SubmitVendorComplianceDocument,
+            AuditEntityRef::new(AuditEntityType::Vendor, vendor_id.as_str())
+                .map_err(VendorComplianceError::AuditTrail)?,
+            AuditCorrelationId::for_vendor(vendor_id.as_str())
+                .map_err(VendorComplianceError::AuditTrail)?,
+        );
         let vendor_category = self
             .vendors
             .get(vendor_id)
@@ -611,6 +675,7 @@ impl VendorComplianceLifecycle {
             });
         }
 
+        let previous_vendors = self.vendors.clone();
         let vendor = self
             .vendors
             .get_mut(vendor_id)
@@ -629,6 +694,10 @@ impl VendorComplianceLifecycle {
                 expires_on: submission.expires_on(),
             },
         );
+        if let Err(error) = self.audit_trail.append(audit_event) {
+            self.vendors = previous_vendors;
+            return Err(VendorComplianceError::AuditTrail(error));
+        }
         Ok(())
     }
 
@@ -641,6 +710,15 @@ impl VendorComplianceLifecycle {
         decided_on: ComplianceDate,
     ) -> Result<VendorComplianceStatus, VendorComplianceError> {
         ensure_role(actor, Role::CommitteeAdmin)?;
+        let audit_event = AuditEvidenceWrite::new(
+            AuditTimestamp::from_epoch_day(decided_on.epoch_day()),
+            AuditIdentityLink::from_actor(actor, REVIEW_VENDOR_APPLICATION_OPERATION_ID),
+            AuditAction::ReviewVendorApplication,
+            AuditEntityRef::new(AuditEntityType::Vendor, vendor_id.as_str())
+                .map_err(VendorComplianceError::AuditTrail)?,
+            AuditCorrelationId::for_vendor(vendor_id.as_str())
+                .map_err(VendorComplianceError::AuditTrail)?,
+        );
         if decision == VendorReviewDecision::Approved {
             let vendor = self
                 .vendors
@@ -652,6 +730,7 @@ impl VendorComplianceLifecycle {
             }
         }
 
+        let previous_vendors = self.vendors.clone();
         let vendor = self
             .vendors
             .get_mut(vendor_id)
@@ -680,7 +759,12 @@ impl VendorComplianceLifecycle {
             decided_on,
             ComplianceHistoryKind::ReviewDecision { decision, comment },
         );
-        Ok(vendor.status)
+        let status = vendor.status;
+        if let Err(error) = self.audit_trail.append(audit_event) {
+            self.vendors = previous_vendors;
+            return Err(VendorComplianceError::AuditTrail(error));
+        }
+        Ok(status)
     }
 
     pub fn run_lifecycle(
@@ -695,6 +779,16 @@ impl VendorComplianceLifecycle {
         );
         let result = (|| {
             ensure_role(actor, Role::CommitteeAdmin)?;
+            let previous_vendors = self.vendors.clone();
+            let audit_event = AuditEvidenceWrite::new(
+                AuditTimestamp::from_epoch_day(run_on.epoch_day()),
+                AuditIdentityLink::from_actor(actor, RUN_VENDOR_LIFECYCLE_OPERATION_ID),
+                AuditAction::RunVendorComplianceLifecycle,
+                AuditEntityRef::new(AuditEntityType::Vendor, "all")
+                    .map_err(VendorComplianceError::AuditTrail)?,
+                AuditCorrelationId::parse("compliance:lifecycle")
+                    .map_err(VendorComplianceError::AuditTrail)?,
+            );
 
             let mut run_result = LifecycleRunResult::default();
             for vendor in self.vendors.values_mut() {
@@ -769,6 +863,10 @@ impl VendorComplianceLifecycle {
                 }
             }
 
+            if let Err(error) = self.audit_trail.append(audit_event) {
+                self.vendors = previous_vendors;
+                return Err(VendorComplianceError::AuditTrail(error));
+            }
             Ok(run_result)
         })();
         telemetry.finish(if result.is_ok() {
@@ -785,6 +883,16 @@ impl VendorComplianceLifecycle {
         as_of: ComplianceDate,
     ) -> Result<HistoryPruneResult, VendorComplianceError> {
         ensure_role(actor, Role::CommitteeAdmin)?;
+        let previous_vendors = self.vendors.clone();
+        let audit_event = AuditEvidenceWrite::new(
+            AuditTimestamp::from_epoch_day(as_of.epoch_day()),
+            AuditIdentityLink::from_actor(actor, PRUNE_VENDOR_HISTORY_OPERATION_ID),
+            AuditAction::PruneVendorComplianceHistory,
+            AuditEntityRef::new(AuditEntityType::Vendor, "all")
+                .map_err(VendorComplianceError::AuditTrail)?,
+            AuditCorrelationId::parse("compliance:retention")
+                .map_err(VendorComplianceError::AuditTrail)?,
+        );
 
         let mut result = HistoryPruneResult::default();
         let mut vendors_to_delete = Vec::new();
@@ -819,6 +927,11 @@ impl VendorComplianceLifecycle {
             if self.vendors.remove(&vendor_id).is_some() {
                 result.deleted_vendor_records += 1;
             }
+        }
+
+        if let Err(error) = self.audit_trail.append(audit_event) {
+            self.vendors = previous_vendors;
+            return Err(VendorComplianceError::AuditTrail(error));
         }
 
         Ok(result)
@@ -979,6 +1092,7 @@ pub enum VendorComplianceError {
         expected: Role,
         actual: Role,
     },
+    AuditTrail(AuditTrailError),
 }
 
 impl fmt::Display for VendorComplianceError {
@@ -1043,6 +1157,7 @@ impl fmt::Display for VendorComplianceError {
                 f,
                 "operation requires role {expected:?}, but actor has role {actual:?}"
             ),
+            Self::AuditTrail(error) => write!(f, "audit trail write failed: {error}"),
         }
     }
 }

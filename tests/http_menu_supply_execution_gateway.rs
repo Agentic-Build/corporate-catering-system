@@ -52,6 +52,16 @@ fn vendor_operator() -> AuthenticatedActorContext {
     .expect("vendor operator should be valid")
 }
 
+fn employee_actor() -> AuthenticatedActorContext {
+    AuthenticatedActorContext::new(
+        actor_id("employee-http-menu-supply"),
+        Role::Employee,
+        restricted_scope(&["fab-a"]),
+        AuthenticationSource::CorporateSso,
+    )
+    .expect("employee actor should be valid")
+}
+
 fn vendor_id(value: &str) -> VendorId {
     VendorId::parse(value).expect("vendor id should be valid")
 }
@@ -78,6 +88,10 @@ fn order_id(value: &str) -> OrderId {
 
 fn taipei_moment(epoch_day: i32, minute_of_day: u16) -> TaipeiBusinessMoment {
     TaipeiBusinessMoment::new(epoch_day, minute_of_day).expect("Taipei business moment is valid")
+}
+
+fn ensure_test_otel_endpoint() {
+    std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
 }
 
 fn required_template_for(category: &VendorCategory) -> ComplianceDocumentTemplate {
@@ -183,8 +197,10 @@ fn menu_item_with_overrides(
 
 #[test]
 fn http_ordering_gateway_enforces_deliverability_and_menu_supply_rules() {
+    ensure_test_otel_endpoint();
     let committee = committee_admin();
     let vendor_actor = vendor_operator();
+    let employee = employee_actor();
     let category = vendor_category("RESTAURANT");
 
     let mut lifecycle = VendorComplianceLifecycle::new(HistoryRetentionPolicy::default());
@@ -242,6 +258,7 @@ fn http_ordering_gateway_enforces_deliverability_and_menu_supply_rules() {
 
     gateway_before_deny
         .execute_create_employee_order(
+            &employee,
             order_id("ord-http-supply-001"),
             &vendor,
             &plant_id("fab-a"),
@@ -258,6 +275,7 @@ fn http_ordering_gateway_enforces_deliverability_and_menu_supply_rules() {
 
     let update_after_cutoff_error = gateway_before_deny
         .execute_update_employee_order(
+            &employee,
             &order_id("ord-http-supply-001"),
             &vendor,
             &plant_id("fab-a"),
@@ -272,6 +290,7 @@ fn http_ordering_gateway_enforces_deliverability_and_menu_supply_rules() {
 
     let unsupported_mutation_error = gateway_before_deny
         .execute_update_employee_order(
+            &employee,
             &order_id("ord-http-supply-001"),
             &vendor,
             &plant_id("fab-a"),
@@ -306,6 +325,7 @@ fn http_ordering_gateway_enforces_deliverability_and_menu_supply_rules() {
         HttpOrderingExecutionGateway::new(&lifecycle, &delivery_policy, &menu_supply);
     let create_blocked_by_deliverability = gateway_after_deny
         .execute_create_employee_order(
+            &employee,
             order_id("ord-http-supply-002"),
             &vendor,
             &plant_id("fab-a"),

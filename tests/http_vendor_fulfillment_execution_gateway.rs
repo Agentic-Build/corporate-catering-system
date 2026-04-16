@@ -35,6 +35,16 @@ fn vendor_operator(plants: &[&str]) -> AuthenticatedActorContext {
     .expect("vendor operator actor should be valid")
 }
 
+fn employee_actor(plants: &[&str]) -> AuthenticatedActorContext {
+    AuthenticatedActorContext::new(
+        actor_id("employee-http-fulfillment"),
+        Role::Employee,
+        restricted_scope(plants),
+        AuthenticationSource::CorporateSso,
+    )
+    .expect("employee actor should be valid")
+}
+
 fn vendor_id(value: &str) -> VendorId {
     VendorId::parse(value).expect("vendor id should be valid")
 }
@@ -49,6 +59,10 @@ fn order_id(value: &str) -> OrderId {
 
 fn taipei_moment(epoch_day: i32, minute_of_day: u16) -> TaipeiBusinessMoment {
     TaipeiBusinessMoment::new(epoch_day, minute_of_day).expect("Taipei business moment is valid")
+}
+
+fn ensure_test_otel_endpoint() {
+    std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
 }
 
 fn menu_item(
@@ -78,9 +92,11 @@ fn menu_item(
 
 #[test]
 fn http_gateway_drives_vendor_fulfillment_board_status_transition_and_export_batches() {
+    ensure_test_otel_endpoint();
     let delivery_epoch_day = 320;
     let vendor = vendor_id("ven-http-fulfillmenta1");
     let vendor_actor = vendor_operator(&["fab-a", "fab-b"]);
+    let employee = employee_actor(&["fab-a", "fab-b"]);
 
     let menu_supply = MenuSupplyPolicy::default();
     menu_supply
@@ -92,6 +108,7 @@ fn http_gateway_drives_vendor_fulfillment_board_status_transition_and_export_bat
 
     menu_supply
         .create_order(
+            &employee,
             order_id("ord-http-fulfill-001"),
             &vendor,
             &plant_id("fab-a"),
@@ -164,9 +181,11 @@ fn http_gateway_drives_vendor_fulfillment_board_status_transition_and_export_bat
 
 #[test]
 fn http_gateway_rejects_status_transition_for_order_outside_actor_scope() {
+    ensure_test_otel_endpoint();
     let delivery_epoch_day = 321;
     let vendor = vendor_id("ven-http-fulfillmentb1");
     let menu_supply = MenuSupplyPolicy::default();
+    let employee = employee_actor(&["fab-a", "fab-b"]);
 
     let broad_actor = vendor_operator(&["fab-a", "fab-b"]);
     menu_supply
@@ -177,6 +196,7 @@ fn http_gateway_rejects_status_transition_for_order_outside_actor_scope() {
         .expect("menu item should be upserted");
     menu_supply
         .create_order(
+            &employee,
             order_id("ord-http-fulfill-002"),
             &vendor,
             &plant_id("fab-b"),

@@ -65,6 +65,10 @@ fn taipei_moment(epoch_day: i32, minute_of_day: u16) -> TaipeiBusinessMoment {
     TaipeiBusinessMoment::new(epoch_day, minute_of_day).expect("Taipei business moment is valid")
 }
 
+fn ensure_test_otel_endpoint() {
+    std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
+}
+
 fn required_template_for(category: &VendorCategory) -> ComplianceDocumentTemplate {
     ComplianceDocumentTemplate::new(
         template_id("tmpl-http-delivery-license"),
@@ -140,6 +144,7 @@ fn mapping(
 
 #[test]
 fn http_gateway_filters_browse_and_search_vendor_visibility() {
+    ensure_test_otel_endpoint();
     let committee = committee_admin();
     let vendor_actor = vendor_operator();
     let category = vendor_category("RESTAURANT");
@@ -211,6 +216,7 @@ fn http_gateway_filters_browse_and_search_vendor_visibility() {
 
 #[test]
 fn http_gateway_enforces_deliverability_for_create_and_update_order_paths() {
+    ensure_test_otel_endpoint();
     let committee = committee_admin();
     let vendor_actor = vendor_operator();
     let category = vendor_category("RESTAURANT");

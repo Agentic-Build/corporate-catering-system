@@ -3,6 +3,10 @@ use std::collections::BTreeSet;
 use crate::access::{
     AccessController, Action, AuthorizationError, AuthorizedWriteOperation, TransportLayer,
 };
+use crate::audit::{
+    AuditInvestigationFilter, AuditPurgeReport, AuditTimestamp, AuditTrailError,
+    ImmutableAuditEvidence, ImmutableAuditTrail, ResponsibilityAttribution,
+};
 use crate::contract::{HttpMethod, HttpOperation};
 use crate::identity::{AuthenticatedActorContext, PlantId};
 use crate::menu_supply_window::{
@@ -203,6 +207,75 @@ impl HttpAuthorizationGateway {
     }
 }
 
+pub struct HttpAuditInvestigationExecutionGateway {
+    audit_trail: ImmutableAuditTrail,
+}
+
+impl HttpAuditInvestigationExecutionGateway {
+    pub fn new(audit_trail: ImmutableAuditTrail) -> Self {
+        Self { audit_trail }
+    }
+
+    pub fn execute_investigation_query(
+        &self,
+        investigator: &AuthenticatedActorContext,
+        filter: &AuditInvestigationFilter,
+    ) -> Result<Vec<ImmutableAuditEvidence>, AuditTrailError> {
+        let telemetry = TelemetryService::ComplianceWorker.begin_operation(
+            "queryAuditInvestigations",
+            Some(investigator.actor_id().as_str()),
+            None::<&str>,
+        );
+        let result = self.audit_trail.investigation_query(investigator, filter);
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
+    }
+
+    pub fn execute_responsibility_query(
+        &self,
+        investigator: &AuthenticatedActorContext,
+        filter: &AuditInvestigationFilter,
+    ) -> Result<Vec<ResponsibilityAttribution>, AuditTrailError> {
+        let telemetry = TelemetryService::ComplianceWorker.begin_operation(
+            "queryAuditResponsibilities",
+            Some(investigator.actor_id().as_str()),
+            None::<&str>,
+        );
+        let result = self
+            .audit_trail
+            .investigation_responsibility_query(investigator, filter);
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
+    }
+
+    pub fn execute_retention_purge(
+        &self,
+        actor: &AuthenticatedActorContext,
+        as_of: AuditTimestamp,
+    ) -> Result<AuditPurgeReport, AuditTrailError> {
+        let telemetry = TelemetryService::ComplianceWorker.begin_operation(
+            "purgeAuditEvidence",
+            Some(actor.actor_id().as_str()),
+            None::<&str>,
+        );
+        let result = self.audit_trail.purge_expired_evidence(actor, as_of);
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
+    }
+}
+
 pub struct HttpDeliveryExecutionGateway<'a> {
     compliance_lifecycle: &'a VendorComplianceLifecycle,
     delivery_policy: &'a VendorPlantDeliveryPolicy,
@@ -329,6 +402,7 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
 
     pub fn execute_create_employee_order(
         &self,
+        actor: &AuthenticatedActorContext,
         order_id: OrderId,
         vendor_id: &VendorId,
         plant_id: &PlantId,
@@ -353,6 +427,7 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
 
             self.menu_supply_policy
                 .create_order(
+                    actor,
                     order_id,
                     vendor_id,
                     plant_id,
@@ -374,6 +449,7 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
 
     pub fn execute_update_employee_order(
         &self,
+        actor: &AuthenticatedActorContext,
         order_id: &OrderId,
         vendor_id: &VendorId,
         plant_id: &PlantId,
@@ -402,7 +478,7 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
                 .map_err(HttpOrderExecutionError::Deliverability)?;
 
             self.menu_supply_policy
-                .update_order(order_id, mutation, at)
+                .update_order(actor, order_id, mutation, at)
                 .map_err(HttpOrderExecutionError::MenuSupply)?;
 
             Ok(())
