@@ -105,6 +105,7 @@ const PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV: &str = "PRELAUNCH_TERMINATED_
 const PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV: &str = "PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_HEX";
 const PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_ENV: &str =
     "PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_HEX";
+const PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED_ENV: &str = "PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED";
 const AUTHORIZATION_BEARER_PREFIX: &str = "Bearer ";
 const MCP_OAUTH_SERVICE_ACCOUNT_TOKEN_PREFIX: &str = "mcp-oauth-sa:";
 const MCP_OAUTH_SERVICE_ACCOUNT_ISSUER_ENV: &str = "MCP_OAUTH_SERVICE_ACCOUNT_ISSUER";
@@ -177,10 +178,19 @@ const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 15] = [
     AuditEntityType::AnomalyAlert,
 ];
 
+type MenuRecommendationRanker = fn(
+    entries: &mut Vec<EmployeeMenuDiscoveryEntry>,
+    at: TaipeiBusinessMoment,
+    sort_by: MenuSortFieldQuery,
+    sort_order: SortOrderQuery,
+) -> Result<(), String>;
+
 #[derive(Debug, Clone)]
 struct AppState {
     next_order_sequence: Arc<AtomicU64>,
     plant_id: PlantId,
+    recommendation_engine_runtime_enabled: bool,
+    menu_recommendation_ranker: MenuRecommendationRanker,
     terminated_employee_actor_ids: Arc<HashSet<ActorId>>,
     audit_trail: ImmutableAuditTrail,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
@@ -1150,6 +1160,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
 
     let menu_variant_count =
         parse_positive_u16_env("PRELAUNCH_MENU_VARIANT_COUNT", DEFAULT_MENU_VARIANT_COUNT)?;
+    let recommendation_engine_runtime_enabled =
+        parse_bool_env_default_false(PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED_ENV)?;
 
     let delivery_epoch_day = resolve_delivery_epoch_day()?;
     let audit_retention_days = parse_positive_u16_env(
@@ -1212,6 +1224,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         plant_id,
         delivery_epoch_day,
         menu_variant_count,
+        recommendation_engine_runtime_enabled,
         payroll_retention_policy,
         order_retention_policy,
         payroll_export_field_encryptor,
@@ -2706,6 +2719,18 @@ fn parse_positive_u64_env(key: &str, default_value: u64) -> Result<u64, String> 
     Ok(parsed)
 }
 
+fn parse_bool_env_default_false(key: &str) -> Result<bool, String> {
+    let raw = match std::env::var(key) {
+        Ok(value) => value,
+        Err(_) => return Ok(false),
+    };
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(format!("{key} must be either `true` or `false`")),
+    }
+}
+
 fn parse_audit_trail_encryption_key_from_env() -> Result<AuditSnapshotEncryptionKey, String> {
     let raw = std::env::var(PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV).map_err(|_| {
         format!("{PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV} must be set to a 64-char hex key")
@@ -2790,6 +2815,7 @@ fn bootstrap_runtime_state(
     plant_id: PlantId,
     delivery_epoch_day: i32,
     menu_variant_count: u16,
+    recommendation_engine_runtime_enabled: bool,
     payroll_retention_policy: PayrollRetentionPolicy,
     order_retention_policy: OrderRetentionPolicy,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
@@ -2937,6 +2963,8 @@ fn bootstrap_runtime_state(
     Ok(AppState {
         next_order_sequence: Arc::new(AtomicU64::new(1)),
         plant_id,
+        recommendation_engine_runtime_enabled,
+        menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
         terminated_employee_actor_ids: Arc::new(terminated_employee_actor_ids),
         audit_trail,
         payroll_export_field_encryptor,
@@ -3125,6 +3153,7 @@ fn handle_list_employee_menus_at(
             "pageSize must be between 1 and 200".to_owned(),
         ));
     }
+    let recommendation_requested = query.recommendation_enabled.unwrap_or(false);
 
     let compliance_lifecycle = read_compliance_lifecycle(state)?;
     let discovery_gateway = HttpEmployeeDiscoveryExecutionGateway::new(
@@ -3191,6 +3220,14 @@ fn handle_list_employee_menus_at(
     let sort_by = query.sort_by.unwrap_or(MenuSortFieldQuery::DeliveryDate);
     let sort_order = query.sort_order.unwrap_or(SortOrderQuery::Asc);
     entries.sort_by(|left, right| compare_menu_discovery_entry(left, right, sort_by, sort_order));
+    let recommendation_applied = maybe_apply_menu_recommendation(
+        state,
+        recommendation_requested,
+        &mut entries,
+        moment,
+        sort_by,
+        sort_order,
+    );
 
     let total_items = entries.len();
     let total_pages = if total_items == 0 {
@@ -3234,8 +3271,8 @@ fn handle_list_employee_menus_at(
     Ok(MenuDiscoveryResponse {
         timezone: "Asia/Taipei",
         view: view.as_str(),
-        recommendation_requested: query.recommendation_enabled.unwrap_or(false),
-        recommendation_applied: false,
+        recommendation_requested,
+        recommendation_applied,
         from_date: epoch_day_to_iso_date(from_epoch_day),
         to_date: epoch_day_to_iso_date(to_epoch_day),
         days,
@@ -3344,6 +3381,85 @@ fn compare_menu_discovery_entry(
         SortOrderQuery::Asc => ordering,
         SortOrderQuery::Desc => ordering.reverse(),
     }
+}
+
+fn maybe_apply_menu_recommendation(
+    state: &AppState,
+    recommendation_requested: bool,
+    entries: &mut Vec<EmployeeMenuDiscoveryEntry>,
+    moment: TaipeiBusinessMoment,
+    sort_by: MenuSortFieldQuery,
+    sort_order: SortOrderQuery,
+) -> bool {
+    if !recommendation_requested || !state.recommendation_engine_runtime_enabled {
+        return false;
+    }
+
+    match (state.menu_recommendation_ranker)(entries, moment, sort_by, sort_order) {
+        Ok(()) => true,
+        Err(error) => {
+            tracing::warn!(
+                recommendation_error = %error,
+                "menu recommendation ranking failed; continuing with deterministic ordering"
+            );
+            false
+        }
+    }
+}
+
+fn heuristic_menu_recommendation_ranker(
+    entries: &mut Vec<EmployeeMenuDiscoveryEntry>,
+    moment: TaipeiBusinessMoment,
+    sort_by: MenuSortFieldQuery,
+    sort_order: SortOrderQuery,
+) -> Result<(), String> {
+    if entries.len() <= 1 {
+        return Ok(());
+    }
+
+    let mut scored_entries = entries
+        .iter()
+        .cloned()
+        .map(|entry| {
+            let score = menu_recommendation_score(&entry, moment)?;
+            Ok((entry, score))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+    scored_entries.sort_by(|(left_entry, left_score), (right_entry, right_score)| {
+        right_score.cmp(left_score).then_with(|| {
+            compare_menu_discovery_entry(left_entry, right_entry, sort_by, sort_order)
+        })
+    });
+
+    entries.clear();
+    entries.extend(scored_entries.into_iter().map(|(entry, _)| entry));
+    Ok(())
+}
+
+fn menu_recommendation_score(
+    entry: &EmployeeMenuDiscoveryEntry,
+    moment: TaipeiBusinessMoment,
+) -> Result<i64, String> {
+    let delivery_epoch_day = entry.menu_item().delivery_epoch_day();
+    let lead_days = delivery_epoch_day.saturating_sub(moment.epoch_day());
+    if lead_days < 0 {
+        return Err(format!(
+            "menu item `{}` delivery day {} is before request day {}",
+            entry.menu_item().menu_item_id().as_str(),
+            delivery_epoch_day,
+            moment.epoch_day()
+        ));
+    }
+    let recency_score = i64::from(31_i32.saturating_sub(lead_days))
+        .checked_mul(1_000)
+        .ok_or_else(|| "recency score overflowed".to_owned())?;
+    let inventory_score = i64::from(entry.remaining_quantity())
+        .checked_mul(100)
+        .ok_or_else(|| "inventory score overflowed".to_owned())?;
+    recency_score
+        .checked_add(inventory_score)
+        .ok_or_else(|| "recommendation score overflowed".to_owned())
 }
 
 fn to_menu_discovery_item_payload(entry: &EmployeeMenuDiscoveryEntry) -> MenuDiscoveryItem {
@@ -8001,6 +8117,8 @@ mod tests {
         AppState {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             plant_id: plant,
+            recommendation_engine_runtime_enabled: false,
+            menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
             terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail: audit_trail.clone(),
             payroll_export_field_encryptor: payroll_export_field_encryptor(),
@@ -8014,6 +8132,24 @@ mod tests {
                     .expect("test pickup verifier should be valid"),
             ),
         }
+    }
+
+    fn build_state_with_recommendation_runtime(
+        now_epoch_day: i32,
+        recommendation_engine_runtime_enabled: bool,
+    ) -> AppState {
+        let mut state = build_state(now_epoch_day);
+        state.recommendation_engine_runtime_enabled = recommendation_engine_runtime_enabled;
+        state
+    }
+
+    fn failing_menu_recommendation_ranker(
+        _entries: &mut Vec<EmployeeMenuDiscoveryEntry>,
+        _at: TaipeiBusinessMoment,
+        _sort_by: MenuSortFieldQuery,
+        _sort_order: SortOrderQuery,
+    ) -> Result<(), String> {
+        Err("simulated recommendation engine outage".to_owned())
     }
 
     fn build_state_with_terminated_load_gate_employee(now_epoch_day: i32) -> AppState {
@@ -8371,6 +8507,8 @@ mod tests {
         let state = AppState {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             plant_id: plant_id("fab-a"),
+            recommendation_engine_runtime_enabled: false,
+            menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
             terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail: audit_trail.clone(),
             payroll_export_field_encryptor: payroll_export_field_encryptor(),
@@ -8567,7 +8705,7 @@ mod tests {
     }
 
     #[test]
-    fn recommendation_flag_does_not_change_core_discovery_behavior() {
+    fn recommendation_flag_is_ignored_when_runtime_feature_flag_is_off() {
         let now_epoch_day = 300;
         let state = build_state(now_epoch_day);
         let query = EmployeeMenuDiscoveryQuery {
@@ -8607,6 +8745,97 @@ mod tests {
                 .collect::<Vec<_>>(),
             "deterministic ordering should remain stable"
         );
+    }
+
+    #[test]
+    fn recommendation_ranking_is_deterministic_when_feature_flag_enabled() {
+        let now_epoch_day = 300;
+        let state = build_state_with_recommendation_runtime(now_epoch_day, true);
+        let query = EmployeeMenuDiscoveryQuery {
+            plant_id: Some("fab-a".to_owned()),
+            view: Some(MenuDiscoveryViewQuery::Week),
+            menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+            sort_by: Some(MenuSortFieldQuery::RemainingQuantity),
+            sort_order: Some(SortOrderQuery::Desc),
+            recommendation_enabled: Some(true),
+            ..EmployeeMenuDiscoveryQuery::default()
+        };
+
+        let response_a =
+            handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
+                .expect("discovery request should succeed");
+        let query = EmployeeMenuDiscoveryQuery {
+            plant_id: Some("fab-a".to_owned()),
+            view: Some(MenuDiscoveryViewQuery::Week),
+            menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+            sort_by: Some(MenuSortFieldQuery::RemainingQuantity),
+            sort_order: Some(SortOrderQuery::Desc),
+            recommendation_enabled: Some(true),
+            ..EmployeeMenuDiscoveryQuery::default()
+        };
+        let response_b =
+            handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
+                .expect("discovery request should succeed");
+
+        assert!(response_a.recommendation_requested);
+        assert!(response_a.recommendation_applied);
+        assert_eq!(
+            response_a
+                .items
+                .iter()
+                .map(|item| item.menu_item_id.clone())
+                .collect::<Vec<_>>(),
+            response_b
+                .items
+                .iter()
+                .map(|item| item.menu_item_id.clone())
+                .collect::<Vec<_>>(),
+            "recommendation ranking must remain deterministic"
+        );
+    }
+
+    #[test]
+    fn recommendation_failure_does_not_block_ordering_flow() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for recommendation failure test")
+            .epoch_day();
+        let mut state = build_state_with_recommendation_runtime(now_epoch_day, true);
+        state.menu_recommendation_ranker = failing_menu_recommendation_ranker;
+
+        let discovery_query = EmployeeMenuDiscoveryQuery {
+            plant_id: Some("fab-a".to_owned()),
+            view: Some(MenuDiscoveryViewQuery::Week),
+            menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+            recommendation_enabled: Some(true),
+            ..EmployeeMenuDiscoveryQuery::default()
+        };
+        let discovery_response = handle_list_employee_menus_at(
+            &state,
+            discovery_query,
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery should degrade gracefully when recommendations fail");
+
+        assert!(discovery_response.recommendation_requested);
+        assert!(!discovery_response.recommendation_applied);
+        assert!(
+            !discovery_response.items.is_empty(),
+            "discovery should still return deterministic items"
+        );
+
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created = handle_create_employee_order(&state, create_request)
+            .expect("ordering flow should remain available");
+        assert_eq!(created.status, "PENDING");
     }
 
     #[test]
