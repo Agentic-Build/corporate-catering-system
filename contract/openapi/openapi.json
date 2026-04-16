@@ -1672,6 +1672,50 @@
         ],
         "type": "object"
       },
+      "EmployeeRushReminderPreferences": {
+        "additionalProperties": false,
+        "properties": {
+          "demandSpikeEnabled": {
+            "type": "boolean"
+          },
+          "employeeActorId": {
+            "$ref": "#/components/schemas/ActorId"
+          },
+          "plantId": {
+            "$ref": "#/components/schemas/PlantId"
+          },
+          "preorderOpenEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "employeeActorId",
+          "plantId",
+          "preorderOpenEnabled",
+          "demandSpikeEnabled"
+        ],
+        "type": "object"
+      },
+      "EmployeeRushReminderPreferencesUpsertRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "demandSpikeEnabled": {
+            "type": "boolean"
+          },
+          "plantId": {
+            "$ref": "#/components/schemas/PlantId"
+          },
+          "preorderOpenEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "plantId",
+          "preorderOpenEnabled",
+          "demandSpikeEnabled"
+        ],
+        "type": "object"
+      },
       "ErrorCode": {
         "enum": [
           "BAD_REQUEST",
@@ -5940,6 +5984,60 @@
           },
           "strictLifecycle": true,
           "timezone": "Asia/Taipei"
+        }
+      }
+    },
+    "/api/v1/employee/rush-reminder-preferences": {
+      "put": {
+        "operationId": "upsertEmployeeRushReminderPreferences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmployeeRushReminderPreferencesUpsertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeRushReminderPreferences"
+                }
+              }
+            },
+            "description": "Employee rush reminder preferences persisted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "corporateSsoBearer": []
+          }
+        ],
+        "summary": "Update employee rush reminder preferences",
+        "tags": [
+          "Employee"
+        ],
+        "x-reminder-governance": {
+          "defaultEnabled": false,
+          "enforcePreferenceOptOut": true,
+          "featureFlag": "PRELAUNCH_RUSH_REMINDER_ENABLED",
+          "phase": "OPTIONAL_PHASE_2"
         }
       }
     },

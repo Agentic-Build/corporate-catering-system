@@ -1305,10 +1305,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         .route("/health/live", get(live_probe))
         .route("/health/startup", get(startup_probe))
         .route("/api/v1/employee/menus", get(list_employee_menus))
-        .route(
-            "/api/v1/employee/rush-reminder-preferences",
-            put(upsert_employee_rush_reminder_preferences),
-        )
         .route("/api/v1/employee/orders", post(create_employee_order))
         .route(
             "/api/v1/employee/orders/:orderId",
@@ -1394,8 +1390,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         )
         .route("/mcp/v1/tools", get(list_mcp_tools))
         .route("/mcp/v1/resources", get(list_mcp_resources))
-        .route("/mcp/v1/tools/:toolName/invoke", post(invoke_mcp_tool))
-        .with_state(state);
+        .route("/mcp/v1/tools/:toolName/invoke", post(invoke_mcp_tool));
+    let app = if rush_reminder_runtime_enabled {
+        app.route(
+            "/api/v1/employee/rush-reminder-preferences",
+            put(upsert_employee_rush_reminder_preferences),
+        )
+    } else {
+        app
+    }
+    .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(socket_addr).await?;
     tracing::info!(bind_addr = %socket_addr, "observability runtime service listening");
@@ -3197,6 +3201,15 @@ fn handle_upsert_employee_rush_reminder_preferences(
     state: &AppState,
     request: EmployeeRushReminderPreferencesUpsertRequest,
 ) -> Result<EmployeeRushReminderPreferencesPayload, (StatusCode, ErrorPayload)> {
+    if !state.rush_reminder_runtime_enabled {
+        return Err(domain_error(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "rush reminder preferences endpoint is unavailable while feature flag is disabled"
+                .to_owned(),
+        ));
+    }
+
     if request.plant_id != state.plant_id.as_str() {
         return Err(domain_error(
             StatusCode::BAD_REQUEST,
@@ -9065,6 +9078,31 @@ mod tests {
         let policy = resolve_rush_reminder_policy(false)
             .expect("disabled runtime should not require parsing reminder policy env");
         assert_eq!(policy, RushReminderPolicy::default());
+    }
+
+    #[test]
+    fn rush_reminder_preferences_endpoint_is_unavailable_when_feature_flag_is_off() {
+        let now_epoch_day = 300;
+        let state = build_state(now_epoch_day);
+
+        let error = handle_upsert_employee_rush_reminder_preferences(
+            &state,
+            EmployeeRushReminderPreferencesUpsertRequest {
+                plant_id: "fab-a".to_owned(),
+                preorder_open_enabled: false,
+                demand_spike_enabled: false,
+            },
+        )
+        .expect_err("feature-disabled reminder preference endpoint should return 404");
+        assert_eq!(error.0, StatusCode::NOT_FOUND);
+        assert_eq!(error.1.code, "NOT_FOUND");
+
+        let persisted = state
+            .rush_reminder_workflow
+            .preferences_for(&actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID))
+            .expect("feature-disabled upsert should not mutate reminder preferences");
+        assert!(persisted.preorder_open_enabled());
+        assert!(persisted.demand_spike_enabled());
     }
 
     #[test]

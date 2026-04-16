@@ -70,6 +70,8 @@ export type { EmployeeOrderPayrollLedger } from './models/EmployeeOrderPayrollLe
 export type { EmployeeOrderReplaceLineItemsPatchRequest } from './models/EmployeeOrderReplaceLineItemsPatchRequest';
 export type { EmployeeOrderStatus } from './models/EmployeeOrderStatus';
 export type { EmployeePayrollDisputeCreateRequest } from './models/EmployeePayrollDisputeCreateRequest';
+export type { EmployeeRushReminderPreferences } from './models/EmployeeRushReminderPreferences';
+export type { EmployeeRushReminderPreferencesUpsertRequest } from './models/EmployeeRushReminderPreferencesUpsertRequest';
 export type { ErrorCode } from './models/ErrorCode';
 export type { ErrorDetail } from './models/ErrorDetail';
 export type { ErrorResponse } from './models/ErrorResponse';

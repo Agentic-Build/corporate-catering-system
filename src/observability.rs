@@ -514,6 +514,9 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
         "listEmployeeMenus" | "listEmployeeMenus:browse" | "listEmployeeMenus:search" => {
             ("/api/v1/employee/menus", "GET")
         }
+        "upsertEmployeeRushReminderPreferences" => {
+            ("/api/v1/employee/rush-reminder-preferences", "PUT")
+        }
         "createEmployeeOrder" | "createEmployeeOrder:deliverability" => {
             ("/api/v1/employee/orders", "POST")
         }
@@ -856,6 +859,19 @@ impl CorrelatedOperation {
             "operation.finished",
             "observability operation span finished",
             &self.attributes,
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::http_route_and_method;
+
+    #[test]
+    fn telemetry_route_mapping_covers_rush_reminder_preferences_operation() {
+        assert_eq!(
+            http_route_and_method("upsertEmployeeRushReminderPreferences"),
+            ("/api/v1/employee/rush-reminder-preferences", "PUT")
         );
     }
 }

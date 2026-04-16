@@ -7,6 +7,8 @@ import type { EmployeeOrderCreateRequest } from '../models/EmployeeOrderCreateRe
 import type { EmployeeOrderPatchRequest } from '../models/EmployeeOrderPatchRequest';
 import type { EmployeeOrderPayrollLedger } from '../models/EmployeeOrderPayrollLedger';
 import type { EmployeePayrollDisputeCreateRequest } from '../models/EmployeePayrollDisputeCreateRequest';
+import type { EmployeeRushReminderPreferences } from '../models/EmployeeRushReminderPreferences';
+import type { EmployeeRushReminderPreferencesUpsertRequest } from '../models/EmployeeRushReminderPreferencesUpsertRequest';
 import type { MenuDiscoveryView } from '../models/MenuDiscoveryView';
 import type { MenuHealthTag } from '../models/MenuHealthTag';
 import type { MenuPage } from '../models/MenuPage';
@@ -218,6 +220,28 @@ export class EmployeeService {
                 403: `Authenticated actor is not authorized to perform this operation.`,
                 404: `Requested resource was not found.`,
                 409: `Request conflicts with business constraints.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Update employee rush reminder preferences
+     * @param requestBody
+     * @returns EmployeeRushReminderPreferences Employee rush reminder preferences persisted
+     * @throws ApiError
+     */
+    public static upsertEmployeeRushReminderPreferences(
+        requestBody: EmployeeRushReminderPreferencesUpsertRequest,
+    ): CancelablePromise<EmployeeRushReminderPreferences> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/employee/rush-reminder-preferences',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
                 500: `Internal server error while processing request.`,
             },
         });
