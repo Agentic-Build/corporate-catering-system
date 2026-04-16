@@ -59,6 +59,25 @@ describe("auth middleware hooks", () => {
     );
   });
 
+  it("returns 400 for malformed encoded scoped path segments", async () => {
+    const cookies = new MemoryCookies();
+    const event = createRequestEvent("/vendor/vendors/%E0%A4%A", cookies, {
+      headers: {
+        "x-mock-role": "vendor"
+      }
+    });
+
+    await expectHttpStatus(
+      Promise.resolve(
+        handle({
+          event,
+          resolve: async () => new Response("ok")
+        } as never)
+      ),
+      400
+    );
+  });
+
   it("allows guarded route when role and scope are valid", async () => {
     const cookies = new MemoryCookies();
     const event = createRequestEvent("/vendor/vendors/ven-mock-001", cookies, {

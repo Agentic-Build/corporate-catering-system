@@ -42,8 +42,12 @@ export const handle: Handle = async ({ event, resolve }) => {
       }
     }
 
-    const scopeRequirements = resolveScopeRequirements(event.url.pathname);
-    for (const requirement of scopeRequirements) {
+    const scopeResolution = resolveScopeRequirements(event.url.pathname);
+    if (scopeResolution.hasMalformedEncoding) {
+      throw error(400, `malformed scoped path encoding in ${event.url.pathname}`);
+    }
+
+    for (const requirement of scopeResolution.requirements) {
       if (hasPermission(auth.actor, "scope:all")) {
         continue;
       }

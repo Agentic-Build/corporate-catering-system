@@ -11,6 +11,11 @@ export interface ScopeRequirement {
   value: string;
 }
 
+export interface ScopeResolutionResult {
+  requirements: ScopeRequirement[];
+  hasMalformedEncoding: boolean;
+}
+
 const ROLE_GUARDS: readonly RoleGuard[] = [
   {
     prefix: "/employee",
@@ -96,8 +101,9 @@ export function resolveRoleGuard(pathname: string): RoleGuard | null {
   return null;
 }
 
-export function resolveScopeRequirements(pathname: string): ScopeRequirement[] {
+export function resolveScopeRequirements(pathname: string): ScopeResolutionResult {
   const requirements: ScopeRequirement[] = [];
+  let hasMalformedEncoding = false;
 
   for (const rule of SCOPE_RULES) {
     const match = pathname.match(rule.pattern);
@@ -110,11 +116,18 @@ export function resolveScopeRequirements(pathname: string): ScopeRequirement[] {
       continue;
     }
 
-    requirements.push({
-      kind: rule.kind,
-      value: decodeURIComponent(captured)
-    });
+    try {
+      requirements.push({
+        kind: rule.kind,
+        value: decodeURIComponent(captured)
+      });
+    } catch {
+      hasMalformedEncoding = true;
+    }
   }
 
-  return requirements;
+  return {
+    requirements,
+    hasMalformedEncoding
+  };
 }
