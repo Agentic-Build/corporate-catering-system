@@ -49,6 +49,46 @@ spec:
                 secretKeyRef:
                   name: corporate-catering-secrets
                   key: database_url
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: object_storage_endpoint
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: object_storage_access_key_id
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: object_storage_secret_access_key
+            - name: MINIO_BUCKET_MENU_IMAGES
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: object_storage_bucket_menu_images
+            - name: MINIO_BUCKET_COMPLIANCE_EVIDENCE
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: object_storage_bucket_compliance_evidence
+            - name: MINIO_BUCKET_FULFILLMENT_EXPORTS
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: object_storage_bucket_fulfillment_exports
+            - name: OBJECT_STORAGE_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: object_storage_region
+            - name: OBJECT_STORAGE_KEY_NAMESPACE
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: object_storage_key_namespace
           readinessProbe:
             httpGet:
               path: /health/ready

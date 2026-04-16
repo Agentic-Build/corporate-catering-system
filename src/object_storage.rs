@@ -500,6 +500,18 @@ impl ObjectStorageUploadPipeline {
         self.ensure_managed_bucket(bucket)
     }
 
+    pub fn menu_bucket(&self) -> &str {
+        self.config.menu_bucket.as_str()
+    }
+
+    pub fn compliance_bucket(&self) -> &str {
+        self.config.compliance_bucket.as_str()
+    }
+
+    pub fn fulfillment_bucket(&self) -> &str {
+        self.config.fulfillment_bucket.as_str()
+    }
+
     fn make_reference(
         &self,
         bucket_target: BucketTarget,

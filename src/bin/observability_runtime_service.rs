@@ -157,14 +157,12 @@ const OBJECT_STORAGE_REGION_ENV: &str = "OBJECT_STORAGE_REGION";
 const OBJECT_STORAGE_KEY_NAMESPACE_ENV: &str = "OBJECT_STORAGE_KEY_NAMESPACE";
 const OBJECT_STORAGE_UPLOAD_TTL_SECONDS_ENV: &str = "OBJECT_STORAGE_UPLOAD_TTL_SECONDS";
 const OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS_ENV: &str = "OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS";
-const DEFAULT_OBJECT_STORAGE_ENDPOINT: &str = "127.0.0.1:9000";
-const DEFAULT_OBJECT_STORAGE_ACCESS_KEY: &str = "corporate-catering";
-const DEFAULT_OBJECT_STORAGE_SECRET_KEY: &str = "corporate-catering-dev";
-const DEFAULT_OBJECT_STORAGE_REGION: &str = "us-east-1";
+#[cfg(test)]
 const DEFAULT_OBJECT_STORAGE_KEY_NAMESPACE: &str = "corporate-catering";
+#[cfg(test)]
 const DEFAULT_MENU_IMAGE_BUCKET: &str = "menu-assets";
+#[cfg(test)]
 const DEFAULT_COMPLIANCE_BUCKET: &str = "compliance-evidence";
-const DEFAULT_FULFILLMENT_BUCKET: &str = "fulfillment-exports";
 const DEFAULT_OBJECT_STORAGE_UPLOAD_TTL_SECONDS: u16 = 900;
 const DEFAULT_OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS: u16 = 600;
 const AUTHORIZATION_BEARER_PREFIX: &str = "Bearer ";
@@ -3760,23 +3758,24 @@ fn parse_bool_env_default_false(key: &str) -> Result<bool, String> {
     }
 }
 
+fn load_required_non_empty_env(key: &str) -> Result<String, String> {
+    let raw = std::env::var(key).map_err(|_| format!("{key} environment variable is required"))?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(format!("{key} environment variable must be non-empty"));
+    }
+    Ok(trimmed.to_owned())
+}
+
 fn parse_object_storage_upload_pipeline_from_env() -> Result<ObjectStorageUploadPipeline, String> {
-    let endpoint = std::env::var(MINIO_ENDPOINT_ENV)
-        .unwrap_or_else(|_| DEFAULT_OBJECT_STORAGE_ENDPOINT.to_owned());
-    let access_key_id = std::env::var(MINIO_ROOT_USER_ENV)
-        .unwrap_or_else(|_| DEFAULT_OBJECT_STORAGE_ACCESS_KEY.to_owned());
-    let secret_access_key = std::env::var(MINIO_ROOT_PASSWORD_ENV)
-        .unwrap_or_else(|_| DEFAULT_OBJECT_STORAGE_SECRET_KEY.to_owned());
-    let menu_bucket = std::env::var(MINIO_BUCKET_MENU_IMAGES_ENV)
-        .unwrap_or_else(|_| DEFAULT_MENU_IMAGE_BUCKET.to_owned());
-    let compliance_bucket = std::env::var(MINIO_BUCKET_COMPLIANCE_EVIDENCE_ENV)
-        .unwrap_or_else(|_| DEFAULT_COMPLIANCE_BUCKET.to_owned());
-    let fulfillment_bucket = std::env::var(MINIO_BUCKET_FULFILLMENT_EXPORTS_ENV)
-        .unwrap_or_else(|_| DEFAULT_FULFILLMENT_BUCKET.to_owned());
-    let region = std::env::var(OBJECT_STORAGE_REGION_ENV)
-        .unwrap_or_else(|_| DEFAULT_OBJECT_STORAGE_REGION.to_owned());
-    let key_namespace = std::env::var(OBJECT_STORAGE_KEY_NAMESPACE_ENV)
-        .unwrap_or_else(|_| DEFAULT_OBJECT_STORAGE_KEY_NAMESPACE.to_owned());
+    let endpoint = load_required_non_empty_env(MINIO_ENDPOINT_ENV)?;
+    let access_key_id = load_required_non_empty_env(MINIO_ROOT_USER_ENV)?;
+    let secret_access_key = load_required_non_empty_env(MINIO_ROOT_PASSWORD_ENV)?;
+    let menu_bucket = load_required_non_empty_env(MINIO_BUCKET_MENU_IMAGES_ENV)?;
+    let compliance_bucket = load_required_non_empty_env(MINIO_BUCKET_COMPLIANCE_EVIDENCE_ENV)?;
+    let fulfillment_bucket = load_required_non_empty_env(MINIO_BUCKET_FULFILLMENT_EXPORTS_ENV)?;
+    let region = load_required_non_empty_env(OBJECT_STORAGE_REGION_ENV)?;
+    let key_namespace = load_required_non_empty_env(OBJECT_STORAGE_KEY_NAMESPACE_ENV)?;
     let upload_ttl_seconds = parse_positive_u16_env(
         OBJECT_STORAGE_UPLOAD_TTL_SECONDS_ENV,
         DEFAULT_OBJECT_STORAGE_UPLOAD_TTL_SECONDS,
@@ -5772,16 +5771,16 @@ fn vendor_has_compliance_document_reference(
 }
 
 fn object_ref_matches_vendor_owner_scope(
-    _state: &AppState,
+    state: &AppState,
     object_ref: &ObjectStorageReference,
     vendor_scope: &str,
 ) -> bool {
     let (bucket, key) = object_ref.split_parts();
-    let artifact_prefix = if bucket == configured_menu_object_bucket().as_str() {
+    let artifact_prefix = if bucket == state.object_storage_upload_pipeline.menu_bucket() {
         "menu-images"
-    } else if bucket == configured_compliance_object_bucket().as_str() {
+    } else if bucket == state.object_storage_upload_pipeline.compliance_bucket() {
         "compliance-documents"
-    } else if bucket == configured_fulfillment_object_bucket().as_str() {
+    } else if bucket == state.object_storage_upload_pipeline.fulfillment_bucket() {
         "fulfillment-artifacts"
     } else {
         return false;
@@ -5789,6 +5788,7 @@ fn object_ref_matches_vendor_owner_scope(
     object_key_matches_vendor_owner_scope(key, artifact_prefix, vendor_scope)
 }
 
+#[cfg(test)]
 fn configured_menu_object_bucket() -> String {
     std::env::var(MINIO_BUCKET_MENU_IMAGES_ENV)
         .ok()
@@ -5797,20 +5797,13 @@ fn configured_menu_object_bucket() -> String {
         .unwrap_or_else(|| DEFAULT_MENU_IMAGE_BUCKET.to_owned())
 }
 
+#[cfg(test)]
 fn configured_compliance_object_bucket() -> String {
     std::env::var(MINIO_BUCKET_COMPLIANCE_EVIDENCE_ENV)
         .ok()
         .map(|bucket| bucket.trim().to_owned())
         .filter(|bucket| !bucket.is_empty())
         .unwrap_or_else(|| DEFAULT_COMPLIANCE_BUCKET.to_owned())
-}
-
-fn configured_fulfillment_object_bucket() -> String {
-    std::env::var(MINIO_BUCKET_FULFILLMENT_EXPORTS_ENV)
-        .ok()
-        .map(|bucket| bucket.trim().to_owned())
-        .filter(|bucket| !bucket.is_empty())
-        .unwrap_or_else(|| DEFAULT_FULFILLMENT_BUCKET.to_owned())
 }
 
 #[cfg(test)]

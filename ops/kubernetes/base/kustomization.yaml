@@ -6,6 +6,7 @@ resources:
   - deployment.yaml
   - deployment-mcp.yaml
   - deployment-compliance-worker.yaml
+  - job-object-storage-provision.yaml
   - service.yaml
   - hpa.yaml
   - hpa-mcp.yaml
