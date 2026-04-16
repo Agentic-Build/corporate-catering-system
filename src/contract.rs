@@ -490,8 +490,7 @@ pub fn canonical_openapi_spec() -> Value {
               { "$ref": "#/components/parameters/HealthTagFilterQuery" },
               { "$ref": "#/components/parameters/PriceMinMinorQuery" },
               { "$ref": "#/components/parameters/PriceMaxMinorQuery" },
-              { "$ref": "#/components/parameters/RemainingQuantityFilterQuery" },
-              { "$ref": "#/components/parameters/RecommendationEnabledQuery" }
+              { "$ref": "#/components/parameters/RemainingQuantityFilterQuery" }
             ],
             "responses": {
               "200": {
@@ -1973,16 +1972,6 @@ pub fn canonical_openapi_spec() -> Value {
               "type": "integer",
               "minimum": 0,
               "maximum": 2000
-            }
-          },
-          "RecommendationEnabledQuery": {
-            "name": "recommendationEnabled",
-            "in": "query",
-            "required": false,
-            "description": "Recommendation flag is accepted for forward compatibility but deterministic filters remain authoritative in MVP.",
-            "schema": {
-              "type": "boolean",
-              "default": false
             }
           },
           "IncludeAuditTransitionsQuery": {

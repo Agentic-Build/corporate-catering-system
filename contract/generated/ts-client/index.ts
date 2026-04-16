@@ -146,7 +146,6 @@ export type { PlantIdFilterQuery } from './models/PlantIdFilterQuery';
 export type { PlantIdQuery } from './models/PlantIdQuery';
 export type { PriceMaxMinorQuery } from './models/PriceMaxMinorQuery';
 export type { PriceMinMinorQuery } from './models/PriceMinMinorQuery';
-export type { RecommendationEnabledQuery } from './models/RecommendationEnabledQuery';
 export type { RemainingQuantityFilterQuery } from './models/RemainingQuantityFilterQuery';
 export type { Role } from './models/Role';
 export type { ServiceWindowActiveAtQuery } from './models/ServiceWindowActiveAtQuery';

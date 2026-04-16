@@ -1479,7 +1479,6 @@ fn employee_discovery_contract_supports_multi_day_preorder_and_deterministic_fil
             "#/components/parameters/PriceMinMinorQuery".to_owned(),
             "#/components/parameters/PriceMaxMinorQuery".to_owned(),
             "#/components/parameters/RemainingQuantityFilterQuery".to_owned(),
-            "#/components/parameters/RecommendationEnabledQuery".to_owned(),
         ])
     );
 

@@ -38,7 +38,6 @@ export class EmployeeService {
      * @param priceMinMinor
      * @param priceMaxMinor
      * @param remainingQuantity Exact inventory counter filter. Matches only items whose remaining quantity equals this value.
-     * @param recommendationEnabled Recommendation flag is accepted for forward compatibility but deterministic filters remain authoritative in MVP.
      * @returns MenuPage Deterministic multi-day menu discovery page
      * @throws ApiError
      */
@@ -58,7 +57,6 @@ export class EmployeeService {
         priceMinMinor?: number,
         priceMaxMinor?: number,
         remainingQuantity?: number,
-        recommendationEnabled: boolean = false,
     ): CancelablePromise<MenuPage> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -79,7 +77,6 @@ export class EmployeeService {
                 'priceMinMinor': priceMinMinor,
                 'priceMaxMinor': priceMaxMinor,
                 'remainingQuantity': remainingQuantity,
-                'recommendationEnabled': recommendationEnabled,
             },
             errors: {
                 400: `Request payload or query is invalid.`,

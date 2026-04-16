@@ -955,7 +955,6 @@ struct EmployeeMenuDiscoveryQuery {
     price_min_minor: Option<u32>,
     price_max_minor: Option<u32>,
     remaining_quantity: Option<u16>,
-    recommendation_enabled: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -3153,7 +3152,7 @@ fn handle_list_employee_menus_at(
             "pageSize must be between 1 and 200".to_owned(),
         ));
     }
-    let recommendation_requested = query.recommendation_enabled.unwrap_or(false);
+    let recommendation_requested = state.recommendation_engine_runtime_enabled;
 
     let compliance_lifecycle = read_compliance_lifecycle(state)?;
     let discovery_gateway = HttpEmployeeDiscoveryExecutionGateway::new(
@@ -8684,7 +8683,6 @@ mod tests {
             price_min_minor: Some(10000),
             price_max_minor: Some(13000),
             remaining_quantity: Some(3),
-            recommendation_enabled: Some(false),
             ..EmployeeMenuDiscoveryQuery::default()
         };
 
@@ -8705,14 +8703,13 @@ mod tests {
     }
 
     #[test]
-    fn recommendation_flag_is_ignored_when_runtime_feature_flag_is_off() {
+    fn recommendation_is_not_requested_when_runtime_feature_flag_is_off() {
         let now_epoch_day = 300;
         let state = build_state(now_epoch_day);
         let query = EmployeeMenuDiscoveryQuery {
             plant_id: Some("fab-a".to_owned()),
             view: Some(MenuDiscoveryViewQuery::Week),
             menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
-            recommendation_enabled: Some(true),
             ..EmployeeMenuDiscoveryQuery::default()
         };
 
@@ -8723,14 +8720,13 @@ mod tests {
             plant_id: Some("fab-a".to_owned()),
             view: Some(MenuDiscoveryViewQuery::Week),
             menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
-            recommendation_enabled: Some(true),
             ..EmployeeMenuDiscoveryQuery::default()
         };
         let response_b =
             handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
                 .expect("discovery request should succeed");
 
-        assert!(response_a.recommendation_requested);
+        assert!(!response_a.recommendation_requested);
         assert!(!response_a.recommendation_applied);
         assert_eq!(
             response_a
@@ -8757,7 +8753,6 @@ mod tests {
             menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
             sort_by: Some(MenuSortFieldQuery::RemainingQuantity),
             sort_order: Some(SortOrderQuery::Desc),
-            recommendation_enabled: Some(true),
             ..EmployeeMenuDiscoveryQuery::default()
         };
 
@@ -8770,7 +8765,6 @@ mod tests {
             menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
             sort_by: Some(MenuSortFieldQuery::RemainingQuantity),
             sort_order: Some(SortOrderQuery::Desc),
-            recommendation_enabled: Some(true),
             ..EmployeeMenuDiscoveryQuery::default()
         };
         let response_b =
@@ -8806,7 +8800,6 @@ mod tests {
             plant_id: Some("fab-a".to_owned()),
             view: Some(MenuDiscoveryViewQuery::Week),
             menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
-            recommendation_enabled: Some(true),
             ..EmployeeMenuDiscoveryQuery::default()
         };
         let discovery_response = handle_list_employee_menus_at(

@@ -378,16 +378,6 @@
           "type": "integer"
         }
       },
-      "RecommendationEnabledQuery": {
-        "description": "Recommendation flag is accepted for forward compatibility but deterministic filters remain authoritative in MVP.",
-        "in": "query",
-        "name": "recommendationEnabled",
-        "required": false,
-        "schema": {
-          "default": false,
-          "type": "boolean"
-        }
-      },
       "RemainingQuantityFilterQuery": {
         "description": "Exact inventory counter filter. Matches only items whose remaining quantity equals this value.",
         "in": "query",
@@ -5540,9 +5530,6 @@
           },
           {
             "$ref": "#/components/parameters/RemainingQuantityFilterQuery"
-          },
-          {
-            "$ref": "#/components/parameters/RecommendationEnabledQuery"
           }
         ],
         "responses": {
