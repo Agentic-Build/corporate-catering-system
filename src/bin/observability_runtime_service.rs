@@ -32,7 +32,8 @@ use corporate_catering_system::payroll::{
     OrderPayrollView, PayrollDeductionRecord, PayrollDisputeId, PayrollDisputeRecord,
     PayrollDisputeTraceEvent, PayrollExchangeBatch, PayrollExchangeBatchId, PayrollExportPage,
     PayrollHrApiSyncOutcome, PayrollLedgerError, PayrollLedgerService, PayrollLedgerSourceKind,
-    PayrollLedgerSourceRef, PayrollRetentionPolicy, PayrollSortField as PayrollSortFieldDomain,
+    PayrollLedgerSourceRef, PayrollReconciliationMetadata, PayrollRetentionPolicy,
+    PayrollSettlementLockReceipt, PayrollSortField as PayrollSortFieldDomain,
     SortOrder as PayrollSortOrderDomain,
 };
 use corporate_catering_system::pickup_totp::{
@@ -71,7 +72,7 @@ const LOAD_GATE_PAYROLL_ACTOR_ID: &str = "payroll-load-gate";
 const LOAD_GATE_PAYROLL_DISPUTE_OWNER_ACTOR_ID: &str = "payroll-dispute-owner";
 const PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV: &str = "PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS";
 
-const ALL_AUDIT_ACTIONS: [AuditAction; 27] = [
+const ALL_AUDIT_ACTIONS: [AuditAction; 29] = [
     AuditAction::CreateEmployeeOrder,
     AuditAction::UpdateEmployeeOrder,
     AuditAction::VerifyPickupOrder,
@@ -97,6 +98,8 @@ const ALL_AUDIT_ACTIONS: [AuditAction; 27] = [
     AuditAction::AssignPayrollDisputeOwner,
     AuditAction::ResolvePayrollDispute,
     AuditAction::ExportPayrollSftpBatch,
+    AuditAction::LockPayrollSettlementCycle,
+    AuditAction::UnlockPayrollSettlementCycle,
     AuditAction::SyncPayrollHrApiAdjunct,
     AuditAction::PurgePayrollData,
 ];
@@ -386,6 +389,16 @@ struct PayrollExportQuery {
     sort_order: Option<SortOrderQuery>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PayrollMonthlySettlementCloseRequest {
+    cycle_key: Option<String>,
+    page: Option<usize>,
+    page_size: Option<usize>,
+    sort_by: Option<PayrollSortFieldQuery>,
+    sort_order: Option<SortOrderQuery>,
+}
+
 #[derive(Debug, Deserialize, Clone, Copy)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 enum PayrollHrApiSyncOutcomePayload {
@@ -407,6 +420,12 @@ impl PayrollHrApiSyncOutcomePayload {
 struct PayrollHrApiSyncRequest {
     outcome: Option<PayrollHrApiSyncOutcomePayload>,
     note: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PayrollSettlementCycleLockRequest {
+    reason: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -438,10 +457,29 @@ struct PayrollExchangeBatchPayload {
     pay_period: String,
     cycle_key: String,
     generated_at: String,
+    cycle_start_date: String,
+    cycle_end_date: String,
     snapshot_checksum: String,
+    reconciliation: PayrollReconciliationPayload,
     exchange_path: &'static str,
     hr_api_sync_status: String,
     hr_api_synced_at: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollReconciliationPayload {
+    total_records: usize,
+    total_amount_minor: u64,
+    total_source_entries: usize,
+    ready_records: usize,
+    locked_records: usize,
+    refunded_records: usize,
+    disputed_records: usize,
+    deduction_failed_records: usize,
+    employee_terminated_records: usize,
+    required_exception_classes: Vec<String>,
+    present_exception_classes: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -456,6 +494,25 @@ struct PayrollDeductionPagePayload {
 #[serde(rename_all = "camelCase")]
 struct PayrollHrApiSyncResponse {
     exchange_batch: PayrollExchangeBatchPayload,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollSettlementCycleLockResponse {
+    settlement_cycle: PayrollSettlementCycleLockPayload,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollSettlementCycleLockPayload {
+    cycle_key: String,
+    pay_period: String,
+    lock_state: String,
+    batch_id: String,
+    snapshot_checksum: String,
+    reason: String,
+    changed_at: String,
+    actor_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -746,6 +803,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         .route(
             "/api/v1/admin/payroll/retention-purge",
             post(purge_payroll_data),
+        )
+        .route(
+            "/api/v1/admin/payroll/monthly-settlements/close",
+            post(close_payroll_monthly_settlement),
+        )
+        .route(
+            "/api/v1/admin/payroll/monthly-settlements/:cycleKey/lock",
+            post(lock_payroll_settlement_cycle),
+        )
+        .route(
+            "/api/v1/admin/payroll/monthly-settlements/:cycleKey/unlock",
+            post(unlock_payroll_settlement_cycle),
         )
         .route(
             "/api/v1/integrations/payroll/deductions",
@@ -2169,6 +2238,194 @@ fn handle_export_payroll_deductions(
     Ok(to_payroll_deduction_page_payload(&export_page))
 }
 
+async fn close_payroll_monthly_settlement(
+    State(state): State<AppState>,
+    request: Option<Json<PayrollMonthlySettlementCloseRequest>>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "closePayrollMonthlySettlement",
+        Some("load-gate"),
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_close_payroll_monthly_settlement(
+        &state,
+        request.map_or_else(PayrollMonthlySettlementCloseRequest::default, |payload| {
+            payload.0
+        }),
+    ) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("monthly settlement payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("monthly settlement error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_close_payroll_monthly_settlement(
+    state: &AppState,
+    request: PayrollMonthlySettlementCloseRequest,
+) -> Result<PayrollDeductionPagePayload, (StatusCode, ErrorPayload)> {
+    let payroll_actor = load_gate_payroll_actor()?;
+    let page = request.page.unwrap_or(1);
+    let page_size = request.page_size.unwrap_or(20);
+    let sort_by = request
+        .sort_by
+        .unwrap_or(PayrollSortFieldQuery::DeliveryDate)
+        .into_domain();
+    let sort_order = request
+        .sort_order
+        .unwrap_or(SortOrderQuery::Asc)
+        .into_payroll_domain();
+    let occurred_at = current_audit_timestamp()?;
+    let export_page = state
+        .payroll_ledger_service
+        .close_monthly_settlement(
+            &payroll_actor,
+            request.cycle_key.as_deref(),
+            page,
+            page_size,
+            sort_by,
+            sort_order,
+            occurred_at,
+        )
+        .map_err(map_payroll_ledger_error)?;
+
+    Ok(to_payroll_deduction_page_payload(&export_page))
+}
+
+async fn unlock_payroll_settlement_cycle(
+    State(state): State<AppState>,
+    Path(cycle_key): Path<String>,
+    request: Json<PayrollSettlementCycleLockRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "unlockPayrollSettlementCycle",
+        Some("load-gate"),
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_unlock_payroll_settlement_cycle(&state, cycle_key, request.0) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("payroll settlement unlock payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "payroll settlement unlock error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_unlock_payroll_settlement_cycle(
+    state: &AppState,
+    cycle_key: String,
+    request: PayrollSettlementCycleLockRequest,
+) -> Result<PayrollSettlementCycleLockResponse, (StatusCode, ErrorPayload)> {
+    let committee_actor = load_gate_committee_admin_actor()?;
+    let occurred_at = current_audit_timestamp()?;
+    let reason = parse_required_patch_note(request.reason, "reason")?;
+    let receipt = state
+        .payroll_ledger_service
+        .unlock_cycle_for_recompute(&committee_actor, &cycle_key, reason, occurred_at)
+        .map_err(map_payroll_ledger_error)?;
+
+    Ok(PayrollSettlementCycleLockResponse {
+        settlement_cycle: to_payroll_settlement_cycle_lock_payload(&receipt),
+    })
+}
+
+async fn lock_payroll_settlement_cycle(
+    State(state): State<AppState>,
+    Path(cycle_key): Path<String>,
+    request: Json<PayrollSettlementCycleLockRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "lockPayrollSettlementCycle",
+        Some("load-gate"),
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_lock_payroll_settlement_cycle(&state, cycle_key, request.0) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("payroll settlement lock payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "payroll settlement lock error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_lock_payroll_settlement_cycle(
+    state: &AppState,
+    cycle_key: String,
+    request: PayrollSettlementCycleLockRequest,
+) -> Result<PayrollSettlementCycleLockResponse, (StatusCode, ErrorPayload)> {
+    let committee_actor = load_gate_committee_admin_actor()?;
+    let occurred_at = current_audit_timestamp()?;
+    let reason = parse_required_patch_note(request.reason, "reason")?;
+    let receipt = state
+        .payroll_ledger_service
+        .lock_cycle(&committee_actor, &cycle_key, reason, occurred_at)
+        .map_err(map_payroll_ledger_error)?;
+
+    Ok(PayrollSettlementCycleLockResponse {
+        settlement_cycle: to_payroll_settlement_cycle_lock_payload(&receipt),
+    })
+}
+
 async fn sync_payroll_hr_api_adjunct(
     State(state): State<AppState>,
     Path(batch_id): Path<String>,
@@ -2367,10 +2624,54 @@ fn to_payroll_exchange_batch_payload(batch: &PayrollExchangeBatch) -> PayrollExc
         pay_period: batch.pay_period().to_owned(),
         cycle_key: batch.cycle_key().to_owned(),
         generated_at: audit_timestamp_to_iso_datetime(batch.generated_at()),
+        cycle_start_date: epoch_day_to_iso_date(batch.cycle_start_epoch_day()),
+        cycle_end_date: epoch_day_to_iso_date(batch.cycle_end_epoch_day()),
         snapshot_checksum: batch.snapshot_checksum().to_owned(),
+        reconciliation: to_payroll_reconciliation_payload(batch.reconciliation()),
         exchange_path: "SFTP_BATCH",
         hr_api_sync_status,
         hr_api_synced_at,
+    }
+}
+
+fn to_payroll_reconciliation_payload(
+    reconciliation: &PayrollReconciliationMetadata,
+) -> PayrollReconciliationPayload {
+    PayrollReconciliationPayload {
+        total_records: reconciliation.total_records(),
+        total_amount_minor: reconciliation.total_amount_minor(),
+        total_source_entries: reconciliation.total_source_entries(),
+        ready_records: reconciliation.ready_records(),
+        locked_records: reconciliation.locked_records(),
+        refunded_records: reconciliation.refunded_records(),
+        disputed_records: reconciliation.disputed_records(),
+        deduction_failed_records: reconciliation.deduction_failed_records(),
+        employee_terminated_records: reconciliation.employee_terminated_records(),
+        required_exception_classes: reconciliation
+            .required_exception_classes()
+            .iter()
+            .map(|class| class.as_str().to_owned())
+            .collect::<Vec<_>>(),
+        present_exception_classes: reconciliation
+            .present_exception_classes()
+            .iter()
+            .map(|class| class.as_str().to_owned())
+            .collect::<Vec<_>>(),
+    }
+}
+
+fn to_payroll_settlement_cycle_lock_payload(
+    receipt: &PayrollSettlementLockReceipt,
+) -> PayrollSettlementCycleLockPayload {
+    PayrollSettlementCycleLockPayload {
+        cycle_key: receipt.cycle_key().to_owned(),
+        pay_period: receipt.pay_period().to_owned(),
+        lock_state: receipt.lock_state().as_str().to_owned(),
+        batch_id: receipt.batch_id().as_str().to_owned(),
+        snapshot_checksum: receipt.snapshot_checksum().to_owned(),
+        reason: receipt.reason().to_owned(),
+        changed_at: audit_timestamp_to_iso_datetime(receipt.changed_at()),
+        actor_id: receipt.actor_id().as_str().to_owned(),
     }
 }
 
@@ -2492,7 +2793,8 @@ fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayl
         }
         PayrollLedgerError::OrderNotRegistered(_)
         | PayrollLedgerError::DisputeNotFound(_)
-        | PayrollLedgerError::ExchangeBatchNotFound(_) => {
+        | PayrollLedgerError::ExchangeBatchNotFound(_)
+        | PayrollLedgerError::SettlementCycleNotFound { .. } => {
             domain_error(StatusCode::NOT_FOUND, "NOT_FOUND", error.to_string())
         }
         PayrollLedgerError::InvalidDisputeTransition { .. }
@@ -2500,7 +2802,9 @@ fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayl
         | PayrollLedgerError::OrderOwnerMismatch { .. }
         | PayrollLedgerError::OrderCurrencyMismatch { .. }
         | PayrollLedgerError::OrderDeliveryDateMismatch { .. }
-        | PayrollLedgerError::CycleKeyPayPeriodConflict { .. } => {
+        | PayrollLedgerError::CycleKeyPayPeriodConflict { .. }
+        | PayrollLedgerError::SettlementCycleAlreadyLocked { .. }
+        | PayrollLedgerError::SettlementCycleAlreadyUnlocked { .. } => {
             domain_error(StatusCode::CONFLICT, "CONFLICT", error.to_string())
         }
         PayrollLedgerError::InvalidOperationId
@@ -2511,6 +2815,7 @@ fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayl
         | PayrollLedgerError::InvalidDisputeReason(_)
         | PayrollLedgerError::InvalidPayPeriod(_)
         | PayrollLedgerError::InvalidCycleKey(_)
+        | PayrollLedgerError::InvalidSettlementReason(_)
         | PayrollLedgerError::InvalidPagination { .. }
         | PayrollLedgerError::InvalidMoney(_)
         | PayrollLedgerError::RefundAmountOutOfRange { .. } => {
@@ -3937,6 +4242,16 @@ mod tests {
         TaipeiBusinessMoment::new(epoch_day, minute_of_day).expect("Taipei moment should be valid")
     }
 
+    fn previous_pay_period_for_epoch_day(epoch_day: i32) -> String {
+        let (year, month, _) = civil_from_days(i64::from(epoch_day));
+        let (previous_year, previous_month) = if month == 1 {
+            (year.saturating_sub(1), 12)
+        } else {
+            (year, month - 1)
+        };
+        format!("{previous_year:04}-{previous_month:02}")
+    }
+
     fn committee_admin() -> AuthenticatedActorContext {
         AuthenticatedActorContext::new(
             actor_id("committee-discovery-test"),
@@ -4768,5 +5083,90 @@ mod tests {
             .find(|item| item.order_id == created_order.order_id)
             .expect("created order should exist in exported deductions");
         assert_eq!(exported.status, "EMPLOYEE_TERMINATED");
+    }
+
+    #[test]
+    fn monthly_settlement_close_handler_uses_previous_taipei_cycle_defaults() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+
+        let closed = handle_close_payroll_monthly_settlement(
+            &state,
+            PayrollMonthlySettlementCloseRequest::default(),
+        )
+        .expect("monthly close should succeed");
+
+        let expected_pay_period = previous_pay_period_for_epoch_day(now_epoch_day);
+        assert_eq!(closed.exchange_batch.pay_period, expected_pay_period);
+        assert_eq!(
+            closed.exchange_batch.cycle_key,
+            format!("monthly-{}", expected_pay_period)
+        );
+        assert_eq!(closed.exchange_batch.exchange_path, "SFTP_BATCH");
+        assert_eq!(
+            closed
+                .exchange_batch
+                .reconciliation
+                .required_exception_classes,
+            vec![
+                "DISPUTED".to_owned(),
+                "DEDUCTION_FAILED".to_owned(),
+                "EMPLOYEE_TERMINATED".to_owned(),
+                "REFUNDED".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn settlement_cycle_lock_handlers_require_reason_and_toggle_lock_state() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+
+        let closed = handle_close_payroll_monthly_settlement(
+            &state,
+            PayrollMonthlySettlementCloseRequest::default(),
+        )
+        .expect("monthly close should succeed");
+        let cycle_key = closed.exchange_batch.cycle_key.clone();
+
+        let unlock_error = handle_unlock_payroll_settlement_cycle(
+            &state,
+            cycle_key.clone(),
+            PayrollSettlementCycleLockRequest::default(),
+        )
+        .expect_err("unlock without reason should fail");
+        assert_eq!(unlock_error.0, StatusCode::BAD_REQUEST);
+
+        let unlocked = handle_unlock_payroll_settlement_cycle(
+            &state,
+            cycle_key.clone(),
+            PayrollSettlementCycleLockRequest {
+                reason: Some("authorized recompute for corrected totals".to_owned()),
+            },
+        )
+        .expect("unlock with reason should succeed");
+        assert_eq!(unlocked.settlement_cycle.lock_state, "UNLOCKED");
+
+        let lock_error = handle_lock_payroll_settlement_cycle(
+            &state,
+            cycle_key.clone(),
+            PayrollSettlementCycleLockRequest::default(),
+        )
+        .expect_err("lock without reason should fail");
+        assert_eq!(lock_error.0, StatusCode::BAD_REQUEST);
+
+        let locked = handle_lock_payroll_settlement_cycle(
+            &state,
+            cycle_key,
+            PayrollSettlementCycleLockRequest {
+                reason: Some("manual governance relock".to_owned()),
+            },
+        )
+        .expect("lock with reason should succeed");
+        assert_eq!(locked.settlement_cycle.lock_state, "LOCKED");
     }
 }

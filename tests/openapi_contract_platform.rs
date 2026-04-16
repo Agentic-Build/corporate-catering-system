@@ -773,6 +773,151 @@ fn payroll_endpoints_have_tested_error_code_to_schema_refs() {
         "#/components/schemas/PayrollRetentionPurgeRequest"
     );
 
+    let monthly_close_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/admin/payroll/monthly-settlements/close",
+        "post",
+    );
+    assert_error_response_ref(
+        monthly_close_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        monthly_close_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        monthly_close_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        monthly_close_operation,
+        "409",
+        "#/components/responses/Conflict",
+    );
+    assert_error_response_ref(
+        monthly_close_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+    assert_eq!(
+        monthly_close_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/PayrollMonthlySettlementCloseRequest"
+    );
+
+    let lock_cycle_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/lock",
+        "post",
+    );
+    assert_error_response_ref(
+        lock_cycle_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        lock_cycle_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        lock_cycle_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        lock_cycle_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+    assert_error_response_ref(
+        lock_cycle_operation,
+        "409",
+        "#/components/responses/Conflict",
+    );
+    assert_error_response_ref(
+        lock_cycle_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+    assert_eq!(
+        lock_cycle_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/PayrollSettlementCycleLockRequest"
+    );
+    let lock_cycle_parameter_refs = lock_cycle_operation["parameters"]
+        .as_array()
+        .expect("lock cycle parameters should be array")
+        .iter()
+        .map(|parameter| {
+            parameter["$ref"]
+                .as_str()
+                .expect("lock cycle parameter should be $ref")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        lock_cycle_parameter_refs,
+        BTreeSet::from(["#/components/parameters/PayrollSettlementCycleKeyPath".to_owned(),])
+    );
+
+    let unlock_cycle_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/unlock",
+        "post",
+    );
+    assert_error_response_ref(
+        unlock_cycle_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        unlock_cycle_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        unlock_cycle_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        unlock_cycle_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+    assert_error_response_ref(
+        unlock_cycle_operation,
+        "409",
+        "#/components/responses/Conflict",
+    );
+    assert_error_response_ref(
+        unlock_cycle_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+    assert_eq!(
+        unlock_cycle_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/PayrollSettlementCycleLockRequest"
+    );
+    let unlock_cycle_parameter_refs = unlock_cycle_operation["parameters"]
+        .as_array()
+        .expect("unlock cycle parameters should be array")
+        .iter()
+        .map(|parameter| {
+            parameter["$ref"]
+                .as_str()
+                .expect("unlock cycle parameter should be $ref")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        unlock_cycle_parameter_refs,
+        BTreeSet::from(["#/components/parameters/PayrollSettlementCycleKeyPath".to_owned(),])
+    );
+
     let payroll_export_operation =
         operation_by_path_and_method(&spec, "/api/v1/integrations/payroll/deductions", "get");
     assert_error_response_ref(

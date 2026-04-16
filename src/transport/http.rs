@@ -52,7 +52,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 27] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 30] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -169,6 +169,21 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 27] = [
         HttpMethod::Post,
         "/api/v1/admin/payroll/retention-purge",
         "purgePayrollData",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/admin/payroll/monthly-settlements/close",
+        "closePayrollMonthlySettlement",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/lock",
+        "lockPayrollSettlementCycle",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/unlock",
+        "unlockPayrollSettlementCycle",
     ),
     RuntimeHttpRoute::new(
         HttpMethod::Get,

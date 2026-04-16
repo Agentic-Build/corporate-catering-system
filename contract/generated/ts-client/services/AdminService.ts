@@ -11,9 +11,13 @@ import type { AuditInvestigationResponse } from '../models/AuditInvestigationRes
 import type { AuditResponsibilityResponse } from '../models/AuditResponsibilityResponse';
 import type { AuditRetentionPurgeRequest } from '../models/AuditRetentionPurgeRequest';
 import type { AuditRetentionPurgeResponse } from '../models/AuditRetentionPurgeResponse';
+import type { PayrollDeductionPage } from '../models/PayrollDeductionPage';
 import type { PayrollDispute } from '../models/PayrollDispute';
+import type { PayrollMonthlySettlementCloseRequest } from '../models/PayrollMonthlySettlementCloseRequest';
 import type { PayrollRetentionPurgeRequest } from '../models/PayrollRetentionPurgeRequest';
 import type { PayrollRetentionPurgeResponse } from '../models/PayrollRetentionPurgeResponse';
+import type { PayrollSettlementCycleLockRequest } from '../models/PayrollSettlementCycleLockRequest';
+import type { PayrollSettlementCycleLockResponse } from '../models/PayrollSettlementCycleLockResponse';
 import type { PlantId } from '../models/PlantId';
 import type { SortOrder } from '../models/SortOrder';
 import type { TaipeiBusinessDateTime } from '../models/TaipeiBusinessDateTime';
@@ -228,6 +232,87 @@ export class AdminService {
             url: '/api/v1/admin/payroll/disputes/{disputeId}',
             path: {
                 'disputeId': disputeId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                409: `Request conflicts with business constraints.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Close previous Taipei monthly payroll settlement cycle and emit SFTP snapshot
+     * @param requestBody
+     * @returns PayrollDeductionPage Monthly payroll settlement snapshot
+     * @throws ApiError
+     */
+    public static closePayrollMonthlySettlement(
+        requestBody?: PayrollMonthlySettlementCloseRequest,
+    ): CancelablePromise<PayrollDeductionPage> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/payroll/monthly-settlements/close',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                409: `Request conflicts with business constraints.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Lock a monthly payroll settlement cycle with explicit reason
+     * @param cycleKey
+     * @param requestBody
+     * @returns PayrollSettlementCycleLockResponse Settlement cycle lock state
+     * @throws ApiError
+     */
+    public static lockPayrollSettlementCycle(
+        cycleKey: string,
+        requestBody: PayrollSettlementCycleLockRequest,
+    ): CancelablePromise<PayrollSettlementCycleLockResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/payroll/monthly-settlements/{cycleKey}/lock',
+            path: {
+                'cycleKey': cycleKey,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                409: `Request conflicts with business constraints.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Unlock a monthly payroll settlement cycle for authorized recomputation
+     * @param cycleKey
+     * @param requestBody
+     * @returns PayrollSettlementCycleLockResponse Settlement cycle lock state
+     * @throws ApiError
+     */
+    public static unlockPayrollSettlementCycle(
+        cycleKey: string,
+        requestBody: PayrollSettlementCycleLockRequest,
+    ): CancelablePromise<PayrollSettlementCycleLockResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/payroll/monthly-settlements/{cycleKey}/unlock',
+            path: {
+                'cycleKey': cycleKey,
             },
             body: requestBody,
             mediaType: 'application/json',

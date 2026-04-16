@@ -153,6 +153,8 @@ pub enum AuditAction {
     AssignPayrollDisputeOwner,
     ResolvePayrollDispute,
     ExportPayrollSftpBatch,
+    LockPayrollSettlementCycle,
+    UnlockPayrollSettlementCycle,
     SyncPayrollHrApiAdjunct,
     PurgePayrollData,
 }
@@ -187,6 +189,8 @@ impl AuditAction {
             Self::AssignPayrollDisputeOwner => "ASSIGN_PAYROLL_DISPUTE_OWNER",
             Self::ResolvePayrollDispute => "RESOLVE_PAYROLL_DISPUTE",
             Self::ExportPayrollSftpBatch => "EXPORT_PAYROLL_SFTP_BATCH",
+            Self::LockPayrollSettlementCycle => "LOCK_PAYROLL_SETTLEMENT_CYCLE",
+            Self::UnlockPayrollSettlementCycle => "UNLOCK_PAYROLL_SETTLEMENT_CYCLE",
             Self::SyncPayrollHrApiAdjunct => "SYNC_PAYROLL_HR_API_ADJUNCT",
             Self::PurgePayrollData => "PURGE_PAYROLL_DATA",
         }
@@ -921,6 +925,8 @@ enum PersistedAuditAction {
     AssignPayrollDisputeOwner,
     ResolvePayrollDispute,
     ExportPayrollSftpBatch,
+    LockPayrollSettlementCycle,
+    UnlockPayrollSettlementCycle,
     SyncPayrollHrApiAdjunct,
     PurgePayrollData,
 }
@@ -1193,6 +1199,10 @@ fn persisted_audit_action_from_domain(action: AuditAction) -> PersistedAuditActi
         AuditAction::AssignPayrollDisputeOwner => PersistedAuditAction::AssignPayrollDisputeOwner,
         AuditAction::ResolvePayrollDispute => PersistedAuditAction::ResolvePayrollDispute,
         AuditAction::ExportPayrollSftpBatch => PersistedAuditAction::ExportPayrollSftpBatch,
+        AuditAction::LockPayrollSettlementCycle => PersistedAuditAction::LockPayrollSettlementCycle,
+        AuditAction::UnlockPayrollSettlementCycle => {
+            PersistedAuditAction::UnlockPayrollSettlementCycle
+        }
         AuditAction::SyncPayrollHrApiAdjunct => PersistedAuditAction::SyncPayrollHrApiAdjunct,
         AuditAction::PurgePayrollData => PersistedAuditAction::PurgePayrollData,
     }
@@ -1241,6 +1251,10 @@ fn domain_audit_action_from_persisted(action: PersistedAuditAction) -> AuditActi
         PersistedAuditAction::AssignPayrollDisputeOwner => AuditAction::AssignPayrollDisputeOwner,
         PersistedAuditAction::ResolvePayrollDispute => AuditAction::ResolvePayrollDispute,
         PersistedAuditAction::ExportPayrollSftpBatch => AuditAction::ExportPayrollSftpBatch,
+        PersistedAuditAction::LockPayrollSettlementCycle => AuditAction::LockPayrollSettlementCycle,
+        PersistedAuditAction::UnlockPayrollSettlementCycle => {
+            AuditAction::UnlockPayrollSettlementCycle
+        }
         PersistedAuditAction::SyncPayrollHrApiAdjunct => AuditAction::SyncPayrollHrApiAdjunct,
         PersistedAuditAction::PurgePayrollData => AuditAction::PurgePayrollData,
     }

@@ -61,12 +61,15 @@ pub enum HttpOperation {
     PurgeAuditEvidence,
     UpdateAdminPayrollDispute,
     PurgePayrollData,
+    CloseMonthlyPayrollSettlement,
+    LockPayrollSettlementCycle,
+    UnlockPayrollSettlementCycle,
     ExportPayrollDeductions,
     SyncPayrollHrApiAdjunct,
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 27] = [
+    pub const ALL: [Self; 30] = [
         Self::ListEmployeeMenus,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
@@ -92,6 +95,9 @@ impl HttpOperation {
         Self::PurgeAuditEvidence,
         Self::UpdateAdminPayrollDispute,
         Self::PurgePayrollData,
+        Self::CloseMonthlyPayrollSettlement,
+        Self::LockPayrollSettlementCycle,
+        Self::UnlockPayrollSettlementCycle,
         Self::ExportPayrollDeductions,
         Self::SyncPayrollHrApiAdjunct,
     ];
@@ -125,6 +131,9 @@ impl HttpOperation {
             Self::PurgeAuditEvidence => "purgeAuditEvidence",
             Self::UpdateAdminPayrollDispute => "updateAdminPayrollDispute",
             Self::PurgePayrollData => "purgePayrollData",
+            Self::CloseMonthlyPayrollSettlement => "closePayrollMonthlySettlement",
+            Self::LockPayrollSettlementCycle => "lockPayrollSettlementCycle",
+            Self::UnlockPayrollSettlementCycle => "unlockPayrollSettlementCycle",
             Self::ExportPayrollDeductions => "exportPayrollDeductions",
             Self::SyncPayrollHrApiAdjunct => "syncPayrollHrApiAdjunct",
         }
@@ -152,6 +161,9 @@ impl HttpOperation {
             | Self::RunVendorComplianceLifecycle
             | Self::PurgeAuditEvidence
             | Self::PurgePayrollData
+            | Self::CloseMonthlyPayrollSettlement
+            | Self::LockPayrollSettlementCycle
+            | Self::UnlockPayrollSettlementCycle
             | Self::SyncPayrollHrApiAdjunct => HttpMethod::Post,
             Self::UpdateEmployeeOrder | Self::UpdateAdminPayrollDispute => HttpMethod::Patch,
             Self::UpsertVendorMenuItem
@@ -198,6 +210,15 @@ impl HttpOperation {
             Self::PurgeAuditEvidence => "/api/v1/admin/audit/retention-purge",
             Self::UpdateAdminPayrollDispute => "/api/v1/admin/payroll/disputes/{disputeId}",
             Self::PurgePayrollData => "/api/v1/admin/payroll/retention-purge",
+            Self::CloseMonthlyPayrollSettlement => {
+                "/api/v1/admin/payroll/monthly-settlements/close"
+            }
+            Self::LockPayrollSettlementCycle => {
+                "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/lock"
+            }
+            Self::UnlockPayrollSettlementCycle => {
+                "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/unlock"
+            }
             Self::ExportPayrollDeductions => "/api/v1/integrations/payroll/deductions",
             Self::SyncPayrollHrApiAdjunct => {
                 "/api/v1/integrations/payroll/sftp-batches/{batchId}/hr-api-sync"
@@ -231,7 +252,10 @@ impl HttpOperation {
             | Self::QueryAuditResponsibilities
             | Self::PurgeAuditEvidence
             | Self::UpdateAdminPayrollDispute
-            | Self::PurgePayrollData => HttpAudience::Admin,
+            | Self::PurgePayrollData
+            | Self::CloseMonthlyPayrollSettlement
+            | Self::LockPayrollSettlementCycle
+            | Self::UnlockPayrollSettlementCycle => HttpAudience::Admin,
             Self::ExportPayrollDeductions | Self::SyncPayrollHrApiAdjunct => {
                 HttpAudience::Integration
             }
@@ -253,10 +277,12 @@ impl HttpOperation {
             | Self::ReviewVendorApplication
             | Self::RunVendorComplianceLifecycle
             | Self::PurgeAuditEvidence
-            | Self::PurgePayrollData => Some(Action::ManageVendorComplianceLifecycle),
-            Self::UpdateAdminPayrollDispute | Self::SyncPayrollHrApiAdjunct => {
-                Some(Action::ExportPayrollDeductions)
-            }
+            | Self::PurgePayrollData
+            | Self::LockPayrollSettlementCycle
+            | Self::UnlockPayrollSettlementCycle => Some(Action::ManageVendorComplianceLifecycle),
+            Self::UpdateAdminPayrollDispute
+            | Self::CloseMonthlyPayrollSettlement
+            | Self::SyncPayrollHrApiAdjunct => Some(Action::ExportPayrollDeductions),
             Self::ListEmployeeMenus
             | Self::GetEmployeeOrderPayrollLedger
             | Self::ListVendorOrders
@@ -304,6 +330,9 @@ impl HttpOperation {
             "purgeAuditEvidence" => Some(Self::PurgeAuditEvidence),
             "updateAdminPayrollDispute" => Some(Self::UpdateAdminPayrollDispute),
             "purgePayrollData" => Some(Self::PurgePayrollData),
+            "closePayrollMonthlySettlement" => Some(Self::CloseMonthlyPayrollSettlement),
+            "lockPayrollSettlementCycle" => Some(Self::LockPayrollSettlementCycle),
+            "unlockPayrollSettlementCycle" => Some(Self::UnlockPayrollSettlementCycle),
             "exportPayrollDeductions" => Some(Self::ExportPayrollDeductions),
             "syncPayrollHrApiAdjunct" => Some(Self::SyncPayrollHrApiAdjunct),
             _ => None,
@@ -1260,6 +1289,113 @@ pub fn canonical_openapi_spec() -> Value {
             }
           }
         },
+        "/api/v1/admin/payroll/monthly-settlements/close": {
+          "post": {
+            "tags": ["Admin"],
+            "summary": "Close previous Taipei monthly payroll settlement cycle and emit SFTP snapshot",
+            "operationId": HttpOperation::CloseMonthlyPayrollSettlement.operation_id(),
+            "x-payroll-exchange-governance": {
+              "coreExchangePath": "SFTP_BATCH",
+              "optionalAdjunctPath": "HR_API_SYNC",
+              "ledgerMode": "APPEND_ONLY",
+              "cycleBoundaryTimezone": "Asia/Taipei"
+            },
+            "security": [{ "corporateSsoBearer": [] }],
+            "requestBody": {
+              "required": false,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/PayrollMonthlySettlementCloseRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Monthly payroll settlement snapshot",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/PayrollDeductionPage" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "409": { "$ref": "#/components/responses/Conflict" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/lock": {
+          "post": {
+            "tags": ["Admin"],
+            "summary": "Lock a monthly payroll settlement cycle with explicit reason",
+            "operationId": HttpOperation::LockPayrollSettlementCycle.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/PayrollSettlementCycleKeyPath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/PayrollSettlementCycleLockRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Settlement cycle lock state",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/PayrollSettlementCycleLockResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "409": { "$ref": "#/components/responses/Conflict" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/unlock": {
+          "post": {
+            "tags": ["Admin"],
+            "summary": "Unlock a monthly payroll settlement cycle for authorized recomputation",
+            "operationId": HttpOperation::UnlockPayrollSettlementCycle.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/PayrollSettlementCycleKeyPath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/PayrollSettlementCycleLockRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Settlement cycle lock state",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/PayrollSettlementCycleLockResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "409": { "$ref": "#/components/responses/Conflict" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
         "/api/v1/integrations/payroll/deductions": {
           "get": {
             "tags": ["Integration"],
@@ -1412,6 +1548,15 @@ pub fn canonical_openapi_spec() -> Value {
           "PayrollCycleKeyQuery": {
             "name": "cycleKey",
             "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._-]{1,64}$"
+            }
+          },
+          "PayrollSettlementCycleKeyPath": {
+            "name": "cycleKey",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string",
@@ -3312,6 +3457,103 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "additionalProperties": false
           },
+          "PayrollMonthlySettlementCloseRequest": {
+            "type": "object",
+            "properties": {
+              "cycleKey": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._-]{1,64}$"
+              },
+              "page": { "type": "integer", "minimum": 1 },
+              "pageSize": { "type": "integer", "minimum": 1, "maximum": 200 },
+              "sortBy": { "$ref": "#/components/schemas/PayrollSortField" },
+              "sortOrder": { "$ref": "#/components/schemas/SortOrder" }
+            },
+            "additionalProperties": false
+          },
+          "PayrollSettlementCycleLockState": {
+            "type": "string",
+            "enum": ["LOCKED", "UNLOCKED"]
+          },
+          "PayrollSettlementCycleLockRequest": {
+            "type": "object",
+            "required": ["reason"],
+            "properties": {
+              "reason": { "type": "string", "minLength": 1, "maxLength": 280 }
+            },
+            "additionalProperties": false
+          },
+          "PayrollSettlementCycleLock": {
+            "type": "object",
+            "required": [
+              "cycleKey",
+              "payPeriod",
+              "lockState",
+              "batchId",
+              "snapshotChecksum",
+              "reason",
+              "changedAt",
+              "actorId"
+            ],
+            "properties": {
+              "cycleKey": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._-]{1,64}$"
+              },
+              "payPeriod": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$" },
+              "lockState": { "$ref": "#/components/schemas/PayrollSettlementCycleLockState" },
+              "batchId": { "type": "string", "pattern": "^sftp-[0-9]{6}-[0-9a-f]{16}$" },
+              "snapshotChecksum": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "reason": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "changedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "actorId": { "$ref": "#/components/schemas/ActorId" }
+            },
+            "additionalProperties": false
+          },
+          "PayrollSettlementCycleLockResponse": {
+            "type": "object",
+            "required": ["settlementCycle"],
+            "properties": {
+              "settlementCycle": { "$ref": "#/components/schemas/PayrollSettlementCycleLock" }
+            },
+            "additionalProperties": false
+          },
+          "PayrollReconciliation": {
+            "type": "object",
+            "required": [
+              "totalRecords",
+              "totalAmountMinor",
+              "totalSourceEntries",
+              "readyRecords",
+              "lockedRecords",
+              "refundedRecords",
+              "disputedRecords",
+              "deductionFailedRecords",
+              "employeeTerminatedRecords",
+              "requiredExceptionClasses",
+              "presentExceptionClasses"
+            ],
+            "properties": {
+              "totalRecords": { "type": "integer", "minimum": 0 },
+              "totalAmountMinor": { "type": "integer", "minimum": 0 },
+              "totalSourceEntries": { "type": "integer", "minimum": 0 },
+              "readyRecords": { "type": "integer", "minimum": 0 },
+              "lockedRecords": { "type": "integer", "minimum": 0 },
+              "refundedRecords": { "type": "integer", "minimum": 0 },
+              "disputedRecords": { "type": "integer", "minimum": 0 },
+              "deductionFailedRecords": { "type": "integer", "minimum": 0 },
+              "employeeTerminatedRecords": { "type": "integer", "minimum": 0 },
+              "requiredExceptionClasses": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/PayrollExceptionClass" }
+              },
+              "presentExceptionClasses": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/PayrollExceptionClass" }
+              }
+            },
+            "additionalProperties": false
+          },
           "PayrollExchangeBatch": {
             "type": "object",
             "required": [
@@ -3319,7 +3561,10 @@ pub fn canonical_openapi_spec() -> Value {
               "payPeriod",
               "cycleKey",
               "generatedAt",
+              "cycleStartDate",
+              "cycleEndDate",
               "snapshotChecksum",
+              "reconciliation",
               "exchangePath",
               "hrApiSyncStatus"
             ],
@@ -3331,10 +3576,13 @@ pub fn canonical_openapi_spec() -> Value {
                 "pattern": "^[A-Za-z0-9._-]{1,64}$"
               },
               "generatedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "cycleStartDate": { "type": "string", "format": "date" },
+              "cycleEndDate": { "type": "string", "format": "date" },
               "snapshotChecksum": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}$"
               },
+              "reconciliation": { "$ref": "#/components/schemas/PayrollReconciliation" },
               "exchangePath": { "type": "string", "enum": ["SFTP_BATCH"] },
               "hrApiSyncStatus": {
                 "type": "string",
@@ -3373,6 +3621,15 @@ pub fn canonical_openapi_spec() -> Value {
               "DISPUTED",
               "DEDUCTION_FAILED",
               "EMPLOYEE_TERMINATED"
+            ]
+          },
+          "PayrollExceptionClass": {
+            "type": "string",
+            "enum": [
+              "DISPUTED",
+              "DEDUCTION_FAILED",
+              "EMPLOYEE_TERMINATED",
+              "REFUNDED"
             ]
           },
           "PayrollDeductionRecord": {

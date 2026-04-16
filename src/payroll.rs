@@ -17,9 +17,12 @@ const OPEN_PAYROLL_DISPUTE_OPERATION_ID: &str = "openPayrollDispute";
 const ASSIGN_PAYROLL_DISPUTE_OWNER_OPERATION_ID: &str = "assignPayrollDisputeOwner";
 const RESOLVE_PAYROLL_DISPUTE_OPERATION_ID: &str = "resolvePayrollDispute";
 const EXPORT_PAYROLL_SFTP_BATCH_OPERATION_ID: &str = "exportPayrollSftpBatch";
+const LOCK_PAYROLL_SETTLEMENT_CYCLE_OPERATION_ID: &str = "lockPayrollSettlementCycle";
+const UNLOCK_PAYROLL_SETTLEMENT_CYCLE_OPERATION_ID: &str = "unlockPayrollSettlementCycle";
 const SYNC_PAYROLL_HR_API_OPERATION_ID: &str = "syncPayrollHrApiAdjunct";
 const PURGE_PAYROLL_DATA_OPERATION_ID: &str = "purgePayrollData";
 const PAYROLL_EXCHANGE_CORRELATION_PREFIX: &str = "payroll-exchange";
+const PAYROLL_SETTLEMENT_CORRELATION_PREFIX: &str = "payroll-settlement";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PayrollRetentionPolicy {
@@ -451,6 +454,101 @@ impl PayrollDeductionStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PayrollExceptionClass {
+    Disputed,
+    DeductionFailed,
+    EmployeeTerminated,
+    Refunded,
+}
+
+impl PayrollExceptionClass {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Disputed => "DISPUTED",
+            Self::DeductionFailed => "DEDUCTION_FAILED",
+            Self::EmployeeTerminated => "EMPLOYEE_TERMINATED",
+            Self::Refunded => "REFUNDED",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PayrollReconciliationMetadata {
+    total_records: usize,
+    total_amount_minor: u64,
+    total_source_entries: usize,
+    ready_records: usize,
+    locked_records: usize,
+    refunded_records: usize,
+    disputed_records: usize,
+    deduction_failed_records: usize,
+    employee_terminated_records: usize,
+    required_exception_classes: Vec<PayrollExceptionClass>,
+    present_exception_classes: Vec<PayrollExceptionClass>,
+}
+
+impl PayrollReconciliationMetadata {
+    pub const fn total_records(&self) -> usize {
+        self.total_records
+    }
+
+    pub const fn total_amount_minor(&self) -> u64 {
+        self.total_amount_minor
+    }
+
+    pub const fn total_source_entries(&self) -> usize {
+        self.total_source_entries
+    }
+
+    pub const fn ready_records(&self) -> usize {
+        self.ready_records
+    }
+
+    pub const fn locked_records(&self) -> usize {
+        self.locked_records
+    }
+
+    pub const fn refunded_records(&self) -> usize {
+        self.refunded_records
+    }
+
+    pub const fn disputed_records(&self) -> usize {
+        self.disputed_records
+    }
+
+    pub const fn deduction_failed_records(&self) -> usize {
+        self.deduction_failed_records
+    }
+
+    pub const fn employee_terminated_records(&self) -> usize {
+        self.employee_terminated_records
+    }
+
+    pub fn required_exception_classes(&self) -> &[PayrollExceptionClass] {
+        &self.required_exception_classes
+    }
+
+    pub fn present_exception_classes(&self) -> &[PayrollExceptionClass] {
+        &self.present_exception_classes
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PayrollSettlementLockState {
+    Locked,
+    Unlocked,
+}
+
+impl PayrollSettlementLockState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Locked => "LOCKED",
+            Self::Unlocked => "UNLOCKED",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PayrollDeductionRecord {
     employee_actor_id: ActorId,
@@ -544,6 +642,52 @@ impl fmt::Display for PayrollExchangeBatchId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PayrollSettlementLockReceipt {
+    cycle_key: String,
+    pay_period: String,
+    lock_state: PayrollSettlementLockState,
+    batch_id: PayrollExchangeBatchId,
+    snapshot_checksum: String,
+    reason: String,
+    changed_at: AuditTimestamp,
+    actor_id: ActorId,
+}
+
+impl PayrollSettlementLockReceipt {
+    pub fn cycle_key(&self) -> &str {
+        &self.cycle_key
+    }
+
+    pub fn pay_period(&self) -> &str {
+        &self.pay_period
+    }
+
+    pub const fn lock_state(&self) -> PayrollSettlementLockState {
+        self.lock_state
+    }
+
+    pub fn batch_id(&self) -> &PayrollExchangeBatchId {
+        &self.batch_id
+    }
+
+    pub fn snapshot_checksum(&self) -> &str {
+        &self.snapshot_checksum
+    }
+
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    pub const fn changed_at(&self) -> AuditTimestamp {
+        self.changed_at
+    }
+
+    pub fn actor_id(&self) -> &ActorId {
+        &self.actor_id
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HrApiSyncReceipt {
     synced_at: AuditTimestamp,
     actor_id: ActorId,
@@ -570,8 +714,11 @@ pub struct PayrollExchangeBatch {
     pay_period: String,
     cycle_key: String,
     generated_at: AuditTimestamp,
+    cycle_start_epoch_day: i32,
+    cycle_end_epoch_day: i32,
     order_ids: Vec<OrderId>,
     snapshot_checksum: String,
+    reconciliation: PayrollReconciliationMetadata,
     snapshot_records: Vec<PayrollDeductionRecord>,
     hr_api_sync_receipt: Option<HrApiSyncReceipt>,
 }
@@ -593,12 +740,24 @@ impl PayrollExchangeBatch {
         self.generated_at
     }
 
+    pub const fn cycle_start_epoch_day(&self) -> i32 {
+        self.cycle_start_epoch_day
+    }
+
+    pub const fn cycle_end_epoch_day(&self) -> i32 {
+        self.cycle_end_epoch_day
+    }
+
     pub fn order_ids(&self) -> &[OrderId] {
         &self.order_ids
     }
 
     pub fn snapshot_checksum(&self) -> &str {
         &self.snapshot_checksum
+    }
+
+    pub fn reconciliation(&self) -> &PayrollReconciliationMetadata {
+        &self.reconciliation
     }
 
     pub fn hr_api_sync_receipt(&self) -> Option<&HrApiSyncReceipt> {
@@ -1151,6 +1310,7 @@ impl PayrollLedgerService {
         if page == 0 || page_size == 0 || page_size > 500 {
             return Err(PayrollLedgerError::InvalidPagination { page, page_size });
         }
+        let (cycle_start_epoch_day, cycle_end_epoch_day) = pay_period_bounds(pay_period)?;
 
         let mut state = lock_state(&self.state)?;
         let previous_state = state.clone();
@@ -1171,20 +1331,27 @@ impl PayrollLedgerService {
                     actual_pay_period: pay_period.to_owned(),
                 });
             }
-            let (paged_records, total_items) = paginate_records(
-                batch.snapshot_records.clone(),
-                page,
-                page_size,
-                sort_by,
-                sort_order,
-            );
-            return Ok(PayrollExportPage {
-                items: paged_records,
-                total_items,
-                page,
-                page_size,
-                batch,
-            });
+            let lock_state = state
+                .cycle_lock_state_by_cycle
+                .get(&cycle_key)
+                .copied()
+                .unwrap_or(PayrollSettlementLockState::Locked);
+            if lock_state == PayrollSettlementLockState::Locked {
+                let (paged_records, total_items) = paginate_records(
+                    batch.snapshot_records.clone(),
+                    page,
+                    page_size,
+                    sort_by,
+                    sort_order,
+                );
+                return Ok(PayrollExportPage {
+                    items: paged_records,
+                    total_items,
+                    page,
+                    page_size,
+                    batch,
+                });
+            }
         }
 
         let records = build_deduction_records_locked(&state, pay_period)?;
@@ -1192,6 +1359,7 @@ impl PayrollLedgerService {
             .iter()
             .map(|record| record.order_id.clone())
             .collect::<Vec<_>>();
+        let reconciliation = compute_reconciliation_metadata(&records);
         let snapshot_checksum = compute_cycle_snapshot_checksum(pay_period, &cycle_key, &records);
         let locked_orders = state
             .locked_orders_by_pay_period
@@ -1215,8 +1383,11 @@ impl PayrollLedgerService {
             pay_period: pay_period.to_owned(),
             cycle_key: cycle_key.clone(),
             generated_at: occurred_at,
+            cycle_start_epoch_day,
+            cycle_end_epoch_day,
             order_ids,
             snapshot_checksum,
+            reconciliation,
             snapshot_records: records,
             hr_api_sync_receipt: None,
         };
@@ -1226,6 +1397,9 @@ impl PayrollLedgerService {
         state
             .exchange_batch_ids_by_cycle
             .insert(cycle_key.clone(), batch_id.clone());
+        state
+            .cycle_lock_state_by_cycle
+            .insert(cycle_key.clone(), PayrollSettlementLockState::Locked);
 
         if let Err(error) = self.append_audit_event(
             actor,
@@ -1255,6 +1429,167 @@ impl PayrollLedgerService {
             page,
             page_size,
             batch,
+        })
+    }
+
+    pub fn close_monthly_settlement(
+        &self,
+        actor: &AuthenticatedActorContext,
+        cycle_key: Option<&str>,
+        page: usize,
+        page_size: usize,
+        sort_by: PayrollSortField,
+        sort_order: SortOrder,
+        occurred_at: AuditTimestamp,
+    ) -> Result<PayrollExportPage, PayrollLedgerError> {
+        let pay_period = previous_pay_period_for_epoch_day(occurred_at.epoch_day());
+        let cycle_key = cycle_key
+            .map(normalize_cycle_key)
+            .transpose()?
+            .unwrap_or_else(|| default_monthly_cycle_key(&pay_period));
+        self.export_sftp_batch(
+            actor,
+            &pay_period,
+            &cycle_key,
+            page,
+            page_size,
+            sort_by,
+            sort_order,
+            occurred_at,
+        )
+    }
+
+    pub fn lock_cycle(
+        &self,
+        actor: &AuthenticatedActorContext,
+        cycle_key: &str,
+        reason: impl Into<String>,
+        occurred_at: AuditTimestamp,
+    ) -> Result<PayrollSettlementLockReceipt, PayrollLedgerError> {
+        ensure_role(actor, Role::CommitteeAdmin)?;
+        let cycle_key = normalize_cycle_key(cycle_key)?;
+        let reason = normalize_settlement_reason(reason.into())?;
+
+        let mut state = lock_state(&self.state)?;
+        let previous_state = state.clone();
+
+        let batch_id = state
+            .exchange_batch_ids_by_cycle
+            .get(&cycle_key)
+            .cloned()
+            .ok_or_else(|| PayrollLedgerError::SettlementCycleNotFound {
+                cycle_key: cycle_key.clone(),
+            })?;
+        let batch = state
+            .exchange_batches
+            .get(&batch_id)
+            .ok_or_else(|| PayrollLedgerError::ExchangeBatchNotFound(batch_id.clone()))?
+            .clone();
+        let current_lock_state = state
+            .cycle_lock_state_by_cycle
+            .get(&cycle_key)
+            .copied()
+            .unwrap_or(PayrollSettlementLockState::Locked);
+        if current_lock_state == PayrollSettlementLockState::Locked {
+            return Err(PayrollLedgerError::SettlementCycleAlreadyLocked { cycle_key });
+        }
+        state
+            .cycle_lock_state_by_cycle
+            .insert(cycle_key.clone(), PayrollSettlementLockState::Locked);
+
+        if let Err(error) = self.append_audit_event(
+            actor,
+            LOCK_PAYROLL_SETTLEMENT_CYCLE_OPERATION_ID,
+            AuditAction::LockPayrollSettlementCycle,
+            AuditEntityType::Settlement,
+            cycle_key.clone(),
+            format!(
+                "lock payroll settlement cycleKey={cycle_key} payPeriod={} reason={reason}",
+                batch.pay_period()
+            ),
+            settlement_correlation_id(&cycle_key).map_err(PayrollLedgerError::AuditTrail)?,
+            occurred_at,
+        ) {
+            *state = previous_state;
+            return Err(error);
+        }
+
+        Ok(PayrollSettlementLockReceipt {
+            cycle_key,
+            pay_period: batch.pay_period().to_owned(),
+            lock_state: PayrollSettlementLockState::Locked,
+            batch_id,
+            snapshot_checksum: batch.snapshot_checksum().to_owned(),
+            reason,
+            changed_at: occurred_at,
+            actor_id: actor.actor_id().clone(),
+        })
+    }
+
+    pub fn unlock_cycle_for_recompute(
+        &self,
+        actor: &AuthenticatedActorContext,
+        cycle_key: &str,
+        reason: impl Into<String>,
+        occurred_at: AuditTimestamp,
+    ) -> Result<PayrollSettlementLockReceipt, PayrollLedgerError> {
+        ensure_role(actor, Role::CommitteeAdmin)?;
+        let cycle_key = normalize_cycle_key(cycle_key)?;
+        let reason = normalize_settlement_reason(reason.into())?;
+
+        let mut state = lock_state(&self.state)?;
+        let previous_state = state.clone();
+
+        let batch_id = state
+            .exchange_batch_ids_by_cycle
+            .get(&cycle_key)
+            .cloned()
+            .ok_or_else(|| PayrollLedgerError::SettlementCycleNotFound {
+                cycle_key: cycle_key.clone(),
+            })?;
+        let batch = state
+            .exchange_batches
+            .get(&batch_id)
+            .ok_or_else(|| PayrollLedgerError::ExchangeBatchNotFound(batch_id.clone()))?
+            .clone();
+        let current_lock_state = state
+            .cycle_lock_state_by_cycle
+            .get(&cycle_key)
+            .copied()
+            .unwrap_or(PayrollSettlementLockState::Locked);
+        if current_lock_state == PayrollSettlementLockState::Unlocked {
+            return Err(PayrollLedgerError::SettlementCycleAlreadyUnlocked { cycle_key });
+        }
+        state
+            .cycle_lock_state_by_cycle
+            .insert(cycle_key.clone(), PayrollSettlementLockState::Unlocked);
+
+        if let Err(error) = self.append_audit_event(
+            actor,
+            UNLOCK_PAYROLL_SETTLEMENT_CYCLE_OPERATION_ID,
+            AuditAction::UnlockPayrollSettlementCycle,
+            AuditEntityType::Settlement,
+            cycle_key.clone(),
+            format!(
+                "unlock payroll settlement cycleKey={cycle_key} payPeriod={} reason={reason}",
+                batch.pay_period()
+            ),
+            settlement_correlation_id(&cycle_key).map_err(PayrollLedgerError::AuditTrail)?,
+            occurred_at,
+        ) {
+            *state = previous_state;
+            return Err(error);
+        }
+
+        Ok(PayrollSettlementLockReceipt {
+            cycle_key,
+            pay_period: batch.pay_period().to_owned(),
+            lock_state: PayrollSettlementLockState::Unlocked,
+            batch_id,
+            snapshot_checksum: batch.snapshot_checksum().to_owned(),
+            reason,
+            changed_at: occurred_at,
+            actor_id: actor.actor_id().clone(),
         })
     }
 
@@ -1385,6 +1720,14 @@ impl PayrollLedgerService {
         state
             .exchange_batch_ids_by_cycle
             .retain(|_, batch_id| active_exchange_batch_ids.contains(batch_id));
+        let active_cycle_keys = state
+            .exchange_batch_ids_by_cycle
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        state
+            .cycle_lock_state_by_cycle
+            .retain(|cycle_key, _| active_cycle_keys.contains(cycle_key));
 
         let ledger_order_ids = state
             .ledger_entries_by_order
@@ -1483,6 +1826,7 @@ struct PayrollLedgerState {
     locked_orders_by_pay_period: BTreeMap<String, BTreeSet<OrderId>>,
     failed_deduction_orders: BTreeSet<OrderId>,
     exchange_batch_ids_by_cycle: BTreeMap<String, PayrollExchangeBatchId>,
+    cycle_lock_state_by_cycle: BTreeMap<String, PayrollSettlementLockState>,
     exchange_batches: BTreeMap<PayrollExchangeBatchId, PayrollExchangeBatch>,
 }
 
@@ -1516,6 +1860,21 @@ fn normalize_dispute_reason(value: String) -> Result<String, PayrollLedgerError>
     }
     if trimmed.chars().count() > MAX_DISPUTE_REASON_LENGTH {
         return Err(PayrollLedgerError::InvalidDisputeReason(format!(
+            "reason must be at most {MAX_DISPUTE_REASON_LENGTH} characters"
+        )));
+    }
+    Ok(trimmed.to_owned())
+}
+
+fn normalize_settlement_reason(value: String) -> Result<String, PayrollLedgerError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(PayrollLedgerError::InvalidSettlementReason(
+            "reason must not be empty".to_owned(),
+        ));
+    }
+    if trimmed.chars().count() > MAX_DISPUTE_REASON_LENGTH {
+        return Err(PayrollLedgerError::InvalidSettlementReason(format!(
             "reason must be at most {MAX_DISPUTE_REASON_LENGTH} characters"
         )));
     }
@@ -1699,6 +2058,73 @@ fn build_deduction_records_locked(
     Ok(records)
 }
 
+fn required_exception_classes() -> Vec<PayrollExceptionClass> {
+    vec![
+        PayrollExceptionClass::Disputed,
+        PayrollExceptionClass::DeductionFailed,
+        PayrollExceptionClass::EmployeeTerminated,
+        PayrollExceptionClass::Refunded,
+    ]
+}
+
+fn compute_reconciliation_metadata(
+    records: &[PayrollDeductionRecord],
+) -> PayrollReconciliationMetadata {
+    let mut total_amount_minor = 0u64;
+    let mut total_source_entries = 0usize;
+    let mut ready_records = 0usize;
+    let mut locked_records = 0usize;
+    let mut refunded_records = 0usize;
+    let mut disputed_records = 0usize;
+    let mut deduction_failed_records = 0usize;
+    let mut employee_terminated_records = 0usize;
+    let mut present_exception_classes = BTreeSet::new();
+
+    for record in records {
+        total_amount_minor =
+            total_amount_minor.saturating_add(u64::from(record.amount().amount_minor()));
+        total_source_entries = total_source_entries.saturating_add(record.source_entry_ids().len());
+        match record.status() {
+            PayrollDeductionStatus::Ready => {
+                ready_records = ready_records.saturating_add(1);
+            }
+            PayrollDeductionStatus::Locked => {
+                locked_records = locked_records.saturating_add(1);
+            }
+            PayrollDeductionStatus::Refunded => {
+                refunded_records = refunded_records.saturating_add(1);
+                present_exception_classes.insert(PayrollExceptionClass::Refunded);
+            }
+            PayrollDeductionStatus::Disputed => {
+                disputed_records = disputed_records.saturating_add(1);
+                present_exception_classes.insert(PayrollExceptionClass::Disputed);
+            }
+            PayrollDeductionStatus::DeductionFailed => {
+                deduction_failed_records = deduction_failed_records.saturating_add(1);
+                present_exception_classes.insert(PayrollExceptionClass::DeductionFailed);
+            }
+            PayrollDeductionStatus::EmployeeTerminated => {
+                employee_terminated_records = employee_terminated_records.saturating_add(1);
+                present_exception_classes.insert(PayrollExceptionClass::EmployeeTerminated);
+            }
+        }
+    }
+
+    PayrollReconciliationMetadata {
+        total_records: records.len(),
+        total_amount_minor,
+        total_source_entries,
+        ready_records,
+        locked_records,
+        refunded_records,
+        disputed_records,
+        deduction_failed_records,
+        employee_terminated_records,
+        required_exception_classes: required_exception_classes(),
+        present_exception_classes: present_exception_classes.into_iter().collect(),
+    }
+}
+
 fn sort_deduction_records(
     records: &mut [PayrollDeductionRecord],
     sort_by: PayrollSortField,
@@ -1799,6 +2225,10 @@ fn compute_cycle_snapshot_checksum(
 }
 
 fn validate_pay_period(pay_period: &str) -> Result<(), PayrollLedgerError> {
+    parse_pay_period_parts(pay_period).map(|_| ())
+}
+
+fn parse_pay_period_parts(pay_period: &str) -> Result<(i32, u32), PayrollLedgerError> {
     let trimmed = pay_period.trim();
     let mut parts = trimmed.split('-');
     let Some(year_part) = parts.next() else {
@@ -1823,8 +2253,41 @@ fn validate_pay_period(pay_period: &str) -> Result<(), PayrollLedgerError> {
     if !(1..=12).contains(&month) {
         return Err(PayrollLedgerError::InvalidPayPeriod(pay_period.to_owned()));
     }
+    let year = year_part
+        .parse::<i32>()
+        .map_err(|_| PayrollLedgerError::InvalidPayPeriod(pay_period.to_owned()))?;
+    Ok((year, month))
+}
 
-    Ok(())
+fn pay_period_bounds(pay_period: &str) -> Result<(i32, i32), PayrollLedgerError> {
+    let (year, month) = parse_pay_period_parts(pay_period)?;
+    let cycle_start_epoch_day = i32::try_from(days_from_civil(year, month, 1))
+        .map_err(|_| PayrollLedgerError::InvalidPayPeriod(pay_period.to_owned()))?;
+    let (next_year, next_month) = if month == 12 {
+        (year.saturating_add(1), 1)
+    } else {
+        (year, month + 1)
+    };
+    let next_month_start_epoch_day = i32::try_from(days_from_civil(next_year, next_month, 1))
+        .map_err(|_| PayrollLedgerError::InvalidPayPeriod(pay_period.to_owned()))?;
+    let cycle_end_epoch_day = next_month_start_epoch_day
+        .checked_sub(1)
+        .ok_or_else(|| PayrollLedgerError::InvalidPayPeriod(pay_period.to_owned()))?;
+    Ok((cycle_start_epoch_day, cycle_end_epoch_day))
+}
+
+fn previous_pay_period_for_epoch_day(epoch_day: i32) -> String {
+    let (year, month, _) = civil_from_days(i64::from(epoch_day));
+    let (previous_year, previous_month) = if month == 1 {
+        (year.saturating_sub(1), 12)
+    } else {
+        (year, month - 1)
+    };
+    format!("{previous_year:04}-{previous_month:02}")
+}
+
+fn default_monthly_cycle_key(pay_period: &str) -> String {
+    format!("monthly-{pay_period}")
 }
 
 fn normalize_cycle_key(value: &str) -> Result<String, PayrollLedgerError> {
@@ -1859,9 +2322,26 @@ fn batch_correlation_id(
     ))
 }
 
+fn settlement_correlation_id(cycle_key: &str) -> Result<AuditCorrelationId, AuditTrailError> {
+    AuditCorrelationId::parse(format!(
+        "{PAYROLL_SETTLEMENT_CORRELATION_PREFIX}:{cycle_key}"
+    ))
+}
+
 fn format_pay_period(epoch_day: i32) -> String {
     let (year, month, _) = civil_from_days(i64::from(epoch_day));
     format!("{year:04}-{month:02}")
+}
+
+fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
+    let year = i64::from(year) - if month <= 2 { 1 } else { 0 };
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let year_of_era = year - era * 400;
+    let month = i64::from(month);
+    let day = i64::from(day);
+    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
 }
 
 fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
@@ -1898,6 +2378,7 @@ pub enum PayrollLedgerError {
     InvalidDisputeReason(String),
     InvalidPayPeriod(String),
     InvalidCycleKey(String),
+    InvalidSettlementReason(String),
     InvalidPagination {
         page: usize,
         page_size: usize,
@@ -1929,10 +2410,19 @@ pub enum PayrollLedgerError {
     },
     DisputeNotFound(PayrollDisputeId),
     ExchangeBatchNotFound(PayrollExchangeBatchId),
+    SettlementCycleNotFound {
+        cycle_key: String,
+    },
     CycleKeyPayPeriodConflict {
         cycle_key: String,
         expected_pay_period: String,
         actual_pay_period: String,
+    },
+    SettlementCycleAlreadyLocked {
+        cycle_key: String,
+    },
+    SettlementCycleAlreadyUnlocked {
+        cycle_key: String,
     },
     InvalidDisputeTransition {
         dispute_id: PayrollDisputeId,
@@ -1977,6 +2467,9 @@ impl fmt::Display for PayrollLedgerError {
                 "invalid pay period `{pay_period}`: expected YYYY-MM with valid month"
             ),
             Self::InvalidCycleKey(message) => write!(f, "invalid payroll cycle key: {message}"),
+            Self::InvalidSettlementReason(message) => {
+                write!(f, "invalid settlement reason: {message}")
+            }
             Self::InvalidPagination { page, page_size } => write!(
                 f,
                 "invalid pagination: page must be >= 1 and pageSize must be 1..=500, got page={page} pageSize={page_size}"
@@ -2021,6 +2514,9 @@ impl fmt::Display for PayrollLedgerError {
             Self::ExchangeBatchNotFound(batch_id) => {
                 write!(f, "payroll exchange batch {batch_id} not found")
             }
+            Self::SettlementCycleNotFound { cycle_key } => {
+                write!(f, "payroll settlement cycle {cycle_key} not found")
+            }
             Self::CycleKeyPayPeriodConflict {
                 cycle_key,
                 expected_pay_period,
@@ -2029,6 +2525,12 @@ impl fmt::Display for PayrollLedgerError {
                 f,
                 "payroll cycle key {cycle_key} is bound to pay period {expected_pay_period}, cannot use with {actual_pay_period}"
             ),
+            Self::SettlementCycleAlreadyLocked { cycle_key } => {
+                write!(f, "payroll settlement cycle {cycle_key} is already locked")
+            }
+            Self::SettlementCycleAlreadyUnlocked { cycle_key } => {
+                write!(f, "payroll settlement cycle {cycle_key} is already unlocked")
+            }
             Self::InvalidDisputeTransition {
                 dispute_id,
                 status,
@@ -2410,6 +2912,242 @@ mod tests {
         );
         assert_eq!(first_export.items(), replay_export.items());
         assert_eq!(first_evidence_count, replay_evidence_count);
+    }
+
+    #[test]
+    fn authorized_unlock_allows_recompute_for_the_same_cycle() {
+        let audit_trail = ImmutableAuditTrail::default();
+        let service =
+            PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail.clone());
+        let employee = employee_actor();
+        let payroll = payroll_actor();
+        let committee = committee_actor();
+        let order = order_id("ord-payroll-ledger-unlock");
+
+        service
+            .reconcile_order_charge(
+                &employee,
+                "createEmployeeOrder",
+                &order,
+                employee.actor_id(),
+                EmploymentStatus::Active,
+                95,
+                "TWD",
+                8800,
+                audit_timestamp(95, 500),
+                source_ref("order:create"),
+            )
+            .expect("deduction should append");
+
+        let first_export = service
+            .export_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-unlock",
+                1,
+                50,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+                audit_timestamp(95, 520),
+            )
+            .expect("first cycle export should succeed");
+
+        let unauthorized_unlock = service
+            .unlock_cycle_for_recompute(
+                &payroll,
+                "cycle-1970-04-unlock",
+                "fix reconciliation drift",
+                audit_timestamp(95, 521),
+            )
+            .expect_err("unlock should require committee role");
+        assert!(matches!(
+            unauthorized_unlock,
+            PayrollLedgerError::UnauthorizedRole { .. }
+        ));
+
+        let invalid_unlock_reason = service
+            .unlock_cycle_for_recompute(
+                &committee,
+                "cycle-1970-04-unlock",
+                "   ",
+                audit_timestamp(95, 522),
+            )
+            .expect_err("unlock reason should be required");
+        assert!(matches!(
+            invalid_unlock_reason,
+            PayrollLedgerError::InvalidSettlementReason(_)
+        ));
+
+        let unlocked = service
+            .unlock_cycle_for_recompute(
+                &committee,
+                "cycle-1970-04-unlock",
+                "approved correction after ledger adjustment",
+                audit_timestamp(95, 523),
+            )
+            .expect("committee unlock should succeed");
+        assert_eq!(unlocked.lock_state(), PayrollSettlementLockState::Unlocked);
+        assert_eq!(unlocked.batch_id(), first_export.batch().batch_id());
+
+        service
+            .reconcile_order_charge(
+                &employee,
+                "updateEmployeeOrder",
+                &order,
+                employee.actor_id(),
+                EmploymentStatus::Active,
+                95,
+                "TWD",
+                9100,
+                audit_timestamp(95, 540),
+                source_ref("order:update"),
+            )
+            .expect("adjustment should append");
+
+        let recomputed = service
+            .export_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-unlock",
+                1,
+                50,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+                audit_timestamp(95, 550),
+            )
+            .expect("recomputed cycle should succeed after unlock");
+        assert_ne!(
+            recomputed.batch().batch_id(),
+            first_export.batch().batch_id()
+        );
+        assert_ne!(
+            recomputed.batch().snapshot_checksum(),
+            first_export.batch().snapshot_checksum()
+        );
+
+        let replay_after_recompute = service
+            .export_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-unlock",
+                1,
+                50,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+                audit_timestamp(95, 560),
+            )
+            .expect("replay after recompute should stay idempotent");
+        assert_eq!(
+            replay_after_recompute.batch().batch_id(),
+            recomputed.batch().batch_id()
+        );
+    }
+
+    #[test]
+    fn monthly_close_defaults_to_previous_taipei_cycle_and_emits_reconciliation_metadata() {
+        let audit_trail = ImmutableAuditTrail::default();
+        let service = PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail);
+        let employee = employee_actor();
+        let payroll = payroll_actor();
+        let order = order_id("ord-payroll-ledger-monthly-close");
+
+        service
+            .reconcile_order_charge(
+                &employee,
+                "createEmployeeOrder",
+                &order,
+                employee.actor_id(),
+                EmploymentStatus::Active,
+                95,
+                "TWD",
+                6200,
+                audit_timestamp(95, 500),
+                source_ref("order:create"),
+            )
+            .expect("deduction should append");
+
+        let close_page = service
+            .close_monthly_settlement(
+                &payroll,
+                None,
+                1,
+                20,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+                audit_timestamp(120, 10),
+            )
+            .expect("monthly close should succeed");
+
+        assert_eq!(close_page.batch().pay_period(), "1970-04");
+        assert_eq!(close_page.batch().cycle_key(), "monthly-1970-04");
+        assert_eq!(close_page.batch().cycle_start_epoch_day(), 90);
+        assert_eq!(close_page.batch().cycle_end_epoch_day(), 119);
+        assert_eq!(close_page.batch().reconciliation().total_records(), 1);
+        assert_eq!(
+            close_page.batch().reconciliation().total_amount_minor(),
+            6200
+        );
+        assert_eq!(
+            close_page.batch().reconciliation().total_source_entries(),
+            1
+        );
+        assert_eq!(close_page.batch().reconciliation().ready_records(), 1);
+        assert_eq!(close_page.batch().reconciliation().locked_records(), 0);
+        assert_eq!(close_page.batch().reconciliation().refunded_records(), 0);
+        assert_eq!(close_page.batch().reconciliation().disputed_records(), 0);
+        assert_eq!(
+            close_page
+                .batch()
+                .reconciliation()
+                .required_exception_classes()
+                .iter()
+                .map(|class| class.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "DISPUTED",
+                "DEDUCTION_FAILED",
+                "EMPLOYEE_TERMINATED",
+                "REFUNDED"
+            ]
+        );
+        assert!(close_page
+            .batch()
+            .reconciliation()
+            .present_exception_classes()
+            .is_empty());
+    }
+
+    #[test]
+    fn lock_cycle_requires_existing_cycle_and_non_empty_reason() {
+        let audit_trail = ImmutableAuditTrail::default();
+        let service = PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail);
+        let committee = committee_actor();
+
+        let missing_cycle = service
+            .lock_cycle(
+                &committee,
+                "cycle-missing",
+                "close governance hold",
+                audit_timestamp(120, 20),
+            )
+            .expect_err("missing cycle lock should fail");
+        assert!(matches!(
+            missing_cycle,
+            PayrollLedgerError::SettlementCycleNotFound { .. }
+        ));
+
+        let invalid_reason = service
+            .unlock_cycle_for_recompute(
+                &committee,
+                "cycle-missing",
+                "   ",
+                audit_timestamp(120, 21),
+            )
+            .expect_err("unlock reason should be non-empty");
+        assert!(matches!(
+            invalid_reason,
+            PayrollLedgerError::InvalidSettlementReason(_)
+        ));
     }
 
     #[test]
