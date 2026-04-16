@@ -10,6 +10,7 @@ pub mod menu_supply_window;
 pub mod observability;
 pub mod operations_analytics;
 pub mod payroll;
+pub mod persistence;
 pub mod pickup_totp;
 pub mod rush_reminder;
 pub mod transport;

@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 use crate::audit::{
     AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
     AuditIdentityLink, AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
@@ -15,7 +17,7 @@ const REVIEW_VENDOR_APPLICATION_OPERATION_ID: &str = "reviewVendorApplication";
 const RUN_VENDOR_LIFECYCLE_OPERATION_ID: &str = "runVendorComplianceLifecycle";
 const PRUNE_VENDOR_HISTORY_OPERATION_ID: &str = "pruneVendorComplianceHistory";
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct VendorId(String);
 
 impl VendorId {
@@ -38,7 +40,7 @@ impl fmt::Display for VendorId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct VendorCategory(String);
 
 impl VendorCategory {
@@ -61,7 +63,7 @@ impl fmt::Display for VendorCategory {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct DocumentTemplateId(String);
 
 impl DocumentTemplateId {
@@ -84,7 +86,7 @@ impl fmt::Display for DocumentTemplateId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ComplianceDate(i32);
 
 impl ComplianceDate {
@@ -109,7 +111,7 @@ impl ComplianceDate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ComplianceDocumentTemplate {
     template_id: DocumentTemplateId,
     vendor_category: VendorCategory,
@@ -195,7 +197,7 @@ impl ComplianceDocumentTemplate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VendorDocumentSubmission {
     document_ref: String,
     submitted_on: ComplianceDate,
@@ -236,14 +238,14 @@ impl VendorDocumentSubmission {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VendorReviewDecision {
     Approved,
     Rejected,
     RequestFix,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VendorComplianceStatus {
     PendingReview,
     FixRequested,
@@ -252,7 +254,7 @@ pub enum VendorComplianceStatus {
     Suspended,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SuspensionReason {
     MissingRequiredDocument {
         template_id: DocumentTemplateId,
@@ -263,7 +265,7 @@ pub enum SuspensionReason {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ComplianceHistoryKind {
     ApplicationSubmitted {
         category: VendorCategory,
@@ -300,7 +302,7 @@ impl ComplianceHistoryKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ComplianceHistoryEntry {
     occurred_on: ComplianceDate,
     actor_id: ActorId,
@@ -326,7 +328,7 @@ impl ComplianceHistoryEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VendorComplianceRecord {
     vendor_id: VendorId,
     display_name: String,
@@ -498,6 +500,13 @@ pub struct VendorComplianceLifecycle {
     audit_trail: ImmutableAuditTrail,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct VendorComplianceLifecycleSnapshot {
+    templates_by_category:
+        BTreeMap<VendorCategory, BTreeMap<DocumentTemplateId, ComplianceDocumentTemplate>>,
+    vendors: BTreeMap<VendorId, VendorComplianceRecord>,
+}
+
 impl VendorComplianceLifecycle {
     pub fn new(retention_policy: HistoryRetentionPolicy) -> Self {
         Self::with_audit_trail(retention_policy, ImmutableAuditTrail::default())
@@ -540,6 +549,56 @@ impl VendorComplianceLifecycle {
             .filter(|vendor| vendor.is_visible_for_ordering())
             .map(|vendor| vendor.vendor_id())
             .collect()
+    }
+
+    pub(crate) fn snapshot(&self) -> VendorComplianceLifecycleSnapshot {
+        VendorComplianceLifecycleSnapshot {
+            templates_by_category: self.templates_by_category.clone(),
+            vendors: self.vendors.clone(),
+        }
+    }
+
+    pub(crate) fn from_snapshot(
+        snapshot: VendorComplianceLifecycleSnapshot,
+        retention_policy: HistoryRetentionPolicy,
+        audit_trail: ImmutableAuditTrail,
+    ) -> Result<Self, VendorComplianceError> {
+        for (category_key, templates) in &snapshot.templates_by_category {
+            for (template_id_key, template) in templates {
+                if template.template_id() != template_id_key {
+                    return Err(VendorComplianceError::PersistenceDataCorrupted(format!(
+                        "template key `{}` does not match payload template id `{}`",
+                        template_id_key.as_str(),
+                        template.template_id().as_str()
+                    )));
+                }
+                if template.vendor_category() != category_key {
+                    return Err(VendorComplianceError::PersistenceDataCorrupted(format!(
+                        "template `{}` category mismatch: key=`{}` payload=`{}`",
+                        template_id_key.as_str(),
+                        category_key.as_str(),
+                        template.vendor_category().as_str()
+                    )));
+                }
+            }
+        }
+
+        for (vendor_id_key, vendor) in &snapshot.vendors {
+            if vendor.vendor_id() != vendor_id_key {
+                return Err(VendorComplianceError::PersistenceDataCorrupted(format!(
+                    "vendor key `{}` does not match payload vendor id `{}`",
+                    vendor_id_key.as_str(),
+                    vendor.vendor_id().as_str()
+                )));
+            }
+        }
+
+        Ok(Self {
+            templates_by_category: snapshot.templates_by_category,
+            vendors: snapshot.vendors,
+            retention_policy,
+            audit_trail,
+        })
     }
 
     pub fn upsert_document_template(
@@ -970,7 +1029,7 @@ impl VendorComplianceLifecycle {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 struct ReminderRegistryKey {
     template_id: DocumentTemplateId,
     expires_on: ComplianceDate,
@@ -1088,6 +1147,7 @@ pub enum VendorComplianceError {
     VendorAlreadyExists(VendorId),
     VendorNotFound(VendorId),
     ApprovalBlockedByComplianceGap(Vec<SuspensionReason>),
+    PersistenceDataCorrupted(String),
     UnauthorizedRole {
         expected: Role,
         actual: Role,
@@ -1153,6 +1213,9 @@ impl fmt::Display for VendorComplianceError {
                 "vendor approval blocked because {} compliance gaps remain",
                 gaps.len()
             ),
+            Self::PersistenceDataCorrupted(message) => {
+                write!(f, "persisted compliance state is corrupted: {message}")
+            }
             Self::UnauthorizedRole { expected, actual } => write!(
                 f,
                 "operation requires role {expected:?}, but actor has role {actual:?}"

@@ -56,6 +56,10 @@ use corporate_catering_system::payroll::{
     PayrollRetentionPolicy, PayrollSettlementLockReceipt,
     PayrollSortField as PayrollSortFieldDomain, SortOrder as PayrollSortOrderDomain,
 };
+use corporate_catering_system::persistence::{
+    build_operational_pg_pool_from_env, VendorCompliancePersistenceError,
+    VendorComplianceSqlRepository,
+};
 use corporate_catering_system::pickup_totp::{
     PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
 };
@@ -224,6 +228,13 @@ type MenuRecommendationRanker = fn(
 type ReminderDeliveryGateway = Arc<dyn RushReminderDeliveryGateway + Send + Sync>;
 
 #[derive(Debug, Clone)]
+enum CompliancePersistence {
+    Sql(Arc<VendorComplianceSqlRepository>),
+    #[cfg(test)]
+    InMemoryOnly,
+}
+
+#[derive(Debug, Clone)]
 struct AppState {
     next_order_sequence: Arc<AtomicU64>,
     vendor_id: VendorId,
@@ -241,6 +252,7 @@ struct AppState {
     payroll_ledger_service: PayrollLedgerService,
     anomaly_alert_workflow: AnomalyAlertWorkflow,
     compliance_lifecycle: Arc<RwLock<VendorComplianceLifecycle>>,
+    compliance_persistence: CompliancePersistence,
     delivery_policy: Arc<VendorPlantDeliveryPolicy>,
     menu_supply_policy: MenuSupplyPolicy,
     pickup_totp_verifier: Arc<PickupTotpVerifier>,
@@ -1342,6 +1354,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     let pickup_totp_verifier = PickupTotpVerifier::from_env("PRELAUNCH_PICKUP_TOTP_SECRET")
         .map(Arc::new)
         .map_err(|error| format!("pickup TOTP verifier initialization failed: {error}"))?;
+    let compliance_repository = Arc::new(VendorComplianceSqlRepository::new(
+        build_operational_pg_pool_from_env()
+            .await
+            .map_err(|error| format!("PostgreSQL pool configuration is invalid: {error}"))?,
+    ));
+    let (compliance_lifecycle, include_lifecycle_seed_baseline) =
+        load_or_seed_compliance_lifecycle(
+            compliance_repository.as_ref(),
+            audit_trail.clone(),
+            vendor_id.clone(),
+            plant_id.clone(),
+            delivery_epoch_day,
+        )
+        .await
+        .map_err(|error| format!("failed to initialize compliance persistence: {error}"))?;
 
     let state = bootstrap_runtime_state(
         audit_trail.clone(),
@@ -1357,8 +1384,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         order_retention_policy,
         payroll_export_field_encryptor,
         pickup_totp_verifier,
+        compliance_lifecycle,
+        CompliancePersistence::Sql(compliance_repository),
+        include_lifecycle_seed_baseline,
     )
     .map_err(|error| format!("failed to bootstrap runtime state: {error}"))?;
+    if include_lifecycle_seed_baseline {
+        let seeded_lifecycle = state
+            .compliance_lifecycle
+            .read()
+            .map_err(|_| "compliance lifecycle state lock is poisoned".to_owned())?
+            .clone();
+        match &state.compliance_persistence {
+            CompliancePersistence::Sql(repository) => repository
+                .save_lifecycle(&seeded_lifecycle)
+                .await
+                .map_err(|error| {
+                    format!("failed to persist seeded compliance baseline scenarios: {error}")
+                })?,
+            #[cfg(test)]
+            CompliancePersistence::InMemoryOnly => {}
+        }
+    }
     let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| {
         format!(
             "failed to load committee actor for purge job: {}",
@@ -2806,12 +2853,29 @@ fn map_vendor_compliance_error(error: VendorComplianceError) -> (StatusCode, Err
         | VendorComplianceError::ApprovalBlockedByComplianceGap(_) => {
             domain_error(StatusCode::CONFLICT, "CONFLICT", error.to_string())
         }
-        VendorComplianceError::AuditTrail(_) => domain_error(
+        VendorComplianceError::AuditTrail(_)
+        | VendorComplianceError::PersistenceDataCorrupted(_) => domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "VENDOR_COMPLIANCE_INTERNAL_ERROR",
             error.to_string(),
         ),
         _ => domain_error(StatusCode::BAD_REQUEST, "BAD_REQUEST", error.to_string()),
+    }
+}
+
+fn map_vendor_compliance_persistence_error(
+    error: VendorCompliancePersistenceError,
+) -> (StatusCode, ErrorPayload) {
+    match error {
+        VendorCompliancePersistenceError::Domain(domain_error_value) => {
+            map_vendor_compliance_error(domain_error_value)
+        }
+        VendorCompliancePersistenceError::Sqlx(_)
+        | VendorCompliancePersistenceError::Serialize(_) => domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "VENDOR_COMPLIANCE_PERSISTENCE_ERROR",
+            error.to_string(),
+        ),
     }
 }
 
@@ -2837,6 +2901,44 @@ fn write_compliance_lifecycle<'a>(
             "compliance lifecycle state lock is poisoned".to_owned(),
         )
     })
+}
+
+fn mutate_compliance_lifecycle<T, F>(
+    state: &AppState,
+    mutator: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&mut VendorComplianceLifecycle) -> Result<T, VendorComplianceError>,
+{
+    let mut mutator = Some(mutator);
+    match &state.compliance_persistence {
+        CompliancePersistence::Sql(repository) => {
+            let mut lifecycle = write_compliance_lifecycle(state)?;
+            let retention_policy = lifecycle.retention_policy().clone();
+            let mutator = mutator
+                .take()
+                .expect("compliance lifecycle mutator should be present");
+            let persistence_result = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(repository.mutate_lifecycle(
+                    retention_policy,
+                    state.audit_trail.clone(),
+                    mutator,
+                ))
+            });
+            let (latest_lifecycle, value) =
+                persistence_result.map_err(map_vendor_compliance_persistence_error)?;
+            *lifecycle = latest_lifecycle;
+            Ok(value)
+        }
+        #[cfg(test)]
+        CompliancePersistence::InMemoryOnly => {
+            let mut lifecycle = write_compliance_lifecycle(state)?;
+            let mutator = mutator
+                .take()
+                .expect("compliance lifecycle mutator should be present");
+            mutator(&mut lifecycle).map_err(map_vendor_compliance_error)
+        }
+    }
 }
 
 fn read_operations_analytics_warehouse<'a>(
@@ -3137,40 +3239,57 @@ fn seeded_menu_health_tags(index: u16) -> Vec<MenuHealthTag> {
     }
 }
 
-fn bootstrap_runtime_state(
+async fn load_or_seed_compliance_lifecycle(
+    repository: &VendorComplianceSqlRepository,
     audit_trail: ImmutableAuditTrail,
     vendor_id: VendorId,
     plant_id: PlantId,
     delivery_epoch_day: i32,
-    menu_variant_count: u16,
-    recommendation_engine_runtime_enabled: bool,
-    advanced_analytics_dashboard_runtime_enabled: bool,
-    rush_reminder_runtime_enabled: bool,
-    rush_reminder_policy: RushReminderPolicy,
-    payroll_retention_policy: PayrollRetentionPolicy,
-    order_retention_policy: OrderRetentionPolicy,
-    payroll_export_field_encryptor: PayrollExportFieldEncryptor,
-    pickup_totp_verifier: Arc<PickupTotpVerifier>,
-) -> Result<AppState, String> {
-    let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| error.message)?;
+) -> Result<(VendorComplianceLifecycle, bool), String> {
+    let retention_policy = HistoryRetentionPolicy::default();
+    if let Some(existing) = repository
+        .load_lifecycle(retention_policy.clone(), audit_trail.clone())
+        .await
+        .map_err(|error| error.to_string())?
+    {
+        return Ok((existing, false));
+    }
 
+    let seeded = build_seeded_load_gate_compliance_lifecycle(
+        audit_trail,
+        retention_policy,
+        vendor_id,
+        plant_id,
+        delivery_epoch_day,
+    )?;
+    repository
+        .save_lifecycle(&seeded)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok((seeded, true))
+}
+
+fn build_seeded_load_gate_compliance_lifecycle(
+    audit_trail: ImmutableAuditTrail,
+    retention_policy: HistoryRetentionPolicy,
+    vendor_id: VendorId,
+    plant_id: PlantId,
+    delivery_epoch_day: i32,
+) -> Result<VendorComplianceLifecycle, String> {
+    let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| error.message)?;
     let vendor_actor = AuthenticatedActorContext::new(
         ActorId::parse("vendor-load-gate").map_err(|error| error.to_string())?,
         Role::VendorOperator,
-        PlantScope::restricted(vec![plant_id.clone()]).map_err(|error| error.to_string())?,
+        PlantScope::restricted(vec![plant_id]).map_err(|error| error.to_string())?,
         AuthenticationSource::VendorAccountMfa,
     )
     .map_err(|error| error.to_string())?;
-
-    let mut compliance_lifecycle = VendorComplianceLifecycle::with_audit_trail(
-        HistoryRetentionPolicy::default(),
-        audit_trail.clone(),
-    );
+    let mut lifecycle = VendorComplianceLifecycle::with_audit_trail(retention_policy, audit_trail);
     let vendor_category = VendorCategory::parse("RESTAURANT").map_err(|error| error.to_string())?;
     let template_id =
         DocumentTemplateId::parse(DEFAULT_SEED_TEMPLATE_ID).map_err(|error| error.to_string())?;
 
-    compliance_lifecycle
+    lifecycle
         .upsert_document_template(
             &committee_actor,
             ComplianceDocumentTemplate::new(
@@ -3189,7 +3308,7 @@ fn bootstrap_runtime_state(
     let submitted_on = ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_sub(30));
     let approved_on = ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_sub(29));
 
-    compliance_lifecycle
+    lifecycle
         .register_vendor_application(
             &vendor_actor,
             vendor_id.clone(),
@@ -3199,7 +3318,7 @@ fn bootstrap_runtime_state(
         )
         .map_err(|error| error.to_string())?;
 
-    compliance_lifecycle
+    lifecycle
         .submit_document(
             &vendor_actor,
             &vendor_id,
@@ -3213,7 +3332,7 @@ fn bootstrap_runtime_state(
         )
         .map_err(|error| error.to_string())?;
 
-    compliance_lifecycle
+    lifecycle
         .review_application(
             &committee_actor,
             &vendor_id,
@@ -3222,6 +3341,39 @@ fn bootstrap_runtime_state(
             approved_on,
         )
         .map_err(|error| error.to_string())?;
+
+    Ok(lifecycle)
+}
+
+fn bootstrap_runtime_state(
+    audit_trail: ImmutableAuditTrail,
+    vendor_id: VendorId,
+    plant_id: PlantId,
+    delivery_epoch_day: i32,
+    menu_variant_count: u16,
+    recommendation_engine_runtime_enabled: bool,
+    advanced_analytics_dashboard_runtime_enabled: bool,
+    rush_reminder_runtime_enabled: bool,
+    rush_reminder_policy: RushReminderPolicy,
+    payroll_retention_policy: PayrollRetentionPolicy,
+    order_retention_policy: OrderRetentionPolicy,
+    payroll_export_field_encryptor: PayrollExportFieldEncryptor,
+    pickup_totp_verifier: Arc<PickupTotpVerifier>,
+    compliance_lifecycle: VendorComplianceLifecycle,
+    compliance_persistence: CompliancePersistence,
+    include_lifecycle_seed_baseline: bool,
+) -> Result<AppState, String> {
+    let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| error.message)?;
+
+    let vendor_actor = AuthenticatedActorContext::new(
+        ActorId::parse("vendor-load-gate").map_err(|error| error.to_string())?,
+        Role::VendorOperator,
+        PlantScope::restricted(vec![plant_id.clone()]).map_err(|error| error.to_string())?,
+        AuthenticationSource::VendorAccountMfa,
+    )
+    .map_err(|error| error.to_string())?;
+
+    let mut compliance_lifecycle = compliance_lifecycle;
 
     let mut delivery_policy = VendorPlantDeliveryPolicy::with_audit_trail(audit_trail.clone());
     let mapping_window_start = TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(30), 0)
@@ -3302,6 +3454,7 @@ fn bootstrap_runtime_state(
         &vendor_id,
         &plant_id,
         delivery_epoch_day,
+        include_lifecycle_seed_baseline,
         &mut compliance_lifecycle,
         &mut delivery_policy,
         &menu_supply_policy,
@@ -3326,6 +3479,7 @@ fn bootstrap_runtime_state(
         payroll_ledger_service,
         anomaly_alert_workflow,
         compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
+        compliance_persistence,
         delivery_policy: Arc::new(delivery_policy),
         menu_supply_policy,
         pickup_totp_verifier,
@@ -3339,21 +3493,26 @@ fn seed_runtime_baseline_scenarios(
     vendor_id: &VendorId,
     plant_id: &PlantId,
     delivery_epoch_day: i32,
+    include_lifecycle_seed_baseline: bool,
     compliance_lifecycle: &mut VendorComplianceLifecycle,
     delivery_policy: &mut VendorPlantDeliveryPolicy,
     menu_supply_policy: &MenuSupplyPolicy,
     payroll_ledger_service: &PayrollLedgerService,
     anomaly_alert_workflow: &AnomalyAlertWorkflow,
 ) -> Result<(), String> {
-    seed_lifecycle_and_mapping_scenarios(
-        committee_actor,
-        vendor_actor,
-        vendor_id,
-        plant_id,
-        delivery_epoch_day,
-        compliance_lifecycle,
-        delivery_policy,
-    )?;
+    if include_lifecycle_seed_baseline {
+        seed_lifecycle_and_mapping_scenarios(
+            committee_actor,
+            vendor_actor,
+            vendor_id,
+            plant_id,
+            delivery_epoch_day,
+            compliance_lifecycle,
+            delivery_policy,
+        )?;
+    } else {
+        seed_delivery_mapping_scenarios(vendor_id, plant_id, delivery_epoch_day, delivery_policy)?;
+    }
     seed_payroll_dispute_scenario(
         vendor_id,
         plant_id,
@@ -3473,6 +3632,18 @@ fn seed_lifecycle_and_mapping_scenarios(
         )
         .map_err(|error| error.to_string())?;
 
+    seed_delivery_mapping_scenarios(vendor_id, plant_id, delivery_epoch_day, delivery_policy)
+}
+
+fn seed_delivery_mapping_scenarios(
+    vendor_id: &VendorId,
+    plant_id: &PlantId,
+    delivery_epoch_day: i32,
+    delivery_policy: &mut VendorPlantDeliveryPolicy,
+) -> Result<(), String> {
+    let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| error.message)?;
+    let lifecycle_vendor_id =
+        VendorId::parse(DEFAULT_SEED_LIFECYCLE_VENDOR_ID).map_err(|error| error.to_string())?;
     let mapping_window_start = TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(30), 0)
         .map_err(|error| error.to_string())?;
     let mapping_window_end =
@@ -3481,7 +3652,7 @@ fn seed_lifecycle_and_mapping_scenarios(
 
     delivery_policy
         .upsert_mapping(
-            committee_actor,
+            &committee_actor,
             TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(15), 1)
                 .map_err(|error| error.to_string())?,
             VendorPlantDeliveryMapping::new(
@@ -3501,7 +3672,7 @@ fn seed_lifecycle_and_mapping_scenarios(
         PlantId::parse(DEFAULT_SEED_DENY_PLANT_ID).map_err(|error| error.to_string())?;
     delivery_policy
         .upsert_mapping(
-            committee_actor,
+            &committee_actor,
             TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(15), 2)
                 .map_err(|error| error.to_string())?,
             VendorPlantDeliveryMapping::new(
@@ -5044,16 +5215,15 @@ fn handle_review_vendor_application(
         )
     })?;
 
-    let mut lifecycle = write_compliance_lifecycle(state)?;
-    let status = lifecycle
-        .review_application(
+    let status = mutate_compliance_lifecycle(state, |lifecycle| {
+        lifecycle.review_application(
             committee_actor,
             &vendor_id,
             decision,
             request.comment,
             ComplianceDate::from_epoch_day(request.decided_on_epoch_day),
         )
-        .map_err(map_vendor_compliance_error)?;
+    })?;
     Ok(VendorApplicationReviewResponse {
         vendor_id: vendor_id.as_str().to_owned(),
         status: vendor_compliance_status_label(status).to_owned(),
@@ -5116,13 +5286,12 @@ fn handle_run_vendor_compliance_lifecycle(
     committee_actor: &AuthenticatedActorContext,
     request: VendorLifecycleRunRequest,
 ) -> Result<VendorLifecycleRunResponse, (StatusCode, ErrorPayload)> {
-    let mut lifecycle = write_compliance_lifecycle(state)?;
-    let result = lifecycle
-        .run_lifecycle(
+    let result = mutate_compliance_lifecycle(state, |lifecycle| {
+        lifecycle.run_lifecycle(
             committee_actor,
             ComplianceDate::from_epoch_day(request.run_on_epoch_day),
         )
-        .map_err(map_vendor_compliance_error)?;
+    })?;
     Ok(VendorLifecycleRunResponse {
         reminder_count: result.reminders.len(),
         suspension_count: result.suspensions.len(),
@@ -9398,6 +9567,7 @@ mod tests {
             payroll_ledger_service,
             anomaly_alert_workflow: AnomalyAlertWorkflow::with_default_rules(audit_trail.clone()),
             compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
+            compliance_persistence: CompliancePersistence::InMemoryOnly,
             delivery_policy: Arc::new(delivery_policy),
             menu_supply_policy,
             pickup_totp_verifier: Arc::new(
@@ -9525,8 +9695,17 @@ mod tests {
             .expect("current time should resolve for test")
             .epoch_day();
         let delivery_epoch_day = now_epoch_day.saturating_add(2);
+        let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
+        let compliance_lifecycle = build_seeded_load_gate_compliance_lifecycle(
+            audit_trail.clone(),
+            HistoryRetentionPolicy::default(),
+            vendor_id(DEFAULT_VENDOR_ID),
+            plant_id(DEFAULT_PLANT_ID),
+            delivery_epoch_day,
+        )
+        .expect("seeded compliance lifecycle should initialize");
         let state = bootstrap_runtime_state(
-            ImmutableAuditTrail::new(AuditRetentionPolicy::default()),
+            audit_trail,
             vendor_id(DEFAULT_VENDOR_ID),
             plant_id(DEFAULT_PLANT_ID),
             delivery_epoch_day,
@@ -9542,6 +9721,9 @@ mod tests {
                 PickupTotpVerifier::from_secret("seed-baseline-pickup-secret".as_bytes())
                     .expect("seed pickup secret should be valid"),
             ),
+            compliance_lifecycle,
+            CompliancePersistence::InMemoryOnly,
+            true,
         )
         .expect("runtime bootstrap should seed baseline scenarios");
 
@@ -10036,6 +10218,7 @@ mod tests {
                     audit_trail.clone(),
                 ),
             )),
+            compliance_persistence: CompliancePersistence::InMemoryOnly,
             delivery_policy: Arc::new(VendorPlantDeliveryPolicy::with_audit_trail(
                 audit_trail.clone(),
             )),
