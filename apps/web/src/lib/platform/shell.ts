@@ -6,7 +6,8 @@ import {
   resolvePortalFromPath,
   type RoleAwareNavigation
 } from "./navigation";
-import { idleState, successState, type AsyncState } from "./async-state";
+import { idleState, loadingState, type AsyncState } from "./async-state";
+import type { ExperienceMode } from "./presentation";
 
 interface ShellAuthSnapshot {
   provider: string;
@@ -24,7 +25,7 @@ export interface AppShellData {
   auth: ShellAuthSnapshot;
   navigation: RoleAwareNavigation;
   activePortal: ReturnType<typeof resolvePortalFromPath>;
-  experienceMode: "mobile-first" | "desktop-first";
+  experienceMode: ExperienceMode;
   bootstrapState: AsyncState<ShellBootstrapState>;
 }
 
@@ -49,11 +50,6 @@ export function buildAppShellData(args: {
     navigation,
     activePortal,
     experienceMode: experiencePortal === "employee" ? "mobile-first" : "desktop-first",
-    bootstrapState:
-      actor === null
-        ? idleState()
-        : successState({
-            message: "shared-platform-baseline-ready"
-          })
+    bootstrapState: actor === null ? idleState() : loadingState()
   };
 }

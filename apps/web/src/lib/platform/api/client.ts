@@ -1,4 +1,13 @@
 import { env } from "$env/dynamic/public";
+import { zhTW } from "$lib/i18n/zh-tw";
+import { errorState, successState, type AsyncState } from "$lib/platform/async-state";
+import type { AuthActor } from "$lib/server/auth/contracts";
+import {
+  ApiConfigurationError,
+  PlantScopeError,
+  normalizeApiFailure,
+  type ApiFailure
+} from "./failure";
 
 import {
   AdminService,
@@ -6,16 +15,8 @@ import {
   OpenAPI,
   VendorService
 } from "../../../../../../contract/generated/ts-client";
-import { ApiError } from "../../../../../../contract/generated/ts-client/core/ApiError";
 
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:18080";
-
-OpenAPI.BASE = env.PUBLIC_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
-OpenAPI.WITH_CREDENTIALS = true;
-OpenAPI.CREDENTIALS = "include";
-OpenAPI.HEADERS = {
-  "Accept-Language": "zh-TW"
-};
+let configuredBaseUrl: string | null = null;
 
 export const apiClient = {
   admin: AdminService,
@@ -23,21 +24,54 @@ export const apiClient = {
   vendor: VendorService
 } as const;
 
-export interface ApiFailure {
-  status: number;
-  message: string;
-}
-
-export function normalizeApiFailure(error: unknown): ApiFailure {
-  if (error instanceof ApiError) {
-    return {
-      status: error.status,
-      message: error.message
-    };
+export function ensureApiClientConfigured(): void {
+  if (configuredBaseUrl !== null) {
+    return;
   }
 
-  return {
-    status: 500,
-    message: "unknown api failure"
+  const baseUrl = env.PUBLIC_API_BASE_URL?.trim();
+  if (!baseUrl) {
+    throw new ApiConfigurationError();
+  }
+
+  configuredBaseUrl = baseUrl;
+  OpenAPI.BASE = baseUrl;
+  OpenAPI.WITH_CREDENTIALS = true;
+  OpenAPI.CREDENTIALS = "include";
+  OpenAPI.HEADERS = {
+    "Accept-Language": "zh-TW"
   };
+}
+
+export async function probeApiAccess(
+  actor: AuthActor
+): Promise<AsyncState<{ message: string }, string>> {
+  try {
+    ensureApiClientConfigured();
+
+    if (actor.role === "employee") {
+      const plantId = requirePlantId(actor);
+      await apiClient.employee.listEmployeeOrders(plantId, undefined, undefined, 1, 1);
+    } else if (actor.role === "vendor") {
+      const plantId = requirePlantId(actor);
+      await apiClient.vendor.listVendorOrders(plantId, undefined, undefined, 1, 1);
+    } else {
+      await apiClient.admin.listAdminVendors(1, 1);
+    }
+
+    return successState({
+      message: zhTW.api.probe.success
+    });
+  } catch (error) {
+    return errorState(normalizeApiFailure(error).localizedMessage);
+  }
+}
+
+function requirePlantId(actor: AuthActor): string {
+  const plantId = actor.scope.plantIds[0];
+  if (!plantId) {
+    throw new PlantScopeError();
+  }
+
+  return plantId;
 }

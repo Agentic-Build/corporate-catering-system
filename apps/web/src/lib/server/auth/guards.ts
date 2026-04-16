@@ -31,36 +31,6 @@ const ROLE_GUARDS: readonly RoleGuard[] = [
     prefix: "/admin",
     allowedRoles: ["admin"],
     requiredPermissions: ["admin:portal"]
-  },
-  {
-    prefix: "/portal/employee",
-    allowedRoles: ["employee"],
-    requiredPermissions: ["employee:portal"]
-  },
-  {
-    prefix: "/portal/vendor",
-    allowedRoles: ["vendor"],
-    requiredPermissions: ["vendor:portal"]
-  },
-  {
-    prefix: "/portal/admin",
-    allowedRoles: ["admin"],
-    requiredPermissions: ["admin:portal"]
-  },
-  {
-    prefix: "/console/employee",
-    allowedRoles: ["employee"],
-    requiredPermissions: ["employee:portal"]
-  },
-  {
-    prefix: "/console/vendor",
-    allowedRoles: ["vendor"],
-    requiredPermissions: ["vendor:portal"]
-  },
-  {
-    prefix: "/console/admin",
-    allowedRoles: ["admin"],
-    requiredPermissions: ["admin:portal"]
   }
 ];
 
@@ -75,18 +45,8 @@ const SCOPE_RULES: readonly {
     groupIndex: 1
   },
   {
-    kind: "vendorId",
-    pattern: /^\/portal\/vendor\/vendors\/([^/]+)(?:\/|$)/,
-    groupIndex: 1
-  },
-  {
     kind: "plantId",
     pattern: /^\/employee\/plants\/([^/]+)(?:\/|$)/,
-    groupIndex: 1
-  },
-  {
-    kind: "plantId",
-    pattern: /^\/portal\/employee\/plants\/([^/]+)(?:\/|$)/,
     groupIndex: 1
   }
 ];

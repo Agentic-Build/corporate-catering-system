@@ -29,6 +29,13 @@ export const zhTW = {
       vendor: "以商家身分登入",
       admin: "以福委會身分登入"
     },
+    probeApi: "檢查 API 連線",
+    actions: {
+      idle: "可直接切換身分或檢查後端連線。",
+      loading: "請求處理中，已暫停重複送出。",
+      successFallback: "操作已完成。",
+      errorFallback: "操作失敗，請稍後再試。"
+    },
     clearSession: "清除目前工作階段",
     activeSessionTitle: "目前工作階段"
   },
@@ -97,6 +104,28 @@ export const zhTW = {
       desktopFirst: "桌機優先（商家 / 福委會體驗）"
     },
     platformReady: "共享平台基線已載入，可直接延伸各入口功能模組。"
+  },
+  api: {
+    probe: {
+      success: "後端連線檢查完成。"
+    },
+    failure: {
+      baseUrlMissing: "尚未設定 PUBLIC_API_BASE_URL，無法連線後端服務。",
+      plantScopeMissing: "目前角色缺少廠區範圍設定，無法執行 API 連線檢查。",
+      network: "無法連線後端服務，請確認網路或稍後再試。",
+      unknown: "發生未預期的 API 錯誤，請稍後再試。",
+      statusText: {
+        400: "API 請求格式錯誤。",
+        401: "API 驗證失敗，請重新登入。",
+        403: "API 權限不足。",
+        404: "API 路徑不存在。",
+        409: "API 請求與目前狀態衝突。",
+        422: "API 驗證規則未通過。",
+        500: "後端服務發生內部錯誤。",
+        502: "後端上游服務暫時不可用。",
+        503: "後端服務維護中。"
+      }
+    }
   },
   asyncState: {
     idle: "尚未開始同步資料。",

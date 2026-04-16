@@ -1,29 +1,25 @@
 <script lang="ts">
   import "../app.css";
 
+  import { browser } from "$app/environment";
   import { navigating } from "$app/state";
   import { onMount, type Snippet } from "svelte";
 
   import { zhTW } from "$lib/i18n/zh-tw";
+  import { probeApiAccess } from "$lib/platform/api";
+  import { idleState, loadingState } from "$lib/platform/async-state";
   import type { PortalRole } from "$lib/platform/navigation";
+  import { resolveLayoutPresentation } from "$lib/platform/presentation";
 
   import type { LayoutData } from "./$types";
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
   let isOnline = $state(true);
+  let bootstrapState = $state(idleState<{ message: string }, string>());
+  let bootstrapProbeInFlight = false;
 
-  const shellContainerClass = $derived(
-    data.experienceMode === "mobile-first"
-      ? "mx-auto w-full max-w-md px-4 pb-24 pt-5 md:max-w-3xl md:px-6 md:pb-12"
-      : "mx-auto w-full max-w-7xl px-4 pb-12 pt-5 md:px-8 lg:px-10"
-  );
-
-  const navPanelClass = $derived(
-    data.experienceMode === "mobile-first"
-      ? "grid gap-4 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm"
-      : "grid gap-4 rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm md:grid-cols-[1fr,2fr]"
-  );
+  const presentation = $derived(resolveLayoutPresentation(data.experienceMode));
 
   onMount(() => {
     isOnline = navigator.onLine;
@@ -43,6 +39,14 @@
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
+  });
+
+  $effect(() => {
+    bootstrapState = data.bootstrapState;
+
+    if (browser && data.actor && bootstrapState.status === "loading") {
+      void refreshBootstrapState(data.actor);
+    }
   });
 
   function portalLabel(role: PortalRole): string {
@@ -69,6 +73,17 @@
       timeZone: "Asia/Taipei"
     });
   }
+
+  async function refreshBootstrapState(actor: NonNullable<LayoutData["actor"]>) {
+    if (bootstrapProbeInFlight) {
+      return;
+    }
+
+    bootstrapProbeInFlight = true;
+    bootstrapState = loadingState();
+    bootstrapState = await probeApiAccess(actor);
+    bootstrapProbeInFlight = false;
+  }
 </script>
 
 <svelte:head>
@@ -87,7 +102,7 @@
     </aside>
   {/if}
 
-  <div class={shellContainerClass}>
+  <div class={presentation.shellContainerClass}>
     <header class="mb-4 grid gap-3 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm md:p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -128,7 +143,7 @@
       </dl>
     </header>
 
-    <nav aria-label={zhTW.shell.navLabel} class={navPanelClass}>
+    <nav aria-label={zhTW.shell.navLabel} class={presentation.navPanelClass}>
       <div class="grid gap-2">
         <p class="text-xs font-semibold tracking-[0.12em] text-slate-500">{zhTW.nav.portalLinksLabel}</p>
         <div class="flex flex-wrap gap-2">
@@ -156,7 +171,7 @@
         <div class="grid gap-2">
           <p class="text-xs font-semibold tracking-[0.12em] text-slate-500">{zhTW.nav.sectionLinksLabel}</p>
           <div
-            class={`grid gap-2 ${data.experienceMode === "mobile-first" ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3"}`}
+            class={`grid gap-2 ${presentation.sectionGridClass}`}
           >
             {#each data.navigation.sectionLinks as sectionLink}
               <a
@@ -177,14 +192,14 @@
     </nav>
 
     <section class="mb-4 mt-4 rounded-2xl border border-slate-200 bg-white/85 p-4 text-sm text-slate-700 shadow-sm">
-      {#if data.bootstrapState.status === "idle"}
+      {#if bootstrapState.status === "idle"}
         {zhTW.asyncState.idle}
-      {:else if data.bootstrapState.status === "loading"}
+      {:else if bootstrapState.status === "loading"}
         {zhTW.asyncState.loading}
-      {:else if data.bootstrapState.status === "success"}
-        {zhTW.asyncState.success}
+      {:else if bootstrapState.status === "success"}
+        {bootstrapState.data.message}
       {:else}
-        {zhTW.asyncState.error}
+        {bootstrapState.error}
       {/if}
     </section>
 
