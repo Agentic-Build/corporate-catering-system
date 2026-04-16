@@ -1314,38 +1314,50 @@ impl PayrollLedgerService {
 
         let mut state = lock_state(&self.state)?;
         let previous_state = state.clone();
-
-        if let Some(existing_batch_id) = state.exchange_batch_ids_by_cycle.get(&cycle_key).cloned()
-        {
+        for (existing_cycle_key, existing_batch_id) in &state.exchange_batch_ids_by_cycle {
             let batch = state
                 .exchange_batches
-                .get(&existing_batch_id)
+                .get(existing_batch_id)
                 .ok_or_else(|| {
                     PayrollLedgerError::ExchangeBatchNotFound(existing_batch_id.clone())
                 })?
                 .clone();
             if batch.pay_period() != pay_period {
-                return Err(PayrollLedgerError::CycleKeyPayPeriodConflict {
-                    cycle_key,
-                    expected_pay_period: batch.pay_period().to_owned(),
-                    actual_pay_period: pay_period.to_owned(),
-                });
+                if existing_cycle_key == &cycle_key {
+                    return Err(PayrollLedgerError::CycleKeyPayPeriodConflict {
+                        cycle_key,
+                        expected_pay_period: batch.pay_period().to_owned(),
+                        actual_pay_period: pay_period.to_owned(),
+                    });
+                }
+                continue;
             }
-            let lock_state = cycle_lock_state_for(&state, &cycle_key)?;
-            if lock_state == PayrollSettlementLockState::Locked {
-                let (paged_records, total_items) = paginate_records(
-                    batch.snapshot_records.clone(),
-                    page,
-                    page_size,
-                    sort_by,
-                    sort_order,
-                );
-                return Ok(PayrollExportPage {
-                    items: paged_records,
-                    total_items,
-                    page,
-                    page_size,
-                    batch,
+
+            let existing_cycle_lock_state = cycle_lock_state_for(&state, existing_cycle_key)?;
+            if existing_cycle_key == &cycle_key {
+                if existing_cycle_lock_state == PayrollSettlementLockState::Locked {
+                    let (paged_records, total_items) = paginate_records(
+                        batch.snapshot_records.clone(),
+                        page,
+                        page_size,
+                        sort_by,
+                        sort_order,
+                    );
+                    return Ok(PayrollExportPage {
+                        items: paged_records,
+                        total_items,
+                        page,
+                        page_size,
+                        batch,
+                    });
+                }
+                continue;
+            }
+
+            if existing_cycle_lock_state == PayrollSettlementLockState::Locked {
+                return Err(PayrollLedgerError::PayPeriodSettlementLocked {
+                    pay_period: pay_period.to_owned(),
+                    cycle_key: existing_cycle_key.to_owned(),
                 });
             }
         }
@@ -2419,6 +2431,10 @@ pub enum PayrollLedgerError {
         expected_pay_period: String,
         actual_pay_period: String,
     },
+    PayPeriodSettlementLocked {
+        pay_period: String,
+        cycle_key: String,
+    },
     SettlementCycleAlreadyLocked {
         cycle_key: String,
     },
@@ -2528,6 +2544,13 @@ impl fmt::Display for PayrollLedgerError {
             } => write!(
                 f,
                 "payroll cycle key {cycle_key} is bound to pay period {expected_pay_period}, cannot use with {actual_pay_period}"
+            ),
+            Self::PayPeriodSettlementLocked {
+                pay_period,
+                cycle_key,
+            } => write!(
+                f,
+                "pay period {pay_period} already has locked settlement cycle {cycle_key}; unlock with reason before recompute"
             ),
             Self::SettlementCycleAlreadyLocked { cycle_key } => {
                 write!(f, "payroll settlement cycle {cycle_key} is already locked")
@@ -3225,6 +3248,7 @@ mod tests {
         let active_employee = employee_actor();
         let terminated_employee = terminated_employee_actor();
         let payroll = payroll_actor();
+        let committee = committee_actor();
         let terminated_order = order_id("ord-payroll-ledger-terminated");
         let active_order = order_id("ord-payroll-ledger-failed");
         let refunded_order = order_id("ord-payroll-ledger-refunded");
@@ -3307,6 +3331,14 @@ mod tests {
                 audit_timestamp(101, 520),
             )
             .expect("failed HR sync should be recorded");
+        service
+            .unlock_cycle_for_recompute(
+                &committee,
+                "cycle-1970-04-exception",
+                "approved settlement recompute after hr sync failure",
+                audit_timestamp(101, 540),
+            )
+            .expect("committee unlock should authorize recompute");
 
         let replay = service
             .export_sftp_batch(
@@ -3341,11 +3373,12 @@ mod tests {
     }
 
     #[test]
-    fn export_second_cycle_marks_open_deductions_as_locked() {
+    fn export_second_cycle_requires_authorized_unlock() {
         let audit_trail = ImmutableAuditTrail::default();
         let service = PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail);
         let employee = employee_actor();
         let payroll = payroll_actor();
+        let committee = committee_actor();
         let order = order_id("ord-payroll-ledger-locked");
 
         service
@@ -3379,6 +3412,30 @@ mod tests {
             first_cycle.items()[0].status(),
             PayrollDeductionStatus::Ready
         );
+        let blocked_second_cycle = service
+            .export_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-lock-2",
+                1,
+                50,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+                audit_timestamp(112, 540),
+            )
+            .expect_err("alternate cycle should be blocked before unlock");
+        assert!(matches!(
+            blocked_second_cycle,
+            PayrollLedgerError::PayPeriodSettlementLocked { .. }
+        ));
+        service
+            .unlock_cycle_for_recompute(
+                &committee,
+                "cycle-1970-04-lock-1",
+                "approved recompute for corrected settlement cycle key",
+                audit_timestamp(112, 545),
+            )
+            .expect("committee unlock should authorize second cycle recompute");
 
         let second_cycle = service
             .export_sftp_batch(

@@ -2394,16 +2394,30 @@ fn handle_purge_order_data(
 
 async fn export_payroll_deductions(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<PayrollExportQuery>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "exportPayrollDeductions",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let payroll_actor = match require_corporate_actor_for_role(&headers, Role::PayrollOperator) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_export_payroll_deductions(&state, query) {
+    let response = match handle_export_payroll_deductions(&state, &payroll_actor, query) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -2431,9 +2445,9 @@ async fn export_payroll_deductions(
 
 fn handle_export_payroll_deductions(
     state: &AppState,
+    payroll_actor: &AuthenticatedActorContext,
     query: PayrollExportQuery,
 ) -> Result<PayrollDeductionPagePayload, (StatusCode, ErrorPayload)> {
-    let payroll_actor = load_gate_payroll_actor()?;
     let pay_period = query.pay_period.ok_or_else(|| {
         domain_error(
             StatusCode::BAD_REQUEST,
@@ -2462,7 +2476,7 @@ fn handle_export_payroll_deductions(
     let export_page = state
         .payroll_ledger_service
         .export_sftp_batch(
-            &payroll_actor,
+            payroll_actor,
             &pay_period,
             &cycle_key,
             page,
@@ -2478,17 +2492,32 @@ fn handle_export_payroll_deductions(
 
 async fn close_payroll_monthly_settlement(
     State(state): State<AppState>,
+    headers: HeaderMap,
     request: Option<Json<PayrollMonthlySettlementCloseRequest>>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "closePayrollMonthlySettlement",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let payroll_actor = match require_corporate_actor_for_role(&headers, Role::PayrollOperator) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
     let response = match handle_close_payroll_monthly_settlement(
         &state,
+        &payroll_actor,
         request.map_or_else(PayrollMonthlySettlementCloseRequest::default, |payload| {
             payload.0
         }),
@@ -2520,9 +2549,9 @@ async fn close_payroll_monthly_settlement(
 
 fn handle_close_payroll_monthly_settlement(
     state: &AppState,
+    payroll_actor: &AuthenticatedActorContext,
     request: PayrollMonthlySettlementCloseRequest,
 ) -> Result<PayrollDeductionPagePayload, (StatusCode, ErrorPayload)> {
-    let payroll_actor = load_gate_payroll_actor()?;
     let page = request.page.unwrap_or(1);
     let page_size = request.page_size.unwrap_or(20);
     let sort_by = request
@@ -2537,7 +2566,7 @@ fn handle_close_payroll_monthly_settlement(
     let export_page = state
         .payroll_ledger_service
         .close_monthly_settlement(
-            &payroll_actor,
+            payroll_actor,
             request.cycle_key.as_deref(),
             page,
             page_size,
@@ -2704,48 +2733,64 @@ fn handle_lock_payroll_settlement_cycle(
 
 async fn sync_payroll_hr_api_adjunct(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(batch_id): Path<String>,
     Json(request): Json<PayrollHrApiSyncRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "syncPayrollHrApiAdjunct",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-
-    let response = match handle_sync_payroll_hr_api_adjunct(&state, batch_id, request) {
-        Ok(payload) => {
-            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
-            (
-                StatusCode::OK,
-                Json(
-                    serde_json::to_value(payload)
-                        .expect("payroll hr api sync payload serialization should succeed"),
-                ),
-            )
-        }
+    let payroll_actor = match require_corporate_actor_for_role(&headers, Role::PayrollOperator) {
+        Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
-            (
+            return (
                 status,
                 Json(
                     serde_json::to_value(error.with_request_id(request_id.as_str()))
-                        .expect("payroll hr api sync error payload serialization should succeed"),
+                        .expect("authorization error payload serialization should succeed"),
                 ),
-            )
+            );
         }
     };
+
+    let response =
+        match handle_sync_payroll_hr_api_adjunct(&state, &payroll_actor, batch_id, request) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(
+                        serde_json::to_value(payload)
+                            .expect("payroll hr api sync payload serialization should succeed"),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                            "payroll hr api sync error payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+        };
 
     response
 }
 
 fn handle_sync_payroll_hr_api_adjunct(
     state: &AppState,
+    payroll_actor: &AuthenticatedActorContext,
     batch_id_raw: String,
     request: PayrollHrApiSyncRequest,
 ) -> Result<PayrollHrApiSyncResponse, (StatusCode, ErrorPayload)> {
-    let payroll_actor = load_gate_payroll_actor()?;
     let batch_id = parse_contract_payroll_exchange_batch_id(&batch_id_raw).map_err(|error| {
         domain_error(
             StatusCode::BAD_REQUEST,
@@ -2757,13 +2802,7 @@ fn handle_sync_payroll_hr_api_adjunct(
     let outcome = request.outcome.into_domain();
     let batch = state
         .payroll_ledger_service
-        .sync_hr_api_adjunct(
-            &payroll_actor,
-            &batch_id,
-            outcome,
-            request.note,
-            occurred_at,
-        )
+        .sync_hr_api_adjunct(payroll_actor, &batch_id, outcome, request.note, occurred_at)
         .map_err(map_payroll_ledger_error)?;
 
     Ok(PayrollHrApiSyncResponse {
@@ -3128,6 +3167,7 @@ fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayl
         | PayrollLedgerError::OrderCurrencyMismatch { .. }
         | PayrollLedgerError::OrderDeliveryDateMismatch { .. }
         | PayrollLedgerError::CycleKeyPayPeriodConflict { .. }
+        | PayrollLedgerError::PayPeriodSettlementLocked { .. }
         | PayrollLedgerError::SettlementCycleAlreadyLocked { .. }
         | PayrollLedgerError::SettlementCycleAlreadyUnlocked { .. } => {
             domain_error(StatusCode::CONFLICT, "CONFLICT", error.to_string())
@@ -4764,6 +4804,16 @@ mod tests {
         .expect("committee actor should be valid")
     }
 
+    fn payroll_operator() -> AuthenticatedActorContext {
+        AuthenticatedActorContext::new(
+            actor_id("payroll-discovery-test"),
+            Role::PayrollOperator,
+            PlantScope::all(),
+            AuthenticationSource::CorporateSso,
+        )
+        .expect("payroll actor should be valid")
+    }
+
     fn vendor_operator() -> AuthenticatedActorContext {
         AuthenticatedActorContext::new(
             actor_id("vendor-discovery-test"),
@@ -5027,6 +5077,24 @@ mod tests {
     }
 
     #[test]
+    fn payroll_operator_authorization_requires_bearer_actor_context() {
+        let missing = require_corporate_actor_for_role(&HeaderMap::new(), Role::PayrollOperator)
+            .expect_err("missing authorization header should fail");
+        assert_eq!(missing.0, StatusCode::UNAUTHORIZED);
+
+        let committee_headers = bearer_headers("committee-test", "COMMITTEE_ADMIN");
+        let forbidden = require_corporate_actor_for_role(&committee_headers, Role::PayrollOperator)
+            .expect_err("non-payroll role should be forbidden");
+        assert_eq!(forbidden.0, StatusCode::FORBIDDEN);
+
+        let payroll_headers = bearer_headers("payroll-test", "PAYROLL_OPERATOR");
+        let payroll = require_corporate_actor_for_role(&payroll_headers, Role::PayrollOperator)
+            .expect("payroll actor header should authorize");
+        assert_eq!(payroll.actor_id().as_str(), "payroll-test");
+        assert_eq!(payroll.role(), Role::PayrollOperator);
+    }
+
+    #[test]
     fn audit_retention_purge_job_removes_expired_evidence() {
         let committee = committee_admin();
         let audit_trail =
@@ -5079,6 +5147,7 @@ mod tests {
             .epoch_day();
         let state = build_state(now_epoch_day);
         let committee = committee_admin();
+        let payroll = payroll_operator();
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
             delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
@@ -5095,6 +5164,7 @@ mod tests {
 
         handle_export_payroll_deductions(
             &state,
+            &payroll,
             PayrollExportQuery {
                 pay_period: Some(pay_period),
                 cycle_key: Some("cycle-payroll-retention-runtime".to_owned()),
@@ -5625,6 +5695,7 @@ mod tests {
             .expect("current time should resolve for test")
             .epoch_day();
         let state = build_state(now_epoch_day);
+        let payroll = payroll_operator();
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
             delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
@@ -5680,6 +5751,7 @@ mod tests {
         let pay_period = created_order.delivery_date[..7].to_owned();
         let export_page = handle_export_payroll_deductions(
             &state,
+            &payroll,
             PayrollExportQuery {
                 pay_period: Some(pay_period),
                 cycle_key: Some("cycle-1970-04-primary".to_owned()),
@@ -5695,6 +5767,7 @@ mod tests {
 
         let synced = handle_sync_payroll_hr_api_adjunct(
             &state,
+            &payroll,
             export_page.exchange_batch.batch_id.clone(),
             PayrollHrApiSyncRequest {
                 outcome: PayrollHrApiSyncOutcomePayload::Succeeded,
@@ -5712,6 +5785,7 @@ mod tests {
             .expect("current time should resolve for test")
             .epoch_day();
         let state = build_state_with_terminated_load_gate_employee(now_epoch_day);
+        let payroll = payroll_operator();
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
             delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
@@ -5728,6 +5802,7 @@ mod tests {
 
         let export_page = handle_export_payroll_deductions(
             &state,
+            &payroll,
             PayrollExportQuery {
                 pay_period: Some(pay_period),
                 cycle_key: Some("cycle-terminated-runtime-drill".to_owned()),
@@ -5763,6 +5838,7 @@ mod tests {
             .expect("current time should resolve for test")
             .epoch_day();
         let state = build_state(now_epoch_day);
+        let payroll = payroll_operator();
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
             delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
@@ -5779,6 +5855,7 @@ mod tests {
 
         let export_page = handle_export_payroll_deductions(
             &state,
+            &payroll,
             PayrollExportQuery {
                 pay_period: Some(pay_period),
                 cycle_key: Some("cycle-encryption-evidence-runtime".to_owned()),
@@ -5834,9 +5911,11 @@ mod tests {
             .expect("current time should resolve for test")
             .epoch_day();
         let state = build_state(now_epoch_day);
+        let payroll = payroll_operator();
 
         let closed = handle_close_payroll_monthly_settlement(
             &state,
+            &payroll,
             PayrollMonthlySettlementCloseRequest::default(),
         )
         .expect("monthly close should succeed");
@@ -5869,9 +5948,11 @@ mod tests {
             .epoch_day();
         let state = build_state(now_epoch_day);
         let committee = committee_admin();
+        let payroll = payroll_operator();
 
         let closed = handle_close_payroll_monthly_settlement(
             &state,
+            &payroll,
             PayrollMonthlySettlementCloseRequest::default(),
         )
         .expect("monthly close should succeed");
