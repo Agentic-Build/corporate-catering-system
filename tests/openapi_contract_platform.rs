@@ -209,6 +209,23 @@ fn mcp_routes_are_contracted_and_use_oauth_service_account_security() {
             .expect("security scheme key must exist");
         assert_eq!(scheme, "mcpOAuthServiceAccountBearer");
     }
+
+    let error_codes = spec["components"]["schemas"]["ErrorCode"]["enum"]
+        .as_array()
+        .expect("error code enum should exist")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("error code enum value should be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(error_codes.contains("INVALID_MCP_TOOL_NAME"));
+    assert!(error_codes.contains("MCP_TOOL_NOT_FOUND"));
+    assert!(error_codes.contains("INVALID_MCP_TOOL_ARGUMENTS"));
+    assert!(error_codes.contains("MCP_OAUTH_CONFIGURATION_ERROR"));
+    assert!(error_codes.contains("MCP_AUTHORIZATION_AUDIT_INTERNAL_ERROR"));
 }
 
 #[test]
