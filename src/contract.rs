@@ -167,7 +167,9 @@ impl HttpOperation {
             Self::CreateEmployeeOrder => "/api/v1/employee/orders",
             Self::UpdateEmployeeOrder => "/api/v1/employee/orders/{orderId}",
             Self::VerifyPickupOrder => "/api/v1/employee/orders/{orderId}/pickup-verifications",
-            Self::GetEmployeeOrderPayrollLedger => "/api/v1/employee/orders/{orderId}/payroll-ledger",
+            Self::GetEmployeeOrderPayrollLedger => {
+                "/api/v1/employee/orders/{orderId}/payroll-ledger"
+            }
             Self::CreateEmployeeOrderDispute => "/api/v1/employee/orders/{orderId}/disputes",
             Self::ListVendorOrders => "/api/v1/vendor/orders",
             Self::ListVendorFulfillmentBoard => "/api/v1/vendor/fulfillment-board",
@@ -241,9 +243,7 @@ impl HttpOperation {
             Self::CreateEmployeeOrder
             | Self::UpdateEmployeeOrder
             | Self::VerifyPickupOrder
-            | Self::CreateEmployeeOrderDispute => {
-                Some(Action::PlaceEmployeeOrder)
-            }
+            | Self::CreateEmployeeOrderDispute => Some(Action::PlaceEmployeeOrder),
             Self::UpsertVendorMenuItem
             | Self::AdvanceVendorFulfillmentDeliveryStatus
             | Self::CreateVendorFulfillmentExportBatch => Some(Action::ManageVendorMenu),
@@ -1273,6 +1273,7 @@ pub fn canonical_openapi_spec() -> Value {
             "security": [{ "corporateSsoBearer": [] }],
             "parameters": [
               { "$ref": "#/components/parameters/PayPeriodQuery" },
+              { "$ref": "#/components/parameters/PayrollCycleKeyQuery" },
               { "$ref": "#/components/parameters/PageQuery" },
               { "$ref": "#/components/parameters/PageSizeQuery" },
               { "$ref": "#/components/parameters/PayrollSortByQuery" },
@@ -1303,6 +1304,14 @@ pub fn canonical_openapi_spec() -> Value {
             "parameters": [
               { "$ref": "#/components/parameters/PayrollExchangeBatchIdPath" }
             ],
+            "requestBody": {
+              "required": false,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/PayrollHrApiSyncRequest" }
+                }
+              }
+            },
             "responses": {
               "200": {
                 "description": "Batch HR API adjunct sync status",
@@ -1398,6 +1407,15 @@ pub fn canonical_openapi_spec() -> Value {
               "type": "string",
               "pattern": "^[0-9]{4}-[0-9]{2}$",
               "examples": ["2026-04"]
+            }
+          },
+          "PayrollCycleKeyQuery": {
+            "name": "cycleKey",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._-]{1,64}$"
             }
           },
           "PageQuery": {
@@ -1849,6 +1867,7 @@ pub fn canonical_openapi_spec() -> Value {
               "action",
               "entityType",
               "entityId",
+              "reason",
               "correlationId"
             ],
             "properties": {
@@ -1861,6 +1880,7 @@ pub fn canonical_openapi_spec() -> Value {
               "action": { "$ref": "#/components/schemas/AuditAction" },
               "entityType": { "$ref": "#/components/schemas/AuditEntityType" },
               "entityId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "reason": { "type": "string", "minLength": 1, "maxLength": 280 },
               "correlationId": { "type": "string", "minLength": 1, "maxLength": 256 }
             },
             "additionalProperties": false
@@ -3297,17 +3317,42 @@ pub fn canonical_openapi_spec() -> Value {
             "required": [
               "batchId",
               "payPeriod",
+              "cycleKey",
               "generatedAt",
+              "snapshotChecksum",
               "exchangePath",
               "hrApiSyncStatus"
             ],
             "properties": {
               "batchId": { "type": "string", "pattern": "^sftp-[0-9]{6}-[0-9a-f]{16}$" },
               "payPeriod": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$" },
+              "cycleKey": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._-]{1,64}$"
+              },
               "generatedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "snapshotChecksum": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
               "exchangePath": { "type": "string", "enum": ["SFTP_BATCH"] },
-              "hrApiSyncStatus": { "type": "string", "enum": ["NOT_SYNCED", "SUCCEEDED"] },
+              "hrApiSyncStatus": {
+                "type": "string",
+                "enum": ["NOT_SYNCED", "SUCCEEDED", "FAILED"]
+              },
               "hrApiSyncedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" }
+            },
+            "additionalProperties": false
+          },
+          "PayrollHrApiSyncOutcome": {
+            "type": "string",
+            "enum": ["SUCCEEDED", "FAILED"]
+          },
+          "PayrollHrApiSyncRequest": {
+            "type": "object",
+            "properties": {
+              "outcome": { "$ref": "#/components/schemas/PayrollHrApiSyncOutcome" },
+              "note": { "type": "string", "minLength": 1, "maxLength": 280 }
             },
             "additionalProperties": false
           },
@@ -3321,7 +3366,14 @@ pub fn canonical_openapi_spec() -> Value {
           },
           "PayrollDeductionStatus": {
             "type": "string",
-            "enum": ["READY", "LOCKED", "REFUNDED", "DISPUTED"]
+            "enum": [
+              "READY",
+              "LOCKED",
+              "REFUNDED",
+              "DISPUTED",
+              "DEDUCTION_FAILED",
+              "EMPLOYEE_TERMINATED"
+            ]
           },
           "PayrollDeductionRecord": {
             "type": "object",

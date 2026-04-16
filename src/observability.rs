@@ -527,9 +527,7 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
         "getEmployeeOrderPayrollLedger" => {
             ("/api/v1/employee/orders/{orderId}/payroll-ledger", "GET")
         }
-        "createEmployeeOrderDispute" => {
-            ("/api/v1/employee/orders/{orderId}/disputes", "POST")
-        }
+        "createEmployeeOrderDispute" => ("/api/v1/employee/orders/{orderId}/disputes", "POST"),
         "listVendorOrders" => ("/api/v1/vendor/orders", "GET"),
         "listVendorFulfillmentBoard" => ("/api/v1/vendor/fulfillment-board", "GET"),
         "upsertVendorMenuItem" => ("/api/v1/vendor/menu-items/{menuItemId}", "PUT"),

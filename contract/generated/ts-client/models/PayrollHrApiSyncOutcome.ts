@@ -2,4 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type PayrollDeductionStatus = 'READY' | 'LOCKED' | 'REFUNDED' | 'DISPUTED' | 'DEDUCTION_FAILED' | 'EMPLOYEE_TERMINATED';
+export type PayrollHrApiSyncOutcome = 'SUCCEEDED' | 'FAILED';

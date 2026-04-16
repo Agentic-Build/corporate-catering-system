@@ -19,5 +19,6 @@ export type AuditEvidence = {
     evidenceId: number;
     occurredAt: TaipeiBusinessDateTime;
     operationId: string;
+    reason: string;
 };
 

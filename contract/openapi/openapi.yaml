@@ -176,6 +176,13 @@ components:
         - 2026-04
         pattern: ^[0-9]{4}-[0-9]{2}$
         type: string
+    PayrollCycleKeyQuery:
+      in: query
+      name: cycleKey
+      required: true
+      schema:
+        pattern: ^[A-Za-z0-9._-]{1,64}$
+        type: string
     PayrollExchangeBatchIdPath:
       in: path
       name: batchId
@@ -508,6 +515,10 @@ components:
           maxLength: 128
           minLength: 1
           type: string
+        reason:
+          maxLength: 280
+          minLength: 1
+          type: string
       required:
       - evidenceId
       - occurredAt
@@ -518,6 +529,7 @@ components:
       - action
       - entityType
       - entityId
+      - reason
       - correlationId
       type: object
     AuditInvestigationResponse:
@@ -1119,6 +1131,8 @@ components:
       - LOCKED
       - REFUNDED
       - DISPUTED
+      - DEDUCTION_FAILED
+      - EMPLOYEE_TERMINATED
       type: string
     PayrollDispute:
       additionalProperties: false
@@ -1208,6 +1222,9 @@ components:
         batchId:
           pattern: ^sftp-[0-9]{6}-[0-9a-f]{16}$
           type: string
+        cycleKey:
+          pattern: ^[A-Za-z0-9._-]{1,64}$
+          type: string
         exchangePath:
           enum:
           - SFTP_BATCH
@@ -1218,18 +1235,39 @@ components:
           enum:
           - NOT_SYNCED
           - SUCCEEDED
+          - FAILED
           type: string
         hrApiSyncedAt:
           $ref: '#/components/schemas/TaipeiBusinessDateTime'
         payPeriod:
           pattern: ^[0-9]{4}-[0-9]{2}$
           type: string
+        snapshotChecksum:
+          pattern: ^[0-9a-f]{64}$
+          type: string
       required:
       - batchId
       - payPeriod
+      - cycleKey
       - generatedAt
+      - snapshotChecksum
       - exchangePath
       - hrApiSyncStatus
+      type: object
+    PayrollHrApiSyncOutcome:
+      enum:
+      - SUCCEEDED
+      - FAILED
+      type: string
+    PayrollHrApiSyncRequest:
+      additionalProperties: false
+      properties:
+        note:
+          maxLength: 280
+          minLength: 1
+          type: string
+        outcome:
+          $ref: '#/components/schemas/PayrollHrApiSyncOutcome'
       type: object
     PayrollHrApiSyncResponse:
       additionalProperties: false
@@ -3085,6 +3123,7 @@ paths:
       operationId: exportPayrollDeductions
       parameters:
       - $ref: '#/components/parameters/PayPeriodQuery'
+      - $ref: '#/components/parameters/PayrollCycleKeyQuery'
       - $ref: '#/components/parameters/PageQuery'
       - $ref: '#/components/parameters/PageSizeQuery'
       - $ref: '#/components/parameters/PayrollSortByQuery'
@@ -3118,6 +3157,12 @@ paths:
       operationId: syncPayrollHrApiAdjunct
       parameters:
       - $ref: '#/components/parameters/PayrollExchangeBatchIdPath'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrollHrApiSyncRequest'
+        required: false
       responses:
         '200':
           content:

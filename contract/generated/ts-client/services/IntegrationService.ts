@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { PayrollDeductionPage } from '../models/PayrollDeductionPage';
+import type { PayrollHrApiSyncRequest } from '../models/PayrollHrApiSyncRequest';
 import type { PayrollHrApiSyncResponse } from '../models/PayrollHrApiSyncResponse';
 import type { PayrollSortField } from '../models/PayrollSortField';
 import type { SortOrder } from '../models/SortOrder';
@@ -13,6 +14,7 @@ export class IntegrationService {
     /**
      * Export payroll deduction records
      * @param payPeriod
+     * @param cycleKey
      * @param page
      * @param pageSize
      * @param sortBy
@@ -22,6 +24,7 @@ export class IntegrationService {
      */
     public static exportPayrollDeductions(
         payPeriod: string,
+        cycleKey: string,
         page: number = 1,
         pageSize: number = 20,
         sortBy?: PayrollSortField,
@@ -32,6 +35,7 @@ export class IntegrationService {
             url: '/api/v1/integrations/payroll/deductions',
             query: {
                 'payPeriod': payPeriod,
+                'cycleKey': cycleKey,
                 'page': page,
                 'pageSize': pageSize,
                 'sortBy': sortBy,
@@ -48,11 +52,13 @@ export class IntegrationService {
     /**
      * Trigger optional HR API adjunct sync for an SFTP payroll batch
      * @param batchId
+     * @param requestBody
      * @returns PayrollHrApiSyncResponse Batch HR API adjunct sync status
      * @throws ApiError
      */
     public static syncPayrollHrApiAdjunct(
         batchId: string,
+        requestBody?: PayrollHrApiSyncRequest,
     ): CancelablePromise<PayrollHrApiSyncResponse> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -60,6 +66,8 @@ export class IntegrationService {
             path: {
                 'batchId': batchId,
             },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 400: `Request payload or query is invalid.`,
                 401: `Authentication token is missing or invalid.`,

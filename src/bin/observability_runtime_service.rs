@@ -17,7 +17,8 @@ use corporate_catering_system::audit::{
 };
 use corporate_catering_system::health::{evaluate_probe, HealthProbeKind, HealthState};
 use corporate_catering_system::identity::{
-    ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
+    ActorId, AuthenticatedActorContext, AuthenticationSource, EmploymentStatus, PlantId,
+    PlantScope, Role,
 };
 use corporate_catering_system::menu_supply_window::{
     EmployeeMenuDiscoveryEntry, MenuHealthTag, MenuImageUrl, MenuItemId, MenuSupplyPolicy,
@@ -30,8 +31,8 @@ use corporate_catering_system::observability::{
 use corporate_catering_system::payroll::{
     OrderPayrollView, PayrollDeductionRecord, PayrollDisputeId, PayrollDisputeRecord,
     PayrollDisputeTraceEvent, PayrollExchangeBatch, PayrollExchangeBatchId, PayrollExportPage,
-    PayrollLedgerError, PayrollLedgerService, PayrollLedgerSourceKind, PayrollLedgerSourceRef,
-    PayrollRetentionPolicy, PayrollSortField as PayrollSortFieldDomain,
+    PayrollHrApiSyncOutcome, PayrollLedgerError, PayrollLedgerService, PayrollLedgerSourceKind,
+    PayrollLedgerSourceRef, PayrollRetentionPolicy, PayrollSortField as PayrollSortFieldDomain,
     SortOrder as PayrollSortOrderDomain,
 };
 use corporate_catering_system::pickup_totp::{
@@ -254,6 +255,7 @@ struct AuditEvidencePayload {
     action: String,
     entity_type: String,
     entity_id: String,
+    reason: String,
     correlation_id: String,
 }
 
@@ -375,10 +377,34 @@ impl PayrollSortFieldQuery {
 #[serde(rename_all = "camelCase")]
 struct PayrollExportQuery {
     pay_period: Option<String>,
+    cycle_key: Option<String>,
     page: Option<usize>,
     page_size: Option<usize>,
     sort_by: Option<PayrollSortFieldQuery>,
     sort_order: Option<SortOrderQuery>,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PayrollHrApiSyncOutcomePayload {
+    Succeeded,
+    Failed,
+}
+
+impl PayrollHrApiSyncOutcomePayload {
+    const fn into_domain(self) -> PayrollHrApiSyncOutcome {
+        match self {
+            Self::Succeeded => PayrollHrApiSyncOutcome::Succeeded,
+            Self::Failed => PayrollHrApiSyncOutcome::Failed,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PayrollHrApiSyncRequest {
+    outcome: Option<PayrollHrApiSyncOutcomePayload>,
+    note: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -408,7 +434,9 @@ struct PageMetaPayload {
 struct PayrollExchangeBatchPayload {
     batch_id: String,
     pay_period: String,
+    cycle_key: String,
     generated_at: String,
+    snapshot_checksum: String,
     exchange_path: &'static str,
     hr_api_sync_status: String,
     hr_api_synced_at: Option<String>,
@@ -912,7 +940,8 @@ fn bootstrap_runtime_state(
 
     let menu_supply_policy =
         MenuSupplyPolicy::with_audit_trail(Default::default(), audit_trail.clone());
-    let payroll_ledger_service = PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
+    let payroll_ledger_service =
+        PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
     let vendor_menu_gateway = HttpVendorMenuExecutionGateway::new(&menu_supply_policy);
 
     for index in 1..=menu_variant_count {
@@ -1885,9 +1914,8 @@ async fn update_admin_payroll_dispute(
             (
                 status,
                 Json(
-                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
-                        "admin payroll dispute error payload serialization should succeed",
-                    ),
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("admin payroll dispute error payload serialization should succeed"),
                 ),
             )
         }
@@ -2060,9 +2088,8 @@ async fn export_payroll_deductions(
             (
                 status,
                 Json(
-                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
-                        "payroll deductions error payload serialization should succeed",
-                    ),
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("payroll deductions error payload serialization should succeed"),
                 ),
             )
         }
@@ -2083,6 +2110,13 @@ fn handle_export_payroll_deductions(
             "payPeriod query parameter is required".to_owned(),
         )
     })?;
+    let cycle_key = query.cycle_key.ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "cycleKey query parameter is required".to_owned(),
+        )
+    })?;
     let page = query.page.unwrap_or(1);
     let page_size = query.page_size.unwrap_or(20);
     let sort_by = query
@@ -2099,6 +2133,7 @@ fn handle_export_payroll_deductions(
         .export_sftp_batch(
             &payroll_actor,
             &pay_period,
+            &cycle_key,
             page,
             page_size,
             sort_by,
@@ -2113,6 +2148,7 @@ fn handle_export_payroll_deductions(
 async fn sync_payroll_hr_api_adjunct(
     State(state): State<AppState>,
     Path(batch_id): Path<String>,
+    request: Option<Json<PayrollHrApiSyncRequest>>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "syncPayrollHrApiAdjunct",
@@ -2121,7 +2157,11 @@ async fn sync_payroll_hr_api_adjunct(
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
 
-    let response = match handle_sync_payroll_hr_api_adjunct(&state, batch_id) {
+    let response = match handle_sync_payroll_hr_api_adjunct(
+        &state,
+        batch_id,
+        request.map_or_else(PayrollHrApiSyncRequest::default, |payload| payload.0),
+    ) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -2137,9 +2177,8 @@ async fn sync_payroll_hr_api_adjunct(
             (
                 status,
                 Json(
-                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
-                        "payroll hr api sync error payload serialization should succeed",
-                    ),
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("payroll hr api sync error payload serialization should succeed"),
                 ),
             )
         }
@@ -2151,6 +2190,7 @@ async fn sync_payroll_hr_api_adjunct(
 fn handle_sync_payroll_hr_api_adjunct(
     state: &AppState,
     batch_id_raw: String,
+    request: PayrollHrApiSyncRequest,
 ) -> Result<PayrollHrApiSyncResponse, (StatusCode, ErrorPayload)> {
     let payroll_actor = load_gate_payroll_actor()?;
     let batch_id = parse_contract_payroll_exchange_batch_id(&batch_id_raw).map_err(|error| {
@@ -2161,9 +2201,19 @@ fn handle_sync_payroll_hr_api_adjunct(
         )
     })?;
     let occurred_at = current_audit_timestamp()?;
+    let outcome = request
+        .outcome
+        .unwrap_or(PayrollHrApiSyncOutcomePayload::Succeeded)
+        .into_domain();
     let batch = state
         .payroll_ledger_service
-        .sync_hr_api_adjunct(&payroll_actor, &batch_id, occurred_at)
+        .sync_hr_api_adjunct(
+            &payroll_actor,
+            &batch_id,
+            outcome,
+            request.note,
+            occurred_at,
+        )
         .map_err(map_payroll_ledger_error)?;
 
     Ok(PayrollHrApiSyncResponse {
@@ -2171,7 +2221,9 @@ fn handle_sync_payroll_hr_api_adjunct(
     })
 }
 
-fn to_employee_order_payroll_ledger_response(view: &OrderPayrollView) -> EmployeeOrderPayrollLedgerResponse {
+fn to_employee_order_payroll_ledger_response(
+    view: &OrderPayrollView,
+) -> EmployeeOrderPayrollLedgerResponse {
     EmployeeOrderPayrollLedgerResponse {
         order_id: view.order_id().as_str().to_owned(),
         employee_actor_id: view.employee_actor_id().as_str().to_owned(),
@@ -2218,7 +2270,9 @@ fn to_payroll_dispute_payload(dispute: &PayrollDisputeRecord) -> PayrollDisputeP
     }
 }
 
-fn to_payroll_dispute_trace_payload(event: &PayrollDisputeTraceEvent) -> PayrollDisputeTracePayload {
+fn to_payroll_dispute_trace_payload(
+    event: &PayrollDisputeTraceEvent,
+) -> PayrollDisputeTracePayload {
     PayrollDisputeTracePayload {
         occurred_at: audit_timestamp_to_iso_datetime(event.occurred_at()),
         actor_id: event.actor_id().as_str().to_owned(),
@@ -2232,7 +2286,9 @@ fn to_payroll_dispute_trace_payload(event: &PayrollDisputeTraceEvent) -> Payroll
     }
 }
 
-fn to_payroll_deduction_page_payload(export_page: &PayrollExportPage) -> PayrollDeductionPagePayload {
+fn to_payroll_deduction_page_payload(
+    export_page: &PayrollExportPage,
+) -> PayrollDeductionPagePayload {
     let total_pages = if export_page.total_items() == 0 {
         0
     } else {
@@ -2254,7 +2310,9 @@ fn to_payroll_deduction_page_payload(export_page: &PayrollExportPage) -> Payroll
     }
 }
 
-fn to_payroll_deduction_record_payload(record: &PayrollDeductionRecord) -> PayrollDeductionRecordPayload {
+fn to_payroll_deduction_record_payload(
+    record: &PayrollDeductionRecord,
+) -> PayrollDeductionRecordPayload {
     PayrollDeductionRecordPayload {
         employee_actor_id: record.employee_actor_id().as_str().to_owned(),
         order_id: record.order_id().as_str().to_owned(),
@@ -2265,7 +2323,9 @@ fn to_payroll_deduction_record_payload(record: &PayrollDeductionRecord) -> Payro
         },
         pay_period: record.pay_period().to_owned(),
         status: record.status().as_str().to_owned(),
-        dispute_status: record.dispute_status().map(|status| status.as_str().to_owned()),
+        dispute_status: record
+            .dispute_status()
+            .map(|status| status.as_str().to_owned()),
         source_entry_ids: record.source_entry_ids().to_vec(),
     }
 }
@@ -2281,7 +2341,9 @@ fn to_payroll_exchange_batch_payload(batch: &PayrollExchangeBatch) -> PayrollExc
     PayrollExchangeBatchPayload {
         batch_id: batch.batch_id().as_str().to_owned(),
         pay_period: batch.pay_period().to_owned(),
+        cycle_key: batch.cycle_key().to_owned(),
         generated_at: audit_timestamp_to_iso_datetime(batch.generated_at()),
+        snapshot_checksum: batch.snapshot_checksum().to_owned(),
         exchange_path: "SFTP_BATCH",
         hr_api_sync_status,
         hr_api_synced_at,
@@ -2322,7 +2384,9 @@ fn parse_contract_payroll_exchange_batch_id(value: &str) -> Result<PayrollExchan
         return Err("must include exactly two `sftp-` segments".to_owned());
     }
     if pay_period_compact.len() != 6
-        || !pay_period_compact.chars().all(|character| character.is_ascii_digit())
+        || !pay_period_compact
+            .chars()
+            .all(|character| character.is_ascii_digit())
     {
         return Err("pay period segment must be YYYYMM digits".to_owned());
     }
@@ -2411,7 +2475,8 @@ fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayl
         | PayrollLedgerError::NoOutstandingPayrollAmount { .. }
         | PayrollLedgerError::OrderOwnerMismatch { .. }
         | PayrollLedgerError::OrderCurrencyMismatch { .. }
-        | PayrollLedgerError::OrderDeliveryDateMismatch { .. } => {
+        | PayrollLedgerError::OrderDeliveryDateMismatch { .. }
+        | PayrollLedgerError::CycleKeyPayPeriodConflict { .. } => {
             domain_error(StatusCode::CONFLICT, "CONFLICT", error.to_string())
         }
         PayrollLedgerError::InvalidOperationId
@@ -2421,6 +2486,7 @@ fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayl
         | PayrollLedgerError::InvalidExchangeBatchId
         | PayrollLedgerError::InvalidDisputeReason(_)
         | PayrollLedgerError::InvalidPayPeriod(_)
+        | PayrollLedgerError::InvalidCycleKey(_)
         | PayrollLedgerError::InvalidPagination { .. }
         | PayrollLedgerError::InvalidMoney(_)
         | PayrollLedgerError::RefundAmountOutOfRange { .. } => {
@@ -2888,17 +2954,35 @@ fn sync_payroll_ledger_from_order_snapshot(
     })?;
 
     let target_amount_minor = expected_payroll_target_amount(snapshot, gross_total_minor);
-    state.payroll_ledger_service.reconcile_order_charge(
-        actor,
-        operation_id,
-        snapshot.order_id(),
-        snapshot.employee_actor_id(),
-        snapshot.delivery_epoch_day(),
-        &currency,
-        target_amount_minor,
-        AuditTimestamp::from_taipei_business_moment(
-            occurred_at.epoch_day(),
-            occurred_at.minute_of_day(),
+    let employee_employment_status =
+        if actor.role() == Role::Employee && actor.actor_id() == snapshot.employee_actor_id() {
+            actor.employment_status()
+        } else {
+            EmploymentStatus::Active
+        };
+    state
+        .payroll_ledger_service
+        .reconcile_order_charge(
+            actor,
+            operation_id,
+            snapshot.order_id(),
+            snapshot.employee_actor_id(),
+            employee_employment_status,
+            snapshot.delivery_epoch_day(),
+            &currency,
+            target_amount_minor,
+            AuditTimestamp::from_taipei_business_moment(
+                occurred_at.epoch_day(),
+                occurred_at.minute_of_day(),
+            )
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "PAYROLL_LEDGER_INTERNAL_ERROR",
+                    error.to_string(),
+                )
+            })?,
+            source_event,
         )
         .map_err(|error| {
             domain_error(
@@ -2906,16 +2990,7 @@ fn sync_payroll_ledger_from_order_snapshot(
                 "PAYROLL_LEDGER_INTERNAL_ERROR",
                 error.to_string(),
             )
-        })?,
-        source_event,
-    )
-    .map_err(|error| {
-        domain_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "PAYROLL_LEDGER_INTERNAL_ERROR",
-            error.to_string(),
-        )
-    })?;
+        })?;
     Ok(())
 }
 
@@ -3396,6 +3471,7 @@ fn to_audit_evidence_payload(evidence: &ImmutableAuditEvidence) -> AuditEvidence
         action: evidence.action().as_str().to_owned(),
         entity_type: evidence.entity().entity_type().as_str().to_owned(),
         entity_id: evidence.entity().entity_id().to_owned(),
+        reason: evidence.reason().to_owned(),
         correlation_id: evidence.correlation_id().as_str().to_owned(),
     }
 }
@@ -3460,6 +3536,7 @@ fn map_audit_trail_error(
         }
         AuditTrailError::InvalidMinuteOfDay { .. }
         | AuditTrailError::InvalidEntityId
+        | AuditTrailError::InvalidReason(_)
         | AuditTrailError::InvalidCorrelationId
         | AuditTrailError::InvalidRetentionPolicy => domain_error(
             StatusCode::BAD_REQUEST,
@@ -4501,11 +4578,9 @@ mod tests {
         let created_order =
             handle_create_employee_order(&state, create_request).expect("order should be created");
 
-        let first_ledger = handle_get_employee_order_payroll_ledger(
-            &state,
-            created_order.order_id.clone(),
-        )
-        .expect("initial payroll ledger should be queryable");
+        let first_ledger =
+            handle_get_employee_order_payroll_ledger(&state, created_order.order_id.clone())
+                .expect("initial payroll ledger should be queryable");
         assert_eq!(first_ledger.net_amount_minor, 12000);
         assert_eq!(first_ledger.ledger_entries.len(), 1);
         assert_eq!(first_ledger.ledger_entries[0].kind, "DEDUCTION");
@@ -4522,11 +4597,9 @@ mod tests {
         )
         .expect("order cancel should succeed");
 
-        let updated_ledger = handle_get_employee_order_payroll_ledger(
-            &state,
-            created_order.order_id.clone(),
-        )
-        .expect("updated payroll ledger should be queryable");
+        let updated_ledger =
+            handle_get_employee_order_payroll_ledger(&state, created_order.order_id.clone())
+                .expect("updated payroll ledger should be queryable");
         assert_eq!(updated_ledger.net_amount_minor, 0);
         assert_eq!(updated_ledger.ledger_entries.len(), 2);
         assert_eq!(updated_ledger.ledger_entries[1].kind, "ADJUSTMENT_CREDIT");
@@ -4595,6 +4668,7 @@ mod tests {
             &state,
             PayrollExportQuery {
                 pay_period: Some(pay_period),
+                cycle_key: Some("cycle-1970-04-primary".to_owned()),
                 page: Some(1),
                 page_size: Some(20),
                 sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
@@ -4608,6 +4682,7 @@ mod tests {
         let synced = handle_sync_payroll_hr_api_adjunct(
             &state,
             export_page.exchange_batch.batch_id.clone(),
+            PayrollHrApiSyncRequest::default(),
         )
         .expect("hr api adjunct sync should succeed");
         assert_eq!(synced.exchange_batch.hr_api_sync_status, "SUCCEEDED");

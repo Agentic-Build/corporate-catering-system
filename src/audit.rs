@@ -15,6 +15,7 @@ const TAIPEI_FIXED_OFFSET_SECONDS: i64 = 8 * 60 * 60;
 const PURGE_AUDIT_EVIDENCE_OPERATION_ID: &str = "purgeAuditEvidence";
 const AUDIT_TRAIL_ENTITY_ID: &str = "audit-trail";
 const PURGE_AUDIT_EVIDENCE_CORRELATION_PREFIX: &str = "audit-trail-retention-purge";
+const MAX_AUDIT_REASON_LENGTH: usize = 280;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuditIdentityLink {
@@ -309,6 +310,7 @@ pub struct ImmutableAuditEvidence {
     audit_identity: AuditIdentityLink,
     action: AuditAction,
     entity: AuditEntityRef,
+    reason: String,
     correlation_id: AuditCorrelationId,
 }
 
@@ -333,6 +335,10 @@ impl ImmutableAuditEvidence {
         &self.entity
     }
 
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+
     pub fn correlation_id(&self) -> &AuditCorrelationId {
         &self.correlation_id
     }
@@ -344,6 +350,7 @@ pub struct AuditEvidenceWrite {
     audit_identity: AuditIdentityLink,
     action: AuditAction,
     entity: AuditEntityRef,
+    reason: String,
     correlation_id: AuditCorrelationId,
 }
 
@@ -359,9 +366,28 @@ impl AuditEvidenceWrite {
             occurred_at,
             audit_identity,
             action,
+            reason: default_audit_reason(action, &entity),
             entity,
             correlation_id,
         }
+    }
+
+    pub fn new_with_reason(
+        occurred_at: AuditTimestamp,
+        audit_identity: AuditIdentityLink,
+        action: AuditAction,
+        entity: AuditEntityRef,
+        reason: impl Into<String>,
+        correlation_id: AuditCorrelationId,
+    ) -> Result<Self, AuditTrailError> {
+        Ok(Self {
+            occurred_at,
+            audit_identity,
+            action,
+            entity,
+            reason: normalize_audit_reason(reason.into())?,
+            correlation_id,
+        })
     }
 }
 
@@ -588,6 +614,7 @@ impl ImmutableAuditTrail {
             audit_identity: write.audit_identity,
             action: write.action,
             entity: write.entity,
+            reason: write.reason,
             correlation_id: write.correlation_id,
         };
         state.evidences.push(evidence.clone());
@@ -712,6 +739,10 @@ impl ImmutableAuditTrail {
             audit_identity: AuditIdentityLink::from_actor(actor, PURGE_AUDIT_EVIDENCE_OPERATION_ID),
             action: AuditAction::PurgeAuditEvidence,
             entity: purge_entity,
+            reason: format!(
+                "retention purge executed asOfEpochDay={}",
+                as_of.epoch_day()
+            ),
             correlation_id: purge_correlation_id,
         };
         state.evidences.push(purge_evidence);
@@ -821,6 +852,7 @@ struct PersistedImmutableAuditEvidence {
     audit_identity: PersistedAuditIdentity,
     action: PersistedAuditAction,
     entity: PersistedAuditEntity,
+    reason: String,
     correlation_id: String,
 }
 
@@ -992,6 +1024,7 @@ fn persisted_evidence_from_domain(
         audit_identity: persisted_audit_identity_from_domain(evidence.audit_identity()),
         action: persisted_audit_action_from_domain(evidence.action()),
         entity: persisted_audit_entity_from_domain(evidence.entity()),
+        reason: evidence.reason().to_owned(),
         correlation_id: evidence.correlation_id().as_str().to_owned(),
     }
 }
@@ -1013,6 +1046,7 @@ fn domain_evidence_from_persisted(
         audit_identity: domain_audit_identity_from_persisted(&persisted.audit_identity)?,
         action: domain_audit_action_from_persisted(persisted.action),
         entity: domain_audit_entity_from_persisted(&persisted.entity)?,
+        reason: normalize_audit_reason(persisted.reason.clone())?,
         correlation_id: AuditCorrelationId::parse(persisted.correlation_id.clone())?,
     })
 }
@@ -1268,10 +1302,35 @@ fn domain_entity_type_from_persisted(entity_type: PersistedAuditEntityType) -> A
     }
 }
 
+fn normalize_audit_reason(value: String) -> Result<String, AuditTrailError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(AuditTrailError::InvalidReason(
+            "reason must not be empty".to_owned(),
+        ));
+    }
+    if trimmed.chars().count() > MAX_AUDIT_REASON_LENGTH {
+        return Err(AuditTrailError::InvalidReason(format!(
+            "reason must be at most {MAX_AUDIT_REASON_LENGTH} characters"
+        )));
+    }
+    Ok(trimmed.to_owned())
+}
+
+fn default_audit_reason(action: AuditAction, entity: &AuditEntityRef) -> String {
+    format!(
+        "action={} entityType={} entityId={}",
+        action.as_str(),
+        entity.entity_type().as_str(),
+        entity.entity_id()
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuditTrailError {
     InvalidMinuteOfDay { minute_of_day: u16 },
     InvalidEntityId,
+    InvalidReason(String),
     InvalidCorrelationId,
     InvalidRetentionPolicy,
     UnauthorizedInvestigatorRole { actual: Role },
@@ -1291,6 +1350,7 @@ impl fmt::Display for AuditTrailError {
                 "audit minute_of_day must be between 0 and 1439, got {minute_of_day}"
             ),
             Self::InvalidEntityId => f.write_str("audit entity id must not be empty"),
+            Self::InvalidReason(message) => write!(f, "invalid audit reason: {message}"),
             Self::InvalidCorrelationId => f.write_str("audit correlation id must not be empty"),
             Self::InvalidRetentionPolicy => {
                 f.write_str("audit retention policy requires retention_days > 0")

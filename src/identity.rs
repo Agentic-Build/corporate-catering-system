@@ -14,6 +14,12 @@ pub enum AuthenticationSource {
     VendorAccountMfa,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EmploymentStatus {
+    Active,
+    Terminated,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ActorId(String);
 
@@ -92,6 +98,7 @@ pub struct AuthenticatedActorContext {
     role: Role,
     plant_scope: PlantScope,
     authentication_source: AuthenticationSource,
+    employment_status: EmploymentStatus,
 }
 
 impl AuthenticatedActorContext {
@@ -101,6 +108,22 @@ impl AuthenticatedActorContext {
         plant_scope: PlantScope,
         authentication_source: AuthenticationSource,
     ) -> Result<Self, IdentityContextError> {
+        Self::new_with_employment_status(
+            actor_id,
+            role,
+            plant_scope,
+            authentication_source,
+            EmploymentStatus::Active,
+        )
+    }
+
+    pub fn new_with_employment_status(
+        actor_id: ActorId,
+        role: Role,
+        plant_scope: PlantScope,
+        authentication_source: AuthenticationSource,
+        employment_status: EmploymentStatus,
+    ) -> Result<Self, IdentityContextError> {
         validate_identity_source(role, authentication_source)?;
         validate_plant_scope(role, &plant_scope)?;
 
@@ -109,6 +132,7 @@ impl AuthenticatedActorContext {
             role,
             plant_scope,
             authentication_source,
+            employment_status,
         })
     }
 
@@ -126,6 +150,10 @@ impl AuthenticatedActorContext {
 
     pub fn authentication_source(&self) -> AuthenticationSource {
         self.authentication_source
+    }
+
+    pub fn employment_status(&self) -> EmploymentStatus {
+        self.employment_status
     }
 }
 

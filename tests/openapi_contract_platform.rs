@@ -645,6 +645,205 @@ fn ordering_and_menu_endpoints_have_tested_error_code_to_schema_refs() {
 }
 
 #[test]
+fn payroll_endpoints_have_tested_error_code_to_schema_refs() {
+    let spec = canonical_openapi_spec();
+
+    let employee_ledger_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/employee/orders/{orderId}/payroll-ledger",
+        "get",
+    );
+    assert_error_response_ref(
+        employee_ledger_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        employee_ledger_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        employee_ledger_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        employee_ledger_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+    assert_error_response_ref(
+        employee_ledger_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+
+    let employee_dispute_operation =
+        operation_by_path_and_method(&spec, "/api/v1/employee/orders/{orderId}/disputes", "post");
+    assert_error_response_ref(
+        employee_dispute_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        employee_dispute_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        employee_dispute_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        employee_dispute_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+    assert_error_response_ref(
+        employee_dispute_operation,
+        "409",
+        "#/components/responses/Conflict",
+    );
+    assert_error_response_ref(
+        employee_dispute_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+
+    let admin_dispute_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/payroll/disputes/{disputeId}", "patch");
+    assert_error_response_ref(
+        admin_dispute_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        admin_dispute_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        admin_dispute_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        admin_dispute_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+    assert_error_response_ref(
+        admin_dispute_operation,
+        "409",
+        "#/components/responses/Conflict",
+    );
+    assert_error_response_ref(
+        admin_dispute_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+
+    let payroll_export_operation =
+        operation_by_path_and_method(&spec, "/api/v1/integrations/payroll/deductions", "get");
+    assert_error_response_ref(
+        payroll_export_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        payroll_export_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        payroll_export_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        payroll_export_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+
+    let payroll_export_parameter_refs = payroll_export_operation["parameters"]
+        .as_array()
+        .expect("payroll export parameters should be array")
+        .iter()
+        .map(|parameter| {
+            parameter["$ref"]
+                .as_str()
+                .expect("payroll export parameter should be $ref")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        payroll_export_parameter_refs,
+        BTreeSet::from([
+            "#/components/parameters/PayPeriodQuery".to_owned(),
+            "#/components/parameters/PayrollCycleKeyQuery".to_owned(),
+            "#/components/parameters/PageQuery".to_owned(),
+            "#/components/parameters/PageSizeQuery".to_owned(),
+            "#/components/parameters/PayrollSortByQuery".to_owned(),
+            "#/components/parameters/SortOrderQuery".to_owned(),
+        ])
+    );
+
+    let payroll_sync_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/integrations/payroll/sftp-batches/{batchId}/hr-api-sync",
+        "post",
+    );
+    assert_error_response_ref(
+        payroll_sync_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        payroll_sync_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        payroll_sync_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        payroll_sync_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+    assert_error_response_ref(
+        payroll_sync_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+    assert_eq!(
+        payroll_sync_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/PayrollHrApiSyncRequest"
+    );
+
+    let error_codes = spec["components"]["schemas"]["ErrorCode"]["enum"]
+        .as_array()
+        .expect("error code enum should exist")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("error code enum value should be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(error_codes.contains("BAD_REQUEST"));
+    assert!(error_codes.contains("NOT_FOUND"));
+    assert!(error_codes.contains("CONFLICT"));
+    assert!(error_codes.contains("PAYROLL_LEDGER_INTERNAL_ERROR"));
+}
+
+#[test]
 fn runtime_http_route_catalog_matches_openapi_contract() {
     let spec = canonical_openapi_spec();
     let openapi_routes = collect_openapi_routes(&spec);

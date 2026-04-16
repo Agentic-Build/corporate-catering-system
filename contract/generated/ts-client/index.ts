@@ -72,6 +72,7 @@ export type { PageMeta } from './models/PageMeta';
 export type { PageQuery } from './models/PageQuery';
 export type { PageSizeQuery } from './models/PageSizeQuery';
 export type { PayPeriodQuery } from './models/PayPeriodQuery';
+export type { PayrollCycleKeyQuery } from './models/PayrollCycleKeyQuery';
 export type { PayrollDeductionPage } from './models/PayrollDeductionPage';
 export type { PayrollDeductionRecord } from './models/PayrollDeductionRecord';
 export type { PayrollDeductionStatus } from './models/PayrollDeductionStatus';
@@ -81,6 +82,8 @@ export type { PayrollDisputeTraceEvent } from './models/PayrollDisputeTraceEvent
 export type { PayrollDisputeTraceEventType } from './models/PayrollDisputeTraceEventType';
 export type { PayrollExchangeBatch } from './models/PayrollExchangeBatch';
 export type { PayrollExchangeBatchIdPath } from './models/PayrollExchangeBatchIdPath';
+export type { PayrollHrApiSyncOutcome } from './models/PayrollHrApiSyncOutcome';
+export type { PayrollHrApiSyncRequest } from './models/PayrollHrApiSyncRequest';
 export type { PayrollHrApiSyncResponse } from './models/PayrollHrApiSyncResponse';
 export type { PayrollLedgerEntry } from './models/PayrollLedgerEntry';
 export type { PayrollLedgerEntryKind } from './models/PayrollLedgerEntryKind';
