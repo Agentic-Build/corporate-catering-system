@@ -524,6 +524,12 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
             "/api/v1/employee/orders/{orderId}/pickup-verifications",
             "POST",
         ),
+        "getEmployeeOrderPayrollLedger" => {
+            ("/api/v1/employee/orders/{orderId}/payroll-ledger", "GET")
+        }
+        "createEmployeeOrderDispute" => {
+            ("/api/v1/employee/orders/{orderId}/disputes", "POST")
+        }
         "listVendorOrders" => ("/api/v1/vendor/orders", "GET"),
         "listVendorFulfillmentBoard" => ("/api/v1/vendor/fulfillment-board", "GET"),
         "upsertVendorMenuItem" => ("/api/v1/vendor/menu-items/{menuItemId}", "PUT"),
@@ -553,7 +559,13 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
         ),
         "reviewVendorApplication" => ("/api/v1/admin/vendors/{vendorId}/reviews", "POST"),
         "runVendorComplianceLifecycle" => ("/api/v1/admin/compliance/lifecycle/executions", "POST"),
+        "updateAdminPayrollDispute" => ("/api/v1/admin/payroll/disputes/{disputeId}", "PATCH"),
+        "purgePayrollData" => ("/api/v1/admin/payroll/retention-purge", "POST"),
         "exportPayrollDeductions" => ("/api/v1/integrations/payroll/deductions", "GET"),
+        "syncPayrollHrApiAdjunct" => (
+            "/api/v1/integrations/payroll/sftp-batches/{batchId}/hr-api-sync",
+            "POST",
+        ),
         "healthReadyProbe" => ("/health/ready", "GET"),
         "healthLiveProbe" => ("/health/live", "GET"),
         "healthStartupProbe" => ("/health/startup", "GET"),

@@ -27,6 +27,13 @@ use corporate_catering_system::menu_supply_window::{
 use corporate_catering_system::observability::{
     initialize_telemetry_runtime_from_env, TelemetryService,
 };
+use corporate_catering_system::payroll::{
+    OrderPayrollView, PayrollDeductionRecord, PayrollDisputeId, PayrollDisputeRecord,
+    PayrollDisputeTraceEvent, PayrollExchangeBatch, PayrollExchangeBatchId, PayrollExportPage,
+    PayrollLedgerError, PayrollLedgerService, PayrollLedgerSourceKind, PayrollLedgerSourceRef,
+    PayrollRetentionPolicy, PayrollSortField as PayrollSortFieldDomain,
+    SortOrder as PayrollSortOrderDomain,
+};
 use corporate_catering_system::pickup_totp::{
     PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
 };
@@ -53,10 +60,16 @@ const DEFAULT_DELIVERY_DAY_OFFSET: i32 = 2;
 const DEFAULT_AUDIT_RETENTION_DAYS: u16 = 2555;
 const DEFAULT_AUDIT_PURGE_INTERVAL_SECONDS: u64 = 3600;
 const DEFAULT_AUDIT_TRAIL_PATH: &str = "ops/state/audit-trail.json";
+const DEFAULT_PAYROLL_LEDGER_RETENTION_DAYS: u16 = 365 * 2;
+const DEFAULT_PAYROLL_DISPUTE_RETENTION_DAYS: u16 = 365;
+const DEFAULT_PAYROLL_EXCHANGE_RETENTION_DAYS: u16 = 365;
+const DEFAULT_PAYROLL_PURGE_INTERVAL_SECONDS: u64 = 3600;
 const LOAD_GATE_EMPLOYEE_ACTOR_ID: &str = "emp-load-gate";
 const LOAD_GATE_COMMITTEE_ACTOR_ID: &str = "committee-load-gate";
+const LOAD_GATE_PAYROLL_ACTOR_ID: &str = "payroll-load-gate";
+const LOAD_GATE_PAYROLL_DISPUTE_OWNER_ACTOR_ID: &str = "payroll-dispute-owner";
 
-const ALL_AUDIT_ACTIONS: [AuditAction; 20] = [
+const ALL_AUDIT_ACTIONS: [AuditAction; 27] = [
     AuditAction::CreateEmployeeOrder,
     AuditAction::UpdateEmployeeOrder,
     AuditAction::VerifyPickupOrder,
@@ -77,9 +90,16 @@ const ALL_AUDIT_ACTIONS: [AuditAction; 20] = [
     AuditAction::PurgeAuditEvidence,
     AuditAction::PruneVendorComplianceHistory,
     AuditAction::ExportPayrollDeductions,
+    AuditAction::AppendPayrollLedgerEntry,
+    AuditAction::OpenPayrollDispute,
+    AuditAction::AssignPayrollDisputeOwner,
+    AuditAction::ResolvePayrollDispute,
+    AuditAction::ExportPayrollSftpBatch,
+    AuditAction::SyncPayrollHrApiAdjunct,
+    AuditAction::PurgePayrollData,
 ];
 
-const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 9] = [
+const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 13] = [
     AuditEntityType::Order,
     AuditEntityType::MenuItem,
     AuditEntityType::Vendor,
@@ -89,6 +109,10 @@ const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 9] = [
     AuditEntityType::Settlement,
     AuditEntityType::VendorOrderingPolicy,
     AuditEntityType::AuditTrail,
+    AuditEntityType::PayrollLedgerEntry,
+    AuditEntityType::PayrollDispute,
+    AuditEntityType::PayrollExchangeBatch,
+    AuditEntityType::PayrollDataRetention,
 ];
 
 #[derive(Debug, Clone)]
@@ -96,6 +120,7 @@ struct AppState {
     next_order_sequence: Arc<AtomicU64>,
     plant_id: PlantId,
     audit_trail: ImmutableAuditTrail,
+    payroll_ledger_service: PayrollLedgerService,
     compliance_lifecycle: Arc<VendorComplianceLifecycle>,
     delivery_policy: Arc<VendorPlantDeliveryPolicy>,
     menu_supply_policy: MenuSupplyPolicy,
@@ -263,6 +288,161 @@ struct AuditRetentionPurgeResponse {
     as_of_epoch_day: i32,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EmployeeOrderPayrollLedgerResponse {
+    order_id: String,
+    employee_actor_id: String,
+    delivery_date: String,
+    currency: String,
+    net_amount_minor: i64,
+    ledger_entries: Vec<PayrollLedgerEntryPayload>,
+    disputes: Vec<PayrollDisputePayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollLedgerEntryPayload {
+    ledger_entry_id: u64,
+    kind: String,
+    amount: MenuPricePayload,
+    occurred_at: String,
+    source_event_kind: String,
+    source_event_reference: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollDisputePayload {
+    dispute_id: String,
+    order_id: String,
+    employee_actor_id: String,
+    owner_actor_id: String,
+    status: String,
+    opened_at: String,
+    updated_at: String,
+    trace: Vec<PayrollDisputeTracePayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollDisputeTracePayload {
+    occurred_at: String,
+    actor_id: String,
+    event_type: String,
+    status: String,
+    owner_actor_id: String,
+    note: Option<String>,
+    source_event_kind: String,
+    source_event_reference: String,
+    refund_ledger_entry_id: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EmployeePayrollDisputeCreateRequest {
+    reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AdminPayrollDisputePatchRequest {
+    operation: String,
+    owner_actor_id: Option<String>,
+    note: Option<String>,
+    refund_amount_minor: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+enum PayrollSortFieldQuery {
+    EmployeeActorId,
+    AmountMinor,
+    DeliveryDate,
+}
+
+impl PayrollSortFieldQuery {
+    const fn into_domain(self) -> PayrollSortFieldDomain {
+        match self {
+            Self::EmployeeActorId => PayrollSortFieldDomain::EmployeeActorId,
+            Self::AmountMinor => PayrollSortFieldDomain::AmountMinor,
+            Self::DeliveryDate => PayrollSortFieldDomain::DeliveryDate,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct PayrollExportQuery {
+    pay_period: Option<String>,
+    page: Option<usize>,
+    page_size: Option<usize>,
+    sort_by: Option<PayrollSortFieldQuery>,
+    sort_order: Option<SortOrderQuery>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollDeductionRecordPayload {
+    employee_actor_id: String,
+    order_id: String,
+    delivery_date: String,
+    amount: MenuPricePayload,
+    pay_period: String,
+    status: String,
+    dispute_status: Option<String>,
+    source_entry_ids: Vec<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PageMetaPayload {
+    page: usize,
+    page_size: usize,
+    total_items: usize,
+    total_pages: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollExchangeBatchPayload {
+    batch_id: String,
+    pay_period: String,
+    generated_at: String,
+    exchange_path: &'static str,
+    hr_api_sync_status: String,
+    hr_api_synced_at: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollDeductionPagePayload {
+    items: Vec<PayrollDeductionRecordPayload>,
+    page: PageMetaPayload,
+    exchange_batch: PayrollExchangeBatchPayload,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollHrApiSyncResponse {
+    exchange_batch: PayrollExchangeBatchPayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PayrollRetentionPurgeRequest {
+    as_of_epoch_day: Option<i32>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollRetentionPurgeResponse {
+    purged_ledger_entries: usize,
+    purged_disputes: usize,
+    purged_exchange_batches: usize,
+    as_of_epoch_day: i32,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MenuPricePayload {
@@ -353,6 +533,15 @@ enum SortOrderQuery {
     Desc,
 }
 
+impl SortOrderQuery {
+    const fn into_payroll_domain(self) -> PayrollSortOrderDomain {
+        match self {
+            Self::Asc => PayrollSortOrderDomain::Asc,
+            Self::Desc => PayrollSortOrderDomain::Desc,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct EmployeeMenuDiscoveryQuery {
@@ -436,6 +625,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         "PRELAUNCH_AUDIT_PURGE_INTERVAL_SECONDS",
         DEFAULT_AUDIT_PURGE_INTERVAL_SECONDS,
     )?;
+    let payroll_retention_policy = PayrollRetentionPolicy::new(
+        parse_positive_u16_env(
+            "PRELAUNCH_PAYROLL_LEDGER_RETENTION_DAYS",
+            DEFAULT_PAYROLL_LEDGER_RETENTION_DAYS,
+        )?,
+        parse_positive_u16_env(
+            "PRELAUNCH_PAYROLL_DISPUTE_RETENTION_DAYS",
+            DEFAULT_PAYROLL_DISPUTE_RETENTION_DAYS,
+        )?,
+        parse_positive_u16_env(
+            "PRELAUNCH_PAYROLL_EXCHANGE_RETENTION_DAYS",
+            DEFAULT_PAYROLL_EXCHANGE_RETENTION_DAYS,
+        )?,
+    )
+    .map_err(|error| format!("payroll retention policy is invalid: {error}"))?;
+    let payroll_purge_interval_seconds = parse_positive_u64_env(
+        "PRELAUNCH_PAYROLL_PURGE_INTERVAL_SECONDS",
+        DEFAULT_PAYROLL_PURGE_INTERVAL_SECONDS,
+    )?;
     let pickup_totp_verifier = PickupTotpVerifier::from_env("PRELAUNCH_PICKUP_TOTP_SECRET")
         .map(Arc::new)
         .map_err(|error| format!("pickup TOTP verifier initialization failed: {error}"))?;
@@ -446,6 +654,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         plant_id,
         delivery_epoch_day,
         menu_variant_count,
+        payroll_retention_policy,
         pickup_totp_verifier,
     )
     .map_err(|error| format!("failed to bootstrap runtime state: {error}"))?;
@@ -455,7 +664,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
             error.message
         )
     })?;
-    spawn_audit_retention_purge_job(audit_trail, committee_actor, audit_purge_interval_seconds);
+    spawn_audit_retention_purge_job(
+        audit_trail,
+        committee_actor.clone(),
+        audit_purge_interval_seconds,
+    );
+    spawn_payroll_retention_purge_job(
+        state.payroll_ledger_service.clone(),
+        committee_actor,
+        payroll_purge_interval_seconds,
+    );
 
     let app = Router::new()
         .route("/health/ready", get(ready_probe))
@@ -472,6 +690,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
             post(verify_order_pickup),
         )
         .route(
+            "/api/v1/employee/orders/:orderId/payroll-ledger",
+            get(get_employee_order_payroll_ledger),
+        )
+        .route(
+            "/api/v1/employee/orders/:orderId/disputes",
+            post(create_employee_order_dispute),
+        )
+        .route(
             "/api/v1/admin/audit/investigations",
             get(query_audit_investigations),
         )
@@ -482,6 +708,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         .route(
             "/api/v1/admin/audit/retention-purge",
             post(purge_audit_evidence),
+        )
+        .route(
+            "/api/v1/admin/payroll/disputes/:disputeId",
+            patch(update_admin_payroll_dispute),
+        )
+        .route(
+            "/api/v1/admin/payroll/retention-purge",
+            post(purge_payroll_data),
+        )
+        .route(
+            "/api/v1/integrations/payroll/deductions",
+            get(export_payroll_deductions),
+        )
+        .route(
+            "/api/v1/integrations/payroll/sftp-batches/:batchId/hr-api-sync",
+            post(sync_payroll_hr_api_adjunct),
         )
         .with_state(state);
 
@@ -569,6 +811,7 @@ fn bootstrap_runtime_state(
     plant_id: PlantId,
     delivery_epoch_day: i32,
     menu_variant_count: u16,
+    payroll_retention_policy: PayrollRetentionPolicy,
     pickup_totp_verifier: Arc<PickupTotpVerifier>,
 ) -> Result<AppState, String> {
     let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| error.message)?;
@@ -669,6 +912,7 @@ fn bootstrap_runtime_state(
 
     let menu_supply_policy =
         MenuSupplyPolicy::with_audit_trail(Default::default(), audit_trail.clone());
+    let payroll_ledger_service = PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
     let vendor_menu_gateway = HttpVendorMenuExecutionGateway::new(&menu_supply_policy);
 
     for index in 1..=menu_variant_count {
@@ -704,6 +948,7 @@ fn bootstrap_runtime_state(
         next_order_sequence: Arc::new(AtomicU64::new(1)),
         plant_id,
         audit_trail,
+        payroll_ledger_service,
         compliance_lifecycle: Arc::new(compliance_lifecycle),
         delivery_policy: Arc::new(delivery_policy),
         menu_supply_policy,
@@ -1363,6 +1608,13 @@ fn handle_create_employee_order(
         .map_err(map_http_order_execution_error)?;
 
     let snapshot = load_order_snapshot_or_policy_error(state, &order_id)?;
+    sync_payroll_ledger_from_order_snapshot(
+        state,
+        &employee_actor,
+        "createEmployeeOrder",
+        &snapshot,
+        requested_at,
+    )?;
     build_employee_order_payload(state, &snapshot)
 }
 
@@ -1445,7 +1697,746 @@ fn handle_update_employee_order(
         .map_err(map_http_order_execution_error)?;
 
     let updated_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
+    sync_payroll_ledger_from_order_snapshot(
+        state,
+        &employee_actor,
+        "updateEmployeeOrder",
+        &updated_snapshot,
+        requested_at,
+    )?;
     build_employee_order_payload(state, &updated_snapshot)
+}
+
+async fn get_employee_order_payroll_ledger(
+    State(state): State<AppState>,
+    Path(order_id): Path<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "getEmployeeOrderPayrollLedger",
+        Some("load-gate"),
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_get_employee_order_payroll_ledger(&state, order_id) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("payroll ledger payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("payroll ledger error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_get_employee_order_payroll_ledger(
+    state: &AppState,
+    order_id_raw: String,
+) -> Result<EmployeeOrderPayrollLedgerResponse, (StatusCode, ErrorPayload)> {
+    let order_id = parse_contract_order_id(&order_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_ORDER_REQUEST",
+            format!("orderId path parameter is invalid: {error}"),
+        )
+    })?;
+    let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
+    let employee_actor = load_gate_employee_actor_for_plant(snapshot.plant_id())?;
+    let view = state
+        .payroll_ledger_service
+        .employee_order_view(&employee_actor, &order_id)
+        .map_err(map_payroll_ledger_error)?;
+
+    Ok(to_employee_order_payroll_ledger_response(&view))
+}
+
+async fn create_employee_order_dispute(
+    State(state): State<AppState>,
+    Path(order_id): Path<String>,
+    Json(request): Json<EmployeePayrollDisputeCreateRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "createEmployeeOrderDispute",
+        Some("load-gate"),
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_create_employee_order_dispute(&state, order_id, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::CREATED.as_u16());
+            (
+                StatusCode::CREATED,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("payroll dispute payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("payroll dispute error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_create_employee_order_dispute(
+    state: &AppState,
+    order_id_raw: String,
+    request: EmployeePayrollDisputeCreateRequest,
+) -> Result<PayrollDisputePayload, (StatusCode, ErrorPayload)> {
+    let order_id = parse_contract_order_id(&order_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_ORDER_REQUEST",
+            format!("orderId path parameter is invalid: {error}"),
+        )
+    })?;
+    let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
+    let employee_actor = load_gate_employee_actor_for_plant(snapshot.plant_id())?;
+    let requested_at = current_taipei_business_moment().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+    sync_payroll_ledger_from_order_snapshot(
+        state,
+        &employee_actor,
+        "createEmployeeOrderDispute",
+        &snapshot,
+        requested_at,
+    )?;
+    let occurred_at = AuditTimestamp::from_taipei_business_moment(
+        requested_at.epoch_day(),
+        requested_at.minute_of_day(),
+    )
+    .map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PAYROLL_LEDGER_INTERNAL_ERROR",
+            error.to_string(),
+        )
+    })?;
+    let default_owner_actor_id = load_gate_payroll_dispute_owner_actor_id()?;
+    let dispute = state
+        .payroll_ledger_service
+        .open_dispute(
+            &employee_actor,
+            &order_id,
+            &default_owner_actor_id,
+            request.reason,
+            occurred_at,
+        )
+        .map_err(map_payroll_ledger_error)?;
+
+    Ok(to_payroll_dispute_payload(&dispute))
+}
+
+async fn update_admin_payroll_dispute(
+    State(state): State<AppState>,
+    Path(dispute_id): Path<String>,
+    Json(request): Json<AdminPayrollDisputePatchRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "updateAdminPayrollDispute",
+        Some("load-gate"),
+        None,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_update_admin_payroll_dispute(&state, dispute_id, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("admin payroll dispute payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "admin payroll dispute error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_update_admin_payroll_dispute(
+    state: &AppState,
+    dispute_id_raw: String,
+    request: AdminPayrollDisputePatchRequest,
+) -> Result<PayrollDisputePayload, (StatusCode, ErrorPayload)> {
+    let payroll_actor = load_gate_payroll_actor()?;
+    let dispute_id = parse_contract_payroll_dispute_id(&dispute_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("disputeId path parameter is invalid: {error}"),
+        )
+    })?;
+    let occurred_at = current_audit_timestamp()?;
+
+    let dispute = match request.operation.as_str() {
+        "ASSIGN_OWNER" => {
+            let owner_actor_id_raw = request.owner_actor_id.ok_or_else(|| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    "ownerActorId is required for ASSIGN_OWNER".to_owned(),
+                )
+            })?;
+            let owner_actor_id = ActorId::parse(owner_actor_id_raw).map_err(|error| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    format!("ownerActorId is invalid: {error}"),
+                )
+            })?;
+            let note = normalize_optional_patch_note(request.note)?;
+            state
+                .payroll_ledger_service
+                .assign_dispute_owner(
+                    &payroll_actor,
+                    &dispute_id,
+                    &owner_actor_id,
+                    occurred_at,
+                    note,
+                )
+                .map_err(map_payroll_ledger_error)?
+        }
+        "RESOLVE_REFUND" => {
+            let note = parse_required_patch_note(request.note, "note")?;
+            state
+                .payroll_ledger_service
+                .resolve_dispute_refund(
+                    &payroll_actor,
+                    &dispute_id,
+                    occurred_at,
+                    note,
+                    request.refund_amount_minor,
+                )
+                .map_err(map_payroll_ledger_error)?
+        }
+        "RESOLVE_REJECTED" => {
+            let note = parse_required_patch_note(request.note, "note")?;
+            state
+                .payroll_ledger_service
+                .resolve_dispute_rejected(&payroll_actor, &dispute_id, occurred_at, note)
+                .map_err(map_payroll_ledger_error)?
+        }
+        other => {
+            return Err(domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("unsupported payroll dispute operation `{other}`"),
+            ));
+        }
+    };
+
+    Ok(to_payroll_dispute_payload(&dispute))
+}
+
+async fn purge_payroll_data(
+    State(state): State<AppState>,
+    Json(request): Json<PayrollRetentionPurgeRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry =
+        TelemetryService::HttpApi.begin_operation("purgePayrollData", Some("load-gate"), None);
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_purge_payroll_data(&state, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("payroll purge payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("payroll purge error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_purge_payroll_data(
+    state: &AppState,
+    request: PayrollRetentionPurgeRequest,
+) -> Result<PayrollRetentionPurgeResponse, (StatusCode, ErrorPayload)> {
+    let committee_actor = load_gate_committee_admin_actor()?;
+    let as_of = match request.as_of_epoch_day {
+        Some(epoch_day) => AuditTimestamp::from_epoch_day(epoch_day),
+        None => AuditTimestamp::now_taipei().map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "PAYROLL_LEDGER_INTERNAL_ERROR",
+                error.to_string(),
+            )
+        })?,
+    };
+    let report = state
+        .payroll_ledger_service
+        .purge_expired_data(&committee_actor, as_of)
+        .map_err(map_payroll_ledger_error)?;
+
+    Ok(PayrollRetentionPurgeResponse {
+        purged_ledger_entries: report.purged_ledger_entries,
+        purged_disputes: report.purged_disputes,
+        purged_exchange_batches: report.purged_exchange_batches,
+        as_of_epoch_day: as_of.epoch_day(),
+    })
+}
+
+async fn export_payroll_deductions(
+    State(state): State<AppState>,
+    Query(query): Query<PayrollExportQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "exportPayrollDeductions",
+        Some("load-gate"),
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_export_payroll_deductions(&state, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("payroll deductions payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "payroll deductions error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_export_payroll_deductions(
+    state: &AppState,
+    query: PayrollExportQuery,
+) -> Result<PayrollDeductionPagePayload, (StatusCode, ErrorPayload)> {
+    let payroll_actor = load_gate_payroll_actor()?;
+    let pay_period = query.pay_period.ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "payPeriod query parameter is required".to_owned(),
+        )
+    })?;
+    let page = query.page.unwrap_or(1);
+    let page_size = query.page_size.unwrap_or(20);
+    let sort_by = query
+        .sort_by
+        .unwrap_or(PayrollSortFieldQuery::DeliveryDate)
+        .into_domain();
+    let sort_order = query
+        .sort_order
+        .unwrap_or(SortOrderQuery::Asc)
+        .into_payroll_domain();
+    let occurred_at = current_audit_timestamp()?;
+    let export_page = state
+        .payroll_ledger_service
+        .export_sftp_batch(
+            &payroll_actor,
+            &pay_period,
+            page,
+            page_size,
+            sort_by,
+            sort_order,
+            occurred_at,
+        )
+        .map_err(map_payroll_ledger_error)?;
+
+    Ok(to_payroll_deduction_page_payload(&export_page))
+}
+
+async fn sync_payroll_hr_api_adjunct(
+    State(state): State<AppState>,
+    Path(batch_id): Path<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "syncPayrollHrApiAdjunct",
+        Some("load-gate"),
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_sync_payroll_hr_api_adjunct(&state, batch_id) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("payroll hr api sync payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "payroll hr api sync error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_sync_payroll_hr_api_adjunct(
+    state: &AppState,
+    batch_id_raw: String,
+) -> Result<PayrollHrApiSyncResponse, (StatusCode, ErrorPayload)> {
+    let payroll_actor = load_gate_payroll_actor()?;
+    let batch_id = parse_contract_payroll_exchange_batch_id(&batch_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("batchId path parameter is invalid: {error}"),
+        )
+    })?;
+    let occurred_at = current_audit_timestamp()?;
+    let batch = state
+        .payroll_ledger_service
+        .sync_hr_api_adjunct(&payroll_actor, &batch_id, occurred_at)
+        .map_err(map_payroll_ledger_error)?;
+
+    Ok(PayrollHrApiSyncResponse {
+        exchange_batch: to_payroll_exchange_batch_payload(&batch),
+    })
+}
+
+fn to_employee_order_payroll_ledger_response(view: &OrderPayrollView) -> EmployeeOrderPayrollLedgerResponse {
+    EmployeeOrderPayrollLedgerResponse {
+        order_id: view.order_id().as_str().to_owned(),
+        employee_actor_id: view.employee_actor_id().as_str().to_owned(),
+        delivery_date: epoch_day_to_iso_date(view.delivery_epoch_day()),
+        currency: view.currency().to_owned(),
+        net_amount_minor: view.net_amount_minor(),
+        ledger_entries: view
+            .ledger_entries()
+            .iter()
+            .map(|entry| PayrollLedgerEntryPayload {
+                ledger_entry_id: entry.entry_id(),
+                kind: entry.kind().as_str().to_owned(),
+                amount: MenuPricePayload {
+                    currency: entry.amount().currency().to_owned(),
+                    amount_minor: entry.amount().amount_minor(),
+                },
+                occurred_at: audit_timestamp_to_iso_datetime(entry.occurred_at()),
+                source_event_kind: entry.source_event().kind().as_str().to_owned(),
+                source_event_reference: entry.source_event().event_reference().to_owned(),
+            })
+            .collect::<Vec<_>>(),
+        disputes: view
+            .disputes()
+            .iter()
+            .map(to_payroll_dispute_payload)
+            .collect::<Vec<_>>(),
+    }
+}
+
+fn to_payroll_dispute_payload(dispute: &PayrollDisputeRecord) -> PayrollDisputePayload {
+    PayrollDisputePayload {
+        dispute_id: dispute.dispute_id().as_str().to_owned(),
+        order_id: dispute.order_id().as_str().to_owned(),
+        employee_actor_id: dispute.employee_actor_id().as_str().to_owned(),
+        owner_actor_id: dispute.owner_actor_id().as_str().to_owned(),
+        status: dispute.status().as_str().to_owned(),
+        opened_at: audit_timestamp_to_iso_datetime(dispute.opened_at()),
+        updated_at: audit_timestamp_to_iso_datetime(dispute.updated_at()),
+        trace: dispute
+            .trace()
+            .iter()
+            .map(to_payroll_dispute_trace_payload)
+            .collect::<Vec<_>>(),
+    }
+}
+
+fn to_payroll_dispute_trace_payload(event: &PayrollDisputeTraceEvent) -> PayrollDisputeTracePayload {
+    PayrollDisputeTracePayload {
+        occurred_at: audit_timestamp_to_iso_datetime(event.occurred_at()),
+        actor_id: event.actor_id().as_str().to_owned(),
+        event_type: event.event_type().as_str().to_owned(),
+        status: event.status().as_str().to_owned(),
+        owner_actor_id: event.owner_actor_id().as_str().to_owned(),
+        note: event.note().map(str::to_owned),
+        source_event_kind: event.source_event().kind().as_str().to_owned(),
+        source_event_reference: event.source_event().event_reference().to_owned(),
+        refund_ledger_entry_id: event.refund_ledger_entry_id(),
+    }
+}
+
+fn to_payroll_deduction_page_payload(export_page: &PayrollExportPage) -> PayrollDeductionPagePayload {
+    let total_pages = if export_page.total_items() == 0 {
+        0
+    } else {
+        (export_page.total_items() - 1) / export_page.page_size() + 1
+    };
+    PayrollDeductionPagePayload {
+        items: export_page
+            .items()
+            .iter()
+            .map(to_payroll_deduction_record_payload)
+            .collect::<Vec<_>>(),
+        page: PageMetaPayload {
+            page: export_page.page(),
+            page_size: export_page.page_size(),
+            total_items: export_page.total_items(),
+            total_pages,
+        },
+        exchange_batch: to_payroll_exchange_batch_payload(export_page.batch()),
+    }
+}
+
+fn to_payroll_deduction_record_payload(record: &PayrollDeductionRecord) -> PayrollDeductionRecordPayload {
+    PayrollDeductionRecordPayload {
+        employee_actor_id: record.employee_actor_id().as_str().to_owned(),
+        order_id: record.order_id().as_str().to_owned(),
+        delivery_date: epoch_day_to_iso_date(record.delivery_epoch_day()),
+        amount: MenuPricePayload {
+            currency: record.amount().currency().to_owned(),
+            amount_minor: record.amount().amount_minor(),
+        },
+        pay_period: record.pay_period().to_owned(),
+        status: record.status().as_str().to_owned(),
+        dispute_status: record.dispute_status().map(|status| status.as_str().to_owned()),
+        source_entry_ids: record.source_entry_ids().to_vec(),
+    }
+}
+
+fn to_payroll_exchange_batch_payload(batch: &PayrollExchangeBatch) -> PayrollExchangeBatchPayload {
+    let (hr_api_sync_status, hr_api_synced_at) = match batch.hr_api_sync_receipt() {
+        Some(receipt) => (
+            receipt.status().as_str().to_owned(),
+            Some(audit_timestamp_to_iso_datetime(receipt.synced_at())),
+        ),
+        None => ("NOT_SYNCED".to_owned(), None),
+    };
+    PayrollExchangeBatchPayload {
+        batch_id: batch.batch_id().as_str().to_owned(),
+        pay_period: batch.pay_period().to_owned(),
+        generated_at: audit_timestamp_to_iso_datetime(batch.generated_at()),
+        exchange_path: "SFTP_BATCH",
+        hr_api_sync_status,
+        hr_api_synced_at,
+    }
+}
+
+fn parse_contract_payroll_dispute_id(value: &str) -> Result<PayrollDisputeId, String> {
+    let trimmed = value.trim();
+    let Some(suffix) = trimmed.strip_prefix("dsp-") else {
+        return Err("must start with `dsp-`".to_owned());
+    };
+    if suffix.len() != 16 {
+        return Err("suffix length must be exactly 16 characters".to_owned());
+    }
+    if !suffix
+        .chars()
+        .all(|ch| ch.is_ascii_digit() || ('a'..='f').contains(&ch))
+    {
+        return Err("suffix must contain only lowercase hex digits".to_owned());
+    }
+
+    PayrollDisputeId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
+}
+
+fn parse_contract_payroll_exchange_batch_id(value: &str) -> Result<PayrollExchangeBatchId, String> {
+    let trimmed = value.trim();
+    let Some(payload) = trimmed.strip_prefix("sftp-") else {
+        return Err("must start with `sftp-`".to_owned());
+    };
+    let mut parts = payload.split('-');
+    let Some(pay_period_compact) = parts.next() else {
+        return Err("must include compact pay period segment".to_owned());
+    };
+    let Some(sequence) = parts.next() else {
+        return Err("must include batch sequence segment".to_owned());
+    };
+    if parts.next().is_some() {
+        return Err("must include exactly two `sftp-` segments".to_owned());
+    }
+    if pay_period_compact.len() != 6
+        || !pay_period_compact.chars().all(|character| character.is_ascii_digit())
+    {
+        return Err("pay period segment must be YYYYMM digits".to_owned());
+    }
+    if sequence.len() != 16
+        || !sequence
+            .chars()
+            .all(|ch| ch.is_ascii_digit() || ('a'..='f').contains(&ch))
+    {
+        return Err("batch sequence segment must be 16 lowercase hex digits".to_owned());
+    }
+
+    PayrollExchangeBatchId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
+}
+
+fn parse_required_patch_note(
+    note: Option<String>,
+    field_name: &str,
+) -> Result<String, (StatusCode, ErrorPayload)> {
+    let note = note.ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("{field_name} is required for this operation"),
+        )
+    })?;
+    let trimmed = note.trim();
+    if trimmed.is_empty() {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("{field_name} must be non-empty when provided"),
+        ));
+    }
+    Ok(trimmed.to_owned())
+}
+
+fn normalize_optional_patch_note(
+    note: Option<String>,
+) -> Result<Option<String>, (StatusCode, ErrorPayload)> {
+    match note {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Err(domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    "note must be non-empty when provided".to_owned(),
+                ));
+            }
+            Ok(Some(trimmed.to_owned()))
+        }
+        None => Ok(None),
+    }
+}
+
+fn current_audit_timestamp() -> Result<AuditTimestamp, (StatusCode, ErrorPayload)> {
+    let now = current_taipei_business_moment().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+    AuditTimestamp::from_taipei_business_moment(now.epoch_day(), now.minute_of_day()).map_err(
+        |error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "PAYROLL_LEDGER_INTERNAL_ERROR",
+                error.to_string(),
+            )
+        },
+    )
+}
+
+fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayload) {
+    match error {
+        PayrollLedgerError::UnauthorizedRole { .. } | PayrollLedgerError::NotOrderOwner { .. } => {
+            domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
+        }
+        PayrollLedgerError::OrderNotRegistered(_)
+        | PayrollLedgerError::DisputeNotFound(_)
+        | PayrollLedgerError::ExchangeBatchNotFound(_) => {
+            domain_error(StatusCode::NOT_FOUND, "NOT_FOUND", error.to_string())
+        }
+        PayrollLedgerError::InvalidDisputeTransition { .. }
+        | PayrollLedgerError::NoOutstandingPayrollAmount { .. }
+        | PayrollLedgerError::OrderOwnerMismatch { .. }
+        | PayrollLedgerError::OrderCurrencyMismatch { .. }
+        | PayrollLedgerError::OrderDeliveryDateMismatch { .. } => {
+            domain_error(StatusCode::CONFLICT, "CONFLICT", error.to_string())
+        }
+        PayrollLedgerError::InvalidOperationId
+        | PayrollLedgerError::InvalidRetentionPolicy
+        | PayrollLedgerError::InvalidSourceEventReference
+        | PayrollLedgerError::InvalidDisputeId
+        | PayrollLedgerError::InvalidExchangeBatchId
+        | PayrollLedgerError::InvalidDisputeReason(_)
+        | PayrollLedgerError::InvalidPayPeriod(_)
+        | PayrollLedgerError::InvalidPagination { .. }
+        | PayrollLedgerError::InvalidMoney(_)
+        | PayrollLedgerError::RefundAmountOutOfRange { .. } => {
+            domain_error(StatusCode::BAD_REQUEST, "BAD_REQUEST", error.to_string())
+        }
+        PayrollLedgerError::AmountOutOfRange { .. }
+        | PayrollLedgerError::LedgerSequenceOverflow
+        | PayrollLedgerError::DisputeSequenceOverflow
+        | PayrollLedgerError::ExchangeBatchSequenceOverflow
+        | PayrollLedgerError::StatePoisoned
+        | PayrollLedgerError::AuditTrail(_) => domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PAYROLL_LEDGER_INTERNAL_ERROR",
+            error.to_string(),
+        ),
+    }
 }
 
 fn load_gate_employee_actor_for_plant(
@@ -1500,6 +2491,39 @@ fn load_gate_committee_admin_actor() -> Result<AuthenticatedActorContext, (Statu
             StatusCode::INTERNAL_SERVER_ERROR,
             "IDENTITY_MODEL_ERROR",
             format!("failed to construct load-gate committee actor context: {error}"),
+        )
+    })
+}
+
+fn load_gate_payroll_actor() -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+    let actor_id = ActorId::parse(LOAD_GATE_PAYROLL_ACTOR_ID).map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "IDENTITY_MODEL_ERROR",
+            format!("failed to parse load-gate payroll actor id: {error}"),
+        )
+    })?;
+    AuthenticatedActorContext::new(
+        actor_id,
+        Role::PayrollOperator,
+        PlantScope::all(),
+        AuthenticationSource::CorporateSso,
+    )
+    .map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "IDENTITY_MODEL_ERROR",
+            format!("failed to construct load-gate payroll actor context: {error}"),
+        )
+    })
+}
+
+fn load_gate_payroll_dispute_owner_actor_id() -> Result<ActorId, (StatusCode, ErrorPayload)> {
+    ActorId::parse(LOAD_GATE_PAYROLL_DISPUTE_OWNER_ACTOR_ID).map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "IDENTITY_MODEL_ERROR",
+            format!("failed to parse payroll dispute owner actor id: {error}"),
         )
     })
 }
@@ -1737,7 +2761,7 @@ fn build_employee_order_payload(
 
     Ok(EmployeeOrderPayload {
         order_id: snapshot.order_id().as_str().to_owned(),
-        employee_actor_id: LOAD_GATE_EMPLOYEE_ACTOR_ID.to_owned(),
+        employee_actor_id: snapshot.employee_actor_id().as_str().to_owned(),
         plant_id: state.plant_id.as_str().to_owned(),
         delivery_date: epoch_day_to_iso_date(snapshot.delivery_epoch_day()),
         status: snapshot.state().as_str().to_owned(),
@@ -1749,6 +2773,150 @@ fn build_employee_order_payload(
         timeline,
         created_at,
     })
+}
+
+fn compute_order_total_for_payroll(
+    state: &AppState,
+    snapshot: &OrderSnapshot,
+) -> Result<(String, u32), (StatusCode, ErrorPayload)> {
+    let mut total_minor: u64 = 0;
+    let mut currency: Option<String> = None;
+    for (menu_item_id, quantity) in snapshot.line_items() {
+        let menu_item = state
+            .menu_supply_policy
+            .menu_item(menu_item_id)
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::CONFLICT,
+                    "ORDER_POLICY_VIOLATION",
+                    error.to_string(),
+                )
+            })?
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::CONFLICT,
+                    "ORDER_POLICY_VIOLATION",
+                    format!(
+                        "order `{}` references missing menu item `{}`",
+                        snapshot.order_id().as_str(),
+                        menu_item_id.as_str()
+                    ),
+                )
+            })?;
+        let price = menu_item.price();
+        match currency.as_deref() {
+            Some(existing) if existing != price.currency() => {
+                return Err(domain_error(
+                    StatusCode::CONFLICT,
+                    "ORDER_POLICY_VIOLATION",
+                    format!(
+                        "order `{}` mixes currencies `{existing}` and `{}`",
+                        snapshot.order_id().as_str(),
+                        price.currency()
+                    ),
+                ));
+            }
+            Some(_) => {}
+            None => currency = Some(price.currency().to_owned()),
+        }
+
+        total_minor = total_minor
+            .checked_add(u64::from(price.amount_minor()) * u64::from(*quantity))
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::CONFLICT,
+                    "ORDER_POLICY_VIOLATION",
+                    format!(
+                        "order `{}` total overflowed supported range",
+                        snapshot.order_id().as_str()
+                    ),
+                )
+            })?;
+    }
+
+    let currency = currency.ok_or_else(|| {
+        domain_error(
+            StatusCode::CONFLICT,
+            "ORDER_POLICY_VIOLATION",
+            format!("order `{}` has no line items", snapshot.order_id().as_str()),
+        )
+    })?;
+    let total_minor = u32::try_from(total_minor).map_err(|_| {
+        domain_error(
+            StatusCode::CONFLICT,
+            "ORDER_POLICY_VIOLATION",
+            format!(
+                "order `{}` total exceeded the maximum supported amount",
+                snapshot.order_id().as_str()
+            ),
+        )
+    })?;
+    Ok((currency, total_minor))
+}
+
+fn expected_payroll_target_amount(snapshot: &OrderSnapshot, gross_total_minor: u32) -> u32 {
+    match snapshot.state() {
+        OrderLifecycleState::Cancelled
+        | OrderLifecycleState::SoldOut
+        | OrderLifecycleState::Refunded => 0,
+        _ => gross_total_minor,
+    }
+}
+
+fn sync_payroll_ledger_from_order_snapshot(
+    state: &AppState,
+    actor: &AuthenticatedActorContext,
+    operation_id: &str,
+    snapshot: &OrderSnapshot,
+    occurred_at: TaipeiBusinessMoment,
+) -> Result<(), (StatusCode, ErrorPayload)> {
+    let (currency, gross_total_minor) = compute_order_total_for_payroll(state, snapshot)?;
+    let source_event = PayrollLedgerSourceRef::new(
+        PayrollLedgerSourceKind::OrderMutation,
+        format!(
+            "order:{}:state:{}",
+            snapshot.order_id().as_str(),
+            snapshot.state().as_str()
+        ),
+    )
+    .map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PAYROLL_LEDGER_INTERNAL_ERROR",
+            error.to_string(),
+        )
+    })?;
+
+    let target_amount_minor = expected_payroll_target_amount(snapshot, gross_total_minor);
+    state.payroll_ledger_service.reconcile_order_charge(
+        actor,
+        operation_id,
+        snapshot.order_id(),
+        snapshot.employee_actor_id(),
+        snapshot.delivery_epoch_day(),
+        &currency,
+        target_amount_minor,
+        AuditTimestamp::from_taipei_business_moment(
+            occurred_at.epoch_day(),
+            occurred_at.minute_of_day(),
+        )
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "PAYROLL_LEDGER_INTERNAL_ERROR",
+                error.to_string(),
+            )
+        })?,
+        source_event,
+    )
+    .map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PAYROLL_LEDGER_INTERNAL_ERROR",
+            error.to_string(),
+        )
+    })?;
+    Ok(())
 }
 
 fn taipei_moment_to_iso_datetime(moment: TaipeiBusinessMoment) -> String {
@@ -1901,6 +3069,49 @@ fn run_audit_retention_purge_once(
             "audit retention purge job completed"
         ),
         Err(error) => tracing::error!(error = %error, "audit retention purge job failed"),
+    }
+}
+
+fn spawn_payroll_retention_purge_job(
+    payroll_ledger_service: PayrollLedgerService,
+    committee_actor: AuthenticatedActorContext,
+    interval_seconds: u64,
+) {
+    tokio::spawn(async move {
+        run_payroll_retention_purge_once(&payroll_ledger_service, &committee_actor);
+        let mut interval = time::interval(std::time::Duration::from_secs(interval_seconds));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            run_payroll_retention_purge_once(&payroll_ledger_service, &committee_actor);
+        }
+    });
+}
+
+fn run_payroll_retention_purge_once(
+    payroll_ledger_service: &PayrollLedgerService,
+    committee_actor: &AuthenticatedActorContext,
+) {
+    let as_of = match AuditTimestamp::now_taipei() {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(
+                error = %error,
+                "payroll retention purge skipped: failed to resolve Taipei time"
+            );
+            return;
+        }
+    };
+    match payroll_ledger_service.purge_expired_data(committee_actor, as_of) {
+        Ok(report) => tracing::info!(
+            purged_ledger_entries = report.purged_ledger_entries,
+            purged_disputes = report.purged_disputes,
+            purged_exchange_batches = report.purged_exchange_batches,
+            as_of_epoch_day = as_of.epoch_day(),
+            as_of_minute_of_day = as_of.minute_of_day(),
+            "payroll retention purge job completed"
+        ),
+        Err(error) => tracing::error!(error = %error, "payroll retention purge job failed"),
     }
 }
 
@@ -2742,6 +3953,8 @@ mod tests {
 
         let menu_supply_policy =
             MenuSupplyPolicy::with_audit_trail(Default::default(), audit_trail.clone());
+        let payroll_ledger_service =
+            PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail.clone());
         menu_supply_policy
             .upsert_menu_item(
                 &vendor_actor,
@@ -2831,6 +4044,7 @@ mod tests {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             plant_id: plant,
             audit_trail,
+            payroll_ledger_service,
             compliance_lifecycle: Arc::new(compliance_lifecycle),
             delivery_policy: Arc::new(delivery_policy),
             menu_supply_policy,
@@ -2895,6 +4109,10 @@ mod tests {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             plant_id: plant_id("fab-a"),
             audit_trail: audit_trail.clone(),
+            payroll_ledger_service: PayrollLedgerService::new(
+                PayrollRetentionPolicy::default(),
+                audit_trail.clone(),
+            ),
             compliance_lifecycle: Arc::new(VendorComplianceLifecycle::with_audit_trail(
                 HistoryRetentionPolicy::default(),
                 audit_trail.clone(),
@@ -3262,5 +4480,137 @@ mod tests {
         .expect_err("second pickup verification should be rejected as replay");
         assert_eq!(replay_error.0, StatusCode::CONFLICT);
         assert_eq!(replay_error.1.code, "PICKUP_VERIFICATION_REPLAYED");
+    }
+
+    #[test]
+    fn employee_payroll_ledger_handler_reflects_append_only_adjustments() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order =
+            handle_create_employee_order(&state, create_request).expect("order should be created");
+
+        let first_ledger = handle_get_employee_order_payroll_ledger(
+            &state,
+            created_order.order_id.clone(),
+        )
+        .expect("initial payroll ledger should be queryable");
+        assert_eq!(first_ledger.net_amount_minor, 12000);
+        assert_eq!(first_ledger.ledger_entries.len(), 1);
+        assert_eq!(first_ledger.ledger_entries[0].kind, "DEDUCTION");
+        assert!(first_ledger.disputes.is_empty());
+
+        handle_update_employee_order(
+            &state,
+            created_order.order_id.clone(),
+            UpdateOrderRequest {
+                operation: "CANCEL".to_owned(),
+                line_items: None,
+                cancel_reason: Some("cancelled by employee".to_owned()),
+            },
+        )
+        .expect("order cancel should succeed");
+
+        let updated_ledger = handle_get_employee_order_payroll_ledger(
+            &state,
+            created_order.order_id.clone(),
+        )
+        .expect("updated payroll ledger should be queryable");
+        assert_eq!(updated_ledger.net_amount_minor, 0);
+        assert_eq!(updated_ledger.ledger_entries.len(), 2);
+        assert_eq!(updated_ledger.ledger_entries[1].kind, "ADJUSTMENT_CREDIT");
+    }
+
+    #[test]
+    fn dispute_workflow_and_exchange_handlers_expose_traceable_payroll_lifecycle() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order =
+            handle_create_employee_order(&state, create_request).expect("order should be created");
+
+        let opened_dispute = handle_create_employee_order_dispute(
+            &state,
+            created_order.order_id.clone(),
+            EmployeePayrollDisputeCreateRequest {
+                reason: "charged despite inventory issue".to_owned(),
+            },
+        )
+        .expect("dispute should be opened");
+        assert_eq!(opened_dispute.status, "OPEN");
+        assert_eq!(opened_dispute.trace.len(), 1);
+
+        let assigned_dispute = handle_update_admin_payroll_dispute(
+            &state,
+            opened_dispute.dispute_id.clone(),
+            AdminPayrollDisputePatchRequest {
+                operation: "ASSIGN_OWNER".to_owned(),
+                owner_actor_id: Some("payroll-owner-alpha".to_owned()),
+                note: Some("triaged".to_owned()),
+                refund_amount_minor: None,
+            },
+        )
+        .expect("owner assignment should succeed");
+        assert_eq!(assigned_dispute.status, "IN_REVIEW");
+        assert_eq!(assigned_dispute.owner_actor_id, "payroll-owner-alpha");
+
+        let resolved_dispute = handle_update_admin_payroll_dispute(
+            &state,
+            opened_dispute.dispute_id.clone(),
+            AdminPayrollDisputePatchRequest {
+                operation: "RESOLVE_REFUND".to_owned(),
+                owner_actor_id: None,
+                note: Some("approved partial refund".to_owned()),
+                refund_amount_minor: Some(6000),
+            },
+        )
+        .expect("refund resolution should succeed");
+        assert_eq!(resolved_dispute.status, "RESOLVED_REFUND_APPROVED");
+        assert!(resolved_dispute.trace.len() >= 3);
+
+        let pay_period = created_order.delivery_date[..7].to_owned();
+        let export_page = handle_export_payroll_deductions(
+            &state,
+            PayrollExportQuery {
+                pay_period: Some(pay_period),
+                page: Some(1),
+                page_size: Some(20),
+                sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
+                sort_order: Some(SortOrderQuery::Asc),
+            },
+        )
+        .expect("payroll deductions export should succeed");
+        assert_eq!(export_page.exchange_batch.exchange_path, "SFTP_BATCH");
+        assert_eq!(export_page.exchange_batch.hr_api_sync_status, "NOT_SYNCED");
+
+        let synced = handle_sync_payroll_hr_api_adjunct(
+            &state,
+            export_page.exchange_batch.batch_id.clone(),
+        )
+        .expect("hr api adjunct sync should succeed");
+        assert_eq!(synced.exchange_batch.hr_api_sync_status, "SUCCEEDED");
+        assert!(synced.exchange_batch.hr_api_synced_at.is_some());
     }
 }

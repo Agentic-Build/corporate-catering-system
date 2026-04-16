@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { PayrollDeductionPage } from '../models/PayrollDeductionPage';
+import type { PayrollHrApiSyncResponse } from '../models/PayrollHrApiSyncResponse';
 import type { PayrollSortField } from '../models/PayrollSortField';
 import type { SortOrder } from '../models/SortOrder';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -40,6 +41,31 @@ export class IntegrationService {
                 400: `Request payload or query is invalid.`,
                 401: `Authentication token is missing or invalid.`,
                 403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Trigger optional HR API adjunct sync for an SFTP payroll batch
+     * @param batchId
+     * @returns PayrollHrApiSyncResponse Batch HR API adjunct sync status
+     * @throws ApiError
+     */
+    public static syncPayrollHrApiAdjunct(
+        batchId: string,
+    ): CancelablePromise<PayrollHrApiSyncResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/integrations/payroll/sftp-batches/{batchId}/hr-api-sync',
+            path: {
+                'batchId': batchId,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                500: `Internal server error while processing request.`,
             },
         });
     }

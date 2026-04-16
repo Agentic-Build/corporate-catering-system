@@ -5,11 +5,14 @@
 import type { EmployeeOrder } from '../models/EmployeeOrder';
 import type { EmployeeOrderCreateRequest } from '../models/EmployeeOrderCreateRequest';
 import type { EmployeeOrderPatchRequest } from '../models/EmployeeOrderPatchRequest';
+import type { EmployeeOrderPayrollLedger } from '../models/EmployeeOrderPayrollLedger';
+import type { EmployeePayrollDisputeCreateRequest } from '../models/EmployeePayrollDisputeCreateRequest';
 import type { MenuDiscoveryView } from '../models/MenuDiscoveryView';
 import type { MenuHealthTag } from '../models/MenuHealthTag';
 import type { MenuPage } from '../models/MenuPage';
 import type { MenuSortField } from '../models/MenuSortField';
 import type { MenuType } from '../models/MenuType';
+import type { PayrollDispute } from '../models/PayrollDispute';
 import type { PickupVerificationRequest } from '../models/PickupVerificationRequest';
 import type { PickupVerificationResponse } from '../models/PickupVerificationResponse';
 import type { PlantId } from '../models/PlantId';
@@ -136,6 +139,59 @@ export class EmployeeService {
                 404: `Requested resource was not found.`,
                 409: `Request conflicts with business constraints.`,
                 422: `Request is syntactically valid but violates business validation rules.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Open a payroll dispute for an order deduction
+     * @param orderId
+     * @param requestBody
+     * @returns PayrollDispute Payroll dispute opened with immutable trace seed
+     * @throws ApiError
+     */
+    public static createEmployeeOrderDispute(
+        orderId: string,
+        requestBody: EmployeePayrollDisputeCreateRequest,
+    ): CancelablePromise<PayrollDispute> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/employee/orders/{orderId}/disputes',
+            path: {
+                'orderId': orderId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                409: `Request conflicts with business constraints.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Get immutable payroll ledger and dispute state for an order
+     * @param orderId
+     * @returns EmployeeOrderPayrollLedger Per-order payroll ledger, adjustments, refunds, and disputes
+     * @throws ApiError
+     */
+    public static getEmployeeOrderPayrollLedger(
+        orderId: string,
+    ): CancelablePromise<EmployeeOrderPayrollLedger> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/employee/orders/{orderId}/payroll-ledger',
+            path: {
+                'orderId': orderId,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
                 500: `Internal server error while processing request.`,
             },
         });

@@ -40,6 +40,8 @@ pub enum HttpOperation {
     CreateEmployeeOrder,
     UpdateEmployeeOrder,
     VerifyPickupOrder,
+    GetEmployeeOrderPayrollLedger,
+    CreateEmployeeOrderDispute,
     ListVendorOrders,
     ListVendorFulfillmentBoard,
     UpsertVendorMenuItem,
@@ -57,15 +59,20 @@ pub enum HttpOperation {
     QueryAuditInvestigations,
     QueryAuditResponsibilities,
     PurgeAuditEvidence,
+    UpdateAdminPayrollDispute,
+    PurgePayrollData,
     ExportPayrollDeductions,
+    SyncPayrollHrApiAdjunct,
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 27] = [
         Self::ListEmployeeMenus,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
         Self::VerifyPickupOrder,
+        Self::GetEmployeeOrderPayrollLedger,
+        Self::CreateEmployeeOrderDispute,
         Self::ListVendorOrders,
         Self::ListVendorFulfillmentBoard,
         Self::UpsertVendorMenuItem,
@@ -83,7 +90,10 @@ impl HttpOperation {
         Self::QueryAuditInvestigations,
         Self::QueryAuditResponsibilities,
         Self::PurgeAuditEvidence,
+        Self::UpdateAdminPayrollDispute,
+        Self::PurgePayrollData,
         Self::ExportPayrollDeductions,
+        Self::SyncPayrollHrApiAdjunct,
     ];
 
     pub const fn operation_id(self) -> &'static str {
@@ -92,6 +102,8 @@ impl HttpOperation {
             Self::CreateEmployeeOrder => "createEmployeeOrder",
             Self::UpdateEmployeeOrder => "updateEmployeeOrder",
             Self::VerifyPickupOrder => "verifyPickupOrder",
+            Self::GetEmployeeOrderPayrollLedger => "getEmployeeOrderPayrollLedger",
+            Self::CreateEmployeeOrderDispute => "createEmployeeOrderDispute",
             Self::ListVendorOrders => "listVendorOrders",
             Self::ListVendorFulfillmentBoard => "listVendorFulfillmentBoard",
             Self::UpsertVendorMenuItem => "upsertVendorMenuItem",
@@ -111,13 +123,17 @@ impl HttpOperation {
             Self::QueryAuditInvestigations => "queryAuditInvestigations",
             Self::QueryAuditResponsibilities => "queryAuditResponsibilities",
             Self::PurgeAuditEvidence => "purgeAuditEvidence",
+            Self::UpdateAdminPayrollDispute => "updateAdminPayrollDispute",
+            Self::PurgePayrollData => "purgePayrollData",
             Self::ExportPayrollDeductions => "exportPayrollDeductions",
+            Self::SyncPayrollHrApiAdjunct => "syncPayrollHrApiAdjunct",
         }
     }
 
     pub const fn method(self) -> HttpMethod {
         match self {
             Self::ListEmployeeMenus
+            | Self::GetEmployeeOrderPayrollLedger
             | Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
             | Self::GetVendorFulfillmentExportBatch
@@ -128,13 +144,16 @@ impl HttpOperation {
             | Self::QueryAuditResponsibilities
             | Self::ExportPayrollDeductions => HttpMethod::Get,
             Self::CreateEmployeeOrder
+            | Self::CreateEmployeeOrderDispute
             | Self::VerifyPickupOrder
             | Self::AdvanceVendorFulfillmentDeliveryStatus
             | Self::CreateVendorFulfillmentExportBatch
             | Self::ReviewVendorApplication
             | Self::RunVendorComplianceLifecycle
-            | Self::PurgeAuditEvidence => HttpMethod::Post,
-            Self::UpdateEmployeeOrder => HttpMethod::Patch,
+            | Self::PurgeAuditEvidence
+            | Self::PurgePayrollData
+            | Self::SyncPayrollHrApiAdjunct => HttpMethod::Post,
+            Self::UpdateEmployeeOrder | Self::UpdateAdminPayrollDispute => HttpMethod::Patch,
             Self::UpsertVendorMenuItem
             | Self::UpsertComplianceDocumentTemplate
             | Self::UpsertVendorPlantDeliveryMapping => HttpMethod::Put,
@@ -148,6 +167,8 @@ impl HttpOperation {
             Self::CreateEmployeeOrder => "/api/v1/employee/orders",
             Self::UpdateEmployeeOrder => "/api/v1/employee/orders/{orderId}",
             Self::VerifyPickupOrder => "/api/v1/employee/orders/{orderId}/pickup-verifications",
+            Self::GetEmployeeOrderPayrollLedger => "/api/v1/employee/orders/{orderId}/payroll-ledger",
+            Self::CreateEmployeeOrderDispute => "/api/v1/employee/orders/{orderId}/disputes",
             Self::ListVendorOrders => "/api/v1/vendor/orders",
             Self::ListVendorFulfillmentBoard => "/api/v1/vendor/fulfillment-board",
             Self::UpsertVendorMenuItem => "/api/v1/vendor/menu-items/{menuItemId}",
@@ -173,7 +194,12 @@ impl HttpOperation {
             Self::QueryAuditInvestigations => "/api/v1/admin/audit/investigations",
             Self::QueryAuditResponsibilities => "/api/v1/admin/audit/responsibilities",
             Self::PurgeAuditEvidence => "/api/v1/admin/audit/retention-purge",
+            Self::UpdateAdminPayrollDispute => "/api/v1/admin/payroll/disputes/{disputeId}",
+            Self::PurgePayrollData => "/api/v1/admin/payroll/retention-purge",
             Self::ExportPayrollDeductions => "/api/v1/integrations/payroll/deductions",
+            Self::SyncPayrollHrApiAdjunct => {
+                "/api/v1/integrations/payroll/sftp-batches/{batchId}/hr-api-sync"
+            }
         }
     }
 
@@ -182,7 +208,9 @@ impl HttpOperation {
             Self::ListEmployeeMenus
             | Self::CreateEmployeeOrder
             | Self::UpdateEmployeeOrder
-            | Self::VerifyPickupOrder => HttpAudience::Employee,
+            | Self::VerifyPickupOrder
+            | Self::GetEmployeeOrderPayrollLedger
+            | Self::CreateEmployeeOrderDispute => HttpAudience::Employee,
             Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
             | Self::UpsertVendorMenuItem
@@ -199,14 +227,21 @@ impl HttpOperation {
             | Self::RunVendorComplianceLifecycle
             | Self::QueryAuditInvestigations
             | Self::QueryAuditResponsibilities
-            | Self::PurgeAuditEvidence => HttpAudience::Admin,
-            Self::ExportPayrollDeductions => HttpAudience::Integration,
+            | Self::PurgeAuditEvidence
+            | Self::UpdateAdminPayrollDispute
+            | Self::PurgePayrollData => HttpAudience::Admin,
+            Self::ExportPayrollDeductions | Self::SyncPayrollHrApiAdjunct => {
+                HttpAudience::Integration
+            }
         }
     }
 
     pub const fn write_action(self) -> Option<Action> {
         match self {
-            Self::CreateEmployeeOrder | Self::UpdateEmployeeOrder | Self::VerifyPickupOrder => {
+            Self::CreateEmployeeOrder
+            | Self::UpdateEmployeeOrder
+            | Self::VerifyPickupOrder
+            | Self::CreateEmployeeOrderDispute => {
                 Some(Action::PlaceEmployeeOrder)
             }
             Self::UpsertVendorMenuItem
@@ -217,8 +252,13 @@ impl HttpOperation {
             | Self::DeleteVendorPlantDeliveryMapping
             | Self::ReviewVendorApplication
             | Self::RunVendorComplianceLifecycle
-            | Self::PurgeAuditEvidence => Some(Action::ManageVendorComplianceLifecycle),
+            | Self::PurgeAuditEvidence
+            | Self::PurgePayrollData => Some(Action::ManageVendorComplianceLifecycle),
+            Self::UpdateAdminPayrollDispute | Self::SyncPayrollHrApiAdjunct => {
+                Some(Action::ExportPayrollDeductions)
+            }
             Self::ListEmployeeMenus
+            | Self::GetEmployeeOrderPayrollLedger
             | Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
             | Self::GetVendorFulfillmentExportBatch
@@ -241,6 +281,8 @@ impl HttpOperation {
             "createEmployeeOrder" => Some(Self::CreateEmployeeOrder),
             "updateEmployeeOrder" => Some(Self::UpdateEmployeeOrder),
             "verifyPickupOrder" => Some(Self::VerifyPickupOrder),
+            "getEmployeeOrderPayrollLedger" => Some(Self::GetEmployeeOrderPayrollLedger),
+            "createEmployeeOrderDispute" => Some(Self::CreateEmployeeOrderDispute),
             "listVendorOrders" => Some(Self::ListVendorOrders),
             "listVendorFulfillmentBoard" => Some(Self::ListVendorFulfillmentBoard),
             "upsertVendorMenuItem" => Some(Self::UpsertVendorMenuItem),
@@ -260,7 +302,10 @@ impl HttpOperation {
             "queryAuditInvestigations" => Some(Self::QueryAuditInvestigations),
             "queryAuditResponsibilities" => Some(Self::QueryAuditResponsibilities),
             "purgeAuditEvidence" => Some(Self::PurgeAuditEvidence),
+            "updateAdminPayrollDispute" => Some(Self::UpdateAdminPayrollDispute),
+            "purgePayrollData" => Some(Self::PurgePayrollData),
             "exportPayrollDeductions" => Some(Self::ExportPayrollDeductions),
+            "syncPayrollHrApiAdjunct" => Some(Self::SyncPayrollHrApiAdjunct),
             _ => None,
         }
     }
@@ -549,6 +594,67 @@ pub fn canonical_openapi_spec() -> Value {
                 "content": {
                   "application/json": {
                     "schema": { "$ref": "#/components/schemas/PickupVerificationResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "409": { "$ref": "#/components/responses/Conflict" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/employee/orders/{orderId}/payroll-ledger": {
+          "get": {
+            "tags": ["Employee"],
+            "summary": "Get immutable payroll ledger and dispute state for an order",
+            "operationId": HttpOperation::GetEmployeeOrderPayrollLedger.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/OrderIdPath" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Per-order payroll ledger, adjustments, refunds, and disputes",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/EmployeeOrderPayrollLedger" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/employee/orders/{orderId}/disputes": {
+          "post": {
+            "tags": ["Employee"],
+            "summary": "Open a payroll dispute for an order deduction",
+            "operationId": HttpOperation::CreateEmployeeOrderDispute.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/OrderIdPath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/EmployeePayrollDisputeCreateRequest" }
+                }
+              }
+            },
+            "responses": {
+              "201": {
+                "description": "Payroll dispute opened with immutable trace seed",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/PayrollDispute" }
                   }
                 }
               },
@@ -1089,11 +1195,81 @@ pub fn canonical_openapi_spec() -> Value {
             }
           }
         },
+        "/api/v1/admin/payroll/disputes/{disputeId}": {
+          "patch": {
+            "tags": ["Admin"],
+            "summary": "Assign and resolve payroll disputes with immutable trace",
+            "operationId": HttpOperation::UpdateAdminPayrollDispute.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/DisputeIdPath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/AdminPayrollDisputePatchRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Updated payroll dispute lifecycle record",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/PayrollDispute" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "409": { "$ref": "#/components/responses/Conflict" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/admin/payroll/retention-purge": {
+          "post": {
+            "tags": ["Admin"],
+            "summary": "Execute payroll and dispute retention purge by policy",
+            "operationId": HttpOperation::PurgePayrollData.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/PayrollRetentionPurgeRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Payroll retention purge result",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/PayrollRetentionPurgeResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
         "/api/v1/integrations/payroll/deductions": {
           "get": {
             "tags": ["Integration"],
             "summary": "Export payroll deduction records",
             "operationId": HttpOperation::ExportPayrollDeductions.operation_id(),
+            "x-payroll-exchange-governance": {
+              "coreExchangePath": "SFTP_BATCH",
+              "optionalAdjunctPath": "HR_API_SYNC",
+              "ledgerMode": "APPEND_ONLY"
+            },
             "security": [{ "corporateSsoBearer": [] }],
             "parameters": [
               { "$ref": "#/components/parameters/PayPeriodQuery" },
@@ -1113,7 +1289,34 @@ pub fn canonical_openapi_spec() -> Value {
               },
               "400": { "$ref": "#/components/responses/BadRequest" },
               "401": { "$ref": "#/components/responses/Unauthorized" },
-              "403": { "$ref": "#/components/responses/Forbidden" }
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/integrations/payroll/sftp-batches/{batchId}/hr-api-sync": {
+          "post": {
+            "tags": ["Integration"],
+            "summary": "Trigger optional HR API adjunct sync for an SFTP payroll batch",
+            "operationId": HttpOperation::SyncPayrollHrApiAdjunct.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/PayrollExchangeBatchIdPath" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Batch HR API adjunct sync status",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/PayrollHrApiSyncResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
         }
@@ -1422,6 +1625,15 @@ pub fn canonical_openapi_spec() -> Value {
               "pattern": "^ord-[a-z0-9]{8,32}$"
             }
           },
+          "DisputeIdPath": {
+            "name": "disputeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^dsp-[0-9a-f]{16}$"
+            }
+          },
           "MenuItemIdPath": {
             "name": "menuItemId",
             "in": "path",
@@ -1471,6 +1683,15 @@ pub fn canonical_openapi_spec() -> Value {
             "schema": {
               "type": "string",
               "pattern": "^fbatch-[0-9-]{3,64}$"
+            }
+          },
+          "PayrollExchangeBatchIdPath": {
+            "name": "batchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^sftp-[0-9]{6}-[0-9a-f]{16}$"
             }
           }
         },
@@ -1579,7 +1800,14 @@ pub fn canonical_openapi_spec() -> Value {
               "RUN_VENDOR_COMPLIANCE_LIFECYCLE",
               "PURGE_AUDIT_EVIDENCE",
               "PRUNE_VENDOR_COMPLIANCE_HISTORY",
-              "EXPORT_PAYROLL_DEDUCTIONS"
+              "EXPORT_PAYROLL_DEDUCTIONS",
+              "APPEND_PAYROLL_LEDGER_ENTRY",
+              "OPEN_PAYROLL_DISPUTE",
+              "ASSIGN_PAYROLL_DISPUTE_OWNER",
+              "RESOLVE_PAYROLL_DISPUTE",
+              "EXPORT_PAYROLL_SFTP_BATCH",
+              "SYNC_PAYROLL_HR_API_ADJUNCT",
+              "PURGE_PAYROLL_DATA"
             ]
           },
           "AuditEntityType": {
@@ -1593,7 +1821,11 @@ pub fn canonical_openapi_spec() -> Value {
               "FULFILLMENT_BATCH",
               "SETTLEMENT",
               "VENDOR_ORDERING_POLICY",
-              "AUDIT_TRAIL"
+              "AUDIT_TRAIL",
+              "PAYROLL_LEDGER_ENTRY",
+              "PAYROLL_DISPUTE",
+              "PAYROLL_EXCHANGE_BATCH",
+              "PAYROLL_DATA_RETENTION"
             ]
           },
           "AuditEntityRef": {
@@ -2856,6 +3088,241 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "additionalProperties": false
           },
+          "PayrollLedgerEntryKind": {
+            "type": "string",
+            "enum": [
+              "DEDUCTION",
+              "ADJUSTMENT_DEBIT",
+              "ADJUSTMENT_CREDIT",
+              "REFUND"
+            ]
+          },
+          "PayrollLedgerSourceKind": {
+            "type": "string",
+            "enum": [
+              "ORDER_MUTATION",
+              "DISPUTE_WORKFLOW",
+              "SFTP_BATCH_EXPORT",
+              "HR_API_SYNC_ADJUNCT"
+            ]
+          },
+          "PayrollDisputeStatus": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "IN_REVIEW",
+              "RESOLVED_REFUND_APPROVED",
+              "RESOLVED_REJECTED"
+            ]
+          },
+          "PayrollDisputeTraceEventType": {
+            "type": "string",
+            "enum": [
+              "OPENED",
+              "OWNER_ASSIGNED",
+              "RESOLVED_REFUND_APPROVED",
+              "RESOLVED_REJECTED"
+            ]
+          },
+          "PayrollLedgerEntry": {
+            "type": "object",
+            "required": [
+              "ledgerEntryId",
+              "kind",
+              "amount",
+              "occurredAt",
+              "sourceEventKind",
+              "sourceEventReference"
+            ],
+            "properties": {
+              "ledgerEntryId": { "type": "integer", "minimum": 1 },
+              "kind": { "$ref": "#/components/schemas/PayrollLedgerEntryKind" },
+              "amount": { "$ref": "#/components/schemas/Money" },
+              "occurredAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "sourceEventKind": { "$ref": "#/components/schemas/PayrollLedgerSourceKind" },
+              "sourceEventReference": { "type": "string", "minLength": 1, "maxLength": 128 }
+            },
+            "additionalProperties": false
+          },
+          "PayrollDisputeTraceEvent": {
+            "type": "object",
+            "required": [
+              "occurredAt",
+              "actorId",
+              "eventType",
+              "status",
+              "ownerActorId",
+              "sourceEventKind",
+              "sourceEventReference"
+            ],
+            "properties": {
+              "occurredAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "actorId": { "$ref": "#/components/schemas/ActorId" },
+              "eventType": { "$ref": "#/components/schemas/PayrollDisputeTraceEventType" },
+              "status": { "$ref": "#/components/schemas/PayrollDisputeStatus" },
+              "ownerActorId": { "$ref": "#/components/schemas/ActorId" },
+              "note": { "type": "string", "maxLength": 280 },
+              "sourceEventKind": { "$ref": "#/components/schemas/PayrollLedgerSourceKind" },
+              "sourceEventReference": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "refundLedgerEntryId": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          },
+          "PayrollDispute": {
+            "type": "object",
+            "required": [
+              "disputeId",
+              "orderId",
+              "employeeActorId",
+              "ownerActorId",
+              "status",
+              "openedAt",
+              "updatedAt",
+              "trace"
+            ],
+            "properties": {
+              "disputeId": { "type": "string", "pattern": "^dsp-[0-9a-f]{16}$" },
+              "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
+              "employeeActorId": { "$ref": "#/components/schemas/ActorId" },
+              "ownerActorId": { "$ref": "#/components/schemas/ActorId" },
+              "status": { "$ref": "#/components/schemas/PayrollDisputeStatus" },
+              "openedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "updatedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "trace": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/PayrollDisputeTraceEvent" },
+                "minItems": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "EmployeeOrderPayrollLedger": {
+            "type": "object",
+            "required": [
+              "orderId",
+              "employeeActorId",
+              "deliveryDate",
+              "currency",
+              "netAmountMinor",
+              "ledgerEntries",
+              "disputes"
+            ],
+            "properties": {
+              "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
+              "employeeActorId": { "$ref": "#/components/schemas/ActorId" },
+              "deliveryDate": { "type": "string", "format": "date" },
+              "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+              "netAmountMinor": { "type": "integer" },
+              "ledgerEntries": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/PayrollLedgerEntry" }
+              },
+              "disputes": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/PayrollDispute" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "EmployeePayrollDisputeCreateRequest": {
+            "type": "object",
+            "required": ["reason"],
+            "properties": {
+              "reason": { "type": "string", "minLength": 1, "maxLength": 280 }
+            },
+            "additionalProperties": false
+          },
+          "AdminPayrollDisputeAssignOwnerPatchRequest": {
+            "type": "object",
+            "required": ["operation", "ownerActorId"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["ASSIGN_OWNER"] },
+              "ownerActorId": { "$ref": "#/components/schemas/ActorId" },
+              "note": { "type": "string", "maxLength": 280 }
+            },
+            "additionalProperties": false
+          },
+          "AdminPayrollDisputeResolveRefundPatchRequest": {
+            "type": "object",
+            "required": ["operation", "note"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["RESOLVE_REFUND"] },
+              "note": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "refundAmountMinor": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          },
+          "AdminPayrollDisputeResolveRejectedPatchRequest": {
+            "type": "object",
+            "required": ["operation", "note"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["RESOLVE_REJECTED"] },
+              "note": { "type": "string", "minLength": 1, "maxLength": 280 }
+            },
+            "additionalProperties": false
+          },
+          "AdminPayrollDisputePatchRequest": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/AdminPayrollDisputeAssignOwnerPatchRequest" },
+              { "$ref": "#/components/schemas/AdminPayrollDisputeResolveRefundPatchRequest" },
+              { "$ref": "#/components/schemas/AdminPayrollDisputeResolveRejectedPatchRequest" }
+            ],
+            "description": "Immutable dispute workflow command."
+          },
+          "PayrollRetentionPurgeRequest": {
+            "type": "object",
+            "properties": {
+              "asOfEpochDay": { "type": "integer" }
+            },
+            "additionalProperties": false
+          },
+          "PayrollRetentionPurgeResponse": {
+            "type": "object",
+            "required": [
+              "purgedLedgerEntries",
+              "purgedDisputes",
+              "purgedExchangeBatches",
+              "asOfEpochDay"
+            ],
+            "properties": {
+              "purgedLedgerEntries": { "type": "integer", "minimum": 0 },
+              "purgedDisputes": { "type": "integer", "minimum": 0 },
+              "purgedExchangeBatches": { "type": "integer", "minimum": 0 },
+              "asOfEpochDay": { "type": "integer" }
+            },
+            "additionalProperties": false
+          },
+          "PayrollExchangeBatch": {
+            "type": "object",
+            "required": [
+              "batchId",
+              "payPeriod",
+              "generatedAt",
+              "exchangePath",
+              "hrApiSyncStatus"
+            ],
+            "properties": {
+              "batchId": { "type": "string", "pattern": "^sftp-[0-9]{6}-[0-9a-f]{16}$" },
+              "payPeriod": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$" },
+              "generatedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "exchangePath": { "type": "string", "enum": ["SFTP_BATCH"] },
+              "hrApiSyncStatus": { "type": "string", "enum": ["NOT_SYNCED", "SUCCEEDED"] },
+              "hrApiSyncedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" }
+            },
+            "additionalProperties": false
+          },
+          "PayrollHrApiSyncResponse": {
+            "type": "object",
+            "required": ["exchangeBatch"],
+            "properties": {
+              "exchangeBatch": { "$ref": "#/components/schemas/PayrollExchangeBatch" }
+            },
+            "additionalProperties": false
+          },
+          "PayrollDeductionStatus": {
+            "type": "string",
+            "enum": ["READY", "LOCKED", "REFUNDED", "DISPUTED"]
+          },
           "PayrollDeductionRecord": {
             "type": "object",
             "required": [
@@ -2864,7 +3331,8 @@ pub fn canonical_openapi_spec() -> Value {
               "deliveryDate",
               "amount",
               "payPeriod",
-              "status"
+              "status",
+              "sourceEntryIds"
             ],
             "properties": {
               "employeeActorId": { "$ref": "#/components/schemas/ActorId" },
@@ -2872,19 +3340,25 @@ pub fn canonical_openapi_spec() -> Value {
               "deliveryDate": { "type": "string", "format": "date" },
               "amount": { "$ref": "#/components/schemas/Money" },
               "payPeriod": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$" },
-              "status": { "type": "string", "enum": ["READY", "LOCKED", "REFUNDED"] }
+              "status": { "$ref": "#/components/schemas/PayrollDeductionStatus" },
+              "disputeStatus": { "$ref": "#/components/schemas/PayrollDisputeStatus" },
+              "sourceEntryIds": {
+                "type": "array",
+                "items": { "type": "integer", "minimum": 1 }
+              }
             },
             "additionalProperties": false
           },
           "PayrollDeductionPage": {
             "type": "object",
-            "required": ["items", "page"],
+            "required": ["items", "page", "exchangeBatch"],
             "properties": {
               "items": {
                 "type": "array",
                 "items": { "$ref": "#/components/schemas/PayrollDeductionRecord" }
               },
-              "page": { "$ref": "#/components/schemas/PageMeta" }
+              "page": { "$ref": "#/components/schemas/PageMeta" },
+              "exchangeBatch": { "$ref": "#/components/schemas/PayrollExchangeBatch" }
             },
             "additionalProperties": false
           },
@@ -2919,6 +3393,7 @@ pub fn canonical_openapi_spec() -> Value {
               "INVALID_AUDIT_INVESTIGATION_QUERY",
               "AUDIT_INVESTIGATION_INTERNAL_ERROR",
               "AUDIT_RETENTION_PURGE_INTERNAL_ERROR",
+              "PAYROLL_LEDGER_INTERNAL_ERROR",
               "VENDOR_FULFILLMENT_INVALID_REQUEST",
               "VENDOR_FULFILLMENT_STATUS_CONFLICT",
               "VENDOR_FULFILLMENT_BATCH_NOT_FOUND"

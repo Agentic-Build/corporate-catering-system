@@ -52,7 +52,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 22] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 27] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -72,6 +72,16 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 22] = [
         HttpMethod::Post,
         "/api/v1/employee/orders/{orderId}/pickup-verifications",
         "verifyPickupOrder",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/employee/orders/{orderId}/payroll-ledger",
+        "getEmployeeOrderPayrollLedger",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/employee/orders/{orderId}/disputes",
+        "createEmployeeOrderDispute",
     ),
     RuntimeHttpRoute::new(HttpMethod::Get, "/api/v1/vendor/orders", "listVendorOrders"),
     RuntimeHttpRoute::new(
@@ -151,9 +161,24 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 22] = [
         "purgeAuditEvidence",
     ),
     RuntimeHttpRoute::new(
+        HttpMethod::Patch,
+        "/api/v1/admin/payroll/disputes/{disputeId}",
+        "updateAdminPayrollDispute",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/admin/payroll/retention-purge",
+        "purgePayrollData",
+    ),
+    RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/integrations/payroll/deductions",
         "exportPayrollDeductions",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/integrations/payroll/sftp-batches/{batchId}/hr-api-sync",
+        "syncPayrollHrApiAdjunct",
     ),
 ];
 

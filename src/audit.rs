@@ -147,6 +147,13 @@ pub enum AuditAction {
     PurgeAuditEvidence,
     PruneVendorComplianceHistory,
     ExportPayrollDeductions,
+    AppendPayrollLedgerEntry,
+    OpenPayrollDispute,
+    AssignPayrollDisputeOwner,
+    ResolvePayrollDispute,
+    ExportPayrollSftpBatch,
+    SyncPayrollHrApiAdjunct,
+    PurgePayrollData,
 }
 
 impl AuditAction {
@@ -174,6 +181,13 @@ impl AuditAction {
             Self::PurgeAuditEvidence => "PURGE_AUDIT_EVIDENCE",
             Self::PruneVendorComplianceHistory => "PRUNE_VENDOR_COMPLIANCE_HISTORY",
             Self::ExportPayrollDeductions => "EXPORT_PAYROLL_DEDUCTIONS",
+            Self::AppendPayrollLedgerEntry => "APPEND_PAYROLL_LEDGER_ENTRY",
+            Self::OpenPayrollDispute => "OPEN_PAYROLL_DISPUTE",
+            Self::AssignPayrollDisputeOwner => "ASSIGN_PAYROLL_DISPUTE_OWNER",
+            Self::ResolvePayrollDispute => "RESOLVE_PAYROLL_DISPUTE",
+            Self::ExportPayrollSftpBatch => "EXPORT_PAYROLL_SFTP_BATCH",
+            Self::SyncPayrollHrApiAdjunct => "SYNC_PAYROLL_HR_API_ADJUNCT",
+            Self::PurgePayrollData => "PURGE_PAYROLL_DATA",
         }
     }
 }
@@ -195,6 +209,10 @@ pub enum AuditEntityType {
     Settlement,
     VendorOrderingPolicy,
     AuditTrail,
+    PayrollLedgerEntry,
+    PayrollDispute,
+    PayrollExchangeBatch,
+    PayrollDataRetention,
 }
 
 impl AuditEntityType {
@@ -209,6 +227,10 @@ impl AuditEntityType {
             Self::Settlement => "SETTLEMENT",
             Self::VendorOrderingPolicy => "VENDOR_ORDERING_POLICY",
             Self::AuditTrail => "AUDIT_TRAIL",
+            Self::PayrollLedgerEntry => "PAYROLL_LEDGER_ENTRY",
+            Self::PayrollDispute => "PAYROLL_DISPUTE",
+            Self::PayrollExchangeBatch => "PAYROLL_EXCHANGE_BATCH",
+            Self::PayrollDataRetention => "PAYROLL_DATA_RETENTION",
         }
     }
 }
@@ -862,6 +884,13 @@ enum PersistedAuditAction {
     PurgeAuditEvidence,
     PruneVendorComplianceHistory,
     ExportPayrollDeductions,
+    AppendPayrollLedgerEntry,
+    OpenPayrollDispute,
+    AssignPayrollDisputeOwner,
+    ResolvePayrollDispute,
+    ExportPayrollSftpBatch,
+    SyncPayrollHrApiAdjunct,
+    PurgePayrollData,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -882,6 +911,10 @@ enum PersistedAuditEntityType {
     Settlement,
     VendorOrderingPolicy,
     AuditTrail,
+    PayrollLedgerEntry,
+    PayrollDispute,
+    PayrollExchangeBatch,
+    PayrollDataRetention,
 }
 
 fn ensure_committee_admin(actor: &AuthenticatedActorContext) -> Result<(), AuditTrailError> {
@@ -1121,6 +1154,13 @@ fn persisted_audit_action_from_domain(action: AuditAction) -> PersistedAuditActi
             PersistedAuditAction::PruneVendorComplianceHistory
         }
         AuditAction::ExportPayrollDeductions => PersistedAuditAction::ExportPayrollDeductions,
+        AuditAction::AppendPayrollLedgerEntry => PersistedAuditAction::AppendPayrollLedgerEntry,
+        AuditAction::OpenPayrollDispute => PersistedAuditAction::OpenPayrollDispute,
+        AuditAction::AssignPayrollDisputeOwner => PersistedAuditAction::AssignPayrollDisputeOwner,
+        AuditAction::ResolvePayrollDispute => PersistedAuditAction::ResolvePayrollDispute,
+        AuditAction::ExportPayrollSftpBatch => PersistedAuditAction::ExportPayrollSftpBatch,
+        AuditAction::SyncPayrollHrApiAdjunct => PersistedAuditAction::SyncPayrollHrApiAdjunct,
+        AuditAction::PurgePayrollData => PersistedAuditAction::PurgePayrollData,
     }
 }
 
@@ -1162,6 +1202,13 @@ fn domain_audit_action_from_persisted(action: PersistedAuditAction) -> AuditActi
             AuditAction::PruneVendorComplianceHistory
         }
         PersistedAuditAction::ExportPayrollDeductions => AuditAction::ExportPayrollDeductions,
+        PersistedAuditAction::AppendPayrollLedgerEntry => AuditAction::AppendPayrollLedgerEntry,
+        PersistedAuditAction::OpenPayrollDispute => AuditAction::OpenPayrollDispute,
+        PersistedAuditAction::AssignPayrollDisputeOwner => AuditAction::AssignPayrollDisputeOwner,
+        PersistedAuditAction::ResolvePayrollDispute => AuditAction::ResolvePayrollDispute,
+        PersistedAuditAction::ExportPayrollSftpBatch => AuditAction::ExportPayrollSftpBatch,
+        PersistedAuditAction::SyncPayrollHrApiAdjunct => AuditAction::SyncPayrollHrApiAdjunct,
+        PersistedAuditAction::PurgePayrollData => AuditAction::PurgePayrollData,
     }
 }
 
@@ -1194,6 +1241,10 @@ fn persisted_entity_type_from_domain(entity_type: AuditEntityType) -> PersistedA
         AuditEntityType::Settlement => PersistedAuditEntityType::Settlement,
         AuditEntityType::VendorOrderingPolicy => PersistedAuditEntityType::VendorOrderingPolicy,
         AuditEntityType::AuditTrail => PersistedAuditEntityType::AuditTrail,
+        AuditEntityType::PayrollLedgerEntry => PersistedAuditEntityType::PayrollLedgerEntry,
+        AuditEntityType::PayrollDispute => PersistedAuditEntityType::PayrollDispute,
+        AuditEntityType::PayrollExchangeBatch => PersistedAuditEntityType::PayrollExchangeBatch,
+        AuditEntityType::PayrollDataRetention => PersistedAuditEntityType::PayrollDataRetention,
     }
 }
 
@@ -1210,6 +1261,10 @@ fn domain_entity_type_from_persisted(entity_type: PersistedAuditEntityType) -> A
         PersistedAuditEntityType::Settlement => AuditEntityType::Settlement,
         PersistedAuditEntityType::VendorOrderingPolicy => AuditEntityType::VendorOrderingPolicy,
         PersistedAuditEntityType::AuditTrail => AuditEntityType::AuditTrail,
+        PersistedAuditEntityType::PayrollLedgerEntry => AuditEntityType::PayrollLedgerEntry,
+        PersistedAuditEntityType::PayrollDispute => AuditEntityType::PayrollDispute,
+        PersistedAuditEntityType::PayrollExchangeBatch => AuditEntityType::PayrollExchangeBatch,
+        PersistedAuditEntityType::PayrollDataRetention => AuditEntityType::PayrollDataRetention,
     }
 }
 

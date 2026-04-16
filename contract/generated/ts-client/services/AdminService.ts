@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ActorId } from '../models/ActorId';
+import type { AdminPayrollDisputePatchRequest } from '../models/AdminPayrollDisputePatchRequest';
 import type { AdminVendorReviewRequest } from '../models/AdminVendorReviewRequest';
 import type { AuditAction } from '../models/AuditAction';
 import type { AuditEntityType } from '../models/AuditEntityType';
@@ -10,6 +11,9 @@ import type { AuditInvestigationResponse } from '../models/AuditInvestigationRes
 import type { AuditResponsibilityResponse } from '../models/AuditResponsibilityResponse';
 import type { AuditRetentionPurgeRequest } from '../models/AuditRetentionPurgeRequest';
 import type { AuditRetentionPurgeResponse } from '../models/AuditRetentionPurgeResponse';
+import type { PayrollDispute } from '../models/PayrollDispute';
+import type { PayrollRetentionPurgeRequest } from '../models/PayrollRetentionPurgeRequest';
+import type { PayrollRetentionPurgeResponse } from '../models/PayrollRetentionPurgeResponse';
 import type { PlantId } from '../models/PlantId';
 import type { SortOrder } from '../models/SortOrder';
 import type { TaipeiBusinessDateTime } from '../models/TaipeiBusinessDateTime';
@@ -205,6 +209,57 @@ export class AdminService {
                 401: `Authentication token is missing or invalid.`,
                 403: `Authenticated actor is not authorized to perform this operation.`,
                 422: `Request is syntactically valid but violates business validation rules.`,
+            },
+        });
+    }
+    /**
+     * Assign and resolve payroll disputes with immutable trace
+     * @param disputeId
+     * @param requestBody
+     * @returns PayrollDispute Updated payroll dispute lifecycle record
+     * @throws ApiError
+     */
+    public static updateAdminPayrollDispute(
+        disputeId: string,
+        requestBody: AdminPayrollDisputePatchRequest,
+    ): CancelablePromise<PayrollDispute> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/admin/payroll/disputes/{disputeId}',
+            path: {
+                'disputeId': disputeId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                409: `Request conflicts with business constraints.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Execute payroll and dispute retention purge by policy
+     * @param requestBody
+     * @returns PayrollRetentionPurgeResponse Payroll retention purge result
+     * @throws ApiError
+     */
+    public static purgePayrollData(
+        requestBody: PayrollRetentionPurgeRequest,
+    ): CancelablePromise<PayrollRetentionPurgeResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/payroll/retention-purge',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
             },
         });
     }

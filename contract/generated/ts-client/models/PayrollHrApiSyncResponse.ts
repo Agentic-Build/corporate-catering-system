@@ -2,12 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { PageMeta } from './PageMeta';
-import type { PayrollDeductionRecord } from './PayrollDeductionRecord';
 import type { PayrollExchangeBatch } from './PayrollExchangeBatch';
-export type PayrollDeductionPage = {
+export type PayrollHrApiSyncResponse = {
     exchangeBatch: PayrollExchangeBatch;
-    items: Array<PayrollDeductionRecord>;
-    page: PageMeta;
 };
 

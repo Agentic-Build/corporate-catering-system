@@ -6,7 +6,7 @@ use crate::audit::{
     AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
     AuditIdentityLink, AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
 };
-use crate::identity::{AuthenticatedActorContext, PlantId, Role};
+use crate::identity::{ActorId, AuthenticatedActorContext, PlantId, Role};
 use crate::vendor_compliance::VendorId;
 use crate::vendor_delivery_mapping::TaipeiBusinessMoment;
 
@@ -818,6 +818,7 @@ impl OrderTimelineEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderSnapshot {
     order_id: OrderId,
+    employee_actor_id: ActorId,
     vendor_id: VendorId,
     plant_id: PlantId,
     delivery_epoch_day: i32,
@@ -831,6 +832,10 @@ pub struct OrderSnapshot {
 impl OrderSnapshot {
     pub fn order_id(&self) -> &OrderId {
         &self.order_id
+    }
+
+    pub fn employee_actor_id(&self) -> &ActorId {
+        &self.employee_actor_id
     }
 
     pub fn vendor_id(&self) -> &VendorId {
@@ -868,6 +873,7 @@ impl OrderSnapshot {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct StoredOrder {
+    employee_actor_id: ActorId,
     vendor_id: VendorId,
     plant_id: PlantId,
     delivery_epoch_day: i32,
@@ -1151,6 +1157,7 @@ impl MenuSupplyPolicy {
             .get(order_id)
             .map(|stored_order| OrderSnapshot {
                 order_id: order_id.clone(),
+                employee_actor_id: stored_order.employee_actor_id.clone(),
                 vendor_id: stored_order.vendor_id.clone(),
                 plant_id: stored_order.plant_id.clone(),
                 delivery_epoch_day: stored_order.delivery_epoch_day,
@@ -1188,6 +1195,7 @@ impl MenuSupplyPolicy {
                 }
                 Some(OrderSnapshot {
                     order_id: order_id.clone(),
+                    employee_actor_id: stored_order.employee_actor_id.clone(),
                     vendor_id: stored_order.vendor_id.clone(),
                     plant_id: stored_order.plant_id.clone(),
                     delivery_epoch_day: stored_order.delivery_epoch_day,
@@ -1240,6 +1248,7 @@ impl MenuSupplyPolicy {
         )?;
         if let Some(existing_order) = state.orders.get(&order_id) {
             if existing_order.vendor_id == *vendor_id
+                && existing_order.employee_actor_id == *actor.actor_id()
                 && existing_order.plant_id == *plant_id
                 && existing_order.delivery_epoch_day == delivery_epoch_day
                 && existing_order.line_items == aggregated_line_items.quantities
@@ -1272,6 +1281,7 @@ impl MenuSupplyPolicy {
         state.orders.insert(
             order_id,
             StoredOrder {
+                employee_actor_id: actor.actor_id().clone(),
                 vendor_id: vendor_id.clone(),
                 plant_id: plant_id.clone(),
                 delivery_epoch_day,
