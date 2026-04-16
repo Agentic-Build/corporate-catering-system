@@ -745,6 +745,34 @@ fn payroll_endpoints_have_tested_error_code_to_schema_refs() {
         "#/components/responses/InternalServerError",
     );
 
+    let payroll_retention_purge_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/payroll/retention-purge", "post");
+    assert_error_response_ref(
+        payroll_retention_purge_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        payroll_retention_purge_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        payroll_retention_purge_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        payroll_retention_purge_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+    assert_eq!(
+        payroll_retention_purge_operation["requestBody"]["content"]["application/json"]["schema"]
+            ["$ref"],
+        "#/components/schemas/PayrollRetentionPurgeRequest"
+    );
+
     let payroll_export_operation =
         operation_by_path_and_method(&spec, "/api/v1/integrations/payroll/deductions", "get");
     assert_error_response_ref(
