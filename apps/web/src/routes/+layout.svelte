@@ -42,10 +42,13 @@
   });
 
   $effect(() => {
+    const actor = data.actor;
+    const shouldProbe = browser && actor !== null && data.bootstrapState.status === "loading";
+
     bootstrapState = data.bootstrapState;
 
-    if (browser && data.actor && bootstrapState.status === "loading") {
-      void refreshBootstrapState(data.actor);
+    if (shouldProbe) {
+      void refreshBootstrapState(actor);
     }
   });
 
