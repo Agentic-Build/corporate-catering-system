@@ -64,6 +64,10 @@ ensure_state_dirs() {
   mkdir -p "${ROOT_DIR}/ops/state"
 }
 
+provision_object_storage_buckets() {
+  "${ROOT_DIR}/ops/local/minio-provision.sh"
+}
+
 run_database_migrations() {
   require_command sqlx
   if [[ -z "${DATABASE_URL:-}" ]]; then
@@ -111,12 +115,14 @@ ensure_state_dirs
 case "${command}" in
   dev)
     compose up -d --wait
+    provision_object_storage_buckets
     run_database_migrations
     reset_runtime_state_file
     exec cargo run --bin observability_runtime_service
     ;;
   up)
     compose up -d --wait
+    provision_object_storage_buckets
     ;;
   app)
     run_database_migrations

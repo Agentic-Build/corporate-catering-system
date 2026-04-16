@@ -119,8 +119,11 @@ fn menu_item_with_overrides(
             "BENTO",
             vec![MenuHealthTag::HighProtein],
             Some(
-                MenuImageUrl::parse("s3://menu-assets/menu/roasted-chicken-bento.jpg")
-                    .expect("menu image URL should be valid"),
+                MenuImageUrl::parse(format!(
+                    "s3://menu-assets/menu-images/{}/media/262144-deadbeef-roasted-chicken-bento.jpg",
+                    vendor_id.as_str()
+                ))
+                .expect("menu image URL should be valid"),
             ),
             Money::new("TWD", 14500).expect("money should be valid"),
             max_daily_quantity,
@@ -148,8 +151,11 @@ fn menu_item_with_metadata(
             menu_type,
             health_tags,
             Some(
-                MenuImageUrl::parse("s3://menu-assets/menu/discovery-menu.jpg")
-                    .expect("menu image URL should be valid"),
+                MenuImageUrl::parse(format!(
+                    "s3://menu-assets/menu-images/{}/media/262144-deadbeef-discovery-menu.jpg",
+                    vendor_id.as_str()
+                ))
+                .expect("menu image URL should be valid"),
             ),
             Money::new("TWD", 12000).expect("money should be valid"),
             max_daily_quantity,
@@ -186,8 +192,23 @@ fn vendors_can_manage_menu_price_image_and_daily_quota() {
             .image_url()
             .expect("image URL should be present")
             .as_str(),
-        "s3://menu-assets/menu/roasted-chicken-bento.jpg"
+        format!(
+            "s3://menu-assets/menu-images/{}/media/262144-deadbeef-roasted-chicken-bento.jpg",
+            vendor.as_str()
+        )
     );
+}
+
+#[test]
+fn menu_image_url_requires_managed_metadata_envelope() {
+    let error = MenuImageUrl::parse(
+        "s3://menu-assets/menu-images/ven-menuwindowa1/media/roasted-chicken-bento.jpg",
+    )
+    .expect_err("image object refs without size/digest envelope should be rejected");
+    assert!(matches!(
+        error,
+        MenuSupplyWindowError::InvalidMenuImageUrl(_)
+    ));
 }
 
 #[test]

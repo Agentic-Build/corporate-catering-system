@@ -3495,7 +3495,7 @@ pub fn canonical_openapi_spec() -> Value {
             "required": ["artifactClass", "fileName", "mimeType", "sizeBytes"],
             "properties": {
               "artifactClass": { "$ref": "#/components/schemas/StorageArtifactClass" },
-              "fileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+              "fileName": { "type": "string", "minLength": 1, "maxLength": 128 },
               "mimeType": { "type": "string", "minLength": 1, "maxLength": 128 },
               "sizeBytes": { "type": "integer", "minimum": 1 },
               "locale": { "type": "string", "minLength": 2, "maxLength": 32 }
@@ -5115,7 +5115,14 @@ pub fn canonical_openapi_spec() -> Value {
               "MCP_AUTHORIZATION_AUDIT_INTERNAL_ERROR",
               "VENDOR_FULFILLMENT_INVALID_REQUEST",
               "VENDOR_FULFILLMENT_STATUS_CONFLICT",
-              "VENDOR_FULFILLMENT_BATCH_NOT_FOUND"
+              "VENDOR_FULFILLMENT_BATCH_NOT_FOUND",
+              "OBJECT_STORAGE_INVALID_ARTIFACT_CLASS",
+              "OBJECT_STORAGE_INVALID_OBJECT_REF",
+              "OBJECT_STORAGE_INVALID_MIME",
+              "OBJECT_STORAGE_SIZE_EXCEEDED",
+              "OBJECT_STORAGE_INVALID_FILE_NAME",
+              "OBJECT_STORAGE_CONFIGURATION_ERROR",
+              "OBJECT_STORAGE_PRESIGN_ERROR"
             ]
           },
           "ErrorDetail": {

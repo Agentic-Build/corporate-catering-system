@@ -89,8 +89,11 @@ fn menu_item(
             "BENTO",
             vec![MenuHealthTag::HighProtein],
             Some(
-                MenuImageUrl::parse("s3://menu-assets/menu/http-fulfillment-bento.jpg")
-                    .expect("menu image URL should be valid"),
+                MenuImageUrl::parse(format!(
+                    "s3://menu-assets/menu-images/{}/media/262144-deadbeef-http-fulfillment-bento.jpg",
+                    vendor_id.as_str()
+                ))
+                .expect("menu image URL should be valid"),
             ),
             Money::new("TWD", 13000).expect("money should be valid"),
             20,

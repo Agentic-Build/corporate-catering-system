@@ -104,7 +104,10 @@ fn activate_vendor(
             vendor_id,
             &template_id("tmpl-vendor-delivery-license"),
             VendorDocumentSubmission::new(
-                "s3://compliance-evidence/docs/vendor-license.pdf",
+                format!(
+                    "s3://compliance-evidence/compliance-documents/{}/docs/524288-deadbeef-vendor-license.pdf",
+                    vendor_id.as_str()
+                ),
                 ComplianceDate::from_epoch_day(0),
                 ComplianceDate::from_epoch_day(300),
             )

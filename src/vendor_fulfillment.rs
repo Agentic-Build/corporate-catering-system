@@ -649,7 +649,7 @@ impl ObjectStorageFulfillmentArtifactStore {
 impl FulfillmentArtifactStore for ObjectStorageFulfillmentArtifactStore {
     fn store_json_artifact(
         &self,
-        _vendor_id: &VendorId,
+        vendor_id: &VendorId,
         _batch_id: &FulfillmentBatchId,
         _delivery_epoch_day: i32,
         artifact_type: FulfillmentArtifactType,
@@ -661,6 +661,7 @@ impl FulfillmentArtifactStore for ObjectStorageFulfillmentArtifactStore {
             .create_upload_plan(
                 ObjectUploadIntent {
                     artifact_class,
+                    owner_scope: Some(vendor_id.as_str().to_owned()),
                     file_name: format!("{}.json", artifact_type.file_stem()),
                     mime_type: "application/json".to_owned(),
                     size_bytes: u64::try_from(payload.len())

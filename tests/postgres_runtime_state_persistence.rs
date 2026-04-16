@@ -114,7 +114,10 @@ fn build_approved_compliance_lifecycle(
             vendor_id,
             &template_id,
             VendorDocumentSubmission::new(
-                "s3://compliance-evidence/docs/runtime-sql-license.pdf",
+                format!(
+                    "s3://compliance-evidence/compliance-documents/{}/docs/524288-deadbeef-runtime-sql-license.pdf",
+                    vendor_id.as_str()
+                ),
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_sub(5)),
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(300)),
             )
@@ -294,8 +297,11 @@ async fn runtime_order_payroll_anomaly_flows_persist_on_real_postgres_with_trans
                     "BENTO",
                     vec![MenuHealthTag::HighProtein],
                     Some(
-                        MenuImageUrl::parse("s3://menu-assets/menu/runtime-sqlx.jpg")
-                            .expect("image url should parse"),
+                        MenuImageUrl::parse(format!(
+                            "s3://menu-assets/menu-images/{}/media/262144-deadbeef-runtime-sqlx.jpg",
+                            vendor_id.as_str()
+                        ))
+                        .expect("image url should parse"),
                     ),
                     Money::new("TWD", 12_000).expect("money should be valid"),
                     20,

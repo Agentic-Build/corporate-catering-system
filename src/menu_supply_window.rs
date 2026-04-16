@@ -28,6 +28,11 @@ const DEFAULT_PREORDER_OPEN_DAYS_AHEAD: u16 = 7;
 const DEFAULT_MODIFY_CANCEL_CUTOFF_MINUTE_OF_DAY: u16 = 17 * 60;
 const MIN_VENDOR_OVERRIDE_CUTOFF_MINUTE_OF_DAY: u16 = 15 * 60;
 const MAX_VENDOR_OVERRIDE_CUTOFF_MINUTE_OF_DAY: u16 = 20 * 60;
+const MINIO_BUCKET_MENU_IMAGES_ENV: &str = "MINIO_BUCKET_MENU_IMAGES";
+const DEFAULT_MENU_IMAGE_BUCKET: &str = "menu-assets";
+const MENU_IMAGE_OBJECT_KEY_PREFIX: &str = "menu-images";
+const MENU_IMAGE_MAX_SIZE_BYTES: u64 = 10 * 1024 * 1024;
+const MENU_IMAGE_ALLOWED_EXTENSIONS: [&str; 4] = ["jpg", "jpeg", "png", "webp"];
 const DEFAULT_ORDER_RETENTION_DAYS: u16 = 365;
 const UPSERT_VENDOR_MENU_ITEM_OPERATION_ID: &str = "upsertVendorMenuItem";
 const UPSERT_VENDOR_ORDERING_POLICY_OPERATION_ID: &str = "upsertVendorOrderingPolicy";
@@ -133,8 +138,29 @@ impl MenuImageUrl {
                 "image URL must be at most {MAX_MENU_IMAGE_URL_LENGTH} characters"
             )));
         }
-        ObjectStorageReference::parse(trimmed)
+        let object_ref = ObjectStorageReference::parse(trimmed)
             .map_err(|error| MenuSupplyWindowError::InvalidMenuImageUrl(error.to_string()))?;
+        let expected_bucket = configured_menu_image_bucket();
+        let (bucket, key) = object_ref.split_parts();
+        if bucket != expected_bucket.as_str() {
+            return Err(MenuSupplyWindowError::InvalidMenuImageUrl(format!(
+                "image object bucket must be `{expected_bucket}`"
+            )));
+        }
+        if !object_key_matches_expected_prefix(key, MENU_IMAGE_OBJECT_KEY_PREFIX) {
+            return Err(MenuSupplyWindowError::InvalidMenuImageUrl(
+                "image object key must use the managed menu-images prefix".to_owned(),
+            ));
+        }
+        if !object_key_matches_artifact_metadata(
+            key,
+            MENU_IMAGE_MAX_SIZE_BYTES,
+            &MENU_IMAGE_ALLOWED_EXTENSIONS,
+        ) {
+            return Err(MenuSupplyWindowError::InvalidMenuImageUrl(
+                "image object key must include managed size and extension metadata".to_owned(),
+            ));
+        }
 
         Ok(Self(trimmed.to_owned()))
     }
@@ -1064,6 +1090,20 @@ impl MenuSupplyPolicy {
         menu_item: VendorMenuItem,
     ) -> Result<(), MenuSupplyWindowError> {
         ensure_role(actor, Role::VendorOperator)?;
+        if let Some(image_url) = menu_item.image_url() {
+            let object_ref = ObjectStorageReference::parse(image_url.as_str())
+                .map_err(|error| MenuSupplyWindowError::InvalidMenuImageUrl(error.to_string()))?;
+            let (_, key) = object_ref.split_parts();
+            if !object_key_matches_vendor_owner_scope(
+                key,
+                MENU_IMAGE_OBJECT_KEY_PREFIX,
+                menu_item.vendor_id().as_str(),
+            ) {
+                return Err(MenuSupplyWindowError::InvalidMenuImageUrl(
+                    "menu image reference is not owned by the vendor scope".to_owned(),
+                ));
+            }
+        }
         let audit_event = AuditEvidenceWrite::new(
             AuditTimestamp::now_taipei().map_err(MenuSupplyWindowError::AuditTrail)?,
             AuditIdentityLink::from_actor(actor, UPSERT_VENDOR_MENU_ITEM_OPERATION_ID),
@@ -1122,6 +1162,20 @@ impl MenuSupplyPolicy {
     ) -> Result<Option<VendorMenuItem>, MenuSupplyWindowError> {
         let state = lock_state(&self.state)?;
         Ok(state.menu_items.get(menu_item_id).cloned())
+    }
+
+    pub fn vendor_has_menu_image_reference(
+        &self,
+        vendor_id: &VendorId,
+        object_ref: &ObjectStorageReference,
+    ) -> Result<bool, MenuSupplyWindowError> {
+        let state = lock_state(&self.state)?;
+        Ok(state.menu_items.values().any(|menu_item| {
+            menu_item.vendor_id() == vendor_id
+                && menu_item
+                    .image_url()
+                    .is_some_and(|image_url| image_url.as_str() == object_ref.as_str())
+        }))
     }
 
     pub fn menu_item_state(
@@ -2139,6 +2193,95 @@ fn lock_state(
     state
         .lock()
         .map_err(|_| MenuSupplyWindowError::StatePoisoned)
+}
+
+fn configured_menu_image_bucket() -> String {
+    std::env::var(MINIO_BUCKET_MENU_IMAGES_ENV)
+        .ok()
+        .map(|bucket| bucket.trim().to_owned())
+        .filter(|bucket| !bucket.is_empty())
+        .unwrap_or_else(|| DEFAULT_MENU_IMAGE_BUCKET.to_owned())
+}
+
+fn object_key_matches_expected_prefix(object_key: &str, artifact_prefix: &str) -> bool {
+    let segments = object_key
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    segments
+        .iter()
+        .position(|segment| *segment == artifact_prefix)
+        .is_some_and(|index| segments.get(index + 1).is_some())
+}
+
+fn object_key_matches_vendor_owner_scope(
+    object_key: &str,
+    artifact_prefix: &str,
+    vendor_scope: &str,
+) -> bool {
+    let owner_scope = normalize_owner_scope_segment(vendor_scope);
+    if owner_scope.is_empty() {
+        return false;
+    }
+    let segments = object_key
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    segments
+        .iter()
+        .position(|segment| *segment == artifact_prefix)
+        .and_then(|index| segments.get(index + 1))
+        .is_some_and(|candidate| *candidate == owner_scope)
+}
+
+fn object_key_matches_artifact_metadata(
+    object_key: &str,
+    max_size_bytes: u64,
+    allowed_extensions: &[&str],
+) -> bool {
+    let Some(object_file_name) = object_key.rsplit('/').next() else {
+        return false;
+    };
+    let mut parts = object_file_name.splitn(3, '-');
+    let Some(size_bytes_segment) = parts.next() else {
+        return false;
+    };
+    let Some(digest_segment) = parts.next() else {
+        return false;
+    };
+    let Some(file_name_segment) = parts.next() else {
+        return false;
+    };
+    let Ok(size_bytes) = size_bytes_segment.parse::<u64>() else {
+        return false;
+    };
+    if size_bytes == 0 || size_bytes > max_size_bytes {
+        return false;
+    }
+    if digest_segment.is_empty()
+        || !digest_segment
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return false;
+    }
+    let Some(extension) = file_name_segment.rsplit('.').next() else {
+        return false;
+    };
+    let normalized_extension = extension.to_ascii_lowercase();
+    allowed_extensions.contains(&normalized_extension.as_str())
+}
+
+fn normalize_owner_scope_segment(value: &str) -> String {
+    let mut normalized = String::with_capacity(value.len());
+    for character in value.trim().chars() {
+        if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.') {
+            normalized.push(character.to_ascii_lowercase());
+        } else {
+            normalized.push('-');
+        }
+    }
+    normalized.trim_matches('-').to_owned()
 }
 
 fn release_order_allocation_locked(

@@ -82,7 +82,10 @@ fn submit_required_document(
             vendor_id,
             &template_id("tmpl-business-license"),
             VendorDocumentSubmission::new(
-                "s3://compliance-evidence/docs/business-license.pdf",
+                format!(
+                    "s3://compliance-evidence/compliance-documents/{}/docs/524288-deadbeef-business-license.pdf",
+                    vendor_id.as_str()
+                ),
                 ComplianceDate::from_epoch_day(submitted_on),
                 ComplianceDate::from_epoch_day(expires_on),
             )
@@ -287,6 +290,21 @@ fn document_submission_requires_managed_compliance_bucket() {
         ComplianceDate::from_epoch_day(120),
     )
     .expect_err("unmanaged bucket reference should be rejected");
+    assert!(matches!(
+        error,
+        VendorComplianceError::InvalidDocumentReference
+    ));
+}
+
+#[test]
+fn document_submission_requires_managed_metadata_envelope() {
+    ensure_test_otel_endpoint();
+    let error = VendorDocumentSubmission::new(
+        "s3://compliance-evidence/compliance-documents/ven-meta-envelope/docs/business-license.pdf",
+        ComplianceDate::from_epoch_day(100),
+        ComplianceDate::from_epoch_day(120),
+    )
+    .expect_err("document refs without size/digest envelope should be rejected");
     assert!(matches!(
         error,
         VendorComplianceError::InvalidDocumentReference

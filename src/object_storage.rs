@@ -158,6 +158,7 @@ impl fmt::Display for ObjectStorageReference {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectUploadIntent {
     pub artifact_class: StorageArtifactClass,
+    pub owner_scope: Option<String>,
     pub file_name: String,
     pub mime_type: String,
     pub size_bytes: u64,
@@ -318,10 +319,16 @@ impl ObjectStorageUploadPipeline {
             });
         }
 
+        let normalized_owner_scope = intent
+            .owner_scope
+            .as_deref()
+            .map(normalize_owner_scope)
+            .transpose()?;
         let normalized_file_name = normalize_file_name(intent.file_name.as_str())?;
         let (amz_timestamp, short_date, now_epoch_seconds) = format_amz_timestamp(now)?;
         let object_key = self.build_object_key(
             intent.artifact_class,
+            normalized_owner_scope.as_deref(),
             &normalized_file_name,
             &normalized_mime,
             intent.size_bytes,
@@ -344,6 +351,7 @@ impl ObjectStorageUploadPipeline {
             "x-amz-meta-size-bytes".to_owned(),
             intent.size_bytes.to_string(),
         );
+        primary_headers.insert("content-length".to_owned(), intent.size_bytes.to_string());
         let (upload_url, upload_expires_at_epoch_seconds) = self.presign_url(
             "PUT",
             &object_ref,
@@ -366,6 +374,7 @@ impl ObjectStorageUploadPipeline {
             let thumbnail_mime = "image/webp".to_owned();
             let thumbnail_key = self.build_object_key(
                 StorageArtifactClass::MenuImageThumbnail,
+                normalized_owner_scope.as_deref(),
                 "thumbnail.webp",
                 thumbnail_mime.as_str(),
                 intent.size_bytes.min(
@@ -483,6 +492,7 @@ impl ObjectStorageUploadPipeline {
     fn build_object_key(
         &self,
         artifact_class: StorageArtifactClass,
+        owner_scope: Option<&str>,
         file_name: &str,
         mime_type: &str,
         size_bytes: u64,
@@ -493,6 +503,9 @@ impl ObjectStorageUploadPipeline {
         let uniqueness_sequence = OBJECT_KEY_UNIQUENESS_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let mut digest = Sha256::new();
         digest.update(artifact_class.as_str().as_bytes());
+        if let Some(owner_scope) = owner_scope {
+            digest.update(owner_scope.as_bytes());
+        }
         digest.update(file_name.as_bytes());
         digest.update(mime_type.as_bytes());
         digest.update(size_bytes.to_string().as_bytes());
@@ -505,17 +518,18 @@ impl ObjectStorageUploadPipeline {
             ensure_file_extension(file_name, mime_type)
         };
         let namespace = normalize_namespace(self.config.key_namespace.as_str());
-        if namespace.is_empty() {
-            format!(
-                "{}/{short_date}/{digest_hex}-{file_name}",
-                artifact_class.object_key_prefix()
-            )
+        let base_prefix = if namespace.is_empty() {
+            artifact_class.object_key_prefix().to_owned()
         } else {
-            format!(
-                "{}/{}/{short_date}/{digest_hex}-{file_name}",
-                namespace,
-                artifact_class.object_key_prefix()
-            )
+            format!("{}/{}", namespace, artifact_class.object_key_prefix())
+        };
+        match owner_scope {
+            Some(owner_scope) => {
+                format!(
+                    "{base_prefix}/{owner_scope}/{short_date}/{size_bytes}-{digest_hex}-{file_name}"
+                )
+            }
+            None => format!("{base_prefix}/{short_date}/{size_bytes}-{digest_hex}-{file_name}"),
         }
     }
 
@@ -862,6 +876,30 @@ fn normalize_file_name(value: &str) -> Result<String, ObjectStorageError> {
     Ok(normalized)
 }
 
+fn normalize_owner_scope(value: &str) -> Result<String, ObjectStorageError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(ObjectStorageError::InvalidFileName(
+            "owner scope must not be empty".to_owned(),
+        ));
+    }
+    let mut normalized = String::with_capacity(trimmed.len());
+    for character in trimmed.chars() {
+        if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.') {
+            normalized.push(character.to_ascii_lowercase());
+        } else {
+            normalized.push('-');
+        }
+    }
+    let normalized = normalized.trim_matches('-').to_owned();
+    if normalized.is_empty() || normalized == "." || normalized == ".." {
+        return Err(ObjectStorageError::InvalidFileName(
+            "owner scope became empty after normalization".to_owned(),
+        ));
+    }
+    Ok(normalized)
+}
+
 fn ensure_file_extension(file_name: &str, mime_type: &str) -> String {
     let inferred_extension = match mime_type {
         "image/jpeg" => "jpg",
@@ -1014,6 +1052,7 @@ mod tests {
             .create_upload_plan(
                 ObjectUploadIntent {
                     artifact_class: StorageArtifactClass::MenuImage,
+                    owner_scope: None,
                     file_name: "menu-photo.jpg".to_owned(),
                     mime_type: "image/jpeg".to_owned(),
                     size_bytes: 128_000,
@@ -1032,6 +1071,10 @@ mod tests {
                 .get("x-amz-meta-artifact-class"),
             Some(&"MENU_IMAGE".to_owned())
         );
+        assert_eq!(
+            plan.primary.required_headers.get("content-length"),
+            Some(&"128000".to_owned())
+        );
     }
 
     #[test]
@@ -1041,6 +1084,7 @@ mod tests {
             .create_upload_plan(
                 ObjectUploadIntent {
                     artifact_class: StorageArtifactClass::ComplianceDocument,
+                    owner_scope: None,
                     file_name: "safety-cert.exe".to_owned(),
                     mime_type: "application/octet-stream".to_owned(),
                     size_bytes: 64,
@@ -1061,6 +1105,7 @@ mod tests {
             .create_upload_plan(
                 ObjectUploadIntent {
                     artifact_class: StorageArtifactClass::MenuImage,
+                    owner_scope: None,
                     file_name: "oversized-menu.jpg".to_owned(),
                     mime_type: "image/jpeg".to_owned(),
                     size_bytes: 11 * 1024 * 1024,
@@ -1109,6 +1154,7 @@ mod tests {
             .create_upload_plan(
                 ObjectUploadIntent {
                     artifact_class: StorageArtifactClass::MenuImage,
+                    owner_scope: None,
                     file_name: "menu-photo.jpg".to_owned(),
                     mime_type: "image/jpeg".to_owned(),
                     size_bytes: 128_000,
@@ -1120,6 +1166,7 @@ mod tests {
             .create_upload_plan(
                 ObjectUploadIntent {
                     artifact_class: StorageArtifactClass::MenuImage,
+                    owner_scope: None,
                     file_name: "menu-photo.jpg".to_owned(),
                     mime_type: "image/jpeg".to_owned(),
                     size_bytes: 128_000,
@@ -1132,5 +1179,28 @@ mod tests {
             plan_two.primary.object_ref.as_str(),
             "object refs must remain collision-safe under identical metadata and second-level timestamp"
         );
+    }
+
+    #[test]
+    fn upload_object_key_includes_owner_scope_segment() {
+        let pipeline = pipeline();
+        let now = UNIX_EPOCH + std::time::Duration::from_secs(1_712_000_000);
+        let plan = pipeline
+            .create_upload_plan(
+                ObjectUploadIntent {
+                    artifact_class: StorageArtifactClass::ComplianceDocument,
+                    owner_scope: Some("ven-load-gate-a".to_owned()),
+                    file_name: "license.pdf".to_owned(),
+                    mime_type: "application/pdf".to_owned(),
+                    size_bytes: 65_536,
+                },
+                now,
+            )
+            .expect("upload plan should be generated");
+        assert!(plan
+            .primary
+            .object_ref
+            .as_str()
+            .contains("/ven-load-gate-a/"));
     }
 }

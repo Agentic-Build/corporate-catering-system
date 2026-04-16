@@ -130,7 +130,10 @@ fn activate_vendor(
             vendor_id,
             &template_id("tmpl-http-menu-supply-license"),
             VendorDocumentSubmission::new(
-                "s3://compliance-evidence/docs/http-menu-supply-license.pdf",
+                format!(
+                    "s3://compliance-evidence/compliance-documents/{}/docs/524288-deadbeef-http-menu-supply-license.pdf",
+                    vendor_id.as_str()
+                ),
                 ComplianceDate::from_epoch_day(0),
                 ComplianceDate::from_epoch_day(300),
             )
@@ -183,8 +186,11 @@ fn menu_item_with_overrides(
             "BOWL",
             vec![MenuHealthTag::HighProtein],
             Some(
-                MenuImageUrl::parse("s3://menu-assets/menu/herb-chicken-bowl.jpg")
-                    .expect("menu image URL should be valid"),
+                MenuImageUrl::parse(format!(
+                    "s3://menu-assets/menu-images/{}/media/262144-deadbeef-herb-chicken-bowl.jpg",
+                    vendor_id.as_str()
+                ))
+                .expect("menu image URL should be valid"),
             ),
             Money::new("TWD", 16000).expect("money should be valid"),
             max_daily_quantity,

@@ -19,6 +19,9 @@ const RUN_VENDOR_LIFECYCLE_OPERATION_ID: &str = "runVendorComplianceLifecycle";
 const PRUNE_VENDOR_HISTORY_OPERATION_ID: &str = "pruneVendorComplianceHistory";
 const MINIO_BUCKET_COMPLIANCE_EVIDENCE_ENV: &str = "MINIO_BUCKET_COMPLIANCE_EVIDENCE";
 const DEFAULT_COMPLIANCE_BUCKET: &str = "compliance-evidence";
+const COMPLIANCE_DOCUMENT_OBJECT_KEY_PREFIX: &str = "compliance-documents";
+const COMPLIANCE_DOCUMENT_MAX_SIZE_BYTES: u64 = 20 * 1024 * 1024;
+const COMPLIANCE_DOCUMENT_ALLOWED_EXTENSIONS: [&str; 4] = ["pdf", "jpg", "jpeg", "png"];
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct VendorId(String);
@@ -220,8 +223,18 @@ impl VendorDocumentSubmission {
         let object_ref = ObjectStorageReference::parse(document_ref.as_str())
             .map_err(|_| VendorComplianceError::InvalidDocumentReference)?;
         let expected_bucket = configured_compliance_bucket();
-        let (bucket, _) = object_ref.split_parts();
+        let (bucket, key) = object_ref.split_parts();
         if bucket != expected_bucket.as_str() {
+            return Err(VendorComplianceError::InvalidDocumentReference);
+        }
+        if !object_key_matches_expected_prefix(key, COMPLIANCE_DOCUMENT_OBJECT_KEY_PREFIX) {
+            return Err(VendorComplianceError::InvalidDocumentReference);
+        }
+        if !object_key_matches_artifact_metadata(
+            key,
+            COMPLIANCE_DOCUMENT_MAX_SIZE_BYTES,
+            &COMPLIANCE_DOCUMENT_ALLOWED_EXTENSIONS,
+        ) {
             return Err(VendorComplianceError::InvalidDocumentReference);
         }
         if submitted_on >= expires_on {
@@ -254,6 +267,87 @@ fn configured_compliance_bucket() -> String {
         .map(|bucket| bucket.trim().to_owned())
         .filter(|bucket| !bucket.is_empty())
         .unwrap_or_else(|| DEFAULT_COMPLIANCE_BUCKET.to_owned())
+}
+
+fn object_key_matches_expected_prefix(object_key: &str, artifact_prefix: &str) -> bool {
+    let segments = object_key
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    segments
+        .iter()
+        .position(|segment| *segment == artifact_prefix)
+        .is_some_and(|index| segments.get(index + 1).is_some())
+}
+
+fn object_key_matches_vendor_owner_scope(
+    object_key: &str,
+    artifact_prefix: &str,
+    vendor_scope: &str,
+) -> bool {
+    let owner_scope = normalize_owner_scope_segment(vendor_scope);
+    if owner_scope.is_empty() {
+        return false;
+    }
+    let segments = object_key
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    segments
+        .iter()
+        .position(|segment| *segment == artifact_prefix)
+        .and_then(|index| segments.get(index + 1))
+        .is_some_and(|candidate| *candidate == owner_scope)
+}
+
+fn object_key_matches_artifact_metadata(
+    object_key: &str,
+    max_size_bytes: u64,
+    allowed_extensions: &[&str],
+) -> bool {
+    let Some(object_file_name) = object_key.rsplit('/').next() else {
+        return false;
+    };
+    let mut parts = object_file_name.splitn(3, '-');
+    let Some(size_bytes_segment) = parts.next() else {
+        return false;
+    };
+    let Some(digest_segment) = parts.next() else {
+        return false;
+    };
+    let Some(file_name_segment) = parts.next() else {
+        return false;
+    };
+    let Ok(size_bytes) = size_bytes_segment.parse::<u64>() else {
+        return false;
+    };
+    if size_bytes == 0 || size_bytes > max_size_bytes {
+        return false;
+    }
+    if digest_segment.is_empty()
+        || !digest_segment
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return false;
+    }
+    let Some(extension) = file_name_segment.rsplit('.').next() else {
+        return false;
+    };
+    let normalized_extension = extension.to_ascii_lowercase();
+    allowed_extensions.contains(&normalized_extension.as_str())
+}
+
+fn normalize_owner_scope_segment(value: &str) -> String {
+    let mut normalized = String::with_capacity(value.len());
+    for character in value.trim().chars() {
+        if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.') {
+            normalized.push(character.to_ascii_lowercase());
+        } else {
+            normalized.push('-');
+        }
+    }
+    normalized.trim_matches('-').to_owned()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -561,6 +655,19 @@ impl VendorComplianceLifecycle {
         self.vendors.get(vendor_id)
     }
 
+    pub fn vendor_has_document_reference(
+        &self,
+        vendor_id: &VendorId,
+        object_ref: &ObjectStorageReference,
+    ) -> bool {
+        self.vendors.get(vendor_id).is_some_and(|vendor| {
+            vendor
+                .documents()
+                .values()
+                .any(|submission| submission.document_ref() == object_ref.as_str())
+        })
+    }
+
     pub fn visible_vendor_ids_for_ordering(&self) -> Vec<&VendorId> {
         self.vendors
             .values()
@@ -750,6 +857,16 @@ impl VendorComplianceLifecycle {
                 template_id: template_id.clone(),
                 max_validity_days: template.max_validity_days(),
             });
+        }
+        let submission_ref = ObjectStorageReference::parse(submission.document_ref())
+            .map_err(|_| VendorComplianceError::InvalidDocumentReference)?;
+        let (_, key) = submission_ref.split_parts();
+        if !object_key_matches_vendor_owner_scope(
+            key,
+            COMPLIANCE_DOCUMENT_OBJECT_KEY_PREFIX,
+            vendor_id.as_str(),
+        ) {
+            return Err(VendorComplianceError::InvalidDocumentReference);
         }
 
         let previous_vendors = self.vendors.clone();

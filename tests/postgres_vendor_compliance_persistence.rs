@@ -117,7 +117,10 @@ async fn vendor_compliance_domain_flow_persists_on_real_postgres_with_transactio
             &vendor_id,
             &template_id,
             VendorDocumentSubmission::new(
-                "s3://compliance-evidence/docs/sqlx-integration-license.pdf",
+                format!(
+                    "s3://compliance-evidence/compliance-documents/{}/docs/524288-deadbeef-sqlx-integration-license.pdf",
+                    vendor_id.as_str()
+                ),
                 ComplianceDate::from_epoch_day(0),
                 ComplianceDate::from_epoch_day(20),
             )

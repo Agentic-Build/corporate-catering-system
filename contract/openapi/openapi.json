@@ -1814,7 +1814,14 @@
           "MCP_AUTHORIZATION_AUDIT_INTERNAL_ERROR",
           "VENDOR_FULFILLMENT_INVALID_REQUEST",
           "VENDOR_FULFILLMENT_STATUS_CONFLICT",
-          "VENDOR_FULFILLMENT_BATCH_NOT_FOUND"
+          "VENDOR_FULFILLMENT_BATCH_NOT_FOUND",
+          "OBJECT_STORAGE_INVALID_ARTIFACT_CLASS",
+          "OBJECT_STORAGE_INVALID_OBJECT_REF",
+          "OBJECT_STORAGE_INVALID_MIME",
+          "OBJECT_STORAGE_SIZE_EXCEEDED",
+          "OBJECT_STORAGE_INVALID_FILE_NAME",
+          "OBJECT_STORAGE_CONFIGURATION_ERROR",
+          "OBJECT_STORAGE_PRESIGN_ERROR"
         ],
         "type": "string"
       },
@@ -2301,7 +2308,7 @@
             "$ref": "#/components/schemas/StorageArtifactClass"
           },
           "fileName": {
-            "maxLength": 255,
+            "maxLength": 128,
             "minLength": 1,
             "type": "string"
           },

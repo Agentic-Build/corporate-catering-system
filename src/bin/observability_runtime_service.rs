@@ -3901,13 +3901,34 @@ fn seeded_menu_type(index: u16) -> &'static str {
     MENU_TYPES[usize::from((index - 1) % (MENU_TYPES.len() as u16))]
 }
 
-fn seeded_compliance_document_ref(file_name: &str) -> String {
-    let compliance_bucket = std::env::var(MINIO_BUCKET_COMPLIANCE_EVIDENCE_ENV)
-        .ok()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| DEFAULT_COMPLIANCE_BUCKET.to_owned());
-    format!("s3://{compliance_bucket}/docs/{file_name}")
+fn seeded_menu_image_ref(vendor_id: &VendorId, file_name: &str) -> String {
+    let menu_bucket = configured_menu_object_bucket();
+    let namespace = configured_object_storage_key_namespace();
+    let owner_scope = normalize_owner_scope_segment(vendor_id.as_str());
+    let object_file_name = seeded_object_file_name(262_144, file_name);
+    let key_prefix = if namespace.is_empty() {
+        format!("menu-images/{owner_scope}/seed")
+    } else {
+        format!("{namespace}/menu-images/{owner_scope}/seed")
+    };
+    format!("s3://{menu_bucket}/{key_prefix}/{object_file_name}")
+}
+
+fn seeded_compliance_document_ref(vendor_id: &VendorId, file_name: &str) -> String {
+    let compliance_bucket = configured_compliance_object_bucket();
+    let namespace = configured_object_storage_key_namespace();
+    let owner_scope = normalize_owner_scope_segment(vendor_id.as_str());
+    let object_file_name = seeded_object_file_name(524_288, file_name);
+    let key_prefix = if namespace.is_empty() {
+        format!("compliance-documents/{owner_scope}/seed")
+    } else {
+        format!("{namespace}/compliance-documents/{owner_scope}/seed")
+    };
+    format!("s3://{compliance_bucket}/{key_prefix}/{object_file_name}")
+}
+
+fn seeded_object_file_name(size_bytes: u64, file_name: &str) -> String {
+    format!("{size_bytes}-deadbeef-{file_name}")
 }
 
 fn seeded_menu_health_tags(index: u16) -> Vec<MenuHealthTag> {
@@ -4005,7 +4026,7 @@ fn build_seeded_load_gate_compliance_lifecycle(
             &vendor_id,
             &template_id,
             VendorDocumentSubmission::new(
-                seeded_compliance_document_ref("load-gate-license.pdf"),
+                seeded_compliance_document_ref(&vendor_id, "load-gate-license.pdf"),
                 submitted_on,
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(300)),
             )
@@ -4218,9 +4239,9 @@ fn bootstrap_runtime_state(
             let menu_item_id =
                 MenuItemId::parse(format!("menu-{index}")).map_err(|error| error.to_string())?;
             let delivery_epoch_day = delivery_epoch_day.saturating_add(i32::from((index - 1) % 7));
-            let image_url =
-                MenuImageUrl::parse(format!("s3://menu-assets/menu/load-gate-{index}.jpg"))
-                    .map_err(|error| error.to_string())?;
+            let image_ref =
+                seeded_menu_image_ref(&vendor_id, format!("load-gate-{index}.jpg").as_str());
+            let image_url = MenuImageUrl::parse(image_ref).map_err(|error| error.to_string())?;
             let menu_item = VendorMenuItem::new(
                 menu_item_id.clone(),
                 vendor_id.clone(),
@@ -4486,7 +4507,7 @@ fn seed_lifecycle_and_mapping_scenarios(
             &lifecycle_vendor_id,
             &lifecycle_template_id,
             VendorDocumentSubmission::new(
-                seeded_compliance_document_ref("lifecycle-seed-license.pdf"),
+                seeded_compliance_document_ref(&lifecycle_vendor_id, "lifecycle-seed-license.pdf"),
                 lifecycle_submitted_on,
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(7)),
             )
@@ -4521,7 +4542,10 @@ fn seed_lifecycle_and_mapping_scenarios(
             &lifecycle_vendor_id,
             &lifecycle_template_id,
             VendorDocumentSubmission::new(
-                seeded_compliance_document_ref("lifecycle-seed-license-renewed.pdf"),
+                seeded_compliance_document_ref(
+                    &lifecycle_vendor_id,
+                    "lifecycle-seed-license-renewed.pdf",
+                ),
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(8)),
                 ComplianceDate::from_epoch_day(delivery_epoch_day.saturating_add(365)),
             )
@@ -5340,6 +5364,7 @@ fn handle_create_vendor_object_storage_upload_plan(
         .create_upload_plan(
             ObjectUploadIntent {
                 artifact_class,
+                owner_scope: Some(state.vendor_id.as_str().to_owned()),
                 file_name: request.file_name,
                 mime_type: request.mime_type,
                 size_bytes: request.size_bytes,
@@ -5361,7 +5386,7 @@ async fn create_vendor_object_storage_access_link(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let _vendor_actor = match require_vendor_operator_actor(&headers) {
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -5374,29 +5399,31 @@ async fn create_vendor_object_storage_access_link(
             );
         }
     };
-    let response = match handle_create_object_storage_access_link(&state, request) {
-        Ok(payload) => {
-            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
-            (
-                StatusCode::OK,
-                Json(
-                    serde_json::to_value(payload)
-                        .expect("object storage access-link payload serialization should succeed"),
-                ),
-            )
-        }
-        Err((status, error)) => {
-            telemetry.finish_with_http_status(status.as_u16());
-            (
-                status,
-                Json(
-                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
-                        "object storage access-link error payload serialization should succeed",
+    let response =
+        match handle_create_vendor_object_storage_access_link(&state, &vendor_actor, request) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(
+                        serde_json::to_value(payload).expect(
+                            "object storage access-link payload serialization should succeed",
+                        ),
                     ),
-                ),
-            )
-        }
-    };
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                            "object storage access-link error payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+        };
 
     response
 }
@@ -5425,7 +5452,7 @@ async fn create_admin_object_storage_access_link(
             );
         }
     };
-    let response = match handle_create_object_storage_access_link(&state, request) {
+    let response = match handle_create_admin_object_storage_access_link(&state, request) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -5452,18 +5479,192 @@ async fn create_admin_object_storage_access_link(
     response
 }
 
+fn handle_create_vendor_object_storage_access_link(
+    state: &AppState,
+    vendor_actor: &AuthenticatedActorContext,
+    request: ObjectStorageAccessLinkRequestPayload,
+) -> Result<ObjectStorageAccessLinkPayload, (StatusCode, ErrorPayload)> {
+    if vendor_actor.role() != Role::VendorOperator {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::VendorOperator,
+                vendor_actor.role()
+            ),
+        ));
+    }
+    if !vendor_actor.plant_scope().contains(&state.plant_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not authorized for plant `{}`",
+                vendor_actor.actor_id().as_str(),
+                state.plant_id.as_str()
+            ),
+        ));
+    }
+    handle_create_object_storage_access_link(state, request, Some(vendor_actor))
+}
+
+fn handle_create_admin_object_storage_access_link(
+    state: &AppState,
+    request: ObjectStorageAccessLinkRequestPayload,
+) -> Result<ObjectStorageAccessLinkPayload, (StatusCode, ErrorPayload)> {
+    handle_create_object_storage_access_link(state, request, None)
+}
+
 fn handle_create_object_storage_access_link(
     state: &AppState,
     request: ObjectStorageAccessLinkRequestPayload,
+    vendor_actor: Option<&AuthenticatedActorContext>,
 ) -> Result<ObjectStorageAccessLinkPayload, (StatusCode, ErrorPayload)> {
     let locale = StorageLocale::from_language_tag(request.locale.as_deref());
     let object_ref = ObjectStorageReference::parse(request.object_ref)
         .map_err(|error| map_object_storage_error(error, locale))?;
+    if let Some(vendor_actor) = vendor_actor {
+        ensure_vendor_object_storage_access(state, vendor_actor, &object_ref)?;
+    }
     let plan = state
         .object_storage_upload_pipeline
         .create_download_plan(&object_ref, SystemTime::now())
         .map_err(|error| map_object_storage_error(error, locale))?;
     Ok(to_object_storage_access_link_payload(plan))
+}
+
+fn ensure_vendor_object_storage_access(
+    state: &AppState,
+    _vendor_actor: &AuthenticatedActorContext,
+    object_ref: &ObjectStorageReference,
+) -> Result<(), (StatusCode, ErrorPayload)> {
+    let owned_by_scope =
+        object_ref_matches_vendor_owner_scope(state, object_ref, state.vendor_id.as_str());
+    let referenced_by_menu = vendor_has_menu_image_reference(state, &state.vendor_id, object_ref)?;
+    let referenced_by_compliance =
+        vendor_has_compliance_document_reference(state, &state.vendor_id, object_ref)?;
+    if owned_by_scope || referenced_by_menu || referenced_by_compliance {
+        return Ok(());
+    }
+    Err(domain_error(
+        StatusCode::FORBIDDEN,
+        "FORBIDDEN",
+        format!(
+            "object reference `{}` is not accessible for vendor `{}`",
+            object_ref.as_str(),
+            state.vendor_id.as_str()
+        ),
+    ))
+}
+
+fn vendor_has_menu_image_reference(
+    state: &AppState,
+    vendor_id: &VendorId,
+    object_ref: &ObjectStorageReference,
+) -> Result<bool, (StatusCode, ErrorPayload)> {
+    with_menu_supply_policy(state, |menu_supply_policy| {
+        menu_supply_policy
+            .vendor_has_menu_image_reference(vendor_id, object_ref)
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!("failed to inspect vendor menu image references: {error}"),
+                )
+            })
+    })
+}
+
+fn vendor_has_compliance_document_reference(
+    state: &AppState,
+    vendor_id: &VendorId,
+    object_ref: &ObjectStorageReference,
+) -> Result<bool, (StatusCode, ErrorPayload)> {
+    let lifecycle = load_compliance_lifecycle_snapshot(state)?;
+    Ok(lifecycle.vendor_has_document_reference(vendor_id, object_ref))
+}
+
+fn object_ref_matches_vendor_owner_scope(
+    _state: &AppState,
+    object_ref: &ObjectStorageReference,
+    vendor_scope: &str,
+) -> bool {
+    let (bucket, key) = object_ref.split_parts();
+    let artifact_prefix = if bucket == configured_menu_object_bucket().as_str() {
+        "menu-images"
+    } else if bucket == configured_compliance_object_bucket().as_str() {
+        "compliance-documents"
+    } else if bucket == configured_fulfillment_object_bucket().as_str() {
+        "fulfillment-artifacts"
+    } else {
+        return false;
+    };
+    object_key_matches_vendor_owner_scope(key, artifact_prefix, vendor_scope)
+}
+
+fn configured_menu_object_bucket() -> String {
+    std::env::var(MINIO_BUCKET_MENU_IMAGES_ENV)
+        .ok()
+        .map(|bucket| bucket.trim().to_owned())
+        .filter(|bucket| !bucket.is_empty())
+        .unwrap_or_else(|| DEFAULT_MENU_IMAGE_BUCKET.to_owned())
+}
+
+fn configured_compliance_object_bucket() -> String {
+    std::env::var(MINIO_BUCKET_COMPLIANCE_EVIDENCE_ENV)
+        .ok()
+        .map(|bucket| bucket.trim().to_owned())
+        .filter(|bucket| !bucket.is_empty())
+        .unwrap_or_else(|| DEFAULT_COMPLIANCE_BUCKET.to_owned())
+}
+
+fn configured_fulfillment_object_bucket() -> String {
+    std::env::var(MINIO_BUCKET_FULFILLMENT_EXPORTS_ENV)
+        .ok()
+        .map(|bucket| bucket.trim().to_owned())
+        .filter(|bucket| !bucket.is_empty())
+        .unwrap_or_else(|| DEFAULT_FULFILLMENT_BUCKET.to_owned())
+}
+
+fn configured_object_storage_key_namespace() -> String {
+    std::env::var(OBJECT_STORAGE_KEY_NAMESPACE_ENV)
+        .ok()
+        .map(|namespace| namespace.trim().trim_matches('/').to_owned())
+        .filter(|namespace| !namespace.is_empty())
+        .unwrap_or_else(|| DEFAULT_OBJECT_STORAGE_KEY_NAMESPACE.to_owned())
+}
+
+fn object_key_matches_vendor_owner_scope(
+    object_key: &str,
+    artifact_prefix: &str,
+    vendor_scope: &str,
+) -> bool {
+    let owner_scope = normalize_owner_scope_segment(vendor_scope);
+    if owner_scope.is_empty() {
+        return false;
+    }
+    let segments = object_key
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    segments
+        .iter()
+        .position(|segment| *segment == artifact_prefix)
+        .and_then(|index| segments.get(index + 1))
+        .is_some_and(|candidate| *candidate == owner_scope)
+}
+
+fn normalize_owner_scope_segment(value: &str) -> String {
+    let mut normalized = String::with_capacity(value.len());
+    for character in value.trim().chars() {
+        if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.') {
+            normalized.push(character.to_ascii_lowercase());
+        } else {
+            normalized.push('-');
+        }
+    }
+    normalized.trim_matches('-').to_owned()
 }
 
 fn parse_storage_artifact_class_label(value: &str) -> Option<StorageArtifactClass> {
@@ -11156,7 +11357,7 @@ mod tests {
                     vendor,
                     &template,
                     VendorDocumentSubmission::new(
-                        seeded_compliance_document_ref("discovery-license.pdf"),
+                        seeded_compliance_document_ref(vendor, "discovery-license.pdf"),
                         ComplianceDate::from_epoch_day(now_epoch_day.saturating_sub(5)),
                         ComplianceDate::from_epoch_day(now_epoch_day.saturating_add(300)),
                     )
@@ -11211,8 +11412,11 @@ mod tests {
                         "BENTO",
                         vec![MenuHealthTag::HighProtein],
                         Some(
-                            MenuImageUrl::parse("s3://menu-assets/menu/visible-bento.jpg")
-                                .expect("image should be valid"),
+                            MenuImageUrl::parse(seeded_menu_image_ref(
+                                &vendor_visible,
+                                "visible-bento.jpg",
+                            ))
+                            .expect("image should be valid"),
                         ),
                         Money::new("TWD", 12000).expect("money should be valid"),
                         5,
@@ -11234,8 +11438,11 @@ mod tests {
                         "SALAD",
                         vec![MenuHealthTag::Vegan],
                         Some(
-                            MenuImageUrl::parse("s3://menu-assets/menu/visible-salad.jpg")
-                                .expect("image should be valid"),
+                            MenuImageUrl::parse(seeded_menu_image_ref(
+                                &vendor_visible,
+                                "visible-salad.jpg",
+                            ))
+                            .expect("image should be valid"),
                         ),
                         Money::new("TWD", 9000).expect("money should be valid"),
                         8,
@@ -11257,8 +11464,11 @@ mod tests {
                         "BENTO",
                         vec![MenuHealthTag::HighProtein],
                         Some(
-                            MenuImageUrl::parse("s3://menu-assets/menu/hidden-bento.jpg")
-                                .expect("image should be valid"),
+                            MenuImageUrl::parse(seeded_menu_image_ref(
+                                &vendor_hidden,
+                                "hidden-bento.jpg",
+                            ))
+                            .expect("image should be valid"),
                         ),
                         Money::new("TWD", 11000).expect("money should be valid"),
                         9,
@@ -11646,8 +11856,9 @@ mod tests {
         assert!(upload_plan.primary.upload_url.contains("X-Amz-Signature="));
         assert!(upload_plan.thumbnail.is_some());
 
-        let access_link = handle_create_object_storage_access_link(
+        let access_link = handle_create_vendor_object_storage_access_link(
             &state,
+            &vendor_actor,
             ObjectStorageAccessLinkRequestPayload {
                 object_ref: upload_plan.primary.object_ref.clone(),
                 locale: Some("en-US".to_owned()),
@@ -11656,6 +11867,25 @@ mod tests {
         .expect("download access link should succeed");
         assert_eq!(access_link.object_ref, upload_plan.primary.object_ref);
         assert!(access_link.download_url.contains("X-Amz-Signature="));
+    }
+
+    #[test]
+    fn object_storage_vendor_access_link_rejects_unowned_reference() {
+        let state = build_state(20_000);
+        let vendor_actor = vendor_operator();
+        let (status, error) = handle_create_vendor_object_storage_access_link(
+            &state,
+            &vendor_actor,
+            ObjectStorageAccessLinkRequestPayload {
+                object_ref:
+                    "s3://menu-assets/corporate-catering/menu-images/ven-other/20260417/262144-deadbeef-not-owned.jpg"
+                        .to_owned(),
+                locale: Some("en-US".to_owned()),
+            },
+        )
+        .expect_err("vendor should not access object refs outside owned scope");
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(error.code, "FORBIDDEN");
     }
 
     #[test]
