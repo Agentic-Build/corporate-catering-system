@@ -76,6 +76,17 @@ pub async fn apply_sql_migrations(pool: &PgPool) -> Result<(), String> {
         .map_err(|error| format!("failed to apply SQL migrations: {error}"))
 }
 
+pub async fn allocate_order_id_hex_from_postgres(pool: &PgPool) -> Result<String, String> {
+    sqlx::query_scalar!(
+        r#"
+SELECT encode(gen_random_bytes(16), 'hex') AS "order_id_hex!"
+        "#
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|error| format!("failed to allocate order id from PostgreSQL: {error}"))
+}
+
 fn parse_positive_u32_env(env_name: &str, default: u32) -> Result<u32, String> {
     match std::env::var(env_name) {
         Ok(raw) => {

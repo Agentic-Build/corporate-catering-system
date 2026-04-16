@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use corporate_catering_system::anomaly_alert::{
     AnomalyAlertQuery, AnomalyAlertWorkflow, AnomalyAlertWorkflowSnapshot, AnomalySignalSnapshot,
 };
@@ -14,7 +16,9 @@ use corporate_catering_system::payroll::{
     PayrollLedgerService, PayrollLedgerServiceSnapshot, PayrollLedgerSourceKind,
     PayrollLedgerSourceRef, PayrollRetentionPolicy,
 };
-use corporate_catering_system::persistence::{JsonStatePersistenceError, SqlJsonStateRepository};
+use corporate_catering_system::persistence::{
+    allocate_order_id_hex_from_postgres, JsonStatePersistenceError, SqlJsonStateRepository,
+};
 use corporate_catering_system::transport::http::HttpOrderingExecutionGateway;
 use corporate_catering_system::vendor_compliance::{
     ComplianceDate, ComplianceDocumentTemplate, DocumentTemplateId, HistoryRetentionPolicy,
@@ -127,6 +131,70 @@ fn build_approved_compliance_lifecycle(
         )
         .expect("approval should succeed");
     lifecycle
+}
+
+#[tokio::test]
+async fn order_id_allocator_is_unique_across_pool_restarts_on_real_postgres() {
+    let postgres = Postgres::default()
+        .with_tag("16-alpine")
+        .start()
+        .await
+        .expect("testcontainers postgres should start");
+    let database_url = format!(
+        "postgres://postgres:postgres@{}:{}/postgres",
+        postgres
+            .get_host()
+            .await
+            .expect("postgres host should resolve"),
+        postgres
+            .get_host_port_ipv4(5432)
+            .await
+            .expect("postgres mapped port should resolve"),
+    );
+
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(database_url.as_str())
+        .await
+        .expect("postgres pool should connect");
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("migrations should apply");
+
+    let mut generated = HashSet::new();
+    for _ in 0..64 {
+        let suffix = allocate_order_id_hex_from_postgres(&pool)
+            .await
+            .expect("order id suffix should allocate");
+        assert_eq!(suffix.len(), 32, "order id suffix should be 32 hex chars");
+        assert!(
+            suffix
+                .chars()
+                .all(|character| matches!(character, '0'..='9' | 'a'..='f')),
+            "order id suffix should be lowercase hex"
+        );
+        assert!(
+            generated.insert(suffix),
+            "order id suffixes should be unique for one runtime instance"
+        );
+    }
+    drop(pool);
+
+    let restarted_pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(database_url.as_str())
+        .await
+        .expect("postgres pool should reconnect after restart");
+    for _ in 0..64 {
+        let suffix = allocate_order_id_hex_from_postgres(&restarted_pool)
+            .await
+            .expect("order id suffix should allocate after restart");
+        assert!(
+            generated.insert(suffix),
+            "order id suffixes should remain unique across runtime restarts"
+        );
+    }
 }
 
 #[tokio::test]

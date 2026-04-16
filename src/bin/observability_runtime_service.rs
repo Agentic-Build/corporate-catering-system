@@ -2,12 +2,13 @@ use std::cmp::Ordering as CmpOrdering;
 use std::collections::{BTreeMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(test)]
 use std::collections::BTreeSet;
+#[cfg(test)]
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 #[cfg(test)]
 use std::sync::{RwLock, RwLockReadGuard};
 
@@ -60,8 +61,9 @@ use corporate_catering_system::payroll::{
     PayrollSortField as PayrollSortFieldDomain, SortOrder as PayrollSortOrderDomain,
 };
 use corporate_catering_system::persistence::{
-    build_operational_pg_pool_from_env, JsonStatePersistenceError, SqlJsonStateRepository,
-    VendorCompliancePersistenceError, VendorComplianceSqlRepository,
+    allocate_order_id_hex_from_postgres, build_operational_pg_pool_from_env,
+    JsonStatePersistenceError, SqlJsonStateRepository, VendorCompliancePersistenceError,
+    VendorComplianceSqlRepository,
 };
 use corporate_catering_system::pickup_totp::{
     PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
@@ -256,6 +258,7 @@ enum RuntimeStatePersistence {
 
 #[derive(Debug, Clone)]
 struct AppState {
+    #[cfg(test)]
     next_order_sequence: Arc<AtomicU64>,
     vendor_id: VendorId,
     plant_id: PlantId,
@@ -4133,6 +4136,7 @@ fn bootstrap_runtime_state(
     }
 
     Ok(AppState {
+        #[cfg(test)]
         next_order_sequence: Arc::new(AtomicU64::new(1)),
         vendor_id,
         plant_id,
@@ -8421,10 +8425,26 @@ fn load_gate_anomaly_alert_owner_actor_id() -> Result<ActorId, (StatusCode, Erro
 }
 
 fn generate_contract_order_id(state: &AppState) -> Result<OrderId, (StatusCode, ErrorPayload)> {
-    let sequence = state
-        .next_order_sequence
-        .fetch_add(1, AtomicOrdering::Relaxed);
-    OrderId::parse(format!("ord-{sequence:016x}")).map_err(|error| {
+    let suffix = match &state.compliance_persistence {
+        CompliancePersistence::Sql(repository) => tokio::task::block_in_place(|| {
+            Handle::current().block_on(allocate_order_id_hex_from_postgres(repository.pool()))
+        })
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ORDER_ID_GENERATION_FAILED",
+                error,
+            )
+        })?,
+        #[cfg(test)]
+        CompliancePersistence::InMemoryOnly => {
+            let sequence = state
+                .next_order_sequence
+                .fetch_add(1, AtomicOrdering::Relaxed);
+            format!("{sequence:016x}")
+        }
+    };
+    OrderId::parse(format!("ord-{suffix}")).map_err(|error| {
         domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ORDER_ID_GENERATION_FAILED",
@@ -10209,6 +10229,7 @@ mod tests {
             .expect("order should consume inventory");
 
         AppState {
+            #[cfg(test)]
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             vendor_id: vendor_visible,
             plant_id: plant,
@@ -10854,6 +10875,7 @@ mod tests {
         let committee = committee_admin();
         let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
         let state = AppState {
+            #[cfg(test)]
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             vendor_id: vendor_id("ven-filter-day"),
             plant_id: plant_id("fab-a"),
