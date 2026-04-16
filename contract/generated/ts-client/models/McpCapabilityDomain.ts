@@ -2,4 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type AuthenticationSource = 'CORPORATE_SSO' | 'VENDOR_ACCOUNT_MFA' | 'OAUTH_SERVICE_ACCOUNT';
+export type McpCapabilityDomain = 'ordering' | 'verification' | 'compliance-review' | 'settlement' | 'anomaly';

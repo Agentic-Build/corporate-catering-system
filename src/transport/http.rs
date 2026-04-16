@@ -52,7 +52,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 36] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 39] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -224,6 +224,13 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 36] = [
         HttpMethod::Post,
         "/api/v1/integrations/payroll/sftp-batches/{batchId}/hr-api-sync",
         "syncPayrollHrApiAdjunct",
+    ),
+    RuntimeHttpRoute::new(HttpMethod::Get, "/mcp/v1/tools", "listMcpTools"),
+    RuntimeHttpRoute::new(HttpMethod::Get, "/mcp/v1/resources", "listMcpResources"),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/mcp/v1/tools/{toolName}/invoke",
+        "invokeMcpTool",
     ),
 ];
 

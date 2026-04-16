@@ -201,6 +201,18 @@
           "type": "string"
         }
       },
+      "McpToolNamePath": {
+        "description": "MCP tool name, for example `ordering.create_employee_order`.",
+        "in": "path",
+        "name": "toolName",
+        "required": true,
+        "schema": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z]+(?:\\.[a-z0-9_]+)+$",
+          "type": "string"
+        }
+      },
       "MenuDateQuery": {
         "description": "Anchor date for week/calendar discovery windows in Asia/Taipei.",
         "in": "query",
@@ -1454,7 +1466,8 @@
       "AuthenticationSource": {
         "enum": [
           "CORPORATE_SSO",
-          "VENDOR_ACCOUNT_MFA"
+          "VENDOR_ACCOUNT_MFA",
+          "OAUTH_SERVICE_ACCOUNT"
         ],
         "type": "string"
       },
@@ -1757,6 +1770,136 @@
           "requestId"
         ],
         "type": "object"
+      },
+      "McpCapabilityDomain": {
+        "enum": [
+          "ordering",
+          "verification",
+          "compliance-review",
+          "settlement",
+          "anomaly"
+        ],
+        "type": "string"
+      },
+      "McpResourceCatalogItem": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilityDomain": {
+            "$ref": "#/components/schemas/McpCapabilityDomain"
+          },
+          "uri": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri",
+          "capabilityDomain"
+        ],
+        "type": "object"
+      },
+      "McpResourceCatalogResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/McpResourceCatalogItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "resources"
+        ],
+        "type": "object"
+      },
+      "McpToolCatalogItem": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilityDomain": {
+            "$ref": "#/components/schemas/McpCapabilityDomain"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "operationId": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "risk": {
+            "$ref": "#/components/schemas/McpToolRisk"
+          }
+        },
+        "required": [
+          "name",
+          "operationId",
+          "capabilityDomain",
+          "risk"
+        ],
+        "type": "object"
+      },
+      "McpToolCatalogResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpToolCatalogItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "type": "object"
+      },
+      "McpToolInvocationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "default": {},
+            "description": "Tool arguments encoded as JSON. Shape depends on the selected MCP tool."
+          }
+        },
+        "type": "object"
+      },
+      "McpToolInvocationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilityDomain": {
+            "$ref": "#/components/schemas/McpCapabilityDomain"
+          },
+          "result": {
+            "description": "Tool-specific JSON response payload."
+          },
+          "risk": {
+            "$ref": "#/components/schemas/McpToolRisk"
+          },
+          "toolName": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "toolName",
+          "capabilityDomain",
+          "risk",
+          "result"
+        ],
+        "type": "object"
+      },
+      "McpToolRisk": {
+        "enum": [
+          "READ_ONLY",
+          "WRITE",
+          "HIGH_RISK_WRITE"
+        ],
+        "type": "string"
       },
       "MenuDiscoveryDay": {
         "additionalProperties": false,
@@ -4163,6 +4306,13 @@
         "type": "http",
         "x-authentication-source": "CORPORATE_SSO"
       },
+      "mcpOAuthServiceAccountBearer": {
+        "bearerFormat": "JWT",
+        "description": "OAuth service-account bearer token for MCP tool and resource access.",
+        "scheme": "bearer",
+        "type": "http",
+        "x-authentication-source": "OAUTH_SERVICE_ACCOUNT"
+      },
       "vendorMfaBearer": {
         "bearerFormat": "JWT",
         "description": "Vendor account token issued only after MFA challenge.",
@@ -6244,6 +6394,129 @@
         "summary": "Advance delivery execution status for a vendor order",
         "tags": [
           "Vendor"
+        ]
+      }
+    },
+    "/mcp/v1/resources": {
+      "get": {
+        "operationId": "listMcpResources",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpResourceCatalogResponse"
+                }
+              }
+            },
+            "description": "MCP resource catalog scoped by granted domains"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "mcpOAuthServiceAccountBearer": []
+          }
+        ],
+        "summary": "List MCP resources available for granted capability domains",
+        "tags": [
+          "MCP"
+        ]
+      }
+    },
+    "/mcp/v1/tools": {
+      "get": {
+        "operationId": "listMcpTools",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpToolCatalogResponse"
+                }
+              }
+            },
+            "description": "MCP tool catalog scoped to granted tools"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "mcpOAuthServiceAccountBearer": []
+          }
+        ],
+        "summary": "List MCP tools granted to the authenticated OAuth service account",
+        "tags": [
+          "MCP"
+        ]
+      }
+    },
+    "/mcp/v1/tools/{toolName}/invoke": {
+      "post": {
+        "operationId": "invokeMcpTool",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/McpToolNamePath"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolInvocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpToolInvocationResponse"
+                }
+              }
+            },
+            "description": "MCP tool invocation result"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "mcpOAuthServiceAccountBearer": []
+          }
+        ],
+        "summary": "Invoke an MCP tool with tool-level RBAC and shared-domain execution",
+        "tags": [
+          "MCP"
         ]
       }
     }

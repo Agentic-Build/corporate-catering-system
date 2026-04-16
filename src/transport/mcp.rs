@@ -684,6 +684,18 @@ impl McpShortLivedKeyBridge {
         &self.key_id
     }
 
+    pub fn issued_at_epoch_seconds(&self) -> i64 {
+        self.issued_at_epoch_seconds
+    }
+
+    pub fn expires_at_epoch_seconds(&self) -> i64 {
+        self.expires_at_epoch_seconds
+    }
+
+    pub fn rotated_at_epoch_seconds(&self) -> i64 {
+        self.rotated_at_epoch_seconds
+    }
+
     pub fn audit_reason(&self) -> &str {
         &self.audit_reason
     }
@@ -711,6 +723,14 @@ impl McpShortLivedKeyBridge {
                 key_id: self.key_id.clone(),
                 ttl_seconds,
                 max_allowed_seconds: MAX_BRIDGE_KEY_TTL_SECONDS,
+            });
+        }
+
+        if self.rotated_at_epoch_seconds > now_epoch_seconds {
+            return Err(McpAuthorizationError::BridgeKeyRotatedInFuture {
+                key_id: self.key_id.clone(),
+                rotated_at_epoch_seconds: self.rotated_at_epoch_seconds,
+                now_epoch_seconds,
             });
         }
 
@@ -780,6 +800,11 @@ pub enum McpAuthorizationError {
         key_id: String,
         ttl_seconds: i64,
         max_allowed_seconds: i64,
+    },
+    BridgeKeyRotatedInFuture {
+        key_id: String,
+        rotated_at_epoch_seconds: i64,
+        now_epoch_seconds: i64,
     },
     BridgeKeyRotationStale {
         key_id: String,
@@ -876,6 +901,14 @@ impl std::fmt::Display for McpAuthorizationError {
             } => write!(
                 f,
                 "short-lived MCP bridge key {key_id} TTL {ttl_seconds}s exceeds max {max_allowed_seconds}s",
+            ),
+            Self::BridgeKeyRotatedInFuture {
+                key_id,
+                rotated_at_epoch_seconds,
+                now_epoch_seconds,
+            } => write!(
+                f,
+                "short-lived MCP bridge key {key_id} rotation timestamp is in the future: rotatedAt={rotated_at_epoch_seconds}, now={now_epoch_seconds}",
             ),
             Self::BridgeKeyRotationStale {
                 key_id,

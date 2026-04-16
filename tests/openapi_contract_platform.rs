@@ -117,6 +117,7 @@ fn contract_is_openapi_31_and_uses_only_locked_auth_model() {
     let keys: BTreeSet<String> = security_schemes.keys().cloned().collect();
     let expected = BTreeSet::from([
         "corporateSsoBearer".to_owned(),
+        "mcpOAuthServiceAccountBearer".to_owned(),
         "vendorMfaBearer".to_owned(),
     ]);
     assert_eq!(keys, expected);
@@ -178,11 +179,36 @@ fn openapi_spec_covers_all_official_http_operations() {
     }
 
     let openapi_operation_ids = collect_operation_ids(&spec);
-    let expected_operation_ids = HttpOperation::ALL
+    let expected_operation_ids = runtime_http_routes()
         .iter()
-        .map(|operation| operation.operation_id().to_owned())
+        .map(|route| route.operation_id().to_owned())
         .collect::<BTreeSet<_>>();
     assert_eq!(openapi_operation_ids, expected_operation_ids);
+}
+
+#[test]
+fn mcp_routes_are_contracted_and_use_oauth_service_account_security() {
+    let spec = canonical_openapi_spec();
+
+    for (path, method, operation_id) in [
+        ("/mcp/v1/tools", "get", "listMcpTools"),
+        ("/mcp/v1/resources", "get", "listMcpResources"),
+        ("/mcp/v1/tools/{toolName}/invoke", "post", "invokeMcpTool"),
+    ] {
+        let operation = operation_by_path_and_method(&spec, path, method);
+        assert_eq!(operation["operationId"], operation_id);
+        let security = operation["security"]
+            .as_array()
+            .expect("security must be an array");
+        assert_eq!(security.len(), 1);
+        let scheme = security[0]
+            .as_object()
+            .expect("security item must be object")
+            .keys()
+            .next()
+            .expect("security scheme key must exist");
+        assert_eq!(scheme, "mcpOAuthServiceAccountBearer");
+    }
 }
 
 #[test]

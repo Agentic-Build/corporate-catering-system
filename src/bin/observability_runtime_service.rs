@@ -12,7 +12,10 @@ use axum::extract::{Path, Query, State};
 use axum::http::{header::AUTHORIZATION, HeaderMap, StatusCode};
 use axum::routing::{get, patch, post, put};
 use axum::{Json, Router};
-use base64::prelude::{Engine as _, BASE64_STANDARD};
+use base64::engine::general_purpose::{
+    STANDARD as BASE64_STANDARD, URL_SAFE_NO_PAD as BASE64_URL_SAFE_NO_PAD,
+};
+use base64::Engine as _;
 use corporate_catering_system::access::AccessController;
 use corporate_catering_system::anomaly_alert::{
     AnomalyAlertError, AnomalyAlertId, AnomalyAlertRecord, AnomalyAlertSeverity,
@@ -75,6 +78,7 @@ use corporate_catering_system::vendor_delivery_mapping::{
     DeliveryMappingId, DeliveryRuleEffect, ServiceWindow, TaipeiBusinessMoment,
     VendorPlantDeliveryMapping, VendorPlantDeliveryPolicy,
 };
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::time::{self, MissedTickBehavior};
@@ -103,6 +107,11 @@ const PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_ENV: &str =
     "PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_HEX";
 const AUTHORIZATION_BEARER_PREFIX: &str = "Bearer ";
 const MCP_OAUTH_SERVICE_ACCOUNT_TOKEN_PREFIX: &str = "mcp-oauth-sa:";
+const MCP_OAUTH_SERVICE_ACCOUNT_ISSUER_ENV: &str = "MCP_OAUTH_SERVICE_ACCOUNT_ISSUER";
+const MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE_ENV: &str = "MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE";
+const MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV: &str =
+    "MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64";
+const MCP_BRIDGE_KEY_REGISTRY_JSON_ENV: &str = "MCP_BRIDGE_KEY_REGISTRY_JSON";
 const MCP_BRIDGE_KEY_ID_HEADER: &str = "x-mcp-bridge-key-id";
 const MCP_BRIDGE_ISSUED_AT_HEADER: &str = "x-mcp-bridge-issued-at";
 const MCP_BRIDGE_EXPIRES_AT_HEADER: &str = "x-mcp-bridge-expires-at";
@@ -963,14 +972,62 @@ impl ErrorPayload {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct McpServiceAccountTokenClaims {
-    service_account_id: String,
+#[serde(rename_all = "camelCase")]
+struct McpServiceAccountJwtClaims {
+    iss: String,
+    aud: McpJwtAudienceClaim,
+    sub: String,
+    exp: i64,
+    #[serde(default)]
+    nbf: Option<i64>,
+    #[serde(default)]
+    iat: Option<i64>,
     role: String,
     all_plants: bool,
     #[serde(default)]
     plant_ids: Vec<String>,
     allowed_tools: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum McpJwtAudienceClaim {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
+impl McpJwtAudienceClaim {
+    fn contains(&self, expected_audience: &str) -> bool {
+        match self {
+            Self::Single(value) => value.trim() == expected_audience,
+            Self::Multiple(values) => values.iter().any(|value| value.trim() == expected_audience),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct McpJwtHeader {
+    alg: String,
+    #[serde(default)]
+    typ: Option<String>,
+}
+
+#[derive(Debug)]
+struct McpOAuthServiceAccountVerifierConfig {
+    issuer: String,
+    audience: String,
+    hs256_secret: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct McpBridgeKeyRegistryEntry {
+    key_id: String,
+    issued_at_epoch_seconds: i64,
+    expires_at_epoch_seconds: i64,
+    rotated_at_epoch_seconds: i64,
+    #[serde(default)]
+    allowed_service_account_ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1439,7 +1496,7 @@ async fn invoke_mcp_tool(
             );
         }
     };
-    let bridge = match parse_optional_mcp_short_lived_bridge(&headers) {
+    let bridge = match parse_optional_mcp_short_lived_bridge(&headers, grant.service_account_id()) {
         Ok(bridge) => bridge,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -2033,39 +2090,16 @@ fn require_mcp_service_account_grant(
                 "authorization header must use Bearer token".to_owned(),
             )
         })?;
-    let claims_token = token
-        .strip_prefix(MCP_OAUTH_SERVICE_ACCOUNT_TOKEN_PREFIX)
-        .ok_or_else(|| {
-            domain_error(
-                StatusCode::UNAUTHORIZED,
-                "UNAUTHORIZED",
-                "MCP authorization token must use `mcp-oauth-sa:` prefix".to_owned(),
-            )
-        })?;
-    let claims_raw = BASE64_STANDARD
-        .decode(claims_token.as_bytes())
-        .map_err(|error| {
-            domain_error(
-                StatusCode::UNAUTHORIZED,
-                "UNAUTHORIZED",
-                format!("MCP service-account token is not valid base64: {error}"),
-            )
-        })?;
-    let claims_json = String::from_utf8(claims_raw).map_err(|error| {
-        domain_error(
+    if token.starts_with(MCP_OAUTH_SERVICE_ACCOUNT_TOKEN_PREFIX) {
+        return Err(domain_error(
             StatusCode::UNAUTHORIZED,
             "UNAUTHORIZED",
-            format!("MCP service-account token is not valid UTF-8: {error}"),
-        )
-    })?;
-    let claims: McpServiceAccountTokenClaims =
-        serde_json::from_str(claims_json.as_str()).map_err(|error| {
-            domain_error(
-                StatusCode::UNAUTHORIZED,
-                "UNAUTHORIZED",
-                format!("MCP service-account token payload is invalid: {error}"),
-            )
-        })?;
+            "legacy MCP token format is unsupported; provide a signed OAuth JWT bearer token"
+                .to_owned(),
+        ));
+    }
+    let now_epoch_seconds = current_epoch_seconds_i64()?;
+    let claims = verify_mcp_service_account_oauth_token(token, now_epoch_seconds)?;
 
     let role = parse_role_label(claims.role.as_str()).ok_or_else(|| {
         domain_error(
@@ -2077,14 +2111,13 @@ fn require_mcp_service_account_grant(
             ),
         )
     })?;
-    let service_account_id =
-        ActorId::parse(claims.service_account_id.as_str()).map_err(|error| {
-            domain_error(
-                StatusCode::UNAUTHORIZED,
-                "UNAUTHORIZED",
-                format!("MCP service-account id is invalid: {error}"),
-            )
-        })?;
+    let service_account_id = ActorId::parse(claims.sub.as_str()).map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("MCP service-account subject is invalid: {error}"),
+        )
+    })?;
     let plant_scope = if claims.all_plants {
         if !claims.plant_ids.is_empty() {
             return Err(domain_error(
@@ -2134,8 +2167,241 @@ fn require_mcp_service_account_grant(
         .map_err(map_mcp_authorization_error)
 }
 
+fn verify_mcp_service_account_oauth_token(
+    token: &str,
+    now_epoch_seconds: i64,
+) -> Result<McpServiceAccountJwtClaims, (StatusCode, ErrorPayload)> {
+    let config = load_mcp_oauth_service_account_verifier_config()?;
+    let mut segments = token.split('.');
+    let header_segment = segments.next().ok_or_else(|| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "MCP OAuth bearer token must be a JWT".to_owned(),
+        )
+    })?;
+    let payload_segment = segments.next().ok_or_else(|| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "MCP OAuth bearer token must be a JWT".to_owned(),
+        )
+    })?;
+    let signature_segment = segments.next().ok_or_else(|| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "MCP OAuth bearer token must be a JWT".to_owned(),
+        )
+    })?;
+    if segments.next().is_some() {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "MCP OAuth bearer token must be a JWT".to_owned(),
+        ));
+    }
+
+    let header_json = decode_url_safe_base64_json(header_segment, "header")?;
+    let header: McpJwtHeader = serde_json::from_str(header_json.as_str()).map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("MCP OAuth JWT header is invalid: {error}"),
+        )
+    })?;
+    if header.alg.trim() != "HS256" {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!(
+                "MCP OAuth JWT alg `{}` is unsupported; expected HS256",
+                header.alg.trim()
+            ),
+        ));
+    }
+    if let Some(token_type) = header.typ.as_deref() {
+        if !token_type.eq_ignore_ascii_case("JWT") {
+            return Err(domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!(
+                    "MCP OAuth JWT typ `{}` is unsupported; expected JWT",
+                    token_type.trim()
+                ),
+            ));
+        }
+    }
+
+    let signing_input = format!("{header_segment}.{payload_segment}");
+    let provided_signature = BASE64_URL_SAFE_NO_PAD
+        .decode(signature_segment.as_bytes())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("MCP OAuth JWT signature is invalid base64url: {error}"),
+            )
+        })?;
+    type HmacSha256 = Hmac<Sha256>;
+    let mut mac =
+        <HmacSha256 as Mac>::new_from_slice(config.hs256_secret.as_slice()).map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "MCP_OAUTH_CONFIGURATION_ERROR",
+                format!("MCP OAuth signing key configuration is invalid: {error}"),
+            )
+        })?;
+    mac.update(signing_input.as_bytes());
+    mac.verify_slice(provided_signature.as_slice())
+        .map_err(|_| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "MCP OAuth JWT signature verification failed".to_owned(),
+            )
+        })?;
+
+    let claims_json = decode_url_safe_base64_json(payload_segment, "payload")?;
+    let claims: McpServiceAccountJwtClaims =
+        serde_json::from_str(claims_json.as_str()).map_err(|error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("MCP OAuth JWT payload is invalid: {error}"),
+            )
+        })?;
+
+    if claims.iss.trim() != config.issuer {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!(
+                "MCP OAuth JWT issuer `{}` does not match expected issuer",
+                claims.iss.trim()
+            ),
+        ));
+    }
+    if !claims.aud.contains(config.audience.as_str()) {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "MCP OAuth JWT audience does not include the required audience".to_owned(),
+        ));
+    }
+    if claims.exp <= now_epoch_seconds {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!(
+                "MCP OAuth JWT is expired: exp={}, now={}",
+                claims.exp, now_epoch_seconds
+            ),
+        ));
+    }
+    if let Some(nbf) = claims.nbf {
+        if now_epoch_seconds < nbf {
+            return Err(domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("MCP OAuth JWT is not active yet: nbf={nbf}, now={now_epoch_seconds}"),
+            ));
+        }
+    }
+    if let Some(iat) = claims.iat {
+        if iat > now_epoch_seconds {
+            return Err(domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!(
+                    "MCP OAuth JWT issued-at is in the future: iat={iat}, now={now_epoch_seconds}"
+                ),
+            ));
+        }
+    }
+
+    Ok(claims)
+}
+
+fn decode_url_safe_base64_json(
+    encoded: &str,
+    segment_label: &str,
+) -> Result<String, (StatusCode, ErrorPayload)> {
+    let raw = BASE64_URL_SAFE_NO_PAD
+        .decode(encoded.as_bytes())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("MCP OAuth JWT {segment_label} is invalid base64url: {error}"),
+            )
+        })?;
+    String::from_utf8(raw).map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("MCP OAuth JWT {segment_label} is not valid UTF-8: {error}"),
+        )
+    })
+}
+
+fn load_mcp_oauth_service_account_verifier_config(
+) -> Result<McpOAuthServiceAccountVerifierConfig, (StatusCode, ErrorPayload)> {
+    let issuer = load_non_empty_env(MCP_OAUTH_SERVICE_ACCOUNT_ISSUER_ENV)?;
+    let audience = load_non_empty_env(MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE_ENV)?;
+    let hs256_secret_base64 =
+        load_non_empty_env(MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV)?;
+    let hs256_secret = BASE64_STANDARD
+        .decode(hs256_secret_base64.as_bytes())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "MCP_OAUTH_CONFIGURATION_ERROR",
+                format!(
+                    "{} must be valid base64: {error}",
+                    MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV
+                ),
+            )
+        })?;
+    if hs256_secret.is_empty() {
+        return Err(domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "MCP_OAUTH_CONFIGURATION_ERROR",
+            format!(
+                "{} must decode to a non-empty key",
+                MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV
+            ),
+        ));
+    }
+    Ok(McpOAuthServiceAccountVerifierConfig {
+        issuer,
+        audience,
+        hs256_secret,
+    })
+}
+
+fn load_non_empty_env(name: &str) -> Result<String, (StatusCode, ErrorPayload)> {
+    let value = std::env::var(name).map_err(|_| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "MCP_OAUTH_CONFIGURATION_ERROR",
+            format!("{name} environment variable is required"),
+        )
+    })?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "MCP_OAUTH_CONFIGURATION_ERROR",
+            format!("{name} environment variable must be non-empty"),
+        ));
+    }
+    Ok(trimmed.to_owned())
+}
+
 fn parse_optional_mcp_short_lived_bridge(
     headers: &HeaderMap,
+    service_account_id: &ActorId,
 ) -> Result<Option<McpShortLivedKeyBridge>, (StatusCode, ErrorPayload)> {
     let key_id = match headers.get(MCP_BRIDGE_KEY_ID_HEADER) {
         Some(value) => value.to_str().map_err(|_| {
@@ -2182,7 +2448,74 @@ fn parse_optional_mcp_short_lived_bridge(
         audit_reason,
     )
     .map_err(map_mcp_authorization_error)?;
+    validate_bridge_key_against_registry(&bridge, service_account_id)?;
     Ok(Some(bridge))
+}
+
+fn validate_bridge_key_against_registry(
+    bridge: &McpShortLivedKeyBridge,
+    service_account_id: &ActorId,
+) -> Result<(), (StatusCode, ErrorPayload)> {
+    let registry_raw = std::env::var(MCP_BRIDGE_KEY_REGISTRY_JSON_ENV).map_err(|_| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!(
+                "{MCP_BRIDGE_KEY_REGISTRY_JSON_ENV} must be configured before MCP bridge keys are accepted"
+            ),
+        )
+    })?;
+    let registry: Vec<McpBridgeKeyRegistryEntry> = serde_json::from_str(registry_raw.as_str())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("{MCP_BRIDGE_KEY_REGISTRY_JSON_ENV} must be valid JSON: {error}"),
+            )
+        })?;
+    let key_id = bridge.key_id();
+    let entry = registry
+        .iter()
+        .find(|entry| entry.key_id.trim() == key_id)
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("MCP bridge key `{key_id}` is not registered"),
+            )
+        })?;
+
+    if entry.issued_at_epoch_seconds != bridge.issued_at_epoch_seconds()
+        || entry.expires_at_epoch_seconds != bridge.expires_at_epoch_seconds()
+        || entry.rotated_at_epoch_seconds != bridge.rotated_at_epoch_seconds()
+    {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("MCP bridge key `{key_id}` metadata does not match server rotation records"),
+        ));
+    }
+
+    if !entry.allowed_service_account_ids.is_empty() {
+        let allowed = entry
+            .allowed_service_account_ids
+            .iter()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .collect::<HashSet<_>>();
+        if !allowed.contains(service_account_id.as_str()) {
+            return Err(domain_error(
+                StatusCode::FORBIDDEN,
+                "FORBIDDEN",
+                format!(
+                    "service account {} is not allowed to use MCP bridge key `{key_id}`",
+                    service_account_id
+                ),
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 fn parse_required_bridge_i64_header(
@@ -2264,6 +2597,7 @@ fn map_mcp_authorization_error(error: McpAuthorizationError) -> (StatusCode, Err
         | McpAuthorizationError::BridgeKeyIssuedInFuture { .. }
         | McpAuthorizationError::BridgeKeyExpired { .. }
         | McpAuthorizationError::BridgeKeyTtlTooLong { .. }
+        | McpAuthorizationError::BridgeKeyRotatedInFuture { .. }
         | McpAuthorizationError::BridgeKeyRotationStale { .. } => {
             domain_error(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", error.to_string())
         }
@@ -4239,9 +4573,21 @@ async fn list_anomaly_alerts(
 
 fn handle_list_anomaly_alerts(
     state: &AppState,
-    _committee_actor: &AuthenticatedActorContext,
+    committee_actor: &AuthenticatedActorContext,
     query: AnomalyAlertQueryRequest,
 ) -> Result<AnomalyAlertListResponse, (StatusCode, ErrorPayload)> {
+    if committee_actor.role() != Role::CommitteeAdmin {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::CommitteeAdmin,
+                committee_actor.role()
+            ),
+        ));
+    }
+
     let as_of = resolve_anomaly_as_of_timestamp(query.as_of_epoch_day, query.as_of_minute_of_day)?;
     let vendor_id = query
         .vendor_id
@@ -7386,6 +7732,91 @@ mod tests {
         headers
     }
 
+    fn ensure_test_mcp_oauth_env() {
+        std::env::set_var(
+            MCP_OAUTH_SERVICE_ACCOUNT_ISSUER_ENV,
+            "https://issuer.catering-mcp.test",
+        );
+        std::env::set_var(
+            MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE_ENV,
+            "corporate-catering-mcp-runtime",
+        );
+        std::env::set_var(
+            MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV,
+            BASE64_STANDARD.encode("mcp-oauth-test-signing-secret-32-bytes".as_bytes()),
+        );
+        std::env::set_var(
+            MCP_BRIDGE_KEY_REGISTRY_JSON_ENV,
+            r#"[{
+                "keyId": "bridge-runtime-test",
+                "issuedAtEpochSeconds": 1000,
+                "expiresAtEpochSeconds": 1600,
+                "rotatedAtEpochSeconds": 1550,
+                "allowedServiceAccountIds": ["svc-mcp-runtime-auth-test"]
+            }]"#,
+        );
+    }
+
+    fn load_test_mcp_oauth_secret() -> Vec<u8> {
+        let encoded = std::env::var(MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV)
+            .expect("test MCP OAuth secret env should be configured");
+        BASE64_STANDARD
+            .decode(encoded.as_bytes())
+            .expect("test MCP OAuth secret should decode")
+    }
+
+    fn build_test_mcp_oauth_jwt_token(claims: serde_json::Value) -> String {
+        let header_json = serde_json::json!({
+            "alg": "HS256",
+            "typ": "JWT",
+        });
+        let header_segment = BASE64_URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&header_json).expect("jwt header serialization should succeed"),
+        );
+        let payload_segment = BASE64_URL_SAFE_NO_PAD
+            .encode(serde_json::to_vec(&claims).expect("jwt payload serialization should succeed"));
+        let signing_input = format!("{header_segment}.{payload_segment}");
+        type HmacSha256 = Hmac<Sha256>;
+        let mut mac = <HmacSha256 as Mac>::new_from_slice(load_test_mcp_oauth_secret().as_slice())
+            .expect("test signing key length should be valid");
+        mac.update(signing_input.as_bytes());
+        let signature = mac.finalize().into_bytes();
+        let signature_segment = BASE64_URL_SAFE_NO_PAD.encode(signature);
+        format!("{signing_input}.{signature_segment}")
+    }
+
+    fn mcp_oauth_headers_for_test(
+        service_account_id: &str,
+        role: &str,
+        all_plants: bool,
+        plant_ids: &[&str],
+        allowed_tools: &[&str],
+    ) -> HeaderMap {
+        ensure_test_mcp_oauth_env();
+        let claims = serde_json::json!({
+            "iss": std::env::var(MCP_OAUTH_SERVICE_ACCOUNT_ISSUER_ENV).expect("issuer env should be configured"),
+            "aud": std::env::var(MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE_ENV).expect("audience env should be configured"),
+            "sub": service_account_id,
+            "exp": 4_102_444_800i64,
+            "iat": 1_577_836_800i64,
+            "nbf": 1_577_836_800i64,
+            "role": role,
+            "allPlants": all_plants,
+            "plantIds": plant_ids,
+            "allowedTools": allowed_tools,
+        });
+        let token = build_test_mcp_oauth_jwt_token(claims);
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AUTHORIZATION,
+            axum::http::HeaderValue::from_str(
+                format!("{AUTHORIZATION_BEARER_PREFIX}{token}").as_str(),
+            )
+            .expect("authorization header should be valid"),
+        );
+        headers
+    }
+
     fn build_state(now_epoch_day: i32) -> AppState {
         std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
 
@@ -7626,6 +8057,146 @@ mod tests {
             .expect("payroll actor header should authorize");
         assert_eq!(payroll.actor_id().as_str(), "payroll-test");
         assert_eq!(payroll.role(), Role::PayrollOperator);
+    }
+
+    #[test]
+    fn mcp_service_account_grant_requires_signed_oauth_jwt() {
+        let headers = mcp_oauth_headers_for_test(
+            "svc-mcp-runtime-auth-test",
+            "COMMITTEE_ADMIN",
+            true,
+            &[],
+            &[MCP_TOOL_ANOMALY_UPSERT_RULE],
+        );
+        let grant = require_mcp_service_account_grant(&headers)
+            .expect("signed OAuth JWT service-account token should authorize");
+        assert_eq!(
+            grant.service_account_id().as_str(),
+            "svc-mcp-runtime-auth-test"
+        );
+        assert_eq!(
+            grant.actor().authentication_source(),
+            AuthenticationSource::OAuthServiceAccount
+        );
+        assert!(
+            grant
+                .allowed_tool_names()
+                .contains(MCP_TOOL_ANOMALY_UPSERT_RULE),
+            "granted MCP tools should include anomaly upsert for this token"
+        );
+
+        let valid_auth_header = headers
+            .get(AUTHORIZATION)
+            .expect("authorization header should be set")
+            .to_str()
+            .expect("authorization header should be utf-8");
+        let valid_token = valid_auth_header
+            .strip_prefix(AUTHORIZATION_BEARER_PREFIX)
+            .expect("authorization header should contain bearer prefix");
+        let segments = valid_token.split('.').collect::<Vec<_>>();
+        assert_eq!(
+            segments.len(),
+            3,
+            "JWT token must have exactly three segments"
+        );
+
+        let forged_signature = BASE64_URL_SAFE_NO_PAD.encode([0u8; 32].as_slice());
+        let forged_token = format!("{}.{}.{}", segments[0], segments[1], forged_signature);
+        let mut forged_headers = HeaderMap::new();
+        forged_headers.insert(
+            AUTHORIZATION,
+            axum::http::HeaderValue::from_str(
+                format!("{AUTHORIZATION_BEARER_PREFIX}{forged_token}").as_str(),
+            )
+            .expect("authorization header should be valid"),
+        );
+        let forged_error = require_mcp_service_account_grant(&forged_headers)
+            .expect_err("forged signature should be rejected");
+        assert_eq!(forged_error.0, StatusCode::UNAUTHORIZED);
+        assert!(
+            forged_error
+                .1
+                .message
+                .contains("signature verification failed"),
+            "forged token failure should mention signature verification, got `{}`",
+            forged_error.1.message
+        );
+
+        let mut legacy_headers = HeaderMap::new();
+        legacy_headers.insert(
+            AUTHORIZATION,
+            axum::http::HeaderValue::from_str(
+                format!(
+                    "{AUTHORIZATION_BEARER_PREFIX}{MCP_OAUTH_SERVICE_ACCOUNT_TOKEN_PREFIX}{}",
+                    BASE64_STANDARD.encode(r#"{"serviceAccountId":"svc-mcp-runtime-auth-test"}"#),
+                )
+                .as_str(),
+            )
+            .expect("legacy authorization header should be valid"),
+        );
+        let legacy_error = require_mcp_service_account_grant(&legacy_headers)
+            .expect_err("legacy self-asserted prefix token must be rejected");
+        assert_eq!(legacy_error.0, StatusCode::UNAUTHORIZED);
+        assert!(
+            legacy_error.1.message.contains("legacy MCP token format"),
+            "legacy token rejection should be explicit, got `{}`",
+            legacy_error.1.message
+        );
+    }
+
+    #[test]
+    fn mcp_bridge_headers_require_registered_rotation_metadata() {
+        let mut headers = mcp_oauth_headers_for_test(
+            "svc-mcp-runtime-auth-test",
+            "COMMITTEE_ADMIN",
+            true,
+            &[],
+            &[MCP_TOOL_ANOMALY_UPSERT_RULE],
+        );
+        headers.insert(
+            MCP_BRIDGE_KEY_ID_HEADER,
+            axum::http::HeaderValue::from_static("bridge-runtime-test"),
+        );
+        headers.insert(
+            MCP_BRIDGE_ISSUED_AT_HEADER,
+            axum::http::HeaderValue::from_static("1000"),
+        );
+        headers.insert(
+            MCP_BRIDGE_EXPIRES_AT_HEADER,
+            axum::http::HeaderValue::from_static("1600"),
+        );
+        headers.insert(
+            MCP_BRIDGE_ROTATED_AT_HEADER,
+            axum::http::HeaderValue::from_static("1550"),
+        );
+        headers.insert(
+            MCP_BRIDGE_AUDIT_REASON_HEADER,
+            axum::http::HeaderValue::from_static("incident runbook mcp bridge"),
+        );
+
+        let grant = require_mcp_service_account_grant(&headers)
+            .expect("MCP service account grant should be valid");
+        let parsed_bridge =
+            parse_optional_mcp_short_lived_bridge(&headers, grant.service_account_id())
+                .expect("registered bridge key metadata should be accepted");
+        assert!(parsed_bridge.is_some());
+
+        headers.insert(
+            MCP_BRIDGE_ROTATED_AT_HEADER,
+            axum::http::HeaderValue::from_static("1499"),
+        );
+        let metadata_mismatch =
+            parse_optional_mcp_short_lived_bridge(&headers, grant.service_account_id())
+                .expect_err("bridge metadata must match server-side registry");
+        assert_eq!(metadata_mismatch.0, StatusCode::UNAUTHORIZED);
+        assert!(
+            metadata_mismatch
+                .1
+                .message
+                .contains("metadata does not match server rotation records"),
+            "bridge metadata mismatch should mention server rotation records, got `{}`",
+            metadata_mismatch.1.message
+        );
     }
 
     #[test]
@@ -9128,6 +9699,54 @@ mod tests {
             }),
         )
         .expect_err("mcp anomaly patch should reject unsupported operation");
+
+        assert_eq!(http_error.0, mcp_error.0);
+        assert_eq!(http_error.1.code, mcp_error.1.code);
+    }
+
+    #[test]
+    fn mcp_and_http_anomaly_read_paths_share_committee_authorization() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let non_committee = payroll_operator();
+        let query = AnomalyAlertQueryRequest {
+            vendor_id: Some("ven-discoverytst-a1".to_owned()),
+            owner_actor_id: None,
+            status: Some("OPEN".to_owned()),
+            escalated_only: None,
+            sla_status: None,
+            as_of_epoch_day: Some(now_epoch_day),
+            as_of_minute_of_day: Some(1439),
+        };
+        let http_error = handle_list_anomaly_alerts(&state, &non_committee, query)
+            .expect_err("HTTP anomaly list should require committee role");
+
+        let service_account = oauth_service_account_actor(
+            "svc-anomaly-read-parity",
+            Role::PayrollOperator,
+            PlantScope::all(),
+        );
+        let grant = McpServiceAccountGrant::new(
+            service_account.actor_id().clone(),
+            service_account,
+            [MCP_TOOL_ANOMALY_LIST_ALERTS],
+        )
+        .expect("anomaly list grant should be valid");
+        let mcp_error = invoke_mcp_read_tool(
+            &state,
+            &grant,
+            MCP_TOOL_ANOMALY_LIST_ALERTS,
+            serde_json::json!({
+                "vendorId": "ven-discoverytst-a1",
+                "status": "OPEN",
+                "asOfEpochDay": now_epoch_day,
+                "asOfMinuteOfDay": 1439
+            }),
+            "mcp-anomaly-read-parity",
+        )
+        .expect_err("MCP anomaly list should require committee role parity");
 
         assert_eq!(http_error.0, mcp_error.0);
         assert_eq!(http_error.1.code, mcp_error.1.code);

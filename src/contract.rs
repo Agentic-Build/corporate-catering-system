@@ -1692,6 +1692,81 @@ pub fn canonical_openapi_spec() -> Value {
               "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
+        },
+        "/mcp/v1/tools": {
+          "get": {
+            "tags": ["MCP"],
+            "summary": "List MCP tools granted to the authenticated OAuth service account",
+            "operationId": "listMcpTools",
+            "security": [{ "mcpOAuthServiceAccountBearer": [] }],
+            "responses": {
+              "200": {
+                "description": "MCP tool catalog scoped to granted tools",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/McpToolCatalogResponse" }
+                  }
+                }
+              },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/mcp/v1/resources": {
+          "get": {
+            "tags": ["MCP"],
+            "summary": "List MCP resources available for granted capability domains",
+            "operationId": "listMcpResources",
+            "security": [{ "mcpOAuthServiceAccountBearer": [] }],
+            "responses": {
+              "200": {
+                "description": "MCP resource catalog scoped by granted domains",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/McpResourceCatalogResponse" }
+                  }
+                }
+              },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/mcp/v1/tools/{toolName}/invoke": {
+          "post": {
+            "tags": ["MCP"],
+            "summary": "Invoke an MCP tool with tool-level RBAC and shared-domain execution",
+            "operationId": "invokeMcpTool",
+            "security": [{ "mcpOAuthServiceAccountBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/McpToolNamePath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/McpToolInvocationRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "MCP tool invocation result",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/McpToolInvocationResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "409": { "$ref": "#/components/responses/Conflict" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
         }
       },
       "components": {
@@ -1709,6 +1784,13 @@ pub fn canonical_openapi_spec() -> Value {
             "bearerFormat": "JWT",
             "description": "Vendor account token issued only after MFA challenge.",
             "x-authentication-source": "VENDOR_ACCOUNT_MFA"
+          },
+          "mcpOAuthServiceAccountBearer": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "OAuth service-account bearer token for MCP tool and resource access.",
+            "x-authentication-source": "OAUTH_SERVICE_ACCOUNT"
           }
         },
         "parameters": {
@@ -2146,6 +2228,18 @@ pub fn canonical_openapi_spec() -> Value {
               "type": "string",
               "pattern": "^sftp-[0-9]{6}-[0-9a-f]{16}$"
             }
+          },
+          "McpToolNamePath": {
+            "name": "toolName",
+            "in": "path",
+            "required": true,
+            "description": "MCP tool name, for example `ordering.create_employee_order`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[a-z]+(?:\\.[a-z0-9_]+)+$"
+            }
           }
         },
         "responses": {
@@ -2231,6 +2325,105 @@ pub fn canonical_openapi_spec() -> Value {
               "VENDOR_ACCOUNT_MFA",
               "OAUTH_SERVICE_ACCOUNT"
             ]
+          },
+          "McpCapabilityDomain": {
+            "type": "string",
+            "enum": [
+              "ordering",
+              "verification",
+              "compliance-review",
+              "settlement",
+              "anomaly"
+            ]
+          },
+          "McpToolRisk": {
+            "type": "string",
+            "enum": [
+              "READ_ONLY",
+              "WRITE",
+              "HIGH_RISK_WRITE"
+            ]
+          },
+          "McpToolCatalogItem": {
+            "type": "object",
+            "required": ["name", "operationId", "capabilityDomain", "risk"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "operationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "capabilityDomain": { "$ref": "#/components/schemas/McpCapabilityDomain" },
+              "risk": { "$ref": "#/components/schemas/McpToolRisk" }
+            },
+            "additionalProperties": false
+          },
+          "McpToolCatalogResponse": {
+            "type": "object",
+            "required": ["tools"],
+            "properties": {
+              "tools": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/McpToolCatalogItem" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "McpResourceCatalogItem": {
+            "type": "object",
+            "required": ["uri", "capabilityDomain"],
+            "properties": {
+              "uri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "capabilityDomain": { "$ref": "#/components/schemas/McpCapabilityDomain" }
+            },
+            "additionalProperties": false
+          },
+          "McpResourceCatalogResponse": {
+            "type": "object",
+            "required": ["resources"],
+            "properties": {
+              "resources": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/McpResourceCatalogItem" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "McpToolInvocationRequest": {
+            "type": "object",
+            "properties": {
+              "args": {
+                "description": "Tool arguments encoded as JSON. Shape depends on the selected MCP tool.",
+                "default": {}
+              }
+            },
+            "additionalProperties": false
+          },
+          "McpToolInvocationResponse": {
+            "type": "object",
+            "required": ["toolName", "capabilityDomain", "risk", "result"],
+            "properties": {
+              "toolName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "capabilityDomain": { "$ref": "#/components/schemas/McpCapabilityDomain" },
+              "risk": { "$ref": "#/components/schemas/McpToolRisk" },
+              "result": {
+                "description": "Tool-specific JSON response payload."
+              }
+            },
+            "additionalProperties": false
           },
           "AuditAction": {
             "type": "string",

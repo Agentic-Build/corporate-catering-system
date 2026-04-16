@@ -364,6 +364,23 @@ fn mcp_oauth_service_account_and_bridge_controls_enforce_tool_level_rbac() {
         McpAuthorizationError::BridgeKeyRotationStale { .. }
     ));
 
+    let future_rotation_bridge =
+        McpShortLivedKeyBridge::new("bridge-a4", 1_000, 1_600, 1_580, "future rotation guard")
+            .expect("bridge structure should be valid before future-rotation check");
+    let future_rotation_error = gateway
+        .authorize_tool_write(
+            &service_account_grant,
+            MCP_TOOL_ANOMALY_UPSERT_RULE,
+            None,
+            1_575,
+            Some(&future_rotation_bridge),
+        )
+        .expect_err("future bridge rotation timestamp should be rejected");
+    assert!(matches!(
+        future_rotation_error,
+        McpAuthorizationError::BridgeKeyRotatedInFuture { .. }
+    ));
+
     let non_oauth_actor = committee_actor("svc-mcp-domain-authz-legacy-source");
     let non_oauth_error = McpServiceAccountGrant::new(
         non_oauth_actor.actor_id().clone(),
