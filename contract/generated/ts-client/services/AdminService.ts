@@ -3,8 +3,18 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ActorId } from '../models/ActorId';
+import type { AdminAnomalyAlertPatchRequest } from '../models/AdminAnomalyAlertPatchRequest';
 import type { AdminPayrollDisputePatchRequest } from '../models/AdminPayrollDisputePatchRequest';
 import type { AdminVendorReviewRequest } from '../models/AdminVendorReviewRequest';
+import type { AnomalyAlert } from '../models/AnomalyAlert';
+import type { AnomalyAlertEvaluationRequest } from '../models/AnomalyAlertEvaluationRequest';
+import type { AnomalyAlertEvaluationResponse } from '../models/AnomalyAlertEvaluationResponse';
+import type { AnomalyAlertListResponse } from '../models/AnomalyAlertListResponse';
+import type { AnomalyAlertStatus } from '../models/AnomalyAlertStatus';
+import type { AnomalyRule } from '../models/AnomalyRule';
+import type { AnomalyRuleListResponse } from '../models/AnomalyRuleListResponse';
+import type { AnomalyRuleUpsertRequest } from '../models/AnomalyRuleUpsertRequest';
+import type { AnomalySlaStatus } from '../models/AnomalySlaStatus';
 import type { AuditAction } from '../models/AuditAction';
 import type { AuditEntityType } from '../models/AuditEntityType';
 import type { AuditInvestigationResponse } from '../models/AuditInvestigationResponse';
@@ -40,6 +50,141 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class AdminService {
+    /**
+     * Query anomaly alerts with escalation and SLA state
+     * @param vendorId
+     * @param ownerActorId
+     * @param status
+     * @param escalatedOnly
+     * @param slaStatus
+     * @param asOfEpochDay
+     * @param asOfMinuteOfDay
+     * @returns AnomalyAlertListResponse Anomaly alerts that satisfy the supplied filters
+     * @throws ApiError
+     */
+    public static listAnomalyAlerts(
+        vendorId?: string,
+        ownerActorId?: ActorId,
+        status?: AnomalyAlertStatus,
+        escalatedOnly?: boolean,
+        slaStatus?: AnomalySlaStatus,
+        asOfEpochDay?: number,
+        asOfMinuteOfDay?: number,
+    ): CancelablePromise<AnomalyAlertListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/anomaly/alerts',
+            query: {
+                'vendorId': vendorId,
+                'ownerActorId': ownerActorId,
+                'status': status,
+                'escalatedOnly': escalatedOnly,
+                'slaStatus': slaStatus,
+                'asOfEpochDay': asOfEpochDay,
+                'asOfMinuteOfDay': asOfMinuteOfDay,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Evaluate anomaly rules and trigger tracked remediation alerts
+     * @param requestBody
+     * @returns AnomalyAlertEvaluationResponse Anomaly evaluation outcome with triggered alerts
+     * @throws ApiError
+     */
+    public static evaluateAnomalyAlerts(
+        requestBody: AnomalyAlertEvaluationRequest,
+    ): CancelablePromise<AnomalyAlertEvaluationResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/anomaly/alerts/evaluations',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Assign owner and advance anomaly remediation lifecycle
+     * @param alertId
+     * @param requestBody
+     * @returns AnomalyAlert Updated anomaly alert lifecycle record
+     * @throws ApiError
+     */
+    public static updateAdminAnomalyAlert(
+        alertId: string,
+        requestBody: AdminAnomalyAlertPatchRequest,
+    ): CancelablePromise<AnomalyAlert> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/admin/anomaly/alerts/{alertId}',
+            path: {
+                'alertId': alertId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                409: `Request conflicts with business constraints.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * List anomaly detection governance rules
+     * @returns AnomalyRuleListResponse Configured anomaly detection rules
+     * @throws ApiError
+     */
+    public static listAnomalyRules(): CancelablePromise<AnomalyRuleListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/anomaly/rules',
+            errors: {
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Upsert anomaly detection governance rule
+     * @param ruleId
+     * @param requestBody
+     * @returns AnomalyRule Upserted anomaly rule
+     * @throws ApiError
+     */
+    public static upsertAnomalyRule(
+        ruleId: string,
+        requestBody: AnomalyRuleUpsertRequest,
+    ): CancelablePromise<AnomalyRule> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/admin/anomaly/rules/{ruleId}',
+            path: {
+                'ruleId': ruleId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
     /**
      * Query immutable audit evidence for investigations
      * @param actorId

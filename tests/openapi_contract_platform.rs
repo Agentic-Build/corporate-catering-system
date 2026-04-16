@@ -1069,6 +1069,131 @@ fn payroll_endpoints_have_tested_error_code_to_schema_refs() {
 }
 
 #[test]
+fn anomaly_alert_workflow_contract_exposes_governance_endpoints_and_schemas() {
+    let spec = canonical_openapi_spec();
+
+    let list_rules_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/anomaly/rules", "get");
+    assert_eq!(
+        list_rules_operation["operationId"],
+        HttpOperation::ListAnomalyRules.operation_id()
+    );
+    assert_error_response_ref(
+        list_rules_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        list_rules_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+
+    let upsert_rule_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/anomaly/rules/{ruleId}", "put");
+    assert_eq!(
+        upsert_rule_operation["operationId"],
+        HttpOperation::UpsertAnomalyRule.operation_id()
+    );
+    assert_error_response_ref(
+        upsert_rule_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_eq!(
+        upsert_rule_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/AnomalyRuleUpsertRequest"
+    );
+
+    let evaluate_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/anomaly/alerts/evaluations", "post");
+    assert_eq!(
+        evaluate_operation["operationId"],
+        HttpOperation::EvaluateAnomalyAlerts.operation_id()
+    );
+    assert_error_response_ref(
+        evaluate_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_eq!(
+        evaluate_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/AnomalyAlertEvaluationRequest"
+    );
+
+    let list_alerts_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/anomaly/alerts", "get");
+    assert_eq!(
+        list_alerts_operation["operationId"],
+        HttpOperation::ListAnomalyAlerts.operation_id()
+    );
+    assert_error_response_ref(
+        list_alerts_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+
+    let update_alert_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/anomaly/alerts/{alertId}", "patch");
+    assert_eq!(
+        update_alert_operation["operationId"],
+        HttpOperation::UpdateAdminAnomalyAlert.operation_id()
+    );
+    assert_error_response_ref(
+        update_alert_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+    assert_error_response_ref(
+        update_alert_operation,
+        "409",
+        "#/components/responses/Conflict",
+    );
+    assert_eq!(
+        update_alert_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/AdminAnomalyAlertPatchRequest"
+    );
+
+    let anomaly_rule_kind_enum = spec["components"]["schemas"]["AnomalyRuleKind"]["enum"]
+        .as_array()
+        .expect("anomaly rule kind enum should be array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("anomaly rule kind enum value must be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        anomaly_rule_kind_enum,
+        BTreeSet::from([
+            "EXPIRY_RISK".to_owned(),
+            "ON_TIME_DEGRADATION".to_owned(),
+            "SATISFACTION_DROP".to_owned(),
+            "COMPLAINT_SPIKE".to_owned(),
+        ])
+    );
+
+    let audit_actions = spec["components"]["schemas"]["AuditAction"]["enum"]
+        .as_array()
+        .expect("audit action enum should be array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("audit action enum value must be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(audit_actions.contains("UPSERT_ANOMALY_DETECTION_RULE"));
+    assert!(audit_actions.contains("TRIGGER_ANOMALY_ALERT"));
+    assert!(audit_actions.contains("ASSIGN_ANOMALY_ALERT_OWNER"));
+    assert!(audit_actions.contains("ADVANCE_ANOMALY_ALERT_STATUS"));
+    assert!(audit_actions.contains("CLOSE_ANOMALY_ALERT"));
+}
+
+#[test]
 fn runtime_http_route_catalog_matches_openapi_contract() {
     let spec = canonical_openapi_spec();
     let openapi_routes = collect_openapi_routes(&spec);

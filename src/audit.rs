@@ -167,6 +167,11 @@ pub enum AuditAction {
     SyncPayrollHrApiAdjunct,
     PurgePayrollData,
     PurgeOrderData,
+    UpsertAnomalyDetectionRule,
+    TriggerAnomalyAlert,
+    AssignAnomalyAlertOwner,
+    AdvanceAnomalyAlertStatus,
+    CloseAnomalyAlert,
 }
 
 impl AuditAction {
@@ -204,6 +209,11 @@ impl AuditAction {
             Self::SyncPayrollHrApiAdjunct => "SYNC_PAYROLL_HR_API_ADJUNCT",
             Self::PurgePayrollData => "PURGE_PAYROLL_DATA",
             Self::PurgeOrderData => "PURGE_ORDER_DATA",
+            Self::UpsertAnomalyDetectionRule => "UPSERT_ANOMALY_DETECTION_RULE",
+            Self::TriggerAnomalyAlert => "TRIGGER_ANOMALY_ALERT",
+            Self::AssignAnomalyAlertOwner => "ASSIGN_ANOMALY_ALERT_OWNER",
+            Self::AdvanceAnomalyAlertStatus => "ADVANCE_ANOMALY_ALERT_STATUS",
+            Self::CloseAnomalyAlert => "CLOSE_ANOMALY_ALERT",
         }
     }
 }
@@ -229,6 +239,8 @@ pub enum AuditEntityType {
     PayrollDispute,
     PayrollExchangeBatch,
     PayrollDataRetention,
+    AnomalyRule,
+    AnomalyAlert,
 }
 
 impl AuditEntityType {
@@ -247,6 +259,8 @@ impl AuditEntityType {
             Self::PayrollDispute => "PAYROLL_DISPUTE",
             Self::PayrollExchangeBatch => "PAYROLL_EXCHANGE_BATCH",
             Self::PayrollDataRetention => "PAYROLL_DATA_RETENTION",
+            Self::AnomalyRule => "ANOMALY_RULE",
+            Self::AnomalyAlert => "ANOMALY_ALERT",
         }
     }
 }
@@ -989,6 +1003,11 @@ enum PersistedAuditAction {
     SyncPayrollHrApiAdjunct,
     PurgePayrollData,
     PurgeOrderData,
+    UpsertAnomalyDetectionRule,
+    TriggerAnomalyAlert,
+    AssignAnomalyAlertOwner,
+    AdvanceAnomalyAlertStatus,
+    CloseAnomalyAlert,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1013,6 +1032,8 @@ enum PersistedAuditEntityType {
     PayrollDispute,
     PayrollExchangeBatch,
     PayrollDataRetention,
+    AnomalyRule,
+    AnomalyAlert,
 }
 
 fn ensure_committee_admin(actor: &AuthenticatedActorContext) -> Result<(), AuditTrailError> {
@@ -1334,6 +1355,11 @@ fn persisted_audit_action_from_domain(action: AuditAction) -> PersistedAuditActi
         AuditAction::SyncPayrollHrApiAdjunct => PersistedAuditAction::SyncPayrollHrApiAdjunct,
         AuditAction::PurgePayrollData => PersistedAuditAction::PurgePayrollData,
         AuditAction::PurgeOrderData => PersistedAuditAction::PurgeOrderData,
+        AuditAction::UpsertAnomalyDetectionRule => PersistedAuditAction::UpsertAnomalyDetectionRule,
+        AuditAction::TriggerAnomalyAlert => PersistedAuditAction::TriggerAnomalyAlert,
+        AuditAction::AssignAnomalyAlertOwner => PersistedAuditAction::AssignAnomalyAlertOwner,
+        AuditAction::AdvanceAnomalyAlertStatus => PersistedAuditAction::AdvanceAnomalyAlertStatus,
+        AuditAction::CloseAnomalyAlert => PersistedAuditAction::CloseAnomalyAlert,
     }
 }
 
@@ -1387,6 +1413,11 @@ fn domain_audit_action_from_persisted(action: PersistedAuditAction) -> AuditActi
         PersistedAuditAction::SyncPayrollHrApiAdjunct => AuditAction::SyncPayrollHrApiAdjunct,
         PersistedAuditAction::PurgePayrollData => AuditAction::PurgePayrollData,
         PersistedAuditAction::PurgeOrderData => AuditAction::PurgeOrderData,
+        PersistedAuditAction::UpsertAnomalyDetectionRule => AuditAction::UpsertAnomalyDetectionRule,
+        PersistedAuditAction::TriggerAnomalyAlert => AuditAction::TriggerAnomalyAlert,
+        PersistedAuditAction::AssignAnomalyAlertOwner => AuditAction::AssignAnomalyAlertOwner,
+        PersistedAuditAction::AdvanceAnomalyAlertStatus => AuditAction::AdvanceAnomalyAlertStatus,
+        PersistedAuditAction::CloseAnomalyAlert => AuditAction::CloseAnomalyAlert,
     }
 }
 
@@ -1423,6 +1454,8 @@ fn persisted_entity_type_from_domain(entity_type: AuditEntityType) -> PersistedA
         AuditEntityType::PayrollDispute => PersistedAuditEntityType::PayrollDispute,
         AuditEntityType::PayrollExchangeBatch => PersistedAuditEntityType::PayrollExchangeBatch,
         AuditEntityType::PayrollDataRetention => PersistedAuditEntityType::PayrollDataRetention,
+        AuditEntityType::AnomalyRule => PersistedAuditEntityType::AnomalyRule,
+        AuditEntityType::AnomalyAlert => PersistedAuditEntityType::AnomalyAlert,
     }
 }
 
@@ -1443,6 +1476,8 @@ fn domain_entity_type_from_persisted(entity_type: PersistedAuditEntityType) -> A
         PersistedAuditEntityType::PayrollDispute => AuditEntityType::PayrollDispute,
         PersistedAuditEntityType::PayrollExchangeBatch => AuditEntityType::PayrollExchangeBatch,
         PersistedAuditEntityType::PayrollDataRetention => AuditEntityType::PayrollDataRetention,
+        PersistedAuditEntityType::AnomalyRule => AuditEntityType::AnomalyRule,
+        PersistedAuditEntityType::AnomalyAlert => AuditEntityType::AnomalyAlert,
     }
 }
 

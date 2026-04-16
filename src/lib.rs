@@ -1,6 +1,7 @@
-#![recursion_limit = "512"]
+#![recursion_limit = "1024"]
 
 pub mod access;
+pub mod anomaly_alert;
 pub mod audit;
 pub mod contract;
 pub mod health;

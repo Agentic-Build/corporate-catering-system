@@ -52,7 +52,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 31] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 36] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -164,6 +164,31 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 31] = [
         HttpMethod::Post,
         "/api/v1/admin/orders/retention-purge",
         "purgeOrderData",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/admin/anomaly/rules",
+        "listAnomalyRules",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Put,
+        "/api/v1/admin/anomaly/rules/{ruleId}",
+        "upsertAnomalyRule",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/admin/anomaly/alerts/evaluations",
+        "evaluateAnomalyAlerts",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/admin/anomaly/alerts",
+        "listAnomalyAlerts",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Patch,
+        "/api/v1/admin/anomaly/alerts/{alertId}",
+        "updateAdminAnomalyAlert",
     ),
     RuntimeHttpRoute::new(
         HttpMethod::Patch,

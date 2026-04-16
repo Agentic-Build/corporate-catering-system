@@ -10,9 +10,15 @@ use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use axum::extract::{Path, Query, State};
 use axum::http::{header::AUTHORIZATION, HeaderMap, StatusCode};
-use axum::routing::{get, patch, post};
+use axum::routing::{get, patch, post, put};
 use axum::{Json, Router};
 use base64::prelude::{Engine as _, BASE64_STANDARD};
+use corporate_catering_system::anomaly_alert::{
+    AnomalyAlertError, AnomalyAlertId, AnomalyAlertRecord, AnomalyAlertSeverity,
+    AnomalyAlertStatus, AnomalyAlertTraceEvent, AnomalyAlertTransition, AnomalyAlertWorkflow,
+    AnomalyRule, AnomalyRuleId, AnomalyRuleKind, AnomalySignalSnapshot, AnomalySlaStatus,
+    AnomalyThresholdComparator,
+};
 use corporate_catering_system::audit::{
     AuditAction, AuditCorrelationId, AuditEntityType, AuditInvestigationFilter,
     AuditRetentionPolicy, AuditSnapshotEncryptionKey, AuditTimestamp, AuditTrailError,
@@ -77,6 +83,7 @@ const LOAD_GATE_EMPLOYEE_ACTOR_ID: &str = "emp-load-gate";
 const LOAD_GATE_COMMITTEE_ACTOR_ID: &str = "committee-load-gate";
 const LOAD_GATE_PAYROLL_ACTOR_ID: &str = "payroll-load-gate";
 const LOAD_GATE_PAYROLL_DISPUTE_OWNER_ACTOR_ID: &str = "payroll-dispute-owner";
+const LOAD_GATE_ANOMALY_ALERT_OWNER_ACTOR_ID: &str = "anomaly-alert-owner";
 const PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV: &str = "PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS";
 const PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV: &str = "PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_HEX";
 const PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_ENV: &str =
@@ -85,7 +92,7 @@ const AUTHORIZATION_BEARER_PREFIX: &str = "Bearer ";
 const PAYROLL_FIELD_ENVELOPE_VERSION: &str = "v1";
 const PAYROLL_FIELD_NONCE_BYTES: usize = 12;
 
-const ALL_AUDIT_ACTIONS: [AuditAction; 30] = [
+const ALL_AUDIT_ACTIONS: [AuditAction; 35] = [
     AuditAction::CreateEmployeeOrder,
     AuditAction::UpdateEmployeeOrder,
     AuditAction::VerifyPickupOrder,
@@ -116,9 +123,14 @@ const ALL_AUDIT_ACTIONS: [AuditAction; 30] = [
     AuditAction::SyncPayrollHrApiAdjunct,
     AuditAction::PurgePayrollData,
     AuditAction::PurgeOrderData,
+    AuditAction::UpsertAnomalyDetectionRule,
+    AuditAction::TriggerAnomalyAlert,
+    AuditAction::AssignAnomalyAlertOwner,
+    AuditAction::AdvanceAnomalyAlertStatus,
+    AuditAction::CloseAnomalyAlert,
 ];
 
-const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 13] = [
+const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 15] = [
     AuditEntityType::Order,
     AuditEntityType::MenuItem,
     AuditEntityType::Vendor,
@@ -132,6 +144,8 @@ const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 13] = [
     AuditEntityType::PayrollDispute,
     AuditEntityType::PayrollExchangeBatch,
     AuditEntityType::PayrollDataRetention,
+    AuditEntityType::AnomalyRule,
+    AuditEntityType::AnomalyAlert,
 ];
 
 #[derive(Debug, Clone)]
@@ -142,6 +156,7 @@ struct AppState {
     audit_trail: ImmutableAuditTrail,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
     payroll_ledger_service: PayrollLedgerService,
+    anomaly_alert_workflow: AnomalyAlertWorkflow,
     compliance_lifecycle: Arc<VendorComplianceLifecycle>,
     delivery_policy: Arc<VendorPlantDeliveryPolicy>,
     menu_supply_policy: MenuSupplyPolicy,
@@ -460,6 +475,129 @@ struct AdminPayrollDisputePatchRequest {
     owner_actor_id: Option<String>,
     note: Option<String>,
     refund_amount_minor: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AnomalyRulePayload {
+    rule_id: String,
+    kind: String,
+    display_name: String,
+    description: String,
+    governance_issue_id: String,
+    enabled: bool,
+    threshold_value: f64,
+    threshold_comparator: String,
+    evaluation_window_days: u16,
+    sla_minutes: u32,
+    severity: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AnomalyRuleListResponse {
+    items: Vec<AnomalyRulePayload>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AnomalyRuleUpsertRequest {
+    kind: String,
+    display_name: String,
+    description: String,
+    governance_issue_id: String,
+    enabled: bool,
+    threshold_value: f64,
+    threshold_comparator: String,
+    evaluation_window_days: u16,
+    sla_minutes: u32,
+    severity: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AnomalyAlertEvaluationRequest {
+    vendor_id: String,
+    observed_at_epoch_day: Option<i32>,
+    observed_at_minute_of_day: Option<u16>,
+    days_until_expiry: Option<f64>,
+    on_time_rate: Option<f64>,
+    satisfaction_score: Option<f64>,
+    complaint_count: Option<f64>,
+    default_owner_actor_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AnomalyAlertTracePayload {
+    occurred_at: String,
+    actor_id: String,
+    event_type: String,
+    status: String,
+    note: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AnomalyAlertPayload {
+    alert_id: String,
+    vendor_id: String,
+    rule_id: String,
+    rule_kind: String,
+    rule_display_name: String,
+    governance_issue_id: String,
+    status: String,
+    owner_actor_id: String,
+    severity: String,
+    observed_value: f64,
+    threshold_value: f64,
+    threshold_comparator: String,
+    observed_at: String,
+    opened_at: String,
+    updated_at: String,
+    sla_due_at: String,
+    sla_status: String,
+    escalated_at: Option<String>,
+    closed_at: Option<String>,
+    closure_note: Option<String>,
+    closure_evidence_refs: Vec<String>,
+    ticket_reference: Option<String>,
+    trace: Vec<AnomalyAlertTracePayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AnomalyAlertEvaluationResponse {
+    triggered_alerts: Vec<AnomalyAlertPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AnomalyAlertListResponse {
+    items: Vec<AnomalyAlertPayload>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct AnomalyAlertQueryRequest {
+    vendor_id: Option<String>,
+    owner_actor_id: Option<String>,
+    status: Option<String>,
+    escalated_only: Option<bool>,
+    sla_status: Option<String>,
+    as_of_epoch_day: Option<i32>,
+    as_of_minute_of_day: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AdminAnomalyAlertPatchRequest {
+    operation: String,
+    owner_actor_id: Option<String>,
+    note: Option<String>,
+    closure_note: Option<String>,
+    closure_evidence_refs: Option<Vec<String>>,
+    ticket_reference: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, Copy)]
@@ -923,6 +1061,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
             "/api/v1/admin/orders/retention-purge",
             post(purge_order_data),
         )
+        .route("/api/v1/admin/anomaly/rules", get(list_anomaly_rules))
+        .route(
+            "/api/v1/admin/anomaly/rules/:ruleId",
+            put(upsert_anomaly_rule),
+        )
+        .route(
+            "/api/v1/admin/anomaly/alerts/evaluations",
+            post(evaluate_anomaly_alerts),
+        )
+        .route("/api/v1/admin/anomaly/alerts", get(list_anomaly_alerts))
+        .route(
+            "/api/v1/admin/anomaly/alerts/:alertId",
+            patch(update_admin_anomaly_alert),
+        )
         .route(
             "/api/v1/admin/payroll/disputes/:disputeId",
             patch(update_admin_payroll_dispute),
@@ -1183,6 +1335,7 @@ fn bootstrap_runtime_state(
         })?;
     let payroll_ledger_service =
         PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
+    let anomaly_alert_workflow = AnomalyAlertWorkflow::with_default_rules(audit_trail.clone());
     let vendor_menu_gateway = HttpVendorMenuExecutionGateway::new(&menu_supply_policy);
 
     for index in 1..=menu_variant_count {
@@ -1221,6 +1374,7 @@ fn bootstrap_runtime_state(
         audit_trail,
         payroll_export_field_encryptor,
         payroll_ledger_service,
+        anomaly_alert_workflow,
         compliance_lifecycle: Arc::new(compliance_lifecycle),
         delivery_policy: Arc::new(delivery_policy),
         menu_supply_policy,
@@ -2180,7 +2334,7 @@ fn handle_update_admin_payroll_dispute(
             format!("disputeId path parameter is invalid: {error}"),
         )
     })?;
-    let occurred_at = current_audit_timestamp()?;
+    let occurred_at = current_anomaly_audit_timestamp()?;
 
     let dispute = match request.operation.as_str() {
         "ASSIGN_OWNER" => {
@@ -2240,6 +2394,599 @@ fn handle_update_admin_payroll_dispute(
     };
 
     Ok(to_payroll_dispute_payload(&dispute))
+}
+
+async fn list_anomaly_rules(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry =
+        TelemetryService::HttpApi.begin_operation("listAnomalyRules", None::<&str>, None::<&str>);
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_list_anomaly_rules(&state, &committee_actor) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("anomaly rule list payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("anomaly rule list error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_list_anomaly_rules(
+    state: &AppState,
+    _committee_actor: &AuthenticatedActorContext,
+) -> Result<AnomalyRuleListResponse, (StatusCode, ErrorPayload)> {
+    let rules = state
+        .anomaly_alert_workflow
+        .list_rules()
+        .map_err(map_anomaly_alert_error)?
+        .iter()
+        .map(to_anomaly_rule_payload)
+        .collect::<Vec<_>>();
+
+    Ok(AnomalyRuleListResponse { items: rules })
+}
+
+async fn upsert_anomaly_rule(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(rule_id): Path<String>,
+    Json(request): Json<AnomalyRuleUpsertRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry =
+        TelemetryService::HttpApi.begin_operation("upsertAnomalyRule", None::<&str>, None::<&str>);
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_upsert_anomaly_rule(&state, &committee_actor, rule_id, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("anomaly rule payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("anomaly rule error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_upsert_anomaly_rule(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    rule_id_raw: String,
+    request: AnomalyRuleUpsertRequest,
+) -> Result<AnomalyRulePayload, (StatusCode, ErrorPayload)> {
+    let rule_id = parse_contract_anomaly_rule_id(&rule_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("ruleId path parameter is invalid: {error}"),
+        )
+    })?;
+    let kind = AnomalyRuleKind::parse(&request.kind).ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("kind `{}` is unsupported", request.kind.trim()),
+        )
+    })?;
+    let threshold_comparator = AnomalyThresholdComparator::parse(&request.threshold_comparator)
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!(
+                    "thresholdComparator `{}` is unsupported",
+                    request.threshold_comparator.trim()
+                ),
+            )
+        })?;
+    let severity = AnomalyAlertSeverity::parse(&request.severity).ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("severity `{}` is unsupported", request.severity.trim()),
+        )
+    })?;
+
+    let rule = AnomalyRule::new(
+        rule_id,
+        kind,
+        request.display_name,
+        request.description,
+        request.governance_issue_id,
+        request.enabled,
+        request.threshold_value,
+        threshold_comparator,
+        request.evaluation_window_days,
+        request.sla_minutes,
+        severity,
+    )
+    .map_err(map_anomaly_alert_error)?;
+
+    let occurred_at = current_audit_timestamp()?;
+    let upserted = state
+        .anomaly_alert_workflow
+        .upsert_rule(committee_actor, rule, occurred_at)
+        .map_err(map_anomaly_alert_error)?;
+    Ok(to_anomaly_rule_payload(&upserted))
+}
+
+async fn evaluate_anomaly_alerts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<AnomalyAlertEvaluationRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "evaluateAnomalyAlerts",
+        None::<&str>,
+        None::<&str>,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_evaluate_anomaly_alerts(&state, &committee_actor, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("anomaly evaluation payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("anomaly evaluation error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_evaluate_anomaly_alerts(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    request: AnomalyAlertEvaluationRequest,
+) -> Result<AnomalyAlertEvaluationResponse, (StatusCode, ErrorPayload)> {
+    if request.days_until_expiry.is_none()
+        && request.on_time_rate.is_none()
+        && request.satisfaction_score.is_none()
+        && request.complaint_count.is_none()
+    {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "at least one anomaly signal metric is required".to_owned(),
+        ));
+    }
+
+    let vendor_id = VendorId::parse(request.vendor_id).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("vendorId is invalid: {error}"),
+        )
+    })?;
+    let observed_at = resolve_anomaly_observed_at_timestamp(
+        request.observed_at_epoch_day,
+        request.observed_at_minute_of_day,
+    )?;
+    let default_owner_actor_id = match request.default_owner_actor_id {
+        Some(value) => ActorId::parse(value).map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("defaultOwnerActorId is invalid: {error}"),
+            )
+        })?,
+        None => load_gate_anomaly_alert_owner_actor_id()?,
+    };
+
+    let result = state
+        .anomaly_alert_workflow
+        .evaluate_rules(
+            committee_actor,
+            AnomalySignalSnapshot::new(vendor_id, observed_at)
+                .with_days_until_expiry(request.days_until_expiry)
+                .with_on_time_rate(request.on_time_rate)
+                .with_satisfaction_score(request.satisfaction_score)
+                .with_complaint_count(request.complaint_count),
+            &default_owner_actor_id,
+        )
+        .map_err(map_anomaly_alert_error)?;
+
+    let as_of = current_anomaly_audit_timestamp()?;
+    Ok(AnomalyAlertEvaluationResponse {
+        triggered_alerts: result
+            .triggered_alerts()
+            .iter()
+            .map(|alert| to_anomaly_alert_payload(alert, as_of))
+            .collect::<Vec<_>>(),
+    })
+}
+
+async fn list_anomaly_alerts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AnomalyAlertQueryRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry =
+        TelemetryService::HttpApi.begin_operation("listAnomalyAlerts", None::<&str>, None::<&str>);
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_list_anomaly_alerts(&state, &committee_actor, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("anomaly alert list payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("anomaly alert list error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_list_anomaly_alerts(
+    state: &AppState,
+    _committee_actor: &AuthenticatedActorContext,
+    query: AnomalyAlertQueryRequest,
+) -> Result<AnomalyAlertListResponse, (StatusCode, ErrorPayload)> {
+    let as_of = resolve_anomaly_as_of_timestamp(query.as_of_epoch_day, query.as_of_minute_of_day)?;
+    let vendor_id = query
+        .vendor_id
+        .map(VendorId::parse)
+        .transpose()
+        .map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("vendorId is invalid: {error}"),
+            )
+        })?;
+    let owner_actor_id = query
+        .owner_actor_id
+        .map(ActorId::parse)
+        .transpose()
+        .map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("ownerActorId is invalid: {error}"),
+            )
+        })?;
+    let status = query
+        .status
+        .map(|value| {
+            AnomalyAlertStatus::parse(&value).ok_or_else(|| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    format!("status `{}` is unsupported", value.trim()),
+                )
+            })
+        })
+        .transpose()?;
+    let sla_status = query
+        .sla_status
+        .map(|value| {
+            AnomalySlaStatus::parse(&value).ok_or_else(|| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    format!("slaStatus `{}` is unsupported", value.trim()),
+                )
+            })
+        })
+        .transpose()?;
+
+    let alerts = state
+        .anomaly_alert_workflow
+        .query_alerts(
+            &corporate_catering_system::anomaly_alert::AnomalyAlertQuery {
+                vendor_id,
+                owner_actor_id,
+                status,
+                escalated_only: query.escalated_only,
+                sla_status,
+            },
+            as_of,
+        )
+        .map_err(map_anomaly_alert_error)?
+        .iter()
+        .map(|alert| to_anomaly_alert_payload(alert, as_of))
+        .collect::<Vec<_>>();
+
+    Ok(AnomalyAlertListResponse { items: alerts })
+}
+
+async fn update_admin_anomaly_alert(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(alert_id): Path<String>,
+    Json(request): Json<AdminAnomalyAlertPatchRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "updateAdminAnomalyAlert",
+        None::<&str>,
+        None::<&str>,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response =
+        match handle_update_admin_anomaly_alert(&state, &committee_actor, alert_id, request) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(
+                        serde_json::to_value(payload)
+                            .expect("anomaly alert patch payload serialization should succeed"),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                            "anomaly alert patch error payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+        };
+
+    response
+}
+
+fn handle_update_admin_anomaly_alert(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    alert_id_raw: String,
+    request: AdminAnomalyAlertPatchRequest,
+) -> Result<AnomalyAlertPayload, (StatusCode, ErrorPayload)> {
+    let alert_id = parse_contract_anomaly_alert_id(&alert_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("alertId path parameter is invalid: {error}"),
+        )
+    })?;
+    let occurred_at = current_anomaly_audit_timestamp()?;
+    let note = normalize_optional_patch_note(request.note)?;
+
+    let alert = match request.operation.as_str() {
+        "ASSIGN_OWNER" => {
+            if request.closure_note.is_some()
+                || request.closure_evidence_refs.is_some()
+                || request.ticket_reference.is_some()
+            {
+                return Err(domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    "closure fields are only allowed for CLOSE operation".to_owned(),
+                ));
+            }
+            let owner_actor_id_raw = request.owner_actor_id.ok_or_else(|| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    "ownerActorId is required for ASSIGN_OWNER".to_owned(),
+                )
+            })?;
+            let owner_actor_id = ActorId::parse(owner_actor_id_raw).map_err(|error| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    format!("ownerActorId is invalid: {error}"),
+                )
+            })?;
+            state
+                .anomaly_alert_workflow
+                .assign_owner(
+                    committee_actor,
+                    &alert_id,
+                    &owner_actor_id,
+                    occurred_at,
+                    note,
+                )
+                .map_err(map_anomaly_alert_error)?
+        }
+        "ACKNOWLEDGE" | "START_REMEDIATION" | "ESCALATE" => {
+            if request.owner_actor_id.is_some()
+                || request.closure_note.is_some()
+                || request.closure_evidence_refs.is_some()
+                || request.ticket_reference.is_some()
+            {
+                return Err(domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    "owner and closure fields are not allowed for this operation".to_owned(),
+                ));
+            }
+            let transition =
+                AnomalyAlertTransition::parse(&request.operation).ok_or_else(|| {
+                    domain_error(
+                        StatusCode::BAD_REQUEST,
+                        "BAD_REQUEST",
+                        format!(
+                            "unsupported anomaly alert operation `{}`",
+                            request.operation
+                        ),
+                    )
+                })?;
+            state
+                .anomaly_alert_workflow
+                .transition_alert(
+                    committee_actor,
+                    &alert_id,
+                    transition,
+                    occurred_at,
+                    note,
+                    None,
+                    Vec::new(),
+                    None,
+                )
+                .map_err(map_anomaly_alert_error)?
+        }
+        "CLOSE" => {
+            if request.owner_actor_id.is_some() {
+                return Err(domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    "ownerActorId is not allowed for CLOSE operation".to_owned(),
+                ));
+            }
+            let closure_note = parse_required_patch_note(request.closure_note, "closureNote")?;
+            let closure_evidence_refs = request.closure_evidence_refs.ok_or_else(|| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    "closureEvidenceRefs is required for CLOSE operation".to_owned(),
+                )
+            })?;
+            state
+                .anomaly_alert_workflow
+                .transition_alert(
+                    committee_actor,
+                    &alert_id,
+                    AnomalyAlertTransition::Close,
+                    occurred_at,
+                    note,
+                    Some(closure_note),
+                    closure_evidence_refs,
+                    request.ticket_reference,
+                )
+                .map_err(map_anomaly_alert_error)?
+        }
+        other => {
+            return Err(domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("unsupported anomaly alert operation `{other}`"),
+            ));
+        }
+    };
+
+    Ok(to_anomaly_alert_payload(&alert, occurred_at))
 }
 
 async fn purge_payroll_data(
@@ -2875,6 +3622,67 @@ fn to_payroll_dispute_trace_payload(
     }
 }
 
+fn to_anomaly_rule_payload(rule: &AnomalyRule) -> AnomalyRulePayload {
+    AnomalyRulePayload {
+        rule_id: rule.rule_id().as_str().to_owned(),
+        kind: rule.kind().as_str().to_owned(),
+        display_name: rule.display_name().to_owned(),
+        description: rule.description().to_owned(),
+        governance_issue_id: rule.governance_issue_id().to_owned(),
+        enabled: rule.enabled(),
+        threshold_value: rule.threshold_value(),
+        threshold_comparator: rule.threshold_comparator().as_str().to_owned(),
+        evaluation_window_days: rule.evaluation_window_days(),
+        sla_minutes: rule.sla_minutes(),
+        severity: rule.severity().as_str().to_owned(),
+    }
+}
+
+fn to_anomaly_alert_payload(
+    alert: &AnomalyAlertRecord,
+    as_of: AuditTimestamp,
+) -> AnomalyAlertPayload {
+    AnomalyAlertPayload {
+        alert_id: alert.alert_id().as_str().to_owned(),
+        vendor_id: alert.vendor_id().as_str().to_owned(),
+        rule_id: alert.rule_id().as_str().to_owned(),
+        rule_kind: alert.rule_kind().as_str().to_owned(),
+        rule_display_name: alert.rule_display_name().to_owned(),
+        governance_issue_id: alert.governance_issue_id().to_owned(),
+        status: alert.status().as_str().to_owned(),
+        owner_actor_id: alert.owner_actor_id().as_str().to_owned(),
+        severity: alert.severity().as_str().to_owned(),
+        observed_value: alert.observed_value(),
+        threshold_value: alert.threshold_value(),
+        threshold_comparator: alert.threshold_comparator().as_str().to_owned(),
+        observed_at: audit_timestamp_to_iso_datetime(alert.observed_at()),
+        opened_at: audit_timestamp_to_iso_datetime(alert.opened_at()),
+        updated_at: audit_timestamp_to_iso_datetime(alert.updated_at()),
+        sla_due_at: audit_timestamp_to_iso_datetime(alert.sla_due_at()),
+        sla_status: alert.sla_status(as_of).as_str().to_owned(),
+        escalated_at: alert.escalated_at().map(audit_timestamp_to_iso_datetime),
+        closed_at: alert.closed_at().map(audit_timestamp_to_iso_datetime),
+        closure_note: alert.closure_note().map(str::to_owned),
+        closure_evidence_refs: alert.closure_evidence_refs().to_vec(),
+        ticket_reference: alert.ticket_reference().map(str::to_owned),
+        trace: alert
+            .trace()
+            .iter()
+            .map(to_anomaly_alert_trace_payload)
+            .collect::<Vec<_>>(),
+    }
+}
+
+fn to_anomaly_alert_trace_payload(event: &AnomalyAlertTraceEvent) -> AnomalyAlertTracePayload {
+    AnomalyAlertTracePayload {
+        occurred_at: audit_timestamp_to_iso_datetime(event.occurred_at()),
+        actor_id: event.actor_id().as_str().to_owned(),
+        event_type: event.event_type().as_str().to_owned(),
+        status: event.status().as_str().to_owned(),
+        note: event.note().map(str::to_owned),
+    }
+}
+
 fn to_payroll_deduction_page_payload(
     export_page: &PayrollExportPage,
     field_encryptor: &PayrollExportFieldEncryptor,
@@ -3090,6 +3898,77 @@ fn parse_contract_payroll_exchange_batch_id(value: &str) -> Result<PayrollExchan
     PayrollExchangeBatchId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
 }
 
+fn parse_contract_anomaly_rule_id(value: &str) -> Result<AnomalyRuleId, String> {
+    let trimmed = value.trim();
+    if !trimmed.starts_with("rule-") {
+        return Err("must start with `rule-`".to_owned());
+    }
+    AnomalyRuleId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
+}
+
+fn parse_contract_anomaly_alert_id(value: &str) -> Result<AnomalyAlertId, String> {
+    let trimmed = value.trim();
+    let Some(suffix) = trimmed.strip_prefix("alt-") else {
+        return Err("must start with `alt-`".to_owned());
+    };
+    if suffix.len() != 16 {
+        return Err("suffix length must be exactly 16 characters".to_owned());
+    }
+    if !suffix
+        .chars()
+        .all(|ch| ch.is_ascii_digit() || ('a'..='f').contains(&ch))
+    {
+        return Err("suffix must contain only lowercase hex digits".to_owned());
+    }
+    AnomalyAlertId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
+}
+
+fn resolve_anomaly_observed_at_timestamp(
+    observed_at_epoch_day: Option<i32>,
+    observed_at_minute_of_day: Option<u16>,
+) -> Result<AuditTimestamp, (StatusCode, ErrorPayload)> {
+    match (observed_at_epoch_day, observed_at_minute_of_day) {
+        (Some(epoch_day), Some(minute_of_day)) => AuditTimestamp::new(epoch_day, minute_of_day)
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    format!("observedAt minute/day combination is invalid: {error}"),
+                )
+            }),
+        (Some(epoch_day), None) => Ok(AuditTimestamp::from_epoch_day(epoch_day)),
+        (None, Some(_)) => Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "observedAtMinuteOfDay requires observedAtEpochDay".to_owned(),
+        )),
+        (None, None) => current_anomaly_audit_timestamp(),
+    }
+}
+
+fn resolve_anomaly_as_of_timestamp(
+    as_of_epoch_day: Option<i32>,
+    as_of_minute_of_day: Option<u16>,
+) -> Result<AuditTimestamp, (StatusCode, ErrorPayload)> {
+    match (as_of_epoch_day, as_of_minute_of_day) {
+        (Some(epoch_day), Some(minute_of_day)) => AuditTimestamp::new(epoch_day, minute_of_day)
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    format!("asOf minute/day combination is invalid: {error}"),
+                )
+            }),
+        (Some(epoch_day), None) => Ok(AuditTimestamp::through_epoch_day(epoch_day)),
+        (None, Some(_)) => Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "asOfMinuteOfDay requires asOfEpochDay".to_owned(),
+        )),
+        (None, None) => current_anomaly_audit_timestamp(),
+    }
+}
+
 fn parse_required_patch_note(
     note: Option<String>,
     field_name: &str,
@@ -3150,6 +4029,25 @@ fn current_audit_timestamp() -> Result<AuditTimestamp, (StatusCode, ErrorPayload
     )
 }
 
+fn current_anomaly_audit_timestamp() -> Result<AuditTimestamp, (StatusCode, ErrorPayload)> {
+    let now = current_taipei_business_moment().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+    AuditTimestamp::from_taipei_business_moment(now.epoch_day(), now.minute_of_day()).map_err(
+        |error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ANOMALY_ALERT_INTERNAL_ERROR",
+                error.to_string(),
+            )
+        },
+    )
+}
+
 fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayload) {
     match error {
         PayrollLedgerError::UnauthorizedRole { .. } | PayrollLedgerError::NotOrderOwner { .. } => {
@@ -3195,6 +4093,43 @@ fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayl
         | PayrollLedgerError::AuditTrail(_) => domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "PAYROLL_LEDGER_INTERNAL_ERROR",
+            error.to_string(),
+        ),
+    }
+}
+
+fn map_anomaly_alert_error(error: AnomalyAlertError) -> (StatusCode, ErrorPayload) {
+    match error {
+        AnomalyAlertError::UnauthorizedRole { .. } => {
+            domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
+        }
+        AnomalyAlertError::AlertNotFound(_) => {
+            domain_error(StatusCode::NOT_FOUND, "NOT_FOUND", error.to_string())
+        }
+        AnomalyAlertError::AlertAlreadyClosed { .. }
+        | AnomalyAlertError::InvalidStatusTransition { .. } => {
+            domain_error(StatusCode::CONFLICT, "CONFLICT", error.to_string())
+        }
+        AnomalyAlertError::InvalidRuleId
+        | AnomalyAlertError::InvalidAlertId
+        | AnomalyAlertError::InvalidRuleText { .. }
+        | AnomalyAlertError::InvalidThresholdValue { .. }
+        | AnomalyAlertError::InvalidRuleComparator { .. }
+        | AnomalyAlertError::InvalidEvaluationWindowDays { .. }
+        | AnomalyAlertError::InvalidSlaMinutes { .. }
+        | AnomalyAlertError::ClosureNoteRequired
+        | AnomalyAlertError::ClosureEvidenceRequired
+        | AnomalyAlertError::InvalidClosureEvidence
+        | AnomalyAlertError::InvalidTicketReference
+        | AnomalyAlertError::InvalidNote => {
+            domain_error(StatusCode::BAD_REQUEST, "BAD_REQUEST", error.to_string())
+        }
+        AnomalyAlertError::AlertSequenceOverflow
+        | AnomalyAlertError::TimestampOverflow
+        | AnomalyAlertError::StatePoisoned
+        | AnomalyAlertError::AuditTrail(_) => domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ANOMALY_ALERT_INTERNAL_ERROR",
             error.to_string(),
         ),
     }
@@ -3375,6 +4310,16 @@ fn load_gate_payroll_dispute_owner_actor_id() -> Result<ActorId, (StatusCode, Er
             StatusCode::INTERNAL_SERVER_ERROR,
             "IDENTITY_MODEL_ERROR",
             format!("failed to parse payroll dispute owner actor id: {error}"),
+        )
+    })
+}
+
+fn load_gate_anomaly_alert_owner_actor_id() -> Result<ActorId, (StatusCode, ErrorPayload)> {
+    ActorId::parse(LOAD_GATE_ANOMALY_ALERT_OWNER_ACTOR_ID).map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "IDENTITY_MODEL_ERROR",
+            format!("failed to parse anomaly alert owner actor id: {error}"),
         )
     })
 }
@@ -5038,9 +5983,10 @@ mod tests {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             plant_id: plant,
             terminated_employee_actor_ids: Arc::new(HashSet::new()),
-            audit_trail,
+            audit_trail: audit_trail.clone(),
             payroll_export_field_encryptor: payroll_export_field_encryptor(),
             payroll_ledger_service,
+            anomaly_alert_workflow: AnomalyAlertWorkflow::with_default_rules(audit_trail.clone()),
             compliance_lifecycle: Arc::new(compliance_lifecycle),
             delivery_policy: Arc::new(delivery_policy),
             menu_supply_policy,
@@ -5273,6 +6219,7 @@ mod tests {
                 PayrollRetentionPolicy::default(),
                 audit_trail.clone(),
             ),
+            anomaly_alert_workflow: AnomalyAlertWorkflow::with_default_rules(audit_trail.clone()),
             compliance_lifecycle: Arc::new(VendorComplianceLifecycle::with_audit_trail(
                 HistoryRetentionPolicy::default(),
                 audit_trail.clone(),
@@ -5777,6 +6724,132 @@ mod tests {
         .expect("hr api adjunct sync should succeed");
         assert_eq!(synced.exchange_batch.hr_api_sync_status, "SUCCEEDED");
         assert!(synced.exchange_batch.hr_api_synced_at.is_some());
+    }
+
+    #[test]
+    fn anomaly_alert_workflow_handlers_track_owner_and_closure_auditability() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let committee = committee_admin();
+
+        let evaluation = handle_evaluate_anomaly_alerts(
+            &state,
+            &committee,
+            AnomalyAlertEvaluationRequest {
+                vendor_id: "ven-discoverytst-a1".to_owned(),
+                observed_at_epoch_day: Some(now_epoch_day),
+                observed_at_minute_of_day: Some(600),
+                days_until_expiry: None,
+                on_time_rate: Some(0.80),
+                satisfaction_score: None,
+                complaint_count: None,
+                default_owner_actor_id: None,
+            },
+        )
+        .expect("anomaly evaluation should succeed");
+        let initial_alert = evaluation
+            .triggered_alerts
+            .iter()
+            .find(|alert| alert.rule_kind == "ON_TIME_DEGRADATION")
+            .expect("on-time degradation should trigger an alert");
+        assert_eq!(initial_alert.status, "OPEN");
+        assert_eq!(
+            initial_alert.owner_actor_id,
+            LOAD_GATE_ANOMALY_ALERT_OWNER_ACTOR_ID
+        );
+
+        let assigned_alert = handle_update_admin_anomaly_alert(
+            &state,
+            &committee,
+            initial_alert.alert_id.clone(),
+            AdminAnomalyAlertPatchRequest {
+                operation: "ASSIGN_OWNER".to_owned(),
+                owner_actor_id: Some("committee-owner-alpha".to_owned()),
+                note: Some("triaged by governance committee".to_owned()),
+                closure_note: None,
+                closure_evidence_refs: None,
+                ticket_reference: None,
+            },
+        )
+        .expect("anomaly alert owner assignment should succeed");
+        assert_eq!(assigned_alert.owner_actor_id, "committee-owner-alpha");
+
+        let in_progress_alert = handle_update_admin_anomaly_alert(
+            &state,
+            &committee,
+            initial_alert.alert_id.clone(),
+            AdminAnomalyAlertPatchRequest {
+                operation: "START_REMEDIATION".to_owned(),
+                owner_actor_id: None,
+                note: Some("remediation started".to_owned()),
+                closure_note: None,
+                closure_evidence_refs: None,
+                ticket_reference: None,
+            },
+        )
+        .expect("anomaly alert remediation transition should succeed");
+        assert_eq!(in_progress_alert.status, "REMEDIATION_IN_PROGRESS");
+
+        let closed_alert = handle_update_admin_anomaly_alert(
+            &state,
+            &committee,
+            initial_alert.alert_id.clone(),
+            AdminAnomalyAlertPatchRequest {
+                operation: "CLOSE".to_owned(),
+                owner_actor_id: None,
+                note: Some("closure approved".to_owned()),
+                closure_note: Some("mitigated with vendor retraining and monitoring".to_owned()),
+                closure_evidence_refs: Some(vec![
+                    "runbook://anomaly/on-time-degradation".to_owned(),
+                    "evidence://vendor/ven-discoverytst-a1/2026-04-16".to_owned(),
+                ]),
+                ticket_reference: Some("jira://OPS-42".to_owned()),
+            },
+        )
+        .expect("anomaly alert close should succeed");
+        assert_eq!(closed_alert.status, "CLOSED");
+        assert_eq!(
+            closed_alert.ticket_reference.as_deref(),
+            Some("jira://OPS-42")
+        );
+        assert_eq!(closed_alert.closure_evidence_refs.len(), 2);
+
+        let closed_listing = handle_list_anomaly_alerts(
+            &state,
+            &committee,
+            AnomalyAlertQueryRequest {
+                vendor_id: Some("ven-discoverytst-a1".to_owned()),
+                owner_actor_id: Some("committee-owner-alpha".to_owned()),
+                status: Some("CLOSED".to_owned()),
+                escalated_only: None,
+                sla_status: None,
+                as_of_epoch_day: Some(now_epoch_day),
+                as_of_minute_of_day: Some(1439),
+            },
+        )
+        .expect("closed anomaly alerts should be queryable");
+        assert_eq!(closed_listing.items.len(), 1);
+        assert_eq!(closed_listing.items[0].alert_id, initial_alert.alert_id);
+
+        let investigations = handle_query_audit_investigations(
+            &state,
+            &committee,
+            AuditInvestigationQuery {
+                actor_id: None,
+                action: Some("CLOSE_ANOMALY_ALERT".to_owned()),
+                entity_type: Some("ANOMALY_ALERT".to_owned()),
+                entity_id: Some(initial_alert.alert_id.clone()),
+                occurred_from_epoch_day: None,
+                occurred_to_epoch_day: None,
+                correlation_id: None,
+            },
+        )
+        .expect("anomaly close event should be auditable");
+        assert_eq!(investigations.items.len(), 1);
+        assert_eq!(investigations.items[0].action, "CLOSE_ANOMALY_ALERT");
+        assert_eq!(investigations.items[0].entity_type, "ANOMALY_ALERT");
     }
 
     #[test]

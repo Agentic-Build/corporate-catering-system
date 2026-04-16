@@ -60,6 +60,11 @@ pub enum HttpOperation {
     QueryAuditResponsibilities,
     PurgeAuditEvidence,
     PurgeOrderData,
+    ListAnomalyRules,
+    UpsertAnomalyRule,
+    EvaluateAnomalyAlerts,
+    ListAnomalyAlerts,
+    UpdateAdminAnomalyAlert,
     UpdateAdminPayrollDispute,
     PurgePayrollData,
     CloseMonthlyPayrollSettlement,
@@ -70,7 +75,7 @@ pub enum HttpOperation {
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 36] = [
         Self::ListEmployeeMenus,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
@@ -95,6 +100,11 @@ impl HttpOperation {
         Self::QueryAuditResponsibilities,
         Self::PurgeAuditEvidence,
         Self::PurgeOrderData,
+        Self::ListAnomalyRules,
+        Self::UpsertAnomalyRule,
+        Self::EvaluateAnomalyAlerts,
+        Self::ListAnomalyAlerts,
+        Self::UpdateAdminAnomalyAlert,
         Self::UpdateAdminPayrollDispute,
         Self::PurgePayrollData,
         Self::CloseMonthlyPayrollSettlement,
@@ -132,6 +142,11 @@ impl HttpOperation {
             Self::QueryAuditResponsibilities => "queryAuditResponsibilities",
             Self::PurgeAuditEvidence => "purgeAuditEvidence",
             Self::PurgeOrderData => "purgeOrderData",
+            Self::ListAnomalyRules => "listAnomalyRules",
+            Self::UpsertAnomalyRule => "upsertAnomalyRule",
+            Self::EvaluateAnomalyAlerts => "evaluateAnomalyAlerts",
+            Self::ListAnomalyAlerts => "listAnomalyAlerts",
+            Self::UpdateAdminAnomalyAlert => "updateAdminAnomalyAlert",
             Self::UpdateAdminPayrollDispute => "updateAdminPayrollDispute",
             Self::PurgePayrollData => "purgePayrollData",
             Self::CloseMonthlyPayrollSettlement => "closePayrollMonthlySettlement",
@@ -164,15 +179,20 @@ impl HttpOperation {
             | Self::RunVendorComplianceLifecycle
             | Self::PurgeAuditEvidence
             | Self::PurgeOrderData
+            | Self::EvaluateAnomalyAlerts
             | Self::PurgePayrollData
             | Self::CloseMonthlyPayrollSettlement
             | Self::LockPayrollSettlementCycle
             | Self::UnlockPayrollSettlementCycle
             | Self::SyncPayrollHrApiAdjunct => HttpMethod::Post,
-            Self::UpdateEmployeeOrder | Self::UpdateAdminPayrollDispute => HttpMethod::Patch,
+            Self::UpdateEmployeeOrder
+            | Self::UpdateAdminPayrollDispute
+            | Self::UpdateAdminAnomalyAlert => HttpMethod::Patch,
             Self::UpsertVendorMenuItem
             | Self::UpsertComplianceDocumentTemplate
-            | Self::UpsertVendorPlantDeliveryMapping => HttpMethod::Put,
+            | Self::UpsertVendorPlantDeliveryMapping
+            | Self::UpsertAnomalyRule => HttpMethod::Put,
+            Self::ListAnomalyRules | Self::ListAnomalyAlerts => HttpMethod::Get,
             Self::DeleteVendorPlantDeliveryMapping => HttpMethod::Delete,
         }
     }
@@ -213,6 +233,11 @@ impl HttpOperation {
             Self::QueryAuditResponsibilities => "/api/v1/admin/audit/responsibilities",
             Self::PurgeAuditEvidence => "/api/v1/admin/audit/retention-purge",
             Self::PurgeOrderData => "/api/v1/admin/orders/retention-purge",
+            Self::ListAnomalyRules => "/api/v1/admin/anomaly/rules",
+            Self::UpsertAnomalyRule => "/api/v1/admin/anomaly/rules/{ruleId}",
+            Self::EvaluateAnomalyAlerts => "/api/v1/admin/anomaly/alerts/evaluations",
+            Self::ListAnomalyAlerts => "/api/v1/admin/anomaly/alerts",
+            Self::UpdateAdminAnomalyAlert => "/api/v1/admin/anomaly/alerts/{alertId}",
             Self::UpdateAdminPayrollDispute => "/api/v1/admin/payroll/disputes/{disputeId}",
             Self::PurgePayrollData => "/api/v1/admin/payroll/retention-purge",
             Self::CloseMonthlyPayrollSettlement => {
@@ -257,6 +282,11 @@ impl HttpOperation {
             | Self::QueryAuditResponsibilities
             | Self::PurgeAuditEvidence
             | Self::PurgeOrderData
+            | Self::ListAnomalyRules
+            | Self::UpsertAnomalyRule
+            | Self::EvaluateAnomalyAlerts
+            | Self::ListAnomalyAlerts
+            | Self::UpdateAdminAnomalyAlert
             | Self::UpdateAdminPayrollDispute
             | Self::PurgePayrollData
             | Self::CloseMonthlyPayrollSettlement
@@ -284,6 +314,9 @@ impl HttpOperation {
             | Self::RunVendorComplianceLifecycle
             | Self::PurgeAuditEvidence
             | Self::PurgeOrderData
+            | Self::UpsertAnomalyRule
+            | Self::EvaluateAnomalyAlerts
+            | Self::UpdateAdminAnomalyAlert
             | Self::PurgePayrollData
             | Self::LockPayrollSettlementCycle
             | Self::UnlockPayrollSettlementCycle => Some(Action::ManageVendorComplianceLifecycle),
@@ -300,6 +333,8 @@ impl HttpOperation {
             | Self::ListComplianceDocumentTemplates
             | Self::QueryAuditInvestigations
             | Self::QueryAuditResponsibilities
+            | Self::ListAnomalyRules
+            | Self::ListAnomalyAlerts
             | Self::ExportPayrollDeductions => None,
         }
     }
@@ -336,6 +371,11 @@ impl HttpOperation {
             "queryAuditResponsibilities" => Some(Self::QueryAuditResponsibilities),
             "purgeAuditEvidence" => Some(Self::PurgeAuditEvidence),
             "purgeOrderData" => Some(Self::PurgeOrderData),
+            "listAnomalyRules" => Some(Self::ListAnomalyRules),
+            "upsertAnomalyRule" => Some(Self::UpsertAnomalyRule),
+            "evaluateAnomalyAlerts" => Some(Self::EvaluateAnomalyAlerts),
+            "listAnomalyAlerts" => Some(Self::ListAnomalyAlerts),
+            "updateAdminAnomalyAlert" => Some(Self::UpdateAdminAnomalyAlert),
             "updateAdminPayrollDispute" => Some(Self::UpdateAdminPayrollDispute),
             "purgePayrollData" => Some(Self::PurgePayrollData),
             "closePayrollMonthlySettlement" => Some(Self::CloseMonthlyPayrollSettlement),
@@ -1262,6 +1302,156 @@ pub fn canonical_openapi_spec() -> Value {
             }
           }
         },
+        "/api/v1/admin/anomaly/rules": {
+          "get": {
+            "tags": ["Admin"],
+            "summary": "List anomaly detection governance rules",
+            "operationId": HttpOperation::ListAnomalyRules.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "responses": {
+              "200": {
+                "description": "Configured anomaly detection rules",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/AnomalyRuleListResponse" }
+                  }
+                }
+              },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/admin/anomaly/rules/{ruleId}": {
+          "put": {
+            "tags": ["Admin"],
+            "summary": "Upsert anomaly detection governance rule",
+            "operationId": HttpOperation::UpsertAnomalyRule.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/AnomalyRuleIdPath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/AnomalyRuleUpsertRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Upserted anomaly rule",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/AnomalyRule" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/admin/anomaly/alerts/evaluations": {
+          "post": {
+            "tags": ["Admin"],
+            "summary": "Evaluate anomaly rules and trigger tracked remediation alerts",
+            "operationId": HttpOperation::EvaluateAnomalyAlerts.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/AnomalyAlertEvaluationRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Anomaly evaluation outcome with triggered alerts",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/AnomalyAlertEvaluationResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/admin/anomaly/alerts": {
+          "get": {
+            "tags": ["Admin"],
+            "summary": "Query anomaly alerts with escalation and SLA state",
+            "operationId": HttpOperation::ListAnomalyAlerts.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/VendorIdFilterQuery" },
+              { "$ref": "#/components/parameters/AnomalyOwnerActorIdFilterQuery" },
+              { "$ref": "#/components/parameters/AnomalyAlertStatusFilterQuery" },
+              { "$ref": "#/components/parameters/AnomalyEscalatedOnlyFilterQuery" },
+              { "$ref": "#/components/parameters/AnomalySlaStatusFilterQuery" },
+              { "$ref": "#/components/parameters/AnomalyAsOfEpochDayQuery" },
+              { "$ref": "#/components/parameters/AnomalyAsOfMinuteOfDayQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Anomaly alerts that satisfy the supplied filters",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/AnomalyAlertListResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/admin/anomaly/alerts/{alertId}": {
+          "patch": {
+            "tags": ["Admin"],
+            "summary": "Assign owner and advance anomaly remediation lifecycle",
+            "operationId": HttpOperation::UpdateAdminAnomalyAlert.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/AnomalyAlertIdPath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/AdminAnomalyAlertPatchRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Updated anomaly alert lifecycle record",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/AnomalyAlert" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "409": { "$ref": "#/components/responses/Conflict" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
         "/api/v1/admin/payroll/disputes/{disputeId}": {
           "patch": {
             "tags": ["Admin"],
@@ -1817,6 +2007,50 @@ pub fn canonical_openapi_spec() -> Value {
               "maxLength": 256
             }
           },
+          "AnomalyOwnerActorIdFilterQuery": {
+            "name": "ownerActorId",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/ActorId" }
+          },
+          "AnomalyAlertStatusFilterQuery": {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/AnomalyAlertStatus" }
+          },
+          "AnomalyEscalatedOnlyFilterQuery": {
+            "name": "escalatedOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          "AnomalySlaStatusFilterQuery": {
+            "name": "slaStatus",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/AnomalySlaStatus" }
+          },
+          "AnomalyAsOfEpochDayQuery": {
+            "name": "asOfEpochDay",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "AnomalyAsOfMinuteOfDayQuery": {
+            "name": "asOfMinuteOfDay",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1439
+            }
+          },
           "OrderIdPath": {
             "name": "orderId",
             "in": "path",
@@ -1824,6 +2058,24 @@ pub fn canonical_openapi_spec() -> Value {
             "schema": {
               "type": "string",
               "pattern": "^ord-[a-z0-9]{8,32}$"
+            }
+          },
+          "AnomalyRuleIdPath": {
+            "name": "ruleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^rule-[a-z0-9-]{3,64}$"
+            }
+          },
+          "AnomalyAlertIdPath": {
+            "name": "alertId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^alt-[0-9a-f]{16}$"
             }
           },
           "DisputeIdPath": {
@@ -2011,7 +2263,12 @@ pub fn canonical_openapi_spec() -> Value {
               "UNLOCK_PAYROLL_SETTLEMENT_CYCLE",
               "SYNC_PAYROLL_HR_API_ADJUNCT",
               "PURGE_PAYROLL_DATA",
-              "PURGE_ORDER_DATA"
+              "PURGE_ORDER_DATA",
+              "UPSERT_ANOMALY_DETECTION_RULE",
+              "TRIGGER_ANOMALY_ALERT",
+              "ASSIGN_ANOMALY_ALERT_OWNER",
+              "ADVANCE_ANOMALY_ALERT_STATUS",
+              "CLOSE_ANOMALY_ALERT"
             ]
           },
           "AuditEntityType": {
@@ -2029,7 +2286,9 @@ pub fn canonical_openapi_spec() -> Value {
               "PAYROLL_LEDGER_ENTRY",
               "PAYROLL_DISPUTE",
               "PAYROLL_EXCHANGE_BATCH",
-              "PAYROLL_DATA_RETENTION"
+              "PAYROLL_DATA_RETENTION",
+              "ANOMALY_RULE",
+              "ANOMALY_ALERT"
             ]
           },
           "AuditEntityRef": {
@@ -3310,6 +3569,284 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "additionalProperties": false
           },
+          "AnomalyRuleKind": {
+            "type": "string",
+            "enum": [
+              "EXPIRY_RISK",
+              "ON_TIME_DEGRADATION",
+              "SATISFACTION_DROP",
+              "COMPLAINT_SPIKE"
+            ]
+          },
+          "AnomalyThresholdComparator": {
+            "type": "string",
+            "enum": ["LT", "LTE", "GT", "GTE"]
+          },
+          "AnomalyAlertSeverity": {
+            "type": "string",
+            "enum": ["WARNING", "CRITICAL"]
+          },
+          "AnomalyAlertStatus": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "ACKNOWLEDGED",
+              "REMEDIATION_IN_PROGRESS",
+              "ESCALATED",
+              "CLOSED"
+            ]
+          },
+          "AnomalySlaStatus": {
+            "type": "string",
+            "enum": ["ON_TRACK", "BREACHED"]
+          },
+          "AnomalyAlertTraceEventType": {
+            "type": "string",
+            "enum": [
+              "TRIGGERED",
+              "OWNER_ASSIGNED",
+              "STATUS_TRANSITIONED",
+              "CLOSED"
+            ]
+          },
+          "AnomalyRule": {
+            "type": "object",
+            "required": [
+              "ruleId",
+              "kind",
+              "displayName",
+              "description",
+              "governanceIssueId",
+              "enabled",
+              "thresholdValue",
+              "thresholdComparator",
+              "evaluationWindowDays",
+              "slaMinutes",
+              "severity"
+            ],
+            "properties": {
+              "ruleId": { "type": "string", "pattern": "^rule-[a-z0-9-]{3,64}$" },
+              "kind": { "$ref": "#/components/schemas/AnomalyRuleKind" },
+              "displayName": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "description": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "governanceIssueId": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "enabled": { "type": "boolean" },
+              "thresholdValue": { "type": "number", "minimum": 0 },
+              "thresholdComparator": { "$ref": "#/components/schemas/AnomalyThresholdComparator" },
+              "evaluationWindowDays": { "type": "integer", "minimum": 1, "maximum": 3650 },
+              "slaMinutes": { "type": "integer", "minimum": 1 },
+              "severity": { "$ref": "#/components/schemas/AnomalyAlertSeverity" }
+            },
+            "additionalProperties": false
+          },
+          "AnomalyRuleListResponse": {
+            "type": "object",
+            "required": ["items"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AnomalyRule" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "AnomalyRuleUpsertRequest": {
+            "type": "object",
+            "required": [
+              "kind",
+              "displayName",
+              "description",
+              "governanceIssueId",
+              "enabled",
+              "thresholdValue",
+              "thresholdComparator",
+              "evaluationWindowDays",
+              "slaMinutes",
+              "severity"
+            ],
+            "properties": {
+              "kind": { "$ref": "#/components/schemas/AnomalyRuleKind" },
+              "displayName": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "description": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "governanceIssueId": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "enabled": { "type": "boolean" },
+              "thresholdValue": { "type": "number", "minimum": 0 },
+              "thresholdComparator": { "$ref": "#/components/schemas/AnomalyThresholdComparator" },
+              "evaluationWindowDays": { "type": "integer", "minimum": 1, "maximum": 3650 },
+              "slaMinutes": { "type": "integer", "minimum": 1 },
+              "severity": { "$ref": "#/components/schemas/AnomalyAlertSeverity" }
+            },
+            "additionalProperties": false
+          },
+          "AnomalyAlertEvaluationRequest": {
+            "type": "object",
+            "required": ["vendorId"],
+            "properties": {
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "observedAtEpochDay": { "type": "integer" },
+              "observedAtMinuteOfDay": { "type": "integer", "minimum": 0, "maximum": 1439 },
+              "daysUntilExpiry": { "type": "number", "minimum": 0 },
+              "onTimeRate": { "type": "number", "minimum": 0, "maximum": 1 },
+              "satisfactionScore": { "type": "number", "minimum": 0, "maximum": 5 },
+              "complaintCount": { "type": "number", "minimum": 0 },
+              "defaultOwnerActorId": { "$ref": "#/components/schemas/ActorId" }
+            },
+            "additionalProperties": false
+          },
+          "AnomalyAlertTraceEvent": {
+            "type": "object",
+            "required": ["occurredAt", "actorId", "eventType", "status"],
+            "properties": {
+              "occurredAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "actorId": { "$ref": "#/components/schemas/ActorId" },
+              "eventType": { "$ref": "#/components/schemas/AnomalyAlertTraceEventType" },
+              "status": { "$ref": "#/components/schemas/AnomalyAlertStatus" },
+              "note": { "type": "string", "maxLength": 280 }
+            },
+            "additionalProperties": false
+          },
+          "AnomalyAlert": {
+            "type": "object",
+            "required": [
+              "alertId",
+              "vendorId",
+              "ruleId",
+              "ruleKind",
+              "ruleDisplayName",
+              "governanceIssueId",
+              "status",
+              "ownerActorId",
+              "severity",
+              "observedValue",
+              "thresholdValue",
+              "thresholdComparator",
+              "observedAt",
+              "openedAt",
+              "updatedAt",
+              "slaDueAt",
+              "slaStatus",
+              "closureEvidenceRefs",
+              "trace"
+            ],
+            "properties": {
+              "alertId": { "type": "string", "pattern": "^alt-[0-9a-f]{16}$" },
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "ruleId": { "type": "string", "pattern": "^rule-[a-z0-9-]{3,64}$" },
+              "ruleKind": { "$ref": "#/components/schemas/AnomalyRuleKind" },
+              "ruleDisplayName": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "governanceIssueId": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "status": { "$ref": "#/components/schemas/AnomalyAlertStatus" },
+              "ownerActorId": { "$ref": "#/components/schemas/ActorId" },
+              "severity": { "$ref": "#/components/schemas/AnomalyAlertSeverity" },
+              "observedValue": { "type": "number" },
+              "thresholdValue": { "type": "number", "minimum": 0 },
+              "thresholdComparator": { "$ref": "#/components/schemas/AnomalyThresholdComparator" },
+              "observedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "openedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "updatedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "slaDueAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "slaStatus": { "$ref": "#/components/schemas/AnomalySlaStatus" },
+              "escalatedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "closedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "closureNote": { "type": "string", "maxLength": 280 },
+              "closureEvidenceRefs": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1, "maxLength": 280 }
+              },
+              "ticketReference": { "type": "string", "maxLength": 128 },
+              "trace": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AnomalyAlertTraceEvent" },
+                "minItems": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "AnomalyAlertEvaluationResponse": {
+            "type": "object",
+            "required": ["triggeredAlerts"],
+            "properties": {
+              "triggeredAlerts": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AnomalyAlert" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "AnomalyAlertListResponse": {
+            "type": "object",
+            "required": ["items"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AnomalyAlert" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "AdminAnomalyAlertAssignOwnerPatchRequest": {
+            "type": "object",
+            "required": ["operation", "ownerActorId"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["ASSIGN_OWNER"] },
+              "ownerActorId": { "$ref": "#/components/schemas/ActorId" },
+              "note": { "type": "string", "maxLength": 280 }
+            },
+            "additionalProperties": false
+          },
+          "AdminAnomalyAlertAcknowledgePatchRequest": {
+            "type": "object",
+            "required": ["operation"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["ACKNOWLEDGE"] },
+              "note": { "type": "string", "maxLength": 280 }
+            },
+            "additionalProperties": false
+          },
+          "AdminAnomalyAlertStartRemediationPatchRequest": {
+            "type": "object",
+            "required": ["operation"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["START_REMEDIATION"] },
+              "note": { "type": "string", "maxLength": 280 }
+            },
+            "additionalProperties": false
+          },
+          "AdminAnomalyAlertEscalatePatchRequest": {
+            "type": "object",
+            "required": ["operation"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["ESCALATE"] },
+              "note": { "type": "string", "maxLength": 280 }
+            },
+            "additionalProperties": false
+          },
+          "AdminAnomalyAlertClosePatchRequest": {
+            "type": "object",
+            "required": ["operation", "closureNote", "closureEvidenceRefs"],
+            "properties": {
+              "operation": { "type": "string", "enum": ["CLOSE"] },
+              "note": { "type": "string", "maxLength": 280 },
+              "closureNote": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "closureEvidenceRefs": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1, "maxLength": 280 },
+                "minItems": 1
+              },
+              "ticketReference": { "type": "string", "maxLength": 128 }
+            },
+            "additionalProperties": false
+          },
+          "AdminAnomalyAlertPatchRequest": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/AdminAnomalyAlertAssignOwnerPatchRequest" },
+              { "$ref": "#/components/schemas/AdminAnomalyAlertAcknowledgePatchRequest" },
+              { "$ref": "#/components/schemas/AdminAnomalyAlertStartRemediationPatchRequest" },
+              { "$ref": "#/components/schemas/AdminAnomalyAlertEscalatePatchRequest" },
+              { "$ref": "#/components/schemas/AdminAnomalyAlertClosePatchRequest" }
+            ],
+            "description": "Governed anomaly alert lifecycle command."
+          },
           "PayrollLedgerEntryKind": {
             "type": "string",
             "enum": [
@@ -3774,6 +4311,7 @@ pub fn canonical_openapi_spec() -> Value {
               "AUDIT_RETENTION_PURGE_INTERNAL_ERROR",
               "ORDER_RETENTION_PURGE_INTERNAL_ERROR",
               "PAYROLL_LEDGER_INTERNAL_ERROR",
+              "ANOMALY_ALERT_INTERNAL_ERROR",
               "VENDOR_FULFILLMENT_INVALID_REQUEST",
               "VENDOR_FULFILLMENT_STATUS_CONFLICT",
               "VENDOR_FULFILLMENT_BATCH_NOT_FOUND"
