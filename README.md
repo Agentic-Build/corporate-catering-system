@@ -51,6 +51,10 @@ Default startup behavior:
 
 - `make dev` and `make dev-app` automatically run `sqlx migrate run` before starting the runtime service.
 
+CI gate:
+
+- `.github/workflows/postgresql-migration-foundation.yml` runs the real-PostgreSQL migration up/down and invariant verifier on pull requests and `main`.
+
 ## OpenAPI Contract Platform
 
 Canonical HTTP contract artifacts are generated from the Rust contract module and committed under `contract/`.

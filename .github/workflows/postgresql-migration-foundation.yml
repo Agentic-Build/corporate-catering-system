@@ -1,0 +1,24 @@
+name: PostgreSQL Migration Foundation Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  migration-foundation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres,rustls
+
+      - name: Verify sqlx migration lifecycle and invariants
+        run: ./scripts/check-sqlx-migrations.sh
