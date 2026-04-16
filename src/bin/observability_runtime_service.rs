@@ -3978,8 +3978,7 @@ fn parse_contract_anomaly_rule_id(value: &str) -> Result<AnomalyRuleId, String> 
 }
 
 fn parse_contract_anomaly_alert_id(value: &str) -> Result<AnomalyAlertId, String> {
-    let trimmed = value.trim();
-    let Some(suffix) = trimmed.strip_prefix("alt-") else {
+    let Some(suffix) = value.strip_prefix("alt-") else {
         return Err("must start with `alt-`".to_owned());
     };
     if suffix.len() != 16 {
@@ -3991,7 +3990,7 @@ fn parse_contract_anomaly_alert_id(value: &str) -> Result<AnomalyAlertId, String
     {
         return Err("suffix must contain only lowercase hex digits".to_owned());
     }
-    AnomalyAlertId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
+    AnomalyAlertId::parse(value.to_owned()).map_err(|error| error.to_string())
 }
 
 fn resolve_anomaly_observed_at_timestamp(
@@ -6819,6 +6818,30 @@ mod tests {
             assert!(
                 parse_contract_anomaly_rule_id(&candidate).is_err(),
                 "expected `{candidate}` to be rejected by contract rule id parser"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_contract_anomaly_alert_id_enforces_openapi_pattern() {
+        let parsed = parse_contract_anomaly_alert_id("alt-0123456789abcdef")
+            .expect("contract-conformant anomaly alert id should parse");
+        assert_eq!(parsed.as_str(), "alt-0123456789abcdef");
+
+        let invalid_cases = vec![
+            "".to_owned(),
+            "alt-".to_owned(),
+            "alt-0123456789abcde".to_owned(),
+            "alt-0123456789abcdef0".to_owned(),
+            "alt-0123456789abcdeg".to_owned(),
+            "ALT-0123456789abcdef".to_owned(),
+            " alt-0123456789abcdef".to_owned(),
+            "alt-0123456789abcdef ".to_owned(),
+        ];
+        for candidate in invalid_cases {
+            assert!(
+                parse_contract_anomaly_alert_id(&candidate).is_err(),
+                "expected `{candidate}` to be rejected by contract alert id parser"
             );
         }
     }

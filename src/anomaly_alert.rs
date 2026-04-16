@@ -56,11 +56,19 @@ pub struct AnomalyAlertId(String);
 impl AnomalyAlertId {
     pub fn parse(value: impl Into<String>) -> Result<Self, AnomalyAlertError> {
         let value = value.into();
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
+        let Some(suffix) = value.strip_prefix("alt-") else {
+            return Err(AnomalyAlertError::InvalidAlertId);
+        };
+        if suffix.len() != 16 {
             return Err(AnomalyAlertError::InvalidAlertId);
         }
-        Ok(Self(trimmed.to_owned()))
+        if !suffix
+            .chars()
+            .all(|ch| ch.is_ascii_digit() || ('a'..='f').contains(&ch))
+        {
+            return Err(AnomalyAlertError::InvalidAlertId);
+        }
+        Ok(Self(value))
     }
 
     pub fn as_str(&self) -> &str {
@@ -966,11 +974,7 @@ impl AnomalyAlertWorkflow {
                     rule.threshold_comparator().as_str(),
                     default_owner_actor_id.as_str(),
                 ),
-                AuditCorrelationId::parse(format!(
-                    "anomaly-alert:{}:{}",
-                    snapshot.vendor_id().as_str(),
-                    rule.rule_id().as_str()
-                ))
+                AuditCorrelationId::parse(format!("anomaly-alert:{}", alert_id.as_str()))
                 .map_err(AnomalyAlertError::AuditTrail)?,
                 opened_at,
             ) {
@@ -1442,7 +1446,9 @@ impl fmt::Display for AnomalyAlertError {
             Self::InvalidRuleId => {
                 f.write_str("anomaly rule id must match `^rule-[a-z0-9-]{3,64}$`")
             }
-            Self::InvalidAlertId => f.write_str("anomaly alert id must not be empty"),
+            Self::InvalidAlertId => {
+                f.write_str("anomaly alert id must match `^alt-[0-9a-f]{16}$`")
+            }
             Self::InvalidRuleText { field } => write!(
                 f,
                 "anomaly rule field `{field}` must be non-empty and at most {MAX_RULE_TEXT_LENGTH} chars"
@@ -1589,6 +1595,30 @@ mod tests {
     }
 
     #[test]
+    fn anomaly_alert_id_parse_enforces_contract_pattern() {
+        let valid = AnomalyAlertId::parse("alt-0123456789abcdef")
+            .expect("contract-conformant anomaly alert id should parse");
+        assert_eq!(valid.as_str(), "alt-0123456789abcdef");
+
+        let invalid_cases = vec![
+            "".to_owned(),
+            "alt-".to_owned(),
+            "alt-0123456789abcde".to_owned(),
+            "alt-0123456789abcdef0".to_owned(),
+            "alt-0123456789abcdeg".to_owned(),
+            "ALT-0123456789abcdef".to_owned(),
+            " alt-0123456789abcdef".to_owned(),
+            "alt-0123456789abcdef ".to_owned(),
+        ];
+        for candidate in invalid_cases {
+            assert!(
+                AnomalyAlertId::parse(candidate.clone()).is_err(),
+                "expected `{candidate}` to be rejected by anomaly alert id parser"
+            );
+        }
+    }
+
+    #[test]
     fn workflow_tracks_owner_lifecycle_sla_and_audit() {
         let committee = committee_actor();
         let default_owner = actor_id("anomaly-owner-default");
@@ -1687,6 +1717,26 @@ mod tests {
         assert_eq!(
             close_events[0].entity().entity_type(),
             AuditEntityType::AnomalyAlert
+        );
+
+        let alert_correlation_events = audit_trail
+            .investigation_query(
+                &committee,
+                &AuditInvestigationFilter::default()
+                    .with_entity(AuditEntityType::AnomalyAlert, alert.alert_id().as_str())
+                    .expect("alert entity filter should be valid"),
+            )
+            .expect("anomaly alert events should be queryable");
+        let alert_correlation_ids = alert_correlation_events
+            .iter()
+            .map(|event| event.correlation_id().as_str().to_owned())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            alert_correlation_ids,
+            std::collections::BTreeSet::from([format!(
+                "anomaly-alert:{}",
+                alert.alert_id().as_str()
+            )])
         );
     }
 }

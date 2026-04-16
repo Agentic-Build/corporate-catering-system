@@ -1104,6 +1104,10 @@ fn anomaly_alert_workflow_contract_exposes_governance_endpoints_and_schemas() {
         upsert_rule_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
         "#/components/schemas/AnomalyRuleUpsertRequest"
     );
+    assert_eq!(
+        spec["components"]["parameters"]["AnomalyRuleIdPath"]["schema"]["pattern"].as_str(),
+        Some("^rule-[a-z0-9-]{3,64}$")
+    );
 
     let evaluate_operation =
         operation_by_path_and_method(&spec, "/api/v1/admin/anomaly/alerts/evaluations", "post");
@@ -1178,6 +1182,10 @@ fn anomaly_alert_workflow_contract_exposes_governance_endpoints_and_schemas() {
     assert_eq!(
         update_alert_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
         "#/components/schemas/AdminAnomalyAlertPatchRequest"
+    );
+    assert_eq!(
+        spec["components"]["parameters"]["AnomalyAlertIdPath"]["schema"]["pattern"].as_str(),
+        Some("^alt-[0-9a-f]{16}$")
     );
     for schema_name in [
         "AdminAnomalyAlertAssignOwnerPatchRequest",
