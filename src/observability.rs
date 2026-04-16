@@ -525,7 +525,15 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
             "POST",
         ),
         "listVendorOrders" => ("/api/v1/vendor/orders", "GET"),
+        "listVendorFulfillmentBoard" => ("/api/v1/vendor/fulfillment-board", "GET"),
         "upsertVendorMenuItem" => ("/api/v1/vendor/menu-items/{menuItemId}", "PUT"),
+        "advanceVendorFulfillmentDeliveryStatus" => {
+            ("/api/v1/vendor/orders/{orderId}/delivery-status", "POST")
+        }
+        "createVendorFulfillmentExportBatch" => ("/api/v1/vendor/fulfillment-batches", "POST"),
+        "getVendorFulfillmentExportBatch" => {
+            ("/api/v1/vendor/fulfillment-batches/{batchId}", "GET")
+        }
         "listAdminVendors" => ("/api/v1/admin/vendors", "GET"),
         "listVendorPlantDeliveryMappings" => {
             ("/api/v1/admin/vendor-plant-delivery-mappings", "GET")

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
-use crate::identity::{AuthenticatedActorContext, Role};
+use crate::identity::{AuthenticatedActorContext, PlantId, Role};
 use crate::vendor_compliance::VendorId;
 use crate::vendor_delivery_mapping::TaipeiBusinessMoment;
 
@@ -807,9 +807,11 @@ impl OrderTimelineEvent {
 pub struct OrderSnapshot {
     order_id: OrderId,
     vendor_id: VendorId,
+    plant_id: PlantId,
     delivery_epoch_day: i32,
     state: OrderLifecycleState,
     line_items: BTreeMap<MenuItemId, u16>,
+    special_requests_by_menu_item: BTreeMap<MenuItemId, BTreeSet<SpecialRequest>>,
     timeline: Vec<OrderTimelineEvent>,
     inventory_reserved: bool,
 }
@@ -821,6 +823,10 @@ impl OrderSnapshot {
 
     pub fn vendor_id(&self) -> &VendorId {
         &self.vendor_id
+    }
+
+    pub fn plant_id(&self) -> &PlantId {
+        &self.plant_id
     }
 
     pub fn delivery_epoch_day(&self) -> i32 {
@@ -835,6 +841,10 @@ impl OrderSnapshot {
         &self.line_items
     }
 
+    pub fn special_requests_by_menu_item(&self) -> &BTreeMap<MenuItemId, BTreeSet<SpecialRequest>> {
+        &self.special_requests_by_menu_item
+    }
+
     pub fn timeline(&self) -> &[OrderTimelineEvent] {
         &self.timeline
     }
@@ -847,11 +857,19 @@ impl OrderSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct StoredOrder {
     vendor_id: VendorId,
+    plant_id: PlantId,
     delivery_epoch_day: i32,
     state: OrderLifecycleState,
     line_items: BTreeMap<MenuItemId, u16>,
+    special_requests_by_menu_item: BTreeMap<MenuItemId, BTreeSet<SpecialRequest>>,
     timeline: Vec<OrderTimelineEvent>,
     inventory_reserved: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AggregatedOrderLineItems {
+    quantities: BTreeMap<MenuItemId, u16>,
+    special_requests_by_menu_item: BTreeMap<MenuItemId, BTreeSet<SpecialRequest>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1080,9 +1098,11 @@ impl MenuSupplyPolicy {
             .map(|stored_order| OrderSnapshot {
                 order_id: order_id.clone(),
                 vendor_id: stored_order.vendor_id.clone(),
+                plant_id: stored_order.plant_id.clone(),
                 delivery_epoch_day: stored_order.delivery_epoch_day,
                 state: stored_order.state,
                 line_items: stored_order.line_items.clone(),
+                special_requests_by_menu_item: stored_order.special_requests_by_menu_item.clone(),
                 timeline: stored_order.timeline.clone(),
                 inventory_reserved: stored_order.inventory_reserved,
             }))
@@ -1097,10 +1117,45 @@ impl MenuSupplyPolicy {
             .map(|snapshot| snapshot.timeline))
     }
 
+    pub fn order_snapshots_for_vendor_delivery_day(
+        &self,
+        vendor_id: &VendorId,
+        delivery_epoch_day: i32,
+    ) -> Result<Vec<OrderSnapshot>, MenuSupplyWindowError> {
+        let state = lock_state(&self.state)?;
+        let mut snapshots = state
+            .orders
+            .iter()
+            .filter_map(|(order_id, stored_order)| {
+                if stored_order.vendor_id != *vendor_id
+                    || stored_order.delivery_epoch_day != delivery_epoch_day
+                {
+                    return None;
+                }
+                Some(OrderSnapshot {
+                    order_id: order_id.clone(),
+                    vendor_id: stored_order.vendor_id.clone(),
+                    plant_id: stored_order.plant_id.clone(),
+                    delivery_epoch_day: stored_order.delivery_epoch_day,
+                    state: stored_order.state,
+                    line_items: stored_order.line_items.clone(),
+                    special_requests_by_menu_item: stored_order
+                        .special_requests_by_menu_item
+                        .clone(),
+                    timeline: stored_order.timeline.clone(),
+                    inventory_reserved: stored_order.inventory_reserved,
+                })
+            })
+            .collect::<Vec<_>>();
+        snapshots.sort_by(|left, right| left.order_id().cmp(right.order_id()));
+        Ok(snapshots)
+    }
+
     pub fn create_order(
         &self,
         order_id: OrderId,
         vendor_id: &VendorId,
+        plant_id: &PlantId,
         delivery_epoch_day: i32,
         line_items: Vec<OrderLineItemRequest>,
         placed_at: TaipeiBusinessMoment,
@@ -1114,8 +1169,11 @@ impl MenuSupplyPolicy {
         )?;
         if let Some(existing_order) = state.orders.get(&order_id) {
             if existing_order.vendor_id == *vendor_id
+                && existing_order.plant_id == *plant_id
                 && existing_order.delivery_epoch_day == delivery_epoch_day
-                && existing_order.line_items == aggregated_line_items
+                && existing_order.line_items == aggregated_line_items.quantities
+                && existing_order.special_requests_by_menu_item
+                    == aggregated_line_items.special_requests_by_menu_item
                 && existing_order.state == OrderLifecycleState::Pending
                 && existing_order.inventory_reserved
             {
@@ -1129,21 +1187,23 @@ impl MenuSupplyPolicy {
         self.ensure_quota_capacity_for_transition_locked(
             &state,
             &current_allocations,
-            &aggregated_line_items,
+            &aggregated_line_items.quantities,
         )?;
         self.apply_allocation_transition_locked(
             &mut state,
             &current_allocations,
-            &aggregated_line_items,
+            &aggregated_line_items.quantities,
         )?;
 
         state.orders.insert(
             order_id,
             StoredOrder {
                 vendor_id: vendor_id.clone(),
+                plant_id: plant_id.clone(),
                 delivery_epoch_day,
                 state: OrderLifecycleState::Pending,
-                line_items: aggregated_line_items,
+                line_items: aggregated_line_items.quantities,
+                special_requests_by_menu_item: aggregated_line_items.special_requests_by_menu_item,
                 timeline: vec![OrderTimelineEvent::new(
                     placed_at,
                     OrderTimelineEventType::Created,
@@ -1237,7 +1297,10 @@ impl MenuSupplyPolicy {
                     &line_items,
                 )?;
 
-                if stored_order.line_items == next_line_items {
+                if stored_order.line_items == next_line_items.quantities
+                    && stored_order.special_requests_by_menu_item
+                        == next_line_items.special_requests_by_menu_item
+                {
                     return Ok(());
                 }
                 if !stored_order.inventory_reserved {
@@ -1256,16 +1319,18 @@ impl MenuSupplyPolicy {
                 self.ensure_quota_capacity_for_transition_locked(
                     &state,
                     &stored_order.line_items,
-                    &next_line_items,
+                    &next_line_items.quantities,
                 )?;
                 self.apply_allocation_transition_locked(
                     &mut state,
                     &stored_order.line_items,
-                    &next_line_items,
+                    &next_line_items.quantities,
                 )?;
 
                 let mut next_order = stored_order.clone();
-                next_order.line_items = next_line_items;
+                next_order.line_items = next_line_items.quantities;
+                next_order.special_requests_by_menu_item =
+                    next_line_items.special_requests_by_menu_item;
                 next_order.state = OrderLifecycleState::Modified;
                 next_order.timeline.push(OrderTimelineEvent::new(
                     requested_at,
@@ -1473,12 +1538,14 @@ impl MenuSupplyPolicy {
         vendor_id: &VendorId,
         delivery_epoch_day: i32,
         line_items: &[OrderLineItemRequest],
-    ) -> Result<BTreeMap<MenuItemId, u16>, MenuSupplyWindowError> {
+    ) -> Result<AggregatedOrderLineItems, MenuSupplyWindowError> {
         if line_items.is_empty() {
             return Err(MenuSupplyWindowError::EmptyOrderLineItems);
         }
 
-        let mut aggregated_line_items = BTreeMap::<MenuItemId, u16>::new();
+        let mut quantities = BTreeMap::<MenuItemId, u16>::new();
+        let mut special_requests_by_menu_item =
+            BTreeMap::<MenuItemId, BTreeSet<SpecialRequest>>::new();
         for line_item in line_items {
             let menu_item = state
                 .menu_items
@@ -1501,7 +1568,7 @@ impl MenuSupplyPolicy {
                 });
             }
 
-            if aggregated_line_items
+            if quantities
                 .insert(line_item.menu_item_id().clone(), line_item.quantity())
                 .is_some()
             {
@@ -1509,9 +1576,16 @@ impl MenuSupplyPolicy {
                     menu_item_id: line_item.menu_item_id().clone(),
                 });
             }
+            special_requests_by_menu_item.insert(
+                line_item.menu_item_id().clone(),
+                line_item.special_requests().clone(),
+            );
         }
 
-        Ok(aggregated_line_items)
+        Ok(AggregatedOrderLineItems {
+            quantities,
+            special_requests_by_menu_item,
+        })
     }
 
     fn ensure_quota_capacity_for_transition_locked(

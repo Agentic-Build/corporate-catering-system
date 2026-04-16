@@ -14,6 +14,10 @@ use crate::vendor_compliance::{VendorComplianceLifecycle, VendorId};
 use crate::vendor_delivery_mapping::{
     TaipeiBusinessMoment, VendorPlantDeliveryError, VendorPlantDeliveryPolicy,
 };
+use crate::vendor_fulfillment::{
+    FulfillmentBatchId, FulfillmentDeliveryStatus, VendorFulfillmentBatchSnapshot,
+    VendorFulfillmentBoardSnapshot, VendorFulfillmentError, VendorFulfillmentPolicy,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RuntimeHttpRoute {
@@ -44,7 +48,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 15] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 19] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -67,9 +71,29 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 15] = [
     ),
     RuntimeHttpRoute::new(HttpMethod::Get, "/api/v1/vendor/orders", "listVendorOrders"),
     RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/vendor/fulfillment-board",
+        "listVendorFulfillmentBoard",
+    ),
+    RuntimeHttpRoute::new(
         HttpMethod::Put,
         "/api/v1/vendor/menu-items/{menuItemId}",
         "upsertVendorMenuItem",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/vendor/orders/{orderId}/delivery-status",
+        "advanceVendorFulfillmentDeliveryStatus",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/vendor/fulfillment-batches",
+        "createVendorFulfillmentExportBatch",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/vendor/fulfillment-batches/{batchId}",
+        "getVendorFulfillmentExportBatch",
     ),
     RuntimeHttpRoute::new(HttpMethod::Get, "/api/v1/admin/vendors", "listAdminVendors"),
     RuntimeHttpRoute::new(
@@ -328,7 +352,14 @@ impl<'a> HttpOrderingExecutionGateway<'a> {
                 .map_err(HttpOrderExecutionError::Deliverability)?;
 
             self.menu_supply_policy
-                .create_order(order_id, vendor_id, delivery_epoch_day, line_items, at)
+                .create_order(
+                    order_id,
+                    vendor_id,
+                    plant_id,
+                    delivery_epoch_day,
+                    line_items,
+                    at,
+                )
                 .map_err(HttpOrderExecutionError::MenuSupply)?;
 
             Ok(())
@@ -466,6 +497,117 @@ impl<'a> HttpVendorMenuExecutionGateway<'a> {
             None,
         );
         let result = self.menu_supply_policy.upsert_menu_item(actor, menu_item);
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
+    }
+}
+
+pub struct HttpVendorFulfillmentExecutionGateway<'a> {
+    fulfillment_policy: &'a VendorFulfillmentPolicy,
+    menu_supply_policy: &'a MenuSupplyPolicy,
+}
+
+impl<'a> HttpVendorFulfillmentExecutionGateway<'a> {
+    pub fn new(
+        fulfillment_policy: &'a VendorFulfillmentPolicy,
+        menu_supply_policy: &'a MenuSupplyPolicy,
+    ) -> Self {
+        Self {
+            fulfillment_policy,
+            menu_supply_policy,
+        }
+    }
+
+    pub fn execute_vendor_operations_board(
+        &self,
+        vendor_id: &VendorId,
+        delivery_epoch_day: i32,
+        at: TaipeiBusinessMoment,
+    ) -> Result<VendorFulfillmentBoardSnapshot, VendorFulfillmentError> {
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
+            "listVendorFulfillmentBoard",
+            None,
+            None,
+        );
+        let result = self.fulfillment_policy.vendor_operations_board(
+            self.menu_supply_policy,
+            vendor_id,
+            delivery_epoch_day,
+            at,
+        );
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
+    }
+
+    pub fn execute_transition_delivery_status(
+        &self,
+        actor: &AuthenticatedActorContext,
+        order_id: &OrderId,
+        to_status: FulfillmentDeliveryStatus,
+        at: TaipeiBusinessMoment,
+    ) -> Result<(), VendorFulfillmentError> {
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
+            "advanceVendorFulfillmentDeliveryStatus",
+            Some(actor.actor_id().as_str()),
+            None,
+        );
+        let result = self
+            .fulfillment_policy
+            .transition_delivery_status(actor, self.menu_supply_policy, order_id, to_status, at)
+            .map(|_| ());
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
+    }
+
+    pub fn execute_create_export_batch(
+        &self,
+        actor: &AuthenticatedActorContext,
+        vendor_id: &VendorId,
+        delivery_epoch_day: i32,
+        captured_at: TaipeiBusinessMoment,
+    ) -> Result<VendorFulfillmentBatchSnapshot, VendorFulfillmentError> {
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
+            "createVendorFulfillmentExportBatch",
+            Some(actor.actor_id().as_str()),
+            None,
+        );
+        let result = self.fulfillment_policy.create_export_batch(
+            actor,
+            self.menu_supply_policy,
+            vendor_id,
+            delivery_epoch_day,
+            captured_at,
+        );
+        telemetry.finish(if result.is_ok() {
+            TelemetryOutcome::Success
+        } else {
+            TelemetryOutcome::Error
+        });
+        result
+    }
+
+    pub fn execute_get_export_batch(
+        &self,
+        batch_id: &FulfillmentBatchId,
+    ) -> Result<VendorFulfillmentBatchSnapshot, VendorFulfillmentError> {
+        let telemetry = TelemetryService::HttpApi.begin_internal_operation(
+            "getVendorFulfillmentExportBatch",
+            None,
+            None,
+        );
+        let result = self.fulfillment_policy.batch_snapshot(batch_id);
         telemetry.finish(if result.is_ok() {
             TelemetryOutcome::Success
         } else {

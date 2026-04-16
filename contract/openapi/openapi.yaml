@@ -1,5 +1,20 @@
 components:
   parameters:
+    BatchIdPath:
+      in: path
+      name: batchId
+      required: true
+      schema:
+        pattern: ^fbatch-[0-9-]{3,64}$
+        type: string
+    DeliveryDateQuery:
+      description: Target delivery date in Asia/Taipei for fulfillment board and export snapshots.
+      in: query
+      name: deliveryDate
+      required: true
+      schema:
+        format: date
+        type: string
     DiscoveryViewQuery:
       in: query
       name: view
@@ -19,6 +34,14 @@ components:
       required: false
       schema:
         $ref: '#/components/schemas/MenuHealthTag'
+    IncludeAuditTransitionsQuery:
+      description: When false, omits status transition audit entries from fulfillment board payload.
+      in: query
+      name: includeAuditTransitions
+      required: false
+      schema:
+        default: true
+        type: boolean
     MappingIdPath:
       in: path
       name: mappingId
@@ -422,6 +445,9 @@ components:
       - PICKUP_VERIFICATION_INVALID_CODE
       - PICKUP_VERIFICATION_INTERNAL_ERROR
       - ORDER_NOT_FOUND
+      - VENDOR_FULFILLMENT_INVALID_REQUEST
+      - VENDOR_FULFILLMENT_STATUS_CONFLICT
+      - VENDOR_FULFILLMENT_BATCH_NOT_FOUND
       type: string
     ErrorDetail:
       additionalProperties: false
@@ -797,6 +823,18 @@ components:
       - asc
       - desc
       type: string
+    SpecialRequestCount:
+      additionalProperties: false
+      properties:
+        count:
+          minimum: 0
+          type: integer
+        specialRequest:
+          $ref: '#/components/schemas/SpecialRequestOption'
+      required:
+      - specialRequest
+      - count
+      type: object
     SpecialRequestOption:
       description: Controlled special-request options. Free-text instructions are intentionally disabled pending final policy clarification.
       enum:
@@ -1051,6 +1089,423 @@ components:
       required:
       - items
       - page
+      type: object
+    VendorFulfillmentBasketEntry:
+      additionalProperties: false
+      properties:
+        basketCode:
+          maxLength: 64
+          minLength: 1
+          type: string
+        orderIds:
+          items:
+            pattern: ^ord-[a-z0-9]{8,32}$
+            type: string
+          minItems: 1
+          type: array
+        plantId:
+          $ref: '#/components/schemas/PlantId'
+        portionCount:
+          minimum: 0
+          type: integer
+      required:
+      - basketCode
+      - plantId
+      - orderIds
+      - portionCount
+      type: object
+    VendorFulfillmentBasketListExport:
+      additionalProperties: false
+      properties:
+        basketCapacityPortions:
+          maximum: 50
+          minimum: 1
+          type: integer
+        baskets:
+          items:
+            $ref: '#/components/schemas/VendorFulfillmentBasketEntry'
+          type: array
+      required:
+      - basketCapacityPortions
+      - baskets
+      type: object
+    VendorFulfillmentBatchArtifacts:
+      additionalProperties: false
+      properties:
+        basketList:
+          $ref: '#/components/schemas/VendorFulfillmentBasketListExport'
+        dailySummary:
+          $ref: '#/components/schemas/VendorFulfillmentDailySummaryExport'
+        labels:
+          $ref: '#/components/schemas/VendorFulfillmentLabelSheetExport'
+        plantPartitionSheet:
+          $ref: '#/components/schemas/VendorFulfillmentPlantPartitionSheetExport'
+      required:
+      - dailySummary
+      - plantPartitionSheet
+      - labels
+      - basketList
+      type: object
+    VendorFulfillmentBatchCreateRequest:
+      additionalProperties: false
+      properties:
+        deliveryDate:
+          format: date
+          type: string
+      required:
+      - deliveryDate
+      type: object
+    VendorFulfillmentBoard:
+      additionalProperties: false
+      properties:
+        deliveryDate:
+          format: date
+          type: string
+        generatedAt:
+          $ref: '#/components/schemas/TaipeiBusinessDateTime'
+        orders:
+          items:
+            $ref: '#/components/schemas/VendorFulfillmentOrderEntry'
+          type: array
+        plants:
+          items:
+            $ref: '#/components/schemas/VendorFulfillmentPlantEntry'
+          type: array
+        statusTransitions:
+          items:
+            $ref: '#/components/schemas/VendorFulfillmentStatusTransitionAuditEntry'
+          type: array
+        timezone:
+          enum:
+          - Asia/Taipei
+          type: string
+      required:
+      - timezone
+      - deliveryDate
+      - generatedAt
+      - plants
+      - orders
+      - statusTransitions
+      type: object
+    VendorFulfillmentDailySummaryExport:
+      additionalProperties: false
+      properties:
+        deliveryDate:
+          format: date
+          type: string
+        perPlant:
+          items:
+            $ref: '#/components/schemas/VendorFulfillmentDailySummaryPlantRow'
+          type: array
+        totalOrders:
+          minimum: 0
+          type: integer
+        totalPortions:
+          minimum: 0
+          type: integer
+        totalSpecialRequests:
+          minimum: 0
+          type: integer
+      required:
+      - deliveryDate
+      - totalOrders
+      - totalPortions
+      - totalSpecialRequests
+      - perPlant
+      type: object
+    VendorFulfillmentDailySummaryPlantRow:
+      additionalProperties: false
+      properties:
+        orderCount:
+          minimum: 0
+          type: integer
+        plantId:
+          $ref: '#/components/schemas/PlantId'
+        portionCount:
+          minimum: 0
+          type: integer
+      required:
+      - plantId
+      - orderCount
+      - portionCount
+      type: object
+    VendorFulfillmentDeliveryStatus:
+      enum:
+      - PENDING_PREP
+      - PREPARING
+      - PACKED
+      - OUT_FOR_DELIVERY
+      - DELIVERED
+      - CANCELLED
+      type: string
+    VendorFulfillmentDeliveryStatusTransitionRequest:
+      additionalProperties: false
+      properties:
+        occurredAt:
+          $ref: '#/components/schemas/TaipeiBusinessDateTime'
+        toStatus:
+          $ref: '#/components/schemas/VendorFulfillmentDeliveryStatus'
+      required:
+      - toStatus
+      - occurredAt
+      type: object
+    VendorFulfillmentDeliveryStatusTransitionResult:
+      additionalProperties: false
+      properties:
+        fromStatus:
+          $ref: '#/components/schemas/VendorFulfillmentDeliveryStatus'
+        occurredAt:
+          $ref: '#/components/schemas/TaipeiBusinessDateTime'
+        orderId:
+          pattern: ^ord-[a-z0-9]{8,32}$
+          type: string
+        toStatus:
+          $ref: '#/components/schemas/VendorFulfillmentDeliveryStatus'
+      required:
+      - orderId
+      - fromStatus
+      - toStatus
+      - occurredAt
+      type: object
+    VendorFulfillmentExportBatch:
+      additionalProperties: false
+      properties:
+        artifacts:
+          $ref: '#/components/schemas/VendorFulfillmentBatchArtifacts'
+        batchId:
+          pattern: ^fbatch-[0-9-]{3,64}$
+          type: string
+        board:
+          $ref: '#/components/schemas/VendorFulfillmentBoard'
+        capturedAt:
+          $ref: '#/components/schemas/TaipeiBusinessDateTime'
+        deliveryDate:
+          format: date
+          type: string
+        generatedByActorId:
+          $ref: '#/components/schemas/ActorId'
+        vendorId:
+          pattern: ^ven-[a-z0-9]{8,32}$
+          type: string
+      required:
+      - batchId
+      - vendorId
+      - deliveryDate
+      - capturedAt
+      - generatedByActorId
+      - board
+      - artifacts
+      type: object
+    VendorFulfillmentLabelEntry:
+      additionalProperties: false
+      properties:
+        deliveryStatus:
+          $ref: '#/components/schemas/VendorFulfillmentDeliveryStatus'
+        menuItemId:
+          pattern: ^menu-[a-z0-9]{8,32}$
+          type: string
+        orderId:
+          pattern: ^ord-[a-z0-9]{8,32}$
+          type: string
+        plantId:
+          $ref: '#/components/schemas/PlantId'
+        quantity:
+          maximum: 20
+          minimum: 1
+          type: integer
+        specialRequests:
+          items:
+            $ref: '#/components/schemas/SpecialRequestOption'
+          maxItems: 3
+          type: array
+          uniqueItems: true
+      required:
+      - orderId
+      - plantId
+      - deliveryStatus
+      - menuItemId
+      - quantity
+      - specialRequests
+      type: object
+    VendorFulfillmentLabelSheetExport:
+      additionalProperties: false
+      properties:
+        labels:
+          items:
+            $ref: '#/components/schemas/VendorFulfillmentLabelEntry'
+          type: array
+      required:
+      - labels
+      type: object
+    VendorFulfillmentOrderEntry:
+      additionalProperties: false
+      properties:
+        deliveryStatus:
+          $ref: '#/components/schemas/VendorFulfillmentDeliveryStatus'
+        lineItems:
+          items:
+            $ref: '#/components/schemas/VendorFulfillmentOrderLineItem'
+          minItems: 1
+          type: array
+        orderId:
+          pattern: ^ord-[a-z0-9]{8,32}$
+          type: string
+        orderStatus:
+          $ref: '#/components/schemas/EmployeeOrderStatus'
+        plantId:
+          $ref: '#/components/schemas/PlantId'
+      required:
+      - orderId
+      - plantId
+      - orderStatus
+      - deliveryStatus
+      - lineItems
+      type: object
+    VendorFulfillmentOrderLineItem:
+      additionalProperties: false
+      properties:
+        menuItemId:
+          pattern: ^menu-[a-z0-9]{8,32}$
+          type: string
+        quantity:
+          maximum: 20
+          minimum: 1
+          type: integer
+        specialRequests:
+          items:
+            $ref: '#/components/schemas/SpecialRequestOption'
+          maxItems: 3
+          type: array
+          uniqueItems: true
+      required:
+      - menuItemId
+      - quantity
+      - specialRequests
+      type: object
+    VendorFulfillmentPlantEntry:
+      additionalProperties: false
+      properties:
+        deliveryStatusCounts:
+          items:
+            $ref: '#/components/schemas/VendorFulfillmentStatusCount'
+          type: array
+        orderCount:
+          minimum: 0
+          type: integer
+        plantId:
+          $ref: '#/components/schemas/PlantId'
+        portionCount:
+          minimum: 0
+          type: integer
+        specialRequestCounts:
+          items:
+            $ref: '#/components/schemas/SpecialRequestCount'
+          type: array
+      required:
+      - plantId
+      - orderCount
+      - portionCount
+      - deliveryStatusCounts
+      - specialRequestCounts
+      type: object
+    VendorFulfillmentPlantPartitionOrderRow:
+      additionalProperties: false
+      properties:
+        deliveryStatus:
+          $ref: '#/components/schemas/VendorFulfillmentDeliveryStatus'
+        orderId:
+          pattern: ^ord-[a-z0-9]{8,32}$
+          type: string
+        portionCount:
+          minimum: 0
+          type: integer
+        specialRequests:
+          items:
+            $ref: '#/components/schemas/SpecialRequestOption'
+          type: array
+          uniqueItems: true
+      required:
+      - orderId
+      - deliveryStatus
+      - portionCount
+      - specialRequests
+      type: object
+    VendorFulfillmentPlantPartitionRow:
+      additionalProperties: false
+      properties:
+        orders:
+          items:
+            $ref: '#/components/schemas/VendorFulfillmentPlantPartitionOrderRow'
+          type: array
+        plantId:
+          $ref: '#/components/schemas/PlantId'
+        specialRequestCounts:
+          items:
+            $ref: '#/components/schemas/SpecialRequestCount'
+          type: array
+        totalOrders:
+          minimum: 0
+          type: integer
+        totalPortions:
+          minimum: 0
+          type: integer
+      required:
+      - plantId
+      - totalOrders
+      - totalPortions
+      - specialRequestCounts
+      - orders
+      type: object
+    VendorFulfillmentPlantPartitionSheetExport:
+      additionalProperties: false
+      properties:
+        rows:
+          items:
+            $ref: '#/components/schemas/VendorFulfillmentPlantPartitionRow'
+          type: array
+      required:
+      - rows
+      type: object
+    VendorFulfillmentStatusCount:
+      additionalProperties: false
+      properties:
+        count:
+          minimum: 0
+          type: integer
+        status:
+          $ref: '#/components/schemas/VendorFulfillmentDeliveryStatus'
+      required:
+      - status
+      - count
+      type: object
+    VendorFulfillmentStatusTransitionAuditEntry:
+      additionalProperties: false
+      properties:
+        actorId:
+          $ref: '#/components/schemas/ActorId'
+        actorRole:
+          $ref: '#/components/schemas/Role'
+        fromStatus:
+          $ref: '#/components/schemas/VendorFulfillmentDeliveryStatus'
+        occurredAt:
+          $ref: '#/components/schemas/TaipeiBusinessDateTime'
+        operationId:
+          maxLength: 128
+          minLength: 1
+          type: string
+        orderId:
+          pattern: ^ord-[a-z0-9]{8,32}$
+          type: string
+        toStatus:
+          $ref: '#/components/schemas/VendorFulfillmentDeliveryStatus'
+      required:
+      - orderId
+      - occurredAt
+      - actorId
+      - actorRole
+      - operationId
+      - fromStatus
+      - toStatus
       type: object
     VendorLifecycleEvent:
       additionalProperties: false
@@ -1907,6 +2362,98 @@ paths:
       summary: Export payroll deduction records
       tags:
       - Integration
+  /api/v1/vendor/fulfillment-batches:
+    post:
+      operationId: createVendorFulfillmentExportBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorFulfillmentBatchCreateRequest'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorFulfillmentExportBatch'
+          description: Fulfillment export batch snapshot created
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      security:
+      - vendorMfaBearer: []
+      summary: Create immutable fulfillment export batch snapshot
+      tags:
+      - Vendor
+      x-fulfillment-governance:
+        artifactTypes:
+        - DAILY_SUMMARY
+        - PLANT_PARTITION_SHEET
+        - LABELS
+        - BASKET_LIST
+        snapshotMode: IMMUTABLE_DETERMINISTIC
+  /api/v1/vendor/fulfillment-batches/{batchId}:
+    get:
+      operationId: getVendorFulfillmentExportBatch
+      parameters:
+      - $ref: '#/components/parameters/BatchIdPath'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorFulfillmentExportBatch'
+          description: Fulfillment export batch snapshot
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      security:
+      - vendorMfaBearer: []
+      summary: Read immutable fulfillment export batch snapshot
+      tags:
+      - Vendor
+  /api/v1/vendor/fulfillment-board:
+    get:
+      operationId: listVendorFulfillmentBoard
+      parameters:
+      - $ref: '#/components/parameters/DeliveryDateQuery'
+      - $ref: '#/components/parameters/PlantIdFilterQuery'
+      - $ref: '#/components/parameters/IncludeAuditTransitionsQuery'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorFulfillmentBoard'
+          description: Vendor fulfillment operations board
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      security:
+      - vendorMfaBearer: []
+      summary: Get real-time vendor fulfillment board with per-plant operational metrics
+      tags:
+      - Vendor
+      x-fulfillment-governance:
+        nearRealTime: true
+        specialRequestStructure: CONTROLLED_ENUM_ONLY
+        statusTransitionAudit: true
   /api/v1/vendor/menu-items/{menuItemId}:
     put:
       operationId: upsertVendorMenuItem
@@ -1966,6 +2513,41 @@ paths:
       security:
       - vendorMfaBearer: []
       summary: List vendor order board entries
+      tags:
+      - Vendor
+  /api/v1/vendor/orders/{orderId}/delivery-status:
+    post:
+      operationId: advanceVendorFulfillmentDeliveryStatus
+      parameters:
+      - $ref: '#/components/parameters/OrderIdPath'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorFulfillmentDeliveryStatusTransitionRequest'
+        required: true
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorFulfillmentDeliveryStatusTransitionResult'
+          description: Delivery execution status transition accepted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+      security:
+      - vendorMfaBearer: []
+      summary: Advance delivery execution status for a vendor order
       tags:
       - Vendor
 servers:

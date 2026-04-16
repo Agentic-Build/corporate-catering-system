@@ -41,7 +41,11 @@ pub enum HttpOperation {
     UpdateEmployeeOrder,
     VerifyPickupOrder,
     ListVendorOrders,
+    ListVendorFulfillmentBoard,
     UpsertVendorMenuItem,
+    AdvanceVendorFulfillmentDeliveryStatus,
+    CreateVendorFulfillmentExportBatch,
+    GetVendorFulfillmentExportBatch,
     ListAdminVendors,
     ListVendorPlantDeliveryMappings,
     ListComplianceDocumentTemplates,
@@ -54,13 +58,17 @@ pub enum HttpOperation {
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 19] = [
         Self::ListEmployeeMenus,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
         Self::VerifyPickupOrder,
         Self::ListVendorOrders,
+        Self::ListVendorFulfillmentBoard,
         Self::UpsertVendorMenuItem,
+        Self::AdvanceVendorFulfillmentDeliveryStatus,
+        Self::CreateVendorFulfillmentExportBatch,
+        Self::GetVendorFulfillmentExportBatch,
         Self::ListAdminVendors,
         Self::ListVendorPlantDeliveryMappings,
         Self::ListComplianceDocumentTemplates,
@@ -79,7 +87,13 @@ impl HttpOperation {
             Self::UpdateEmployeeOrder => "updateEmployeeOrder",
             Self::VerifyPickupOrder => "verifyPickupOrder",
             Self::ListVendorOrders => "listVendorOrders",
+            Self::ListVendorFulfillmentBoard => "listVendorFulfillmentBoard",
             Self::UpsertVendorMenuItem => "upsertVendorMenuItem",
+            Self::AdvanceVendorFulfillmentDeliveryStatus => {
+                "advanceVendorFulfillmentDeliveryStatus"
+            }
+            Self::CreateVendorFulfillmentExportBatch => "createVendorFulfillmentExportBatch",
+            Self::GetVendorFulfillmentExportBatch => "getVendorFulfillmentExportBatch",
             Self::ListAdminVendors => "listAdminVendors",
             Self::ListVendorPlantDeliveryMappings => "listVendorPlantDeliveryMappings",
             Self::ListComplianceDocumentTemplates => "listComplianceDocumentTemplates",
@@ -96,12 +110,16 @@ impl HttpOperation {
         match self {
             Self::ListEmployeeMenus
             | Self::ListVendorOrders
+            | Self::ListVendorFulfillmentBoard
+            | Self::GetVendorFulfillmentExportBatch
             | Self::ListAdminVendors
             | Self::ListVendorPlantDeliveryMappings
             | Self::ListComplianceDocumentTemplates
             | Self::ExportPayrollDeductions => HttpMethod::Get,
             Self::CreateEmployeeOrder
             | Self::VerifyPickupOrder
+            | Self::AdvanceVendorFulfillmentDeliveryStatus
+            | Self::CreateVendorFulfillmentExportBatch
             | Self::ReviewVendorApplication
             | Self::RunVendorComplianceLifecycle => HttpMethod::Post,
             Self::UpdateEmployeeOrder => HttpMethod::Patch,
@@ -119,7 +137,13 @@ impl HttpOperation {
             Self::UpdateEmployeeOrder => "/api/v1/employee/orders/{orderId}",
             Self::VerifyPickupOrder => "/api/v1/employee/orders/{orderId}/pickup-verifications",
             Self::ListVendorOrders => "/api/v1/vendor/orders",
+            Self::ListVendorFulfillmentBoard => "/api/v1/vendor/fulfillment-board",
             Self::UpsertVendorMenuItem => "/api/v1/vendor/menu-items/{menuItemId}",
+            Self::AdvanceVendorFulfillmentDeliveryStatus => {
+                "/api/v1/vendor/orders/{orderId}/delivery-status"
+            }
+            Self::CreateVendorFulfillmentExportBatch => "/api/v1/vendor/fulfillment-batches",
+            Self::GetVendorFulfillmentExportBatch => "/api/v1/vendor/fulfillment-batches/{batchId}",
             Self::ListAdminVendors => "/api/v1/admin/vendors",
             Self::ListVendorPlantDeliveryMappings => "/api/v1/admin/vendor-plant-delivery-mappings",
             Self::ListComplianceDocumentTemplates => "/api/v1/admin/compliance/document-templates",
@@ -144,7 +168,12 @@ impl HttpOperation {
             | Self::CreateEmployeeOrder
             | Self::UpdateEmployeeOrder
             | Self::VerifyPickupOrder => HttpAudience::Employee,
-            Self::ListVendorOrders | Self::UpsertVendorMenuItem => HttpAudience::Vendor,
+            Self::ListVendorOrders
+            | Self::ListVendorFulfillmentBoard
+            | Self::UpsertVendorMenuItem
+            | Self::AdvanceVendorFulfillmentDeliveryStatus
+            | Self::CreateVendorFulfillmentExportBatch
+            | Self::GetVendorFulfillmentExportBatch => HttpAudience::Vendor,
             Self::ListAdminVendors
             | Self::ListVendorPlantDeliveryMappings
             | Self::ListComplianceDocumentTemplates
@@ -162,7 +191,9 @@ impl HttpOperation {
             Self::CreateEmployeeOrder | Self::UpdateEmployeeOrder | Self::VerifyPickupOrder => {
                 Some(Action::PlaceEmployeeOrder)
             }
-            Self::UpsertVendorMenuItem => Some(Action::ManageVendorMenu),
+            Self::UpsertVendorMenuItem
+            | Self::AdvanceVendorFulfillmentDeliveryStatus
+            | Self::CreateVendorFulfillmentExportBatch => Some(Action::ManageVendorMenu),
             Self::UpsertComplianceDocumentTemplate
             | Self::UpsertVendorPlantDeliveryMapping
             | Self::DeleteVendorPlantDeliveryMapping
@@ -170,6 +201,8 @@ impl HttpOperation {
             | Self::RunVendorComplianceLifecycle => Some(Action::ManageVendorComplianceLifecycle),
             Self::ListEmployeeMenus
             | Self::ListVendorOrders
+            | Self::ListVendorFulfillmentBoard
+            | Self::GetVendorFulfillmentExportBatch
             | Self::ListAdminVendors
             | Self::ListVendorPlantDeliveryMappings
             | Self::ListComplianceDocumentTemplates
@@ -188,7 +221,13 @@ impl HttpOperation {
             "updateEmployeeOrder" => Some(Self::UpdateEmployeeOrder),
             "verifyPickupOrder" => Some(Self::VerifyPickupOrder),
             "listVendorOrders" => Some(Self::ListVendorOrders),
+            "listVendorFulfillmentBoard" => Some(Self::ListVendorFulfillmentBoard),
             "upsertVendorMenuItem" => Some(Self::UpsertVendorMenuItem),
+            "advanceVendorFulfillmentDeliveryStatus" => {
+                Some(Self::AdvanceVendorFulfillmentDeliveryStatus)
+            }
+            "createVendorFulfillmentExportBatch" => Some(Self::CreateVendorFulfillmentExportBatch),
+            "getVendorFulfillmentExportBatch" => Some(Self::GetVendorFulfillmentExportBatch),
             "listAdminVendors" => Some(Self::ListAdminVendors),
             "listVendorPlantDeliveryMappings" => Some(Self::ListVendorPlantDeliveryMappings),
             "listComplianceDocumentTemplates" => Some(Self::ListComplianceDocumentTemplates),
@@ -529,6 +568,37 @@ pub fn canonical_openapi_spec() -> Value {
             }
           }
         },
+        "/api/v1/vendor/fulfillment-board": {
+          "get": {
+            "tags": ["Vendor"],
+            "summary": "Get real-time vendor fulfillment board with per-plant operational metrics",
+            "operationId": HttpOperation::ListVendorFulfillmentBoard.operation_id(),
+            "x-fulfillment-governance": {
+              "nearRealTime": true,
+              "specialRequestStructure": "CONTROLLED_ENUM_ONLY",
+              "statusTransitionAudit": true
+            },
+            "security": [{ "vendorMfaBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/DeliveryDateQuery" },
+              { "$ref": "#/components/parameters/PlantIdFilterQuery" },
+              { "$ref": "#/components/parameters/IncludeAuditTransitionsQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Vendor fulfillment operations board",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/VendorFulfillmentBoard" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" }
+            }
+          }
+        },
         "/api/v1/vendor/menu-items/{menuItemId}": {
           "put": {
             "tags": ["Vendor"],
@@ -559,6 +629,105 @@ pub fn canonical_openapi_spec() -> Value {
               "401": { "$ref": "#/components/responses/Unauthorized" },
               "403": { "$ref": "#/components/responses/Forbidden" },
               "422": { "$ref": "#/components/responses/ValidationFailed" }
+            }
+          }
+        },
+        "/api/v1/vendor/orders/{orderId}/delivery-status": {
+          "post": {
+            "tags": ["Vendor"],
+            "summary": "Advance delivery execution status for a vendor order",
+            "operationId": HttpOperation::AdvanceVendorFulfillmentDeliveryStatus.operation_id(),
+            "security": [{ "vendorMfaBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/OrderIdPath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/VendorFulfillmentDeliveryStatusTransitionRequest"
+                  }
+                }
+              }
+            },
+            "responses": {
+              "202": {
+                "description": "Delivery execution status transition accepted",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/VendorFulfillmentDeliveryStatusTransitionResult"
+                    }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "409": { "$ref": "#/components/responses/Conflict" },
+              "422": { "$ref": "#/components/responses/ValidationFailed" }
+            }
+          }
+        },
+        "/api/v1/vendor/fulfillment-batches": {
+          "post": {
+            "tags": ["Vendor"],
+            "summary": "Create immutable fulfillment export batch snapshot",
+            "operationId": HttpOperation::CreateVendorFulfillmentExportBatch.operation_id(),
+            "x-fulfillment-governance": {
+              "snapshotMode": "IMMUTABLE_DETERMINISTIC",
+              "artifactTypes": ["DAILY_SUMMARY", "PLANT_PARTITION_SHEET", "LABELS", "BASKET_LIST"]
+            },
+            "security": [{ "vendorMfaBearer": [] }],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/VendorFulfillmentBatchCreateRequest" }
+                }
+              }
+            },
+            "responses": {
+              "201": {
+                "description": "Fulfillment export batch snapshot created",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/VendorFulfillmentExportBatch" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "409": { "$ref": "#/components/responses/Conflict" },
+              "422": { "$ref": "#/components/responses/ValidationFailed" }
+            }
+          }
+        },
+        "/api/v1/vendor/fulfillment-batches/{batchId}": {
+          "get": {
+            "tags": ["Vendor"],
+            "summary": "Read immutable fulfillment export batch snapshot",
+            "operationId": HttpOperation::GetVendorFulfillmentExportBatch.operation_id(),
+            "security": [{ "vendorMfaBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/BatchIdPath" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Fulfillment export batch snapshot",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/VendorFulfillmentExportBatch" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" }
             }
           }
         },
@@ -868,6 +1037,16 @@ pub fn canonical_openapi_spec() -> Value {
               "format": "date"
             }
           },
+          "DeliveryDateQuery": {
+            "name": "deliveryDate",
+            "in": "query",
+            "required": true,
+            "description": "Target delivery date in Asia/Taipei for fulfillment board and export snapshots.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
           "DiscoveryViewQuery": {
             "name": "view",
             "in": "query",
@@ -1014,6 +1193,16 @@ pub fn canonical_openapi_spec() -> Value {
               "default": false
             }
           },
+          "IncludeAuditTransitionsQuery": {
+            "name": "includeAuditTransitions",
+            "in": "query",
+            "required": false,
+            "description": "When false, omits status transition audit entries from fulfillment board payload.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
           "OrderStatusFilterQuery": {
             "name": "status",
             "in": "query",
@@ -1103,6 +1292,15 @@ pub fn canonical_openapi_spec() -> Value {
             "schema": {
               "type": "string",
               "pattern": "^map-[a-z0-9-]{3,64}$"
+            }
+          },
+          "BatchIdPath": {
+            "name": "batchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^fbatch-[0-9-]{3,64}$"
             }
           }
         },
@@ -1693,6 +1891,367 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "additionalProperties": false
           },
+          "VendorFulfillmentDeliveryStatus": {
+            "type": "string",
+            "enum": [
+              "PENDING_PREP",
+              "PREPARING",
+              "PACKED",
+              "OUT_FOR_DELIVERY",
+              "DELIVERED",
+              "CANCELLED"
+            ]
+          },
+          "VendorFulfillmentStatusCount": {
+            "type": "object",
+            "required": ["status", "count"],
+            "properties": {
+              "status": { "$ref": "#/components/schemas/VendorFulfillmentDeliveryStatus" },
+              "count": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "SpecialRequestCount": {
+            "type": "object",
+            "required": ["specialRequest", "count"],
+            "properties": {
+              "specialRequest": { "$ref": "#/components/schemas/SpecialRequestOption" },
+              "count": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentOrderLineItem": {
+            "type": "object",
+            "required": ["menuItemId", "quantity", "specialRequests"],
+            "properties": {
+              "menuItemId": { "type": "string", "pattern": "^menu-[a-z0-9]{8,32}$" },
+              "quantity": { "type": "integer", "minimum": 1, "maximum": 20 },
+              "specialRequests": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/SpecialRequestOption" },
+                "uniqueItems": true,
+                "maxItems": 3
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentOrderEntry": {
+            "type": "object",
+            "required": [
+              "orderId",
+              "plantId",
+              "orderStatus",
+              "deliveryStatus",
+              "lineItems"
+            ],
+            "properties": {
+              "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
+              "plantId": { "$ref": "#/components/schemas/PlantId" },
+              "orderStatus": { "$ref": "#/components/schemas/EmployeeOrderStatus" },
+              "deliveryStatus": { "$ref": "#/components/schemas/VendorFulfillmentDeliveryStatus" },
+              "lineItems": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorFulfillmentOrderLineItem" },
+                "minItems": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentPlantEntry": {
+            "type": "object",
+            "required": [
+              "plantId",
+              "orderCount",
+              "portionCount",
+              "deliveryStatusCounts",
+              "specialRequestCounts"
+            ],
+            "properties": {
+              "plantId": { "$ref": "#/components/schemas/PlantId" },
+              "orderCount": { "type": "integer", "minimum": 0 },
+              "portionCount": { "type": "integer", "minimum": 0 },
+              "deliveryStatusCounts": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorFulfillmentStatusCount" }
+              },
+              "specialRequestCounts": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/SpecialRequestCount" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentStatusTransitionAuditEntry": {
+            "type": "object",
+            "required": [
+              "orderId",
+              "occurredAt",
+              "actorId",
+              "actorRole",
+              "operationId",
+              "fromStatus",
+              "toStatus"
+            ],
+            "properties": {
+              "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
+              "occurredAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "actorId": { "$ref": "#/components/schemas/ActorId" },
+              "actorRole": { "$ref": "#/components/schemas/Role" },
+              "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "fromStatus": { "$ref": "#/components/schemas/VendorFulfillmentDeliveryStatus" },
+              "toStatus": { "$ref": "#/components/schemas/VendorFulfillmentDeliveryStatus" }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentBoard": {
+            "type": "object",
+            "required": [
+              "timezone",
+              "deliveryDate",
+              "generatedAt",
+              "plants",
+              "orders",
+              "statusTransitions"
+            ],
+            "properties": {
+              "timezone": {
+                "type": "string",
+                "enum": ["Asia/Taipei"]
+              },
+              "deliveryDate": { "type": "string", "format": "date" },
+              "generatedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "plants": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorFulfillmentPlantEntry" }
+              },
+              "orders": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorFulfillmentOrderEntry" }
+              },
+              "statusTransitions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/VendorFulfillmentStatusTransitionAuditEntry"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentBatchCreateRequest": {
+            "type": "object",
+            "required": ["deliveryDate"],
+            "properties": {
+              "deliveryDate": { "type": "string", "format": "date" }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentDailySummaryPlantRow": {
+            "type": "object",
+            "required": ["plantId", "orderCount", "portionCount"],
+            "properties": {
+              "plantId": { "$ref": "#/components/schemas/PlantId" },
+              "orderCount": { "type": "integer", "minimum": 0 },
+              "portionCount": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentDailySummaryExport": {
+            "type": "object",
+            "required": [
+              "deliveryDate",
+              "totalOrders",
+              "totalPortions",
+              "totalSpecialRequests",
+              "perPlant"
+            ],
+            "properties": {
+              "deliveryDate": { "type": "string", "format": "date" },
+              "totalOrders": { "type": "integer", "minimum": 0 },
+              "totalPortions": { "type": "integer", "minimum": 0 },
+              "totalSpecialRequests": { "type": "integer", "minimum": 0 },
+              "perPlant": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorFulfillmentDailySummaryPlantRow" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentPlantPartitionOrderRow": {
+            "type": "object",
+            "required": ["orderId", "deliveryStatus", "portionCount", "specialRequests"],
+            "properties": {
+              "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
+              "deliveryStatus": {
+                "$ref": "#/components/schemas/VendorFulfillmentDeliveryStatus"
+              },
+              "portionCount": { "type": "integer", "minimum": 0 },
+              "specialRequests": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/SpecialRequestOption" },
+                "uniqueItems": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentPlantPartitionRow": {
+            "type": "object",
+            "required": [
+              "plantId",
+              "totalOrders",
+              "totalPortions",
+              "specialRequestCounts",
+              "orders"
+            ],
+            "properties": {
+              "plantId": { "$ref": "#/components/schemas/PlantId" },
+              "totalOrders": { "type": "integer", "minimum": 0 },
+              "totalPortions": { "type": "integer", "minimum": 0 },
+              "specialRequestCounts": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/SpecialRequestCount" }
+              },
+              "orders": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/VendorFulfillmentPlantPartitionOrderRow"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentPlantPartitionSheetExport": {
+            "type": "object",
+            "required": ["rows"],
+            "properties": {
+              "rows": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorFulfillmentPlantPartitionRow" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentLabelEntry": {
+            "type": "object",
+            "required": [
+              "orderId",
+              "plantId",
+              "deliveryStatus",
+              "menuItemId",
+              "quantity",
+              "specialRequests"
+            ],
+            "properties": {
+              "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
+              "plantId": { "$ref": "#/components/schemas/PlantId" },
+              "deliveryStatus": {
+                "$ref": "#/components/schemas/VendorFulfillmentDeliveryStatus"
+              },
+              "menuItemId": { "type": "string", "pattern": "^menu-[a-z0-9]{8,32}$" },
+              "quantity": { "type": "integer", "minimum": 1, "maximum": 20 },
+              "specialRequests": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/SpecialRequestOption" },
+                "uniqueItems": true,
+                "maxItems": 3
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentLabelSheetExport": {
+            "type": "object",
+            "required": ["labels"],
+            "properties": {
+              "labels": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorFulfillmentLabelEntry" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentBasketEntry": {
+            "type": "object",
+            "required": ["basketCode", "plantId", "orderIds", "portionCount"],
+            "properties": {
+              "basketCode": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "plantId": { "$ref": "#/components/schemas/PlantId" },
+              "orderIds": {
+                "type": "array",
+                "items": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
+                "minItems": 1
+              },
+              "portionCount": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentBasketListExport": {
+            "type": "object",
+            "required": ["basketCapacityPortions", "baskets"],
+            "properties": {
+              "basketCapacityPortions": { "type": "integer", "minimum": 1, "maximum": 50 },
+              "baskets": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorFulfillmentBasketEntry" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentBatchArtifacts": {
+            "type": "object",
+            "required": ["dailySummary", "plantPartitionSheet", "labels", "basketList"],
+            "properties": {
+              "dailySummary": {
+                "$ref": "#/components/schemas/VendorFulfillmentDailySummaryExport"
+              },
+              "plantPartitionSheet": {
+                "$ref": "#/components/schemas/VendorFulfillmentPlantPartitionSheetExport"
+              },
+              "labels": { "$ref": "#/components/schemas/VendorFulfillmentLabelSheetExport" },
+              "basketList": { "$ref": "#/components/schemas/VendorFulfillmentBasketListExport" }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentExportBatch": {
+            "type": "object",
+            "required": [
+              "batchId",
+              "vendorId",
+              "deliveryDate",
+              "capturedAt",
+              "generatedByActorId",
+              "board",
+              "artifacts"
+            ],
+            "properties": {
+              "batchId": { "type": "string", "pattern": "^fbatch-[0-9-]{3,64}$" },
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "deliveryDate": { "type": "string", "format": "date" },
+              "capturedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "generatedByActorId": { "$ref": "#/components/schemas/ActorId" },
+              "board": { "$ref": "#/components/schemas/VendorFulfillmentBoard" },
+              "artifacts": { "$ref": "#/components/schemas/VendorFulfillmentBatchArtifacts" }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentDeliveryStatusTransitionRequest": {
+            "type": "object",
+            "required": ["toStatus", "occurredAt"],
+            "properties": {
+              "toStatus": { "$ref": "#/components/schemas/VendorFulfillmentDeliveryStatus" },
+              "occurredAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentDeliveryStatusTransitionResult": {
+            "type": "object",
+            "required": ["orderId", "fromStatus", "toStatus", "occurredAt"],
+            "properties": {
+              "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
+              "fromStatus": { "$ref": "#/components/schemas/VendorFulfillmentDeliveryStatus" },
+              "toStatus": { "$ref": "#/components/schemas/VendorFulfillmentDeliveryStatus" },
+              "occurredAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" }
+            },
+            "additionalProperties": false
+          },
           "VendorMenuItemUpsertRequest": {
             "type": "object",
             "required": [
@@ -2046,7 +2605,10 @@ pub fn canonical_openapi_spec() -> Value {
               "PICKUP_VERIFICATION_INVALID_WINDOW",
               "PICKUP_VERIFICATION_INVALID_CODE",
               "PICKUP_VERIFICATION_INTERNAL_ERROR",
-              "ORDER_NOT_FOUND"
+              "ORDER_NOT_FOUND",
+              "VENDOR_FULFILLMENT_INVALID_REQUEST",
+              "VENDOR_FULFILLMENT_STATUS_CONFLICT",
+              "VENDOR_FULFILLMENT_BATCH_NOT_FOUND"
             ]
           },
           "ErrorDetail": {

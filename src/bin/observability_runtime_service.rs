@@ -2170,6 +2170,7 @@ mod tests {
             .create_order(
                 order_id("ord-discovery-tst-001"),
                 &vendor_visible,
+                &plant,
                 now_epoch_day.saturating_add(1),
                 vec![
                     OrderLineItemRequest::new(menu_item_id("menu-discoverytsta1"), 2, vec![])

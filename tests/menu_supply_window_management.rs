@@ -193,6 +193,7 @@ fn quota_accounting_prevents_oversell_under_concurrent_ordering() {
             policy_clone.create_order(
                 order_id(format!("ord-atomic-{index:02}").as_str()),
                 &vendor_clone,
+                &plant_id("fab-a"),
                 11,
                 vec![line_item],
                 taipei_moment(10, 600),
@@ -244,6 +245,7 @@ fn preorder_window_and_cutoff_rules_enforce_default_and_bounded_vendor_overrides
         .create_order(
             order_id("ord-window-default-reject"),
             &vendor,
+            &plant_id("fab-a"),
             20,
             vec![
                 OrderLineItemRequest::new(menu_item_id("menu-supply-c1"), 1, vec![])
@@ -285,6 +287,7 @@ fn preorder_window_and_cutoff_rules_enforce_default_and_bounded_vendor_overrides
         .create_order(
             order_id("ord-window-override-reject"),
             &vendor,
+            &plant_id("fab-a"),
             17,
             vec![
                 OrderLineItemRequest::new(menu_item_id("menu-supply-c2"), 1, vec![])
@@ -309,6 +312,7 @@ fn preorder_window_and_cutoff_rules_enforce_default_and_bounded_vendor_overrides
         .create_order(
             order_id("ord-cutoff-reject"),
             &vendor,
+            &plant_id("fab-a"),
             16,
             vec![
                 OrderLineItemRequest::new(menu_item_id("menu-supply-c3"), 1, vec![])
@@ -359,6 +363,7 @@ fn update_and_cancel_respect_cutoff_and_release_allocated_quota() {
         .create_order(
             order_id("ord-update-001"),
             &vendor,
+            &plant_id("fab-a"),
             40,
             vec![
                 OrderLineItemRequest::new(menu_item_id("menu-supply-d1"), 2, vec![])
@@ -416,6 +421,7 @@ fn update_and_cancel_respect_cutoff_and_release_allocated_quota() {
         .create_order(
             order_id("ord-update-002"),
             &vendor,
+            &plant_id("fab-a"),
             40,
             vec![
                 OrderLineItemRequest::new(menu_item_id("menu-supply-d1"), 1, vec![])
@@ -454,6 +460,7 @@ fn lifecycle_timeline_covers_modification_cancel_sold_out_and_refund_states() {
         .create_order(
             order_id("ord-life-001"),
             &vendor,
+            &plant_id("fab-a"),
             55,
             vec![
                 OrderLineItemRequest::new(menu_item_id("menu-supply-life-a1"), 2, vec![])
@@ -530,6 +537,7 @@ fn lifecycle_timeline_covers_modification_cancel_sold_out_and_refund_states() {
         .create_order(
             order_id("ord-life-002"),
             &vendor,
+            &plant_id("fab-a"),
             55,
             vec![
                 OrderLineItemRequest::new(menu_item_id("menu-supply-life-a1"), 2, vec![])
@@ -593,6 +601,7 @@ fn inventory_reservation_release_and_create_are_idempotent() {
         .create_order(
             order_id("ord-idemp-001"),
             &vendor,
+            &plant_id("fab-a"),
             66,
             create_line_items.clone(),
             taipei_moment(65, 900),
@@ -602,6 +611,7 @@ fn inventory_reservation_release_and_create_are_idempotent() {
         .create_order(
             order_id("ord-idemp-001"),
             &vendor,
+            &plant_id("fab-a"),
             66,
             create_line_items,
             taipei_moment(65, 901),
@@ -618,6 +628,7 @@ fn inventory_reservation_release_and_create_are_idempotent() {
         .create_order(
             order_id("ord-idemp-001"),
             &vendor,
+            &plant_id("fab-a"),
             66,
             vec![
                 OrderLineItemRequest::new(menu_item_id("menu-supply-idemp-a1"), 1, vec![])
@@ -669,6 +680,7 @@ fn invalid_lifecycle_transition_returns_explicit_domain_error() {
         .create_order(
             order_id("ord-life-003"),
             &vendor,
+            &plant_id("fab-a"),
             70,
             vec![
                 OrderLineItemRequest::new(menu_item_id("menu-supply-life-b1"), 1, vec![])
@@ -759,6 +771,48 @@ fn special_requests_are_controlled_and_risk_limited() {
 }
 
 #[test]
+fn order_snapshot_retains_plant_and_controlled_special_request_structure() {
+    let policy = MenuSupplyPolicy::default();
+    let vendor = vendor_id("ven-menuwindow-special-struct");
+
+    policy
+        .upsert_menu_item(
+            &vendor_operator(),
+            menu_item("menu-special-struct-a1", &vendor, 15, 90),
+        )
+        .expect("menu item upsert should succeed");
+
+    policy
+        .create_order(
+            order_id("ord-special-struct-001"),
+            &vendor,
+            &plant_id("fab-b"),
+            90,
+            vec![OrderLineItemRequest::new(
+                menu_item_id("menu-special-struct-a1"),
+                2,
+                vec![SpecialRequest::NoUtensils, SpecialRequest::SauceOnSide],
+            )
+            .expect("line item should be valid")],
+            taipei_moment(89, 700),
+        )
+        .expect("order should be created");
+
+    let snapshot = policy
+        .order_snapshot(&order_id("ord-special-struct-001"))
+        .expect("snapshot query should succeed")
+        .expect("snapshot should exist");
+    assert_eq!(snapshot.plant_id(), &plant_id("fab-b"));
+    assert_eq!(
+        snapshot
+            .special_requests_by_menu_item()
+            .get(&menu_item_id("menu-special-struct-a1"))
+            .expect("special request map should have menu item"),
+        &BTreeSet::from([SpecialRequest::NoUtensils, SpecialRequest::SauceOnSide])
+    );
+}
+
+#[test]
 fn employee_discovery_snapshot_is_multi_day_and_uses_exact_inventory_with_cutoff_context() {
     let policy = MenuSupplyPolicy::default();
     let deliverable_vendor = vendor_id("ven-menuwindow-disc-a1");
@@ -808,6 +862,7 @@ fn employee_discovery_snapshot_is_multi_day_and_uses_exact_inventory_with_cutoff
         .create_order(
             order_id("ord-disc-001"),
             &deliverable_vendor,
+            &plant_id("fab-a"),
             81,
             vec![
                 OrderLineItemRequest::new(menu_item_id("menu-disc-a1"), 2, vec![])

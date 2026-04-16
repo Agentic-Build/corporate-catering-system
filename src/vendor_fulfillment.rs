@@ -1,0 +1,1134 @@
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::sync::{Arc, Mutex};
+
+use crate::audit::AuditIdentityLink;
+use crate::identity::{AuthenticatedActorContext, PlantId, Role};
+use crate::menu_supply_window::{
+    MenuItemId, MenuSupplyPolicy, MenuSupplyWindowError, OrderId, OrderLifecycleState,
+    OrderSnapshot, SpecialRequest,
+};
+use crate::vendor_compliance::VendorId;
+use crate::vendor_delivery_mapping::TaipeiBusinessMoment;
+
+const ADVANCE_DELIVERY_STATUS_OPERATION_ID: &str = "advanceVendorFulfillmentDeliveryStatus";
+const CREATE_EXPORT_BATCH_OPERATION_ID: &str = "createVendorFulfillmentExportBatch";
+const BASKET_CAPACITY_PORTIONS: u16 = 12;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FulfillmentDeliveryStatus {
+    PendingPrep,
+    Preparing,
+    Packed,
+    OutForDelivery,
+    Delivered,
+    Cancelled,
+}
+
+impl FulfillmentDeliveryStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PendingPrep => "PENDING_PREP",
+            Self::Preparing => "PREPARING",
+            Self::Packed => "PACKED",
+            Self::OutForDelivery => "OUT_FOR_DELIVERY",
+            Self::Delivered => "DELIVERED",
+            Self::Cancelled => "CANCELLED",
+        }
+    }
+}
+
+impl fmt::Display for FulfillmentDeliveryStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FulfillmentBatchId(String);
+
+impl FulfillmentBatchId {
+    pub fn parse(value: impl Into<String>) -> Result<Self, VendorFulfillmentError> {
+        let value = value.into();
+        if value.trim().is_empty() {
+            return Err(VendorFulfillmentError::InvalidBatchId);
+        }
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for FulfillmentBatchId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentOrderLineItem {
+    menu_item_id: MenuItemId,
+    quantity: u16,
+    special_requests: BTreeSet<SpecialRequest>,
+}
+
+impl FulfillmentOrderLineItem {
+    pub fn menu_item_id(&self) -> &MenuItemId {
+        &self.menu_item_id
+    }
+
+    pub fn quantity(&self) -> u16 {
+        self.quantity
+    }
+
+    pub fn special_requests(&self) -> &BTreeSet<SpecialRequest> {
+        &self.special_requests
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VendorFulfillmentOrderEntry {
+    order_id: OrderId,
+    plant_id: PlantId,
+    order_state: OrderLifecycleState,
+    delivery_status: FulfillmentDeliveryStatus,
+    line_items: Vec<FulfillmentOrderLineItem>,
+}
+
+impl VendorFulfillmentOrderEntry {
+    pub fn order_id(&self) -> &OrderId {
+        &self.order_id
+    }
+
+    pub fn plant_id(&self) -> &PlantId {
+        &self.plant_id
+    }
+
+    pub fn order_state(&self) -> OrderLifecycleState {
+        self.order_state
+    }
+
+    pub fn delivery_status(&self) -> FulfillmentDeliveryStatus {
+        self.delivery_status
+    }
+
+    pub fn line_items(&self) -> &[FulfillmentOrderLineItem] {
+        &self.line_items
+    }
+
+    pub fn total_portions(&self) -> u32 {
+        self.line_items
+            .iter()
+            .map(|line_item| u32::from(line_item.quantity()))
+            .sum()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VendorFulfillmentPlantEntry {
+    plant_id: PlantId,
+    order_count: u32,
+    portion_count: u32,
+    delivery_status_counts: BTreeMap<FulfillmentDeliveryStatus, u32>,
+    special_request_counts: BTreeMap<SpecialRequest, u32>,
+}
+
+impl VendorFulfillmentPlantEntry {
+    pub fn plant_id(&self) -> &PlantId {
+        &self.plant_id
+    }
+
+    pub fn order_count(&self) -> u32 {
+        self.order_count
+    }
+
+    pub fn portion_count(&self) -> u32 {
+        self.portion_count
+    }
+
+    pub fn delivery_status_counts(&self) -> &BTreeMap<FulfillmentDeliveryStatus, u32> {
+        &self.delivery_status_counts
+    }
+
+    pub fn special_request_counts(&self) -> &BTreeMap<SpecialRequest, u32> {
+        &self.special_request_counts
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentStatusAuditEntry {
+    order_id: OrderId,
+    vendor_id: VendorId,
+    delivery_epoch_day: i32,
+    occurred_at: TaipeiBusinessMoment,
+    from_status: FulfillmentDeliveryStatus,
+    to_status: FulfillmentDeliveryStatus,
+    audit_identity: AuditIdentityLink,
+}
+
+impl FulfillmentStatusAuditEntry {
+    pub fn order_id(&self) -> &OrderId {
+        &self.order_id
+    }
+
+    pub fn vendor_id(&self) -> &VendorId {
+        &self.vendor_id
+    }
+
+    pub fn delivery_epoch_day(&self) -> i32 {
+        self.delivery_epoch_day
+    }
+
+    pub fn occurred_at(&self) -> TaipeiBusinessMoment {
+        self.occurred_at
+    }
+
+    pub fn from_status(&self) -> FulfillmentDeliveryStatus {
+        self.from_status
+    }
+
+    pub fn to_status(&self) -> FulfillmentDeliveryStatus {
+        self.to_status
+    }
+
+    pub fn audit_identity(&self) -> &AuditIdentityLink {
+        &self.audit_identity
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VendorFulfillmentBoardSnapshot {
+    vendor_id: VendorId,
+    delivery_epoch_day: i32,
+    generated_at: TaipeiBusinessMoment,
+    plant_entries: Vec<VendorFulfillmentPlantEntry>,
+    order_entries: Vec<VendorFulfillmentOrderEntry>,
+    status_transitions: Vec<FulfillmentStatusAuditEntry>,
+}
+
+impl VendorFulfillmentBoardSnapshot {
+    pub fn vendor_id(&self) -> &VendorId {
+        &self.vendor_id
+    }
+
+    pub fn delivery_epoch_day(&self) -> i32 {
+        self.delivery_epoch_day
+    }
+
+    pub fn generated_at(&self) -> TaipeiBusinessMoment {
+        self.generated_at
+    }
+
+    pub fn plant_entries(&self) -> &[VendorFulfillmentPlantEntry] {
+        &self.plant_entries
+    }
+
+    pub fn order_entries(&self) -> &[VendorFulfillmentOrderEntry] {
+        &self.order_entries
+    }
+
+    pub fn status_transitions(&self) -> &[FulfillmentStatusAuditEntry] {
+        &self.status_transitions
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentDailySummaryPlantRow {
+    plant_id: PlantId,
+    order_count: u32,
+    portion_count: u32,
+}
+
+impl FulfillmentDailySummaryPlantRow {
+    pub fn plant_id(&self) -> &PlantId {
+        &self.plant_id
+    }
+
+    pub fn order_count(&self) -> u32 {
+        self.order_count
+    }
+
+    pub fn portion_count(&self) -> u32 {
+        self.portion_count
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentDailySummaryExport {
+    vendor_id: VendorId,
+    delivery_epoch_day: i32,
+    total_orders: u32,
+    total_portions: u32,
+    total_special_requests: u32,
+    per_plant: Vec<FulfillmentDailySummaryPlantRow>,
+}
+
+impl FulfillmentDailySummaryExport {
+    pub fn vendor_id(&self) -> &VendorId {
+        &self.vendor_id
+    }
+
+    pub fn delivery_epoch_day(&self) -> i32 {
+        self.delivery_epoch_day
+    }
+
+    pub fn total_orders(&self) -> u32 {
+        self.total_orders
+    }
+
+    pub fn total_portions(&self) -> u32 {
+        self.total_portions
+    }
+
+    pub fn total_special_requests(&self) -> u32 {
+        self.total_special_requests
+    }
+
+    pub fn per_plant(&self) -> &[FulfillmentDailySummaryPlantRow] {
+        &self.per_plant
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentPlantPartitionOrderRow {
+    order_id: OrderId,
+    delivery_status: FulfillmentDeliveryStatus,
+    portion_count: u32,
+    special_requests: BTreeSet<SpecialRequest>,
+}
+
+impl FulfillmentPlantPartitionOrderRow {
+    pub fn order_id(&self) -> &OrderId {
+        &self.order_id
+    }
+
+    pub fn delivery_status(&self) -> FulfillmentDeliveryStatus {
+        self.delivery_status
+    }
+
+    pub fn portion_count(&self) -> u32 {
+        self.portion_count
+    }
+
+    pub fn special_requests(&self) -> &BTreeSet<SpecialRequest> {
+        &self.special_requests
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentPlantPartitionSheetRow {
+    plant_id: PlantId,
+    total_orders: u32,
+    total_portions: u32,
+    special_request_counts: BTreeMap<SpecialRequest, u32>,
+    orders: Vec<FulfillmentPlantPartitionOrderRow>,
+}
+
+impl FulfillmentPlantPartitionSheetRow {
+    pub fn plant_id(&self) -> &PlantId {
+        &self.plant_id
+    }
+
+    pub fn total_orders(&self) -> u32 {
+        self.total_orders
+    }
+
+    pub fn total_portions(&self) -> u32 {
+        self.total_portions
+    }
+
+    pub fn special_request_counts(&self) -> &BTreeMap<SpecialRequest, u32> {
+        &self.special_request_counts
+    }
+
+    pub fn orders(&self) -> &[FulfillmentPlantPartitionOrderRow] {
+        &self.orders
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentPlantPartitionSheetExport {
+    rows: Vec<FulfillmentPlantPartitionSheetRow>,
+}
+
+impl FulfillmentPlantPartitionSheetExport {
+    pub fn rows(&self) -> &[FulfillmentPlantPartitionSheetRow] {
+        &self.rows
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentLabelEntry {
+    order_id: OrderId,
+    plant_id: PlantId,
+    delivery_status: FulfillmentDeliveryStatus,
+    menu_item_id: MenuItemId,
+    quantity: u16,
+    special_requests: BTreeSet<SpecialRequest>,
+}
+
+impl FulfillmentLabelEntry {
+    pub fn order_id(&self) -> &OrderId {
+        &self.order_id
+    }
+
+    pub fn plant_id(&self) -> &PlantId {
+        &self.plant_id
+    }
+
+    pub fn delivery_status(&self) -> FulfillmentDeliveryStatus {
+        self.delivery_status
+    }
+
+    pub fn menu_item_id(&self) -> &MenuItemId {
+        &self.menu_item_id
+    }
+
+    pub fn quantity(&self) -> u16 {
+        self.quantity
+    }
+
+    pub fn special_requests(&self) -> &BTreeSet<SpecialRequest> {
+        &self.special_requests
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentLabelSheetExport {
+    labels: Vec<FulfillmentLabelEntry>,
+}
+
+impl FulfillmentLabelSheetExport {
+    pub fn labels(&self) -> &[FulfillmentLabelEntry] {
+        &self.labels
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentBasketEntry {
+    basket_code: String,
+    plant_id: PlantId,
+    order_ids: Vec<OrderId>,
+    portion_count: u32,
+}
+
+impl FulfillmentBasketEntry {
+    pub fn basket_code(&self) -> &str {
+        &self.basket_code
+    }
+
+    pub fn plant_id(&self) -> &PlantId {
+        &self.plant_id
+    }
+
+    pub fn order_ids(&self) -> &[OrderId] {
+        &self.order_ids
+    }
+
+    pub fn portion_count(&self) -> u32 {
+        self.portion_count
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentBasketListExport {
+    basket_capacity_portions: u16,
+    baskets: Vec<FulfillmentBasketEntry>,
+}
+
+impl FulfillmentBasketListExport {
+    pub fn basket_capacity_portions(&self) -> u16 {
+        self.basket_capacity_portions
+    }
+
+    pub fn baskets(&self) -> &[FulfillmentBasketEntry] {
+        &self.baskets
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FulfillmentBatchArtifacts {
+    daily_summary: FulfillmentDailySummaryExport,
+    plant_partition_sheet: FulfillmentPlantPartitionSheetExport,
+    labels: FulfillmentLabelSheetExport,
+    basket_list: FulfillmentBasketListExport,
+}
+
+impl FulfillmentBatchArtifacts {
+    pub fn daily_summary(&self) -> &FulfillmentDailySummaryExport {
+        &self.daily_summary
+    }
+
+    pub fn plant_partition_sheet(&self) -> &FulfillmentPlantPartitionSheetExport {
+        &self.plant_partition_sheet
+    }
+
+    pub fn labels(&self) -> &FulfillmentLabelSheetExport {
+        &self.labels
+    }
+
+    pub fn basket_list(&self) -> &FulfillmentBasketListExport {
+        &self.basket_list
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VendorFulfillmentBatchSnapshot {
+    batch_id: FulfillmentBatchId,
+    vendor_id: VendorId,
+    delivery_epoch_day: i32,
+    captured_at: TaipeiBusinessMoment,
+    board: VendorFulfillmentBoardSnapshot,
+    artifacts: FulfillmentBatchArtifacts,
+    audit_identity: AuditIdentityLink,
+}
+
+impl VendorFulfillmentBatchSnapshot {
+    pub fn batch_id(&self) -> &FulfillmentBatchId {
+        &self.batch_id
+    }
+
+    pub fn vendor_id(&self) -> &VendorId {
+        &self.vendor_id
+    }
+
+    pub fn delivery_epoch_day(&self) -> i32 {
+        self.delivery_epoch_day
+    }
+
+    pub fn captured_at(&self) -> TaipeiBusinessMoment {
+        self.captured_at
+    }
+
+    pub fn board(&self) -> &VendorFulfillmentBoardSnapshot {
+        &self.board
+    }
+
+    pub fn artifacts(&self) -> &FulfillmentBatchArtifacts {
+        &self.artifacts
+    }
+
+    pub fn audit_identity(&self) -> &AuditIdentityLink {
+        &self.audit_identity
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DeliveryStatusRecord {
+    status: FulfillmentDeliveryStatus,
+    vendor_id: VendorId,
+    delivery_epoch_day: i32,
+}
+
+#[derive(Debug, Clone, Default)]
+struct VendorFulfillmentState {
+    order_delivery_statuses: BTreeMap<OrderId, DeliveryStatusRecord>,
+    status_audit_log: Vec<FulfillmentStatusAuditEntry>,
+    batches: BTreeMap<FulfillmentBatchId, VendorFulfillmentBatchSnapshot>,
+    next_batch_sequence: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct VendorFulfillmentPolicy {
+    state: Arc<Mutex<VendorFulfillmentState>>,
+}
+
+impl VendorFulfillmentPolicy {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn vendor_operations_board(
+        &self,
+        menu_supply_policy: &MenuSupplyPolicy,
+        vendor_id: &VendorId,
+        delivery_epoch_day: i32,
+        generated_at: TaipeiBusinessMoment,
+    ) -> Result<VendorFulfillmentBoardSnapshot, VendorFulfillmentError> {
+        let orders = menu_supply_policy
+            .order_snapshots_for_vendor_delivery_day(vendor_id, delivery_epoch_day)?;
+        let state = lock_state(&self.state)?;
+        build_board_snapshot(
+            vendor_id,
+            delivery_epoch_day,
+            generated_at,
+            &orders,
+            &state.order_delivery_statuses,
+            &state.status_audit_log,
+        )
+    }
+
+    pub fn transition_delivery_status(
+        &self,
+        actor: &AuthenticatedActorContext,
+        menu_supply_policy: &MenuSupplyPolicy,
+        order_id: &OrderId,
+        to_status: FulfillmentDeliveryStatus,
+        occurred_at: TaipeiBusinessMoment,
+    ) -> Result<FulfillmentStatusAuditEntry, VendorFulfillmentError> {
+        ensure_role(actor, Role::VendorOperator)?;
+
+        let order_snapshot = menu_supply_policy
+            .order_snapshot(order_id)?
+            .ok_or_else(|| VendorFulfillmentError::OrderNotFound(order_id.clone()))?;
+        if !actor.plant_scope().contains(order_snapshot.plant_id()) {
+            return Err(VendorFulfillmentError::TargetPlantOutOfScope {
+                actor_id: actor.actor_id().clone(),
+                target_plant: order_snapshot.plant_id().clone(),
+            });
+        }
+
+        let mut state = lock_state(&self.state)?;
+        let from_status = state
+            .order_delivery_statuses
+            .get(order_id)
+            .map(|record| record.status)
+            .unwrap_or_else(|| default_delivery_status(order_snapshot.state()));
+        if from_status == to_status {
+            return Err(VendorFulfillmentError::DeliveryStatusUnchanged {
+                order_id: order_id.clone(),
+                status: to_status,
+            });
+        }
+        if !delivery_transition_allowed(from_status, to_status) {
+            return Err(VendorFulfillmentError::InvalidDeliveryStatusTransition {
+                order_id: order_id.clone(),
+                from_status,
+                to_status,
+            });
+        }
+
+        state.order_delivery_statuses.insert(
+            order_id.clone(),
+            DeliveryStatusRecord {
+                status: to_status,
+                vendor_id: order_snapshot.vendor_id().clone(),
+                delivery_epoch_day: order_snapshot.delivery_epoch_day(),
+            },
+        );
+
+        let audit_entry = FulfillmentStatusAuditEntry {
+            order_id: order_id.clone(),
+            vendor_id: order_snapshot.vendor_id().clone(),
+            delivery_epoch_day: order_snapshot.delivery_epoch_day(),
+            occurred_at,
+            from_status,
+            to_status,
+            audit_identity: AuditIdentityLink::from_actor(
+                actor,
+                ADVANCE_DELIVERY_STATUS_OPERATION_ID,
+            ),
+        };
+        state.status_audit_log.push(audit_entry.clone());
+        Ok(audit_entry)
+    }
+
+    pub fn create_export_batch(
+        &self,
+        actor: &AuthenticatedActorContext,
+        menu_supply_policy: &MenuSupplyPolicy,
+        vendor_id: &VendorId,
+        delivery_epoch_day: i32,
+        captured_at: TaipeiBusinessMoment,
+    ) -> Result<VendorFulfillmentBatchSnapshot, VendorFulfillmentError> {
+        ensure_role(actor, Role::VendorOperator)?;
+
+        let board = self.vendor_operations_board(
+            menu_supply_policy,
+            vendor_id,
+            delivery_epoch_day,
+            captured_at,
+        )?;
+        for plant_entry in board.plant_entries() {
+            if !actor.plant_scope().contains(plant_entry.plant_id()) {
+                return Err(VendorFulfillmentError::TargetPlantOutOfScope {
+                    actor_id: actor.actor_id().clone(),
+                    target_plant: plant_entry.plant_id().clone(),
+                });
+            }
+        }
+        let artifacts = build_batch_artifacts(vendor_id, delivery_epoch_day, board.order_entries());
+
+        let mut state = lock_state(&self.state)?;
+        state.next_batch_sequence = state
+            .next_batch_sequence
+            .checked_add(1)
+            .ok_or(VendorFulfillmentError::BatchSequenceOverflow)?;
+        let batch_id = FulfillmentBatchId::parse(format!(
+            "fbatch-{delivery_epoch_day}-{:06}",
+            state.next_batch_sequence
+        ))?;
+
+        let snapshot = VendorFulfillmentBatchSnapshot {
+            batch_id: batch_id.clone(),
+            vendor_id: vendor_id.clone(),
+            delivery_epoch_day,
+            captured_at,
+            board,
+            artifacts,
+            audit_identity: AuditIdentityLink::from_actor(actor, CREATE_EXPORT_BATCH_OPERATION_ID),
+        };
+        state.batches.insert(batch_id, snapshot.clone());
+        Ok(snapshot)
+    }
+
+    pub fn batch_snapshot(
+        &self,
+        batch_id: &FulfillmentBatchId,
+    ) -> Result<VendorFulfillmentBatchSnapshot, VendorFulfillmentError> {
+        let state = lock_state(&self.state)?;
+        state
+            .batches
+            .get(batch_id)
+            .cloned()
+            .ok_or_else(|| VendorFulfillmentError::BatchNotFound(batch_id.clone()))
+    }
+
+    pub fn status_audit_log(
+        &self,
+    ) -> Result<Vec<FulfillmentStatusAuditEntry>, VendorFulfillmentError> {
+        let state = lock_state(&self.state)?;
+        Ok(state.status_audit_log.clone())
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct PlantAggregate {
+    order_count: u32,
+    portion_count: u32,
+    delivery_status_counts: BTreeMap<FulfillmentDeliveryStatus, u32>,
+    special_request_counts: BTreeMap<SpecialRequest, u32>,
+}
+
+fn build_board_snapshot(
+    vendor_id: &VendorId,
+    delivery_epoch_day: i32,
+    generated_at: TaipeiBusinessMoment,
+    orders: &[OrderSnapshot],
+    status_overrides: &BTreeMap<OrderId, DeliveryStatusRecord>,
+    status_audit_log: &[FulfillmentStatusAuditEntry],
+) -> Result<VendorFulfillmentBoardSnapshot, VendorFulfillmentError> {
+    let mut order_entries = Vec::with_capacity(orders.len());
+    let mut plant_aggregates = BTreeMap::<PlantId, PlantAggregate>::new();
+    let mut order_ids = BTreeSet::new();
+
+    for order in orders {
+        order_ids.insert(order.order_id().clone());
+        let delivery_status = status_overrides
+            .get(order.order_id())
+            .filter(|record| {
+                record.vendor_id == *vendor_id && record.delivery_epoch_day == delivery_epoch_day
+            })
+            .map(|record| record.status)
+            .unwrap_or_else(|| default_delivery_status(order.state()));
+
+        let line_items = build_order_line_items(order)?;
+        let order_entry = VendorFulfillmentOrderEntry {
+            order_id: order.order_id().clone(),
+            plant_id: order.plant_id().clone(),
+            order_state: order.state(),
+            delivery_status,
+            line_items,
+        };
+
+        let plant_aggregate = plant_aggregates
+            .entry(order_entry.plant_id().clone())
+            .or_default();
+        plant_aggregate.order_count = plant_aggregate.order_count.saturating_add(1);
+        plant_aggregate.portion_count = plant_aggregate
+            .portion_count
+            .saturating_add(order_entry.total_portions());
+        *plant_aggregate
+            .delivery_status_counts
+            .entry(delivery_status)
+            .or_insert(0) += 1;
+
+        for line_item in order_entry.line_items() {
+            let quantity = u32::from(line_item.quantity());
+            for special_request in line_item.special_requests() {
+                *plant_aggregate
+                    .special_request_counts
+                    .entry(*special_request)
+                    .or_insert(0) += quantity;
+            }
+        }
+
+        order_entries.push(order_entry);
+    }
+
+    let mut plant_entries = Vec::with_capacity(plant_aggregates.len());
+    for (plant_id, aggregate) in plant_aggregates {
+        plant_entries.push(VendorFulfillmentPlantEntry {
+            plant_id,
+            order_count: aggregate.order_count,
+            portion_count: aggregate.portion_count,
+            delivery_status_counts: aggregate.delivery_status_counts,
+            special_request_counts: aggregate.special_request_counts,
+        });
+    }
+
+    let mut status_transitions = status_audit_log
+        .iter()
+        .filter(|entry| {
+            entry.vendor_id() == vendor_id
+                && entry.delivery_epoch_day() == delivery_epoch_day
+                && order_ids.contains(entry.order_id())
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    status_transitions.sort_by(|left, right| {
+        left.occurred_at()
+            .cmp(&right.occurred_at())
+            .then_with(|| left.order_id().cmp(right.order_id()))
+    });
+
+    Ok(VendorFulfillmentBoardSnapshot {
+        vendor_id: vendor_id.clone(),
+        delivery_epoch_day,
+        generated_at,
+        plant_entries,
+        order_entries,
+        status_transitions,
+    })
+}
+
+fn build_order_line_items(
+    order: &OrderSnapshot,
+) -> Result<Vec<FulfillmentOrderLineItem>, VendorFulfillmentError> {
+    let mut line_items = Vec::with_capacity(order.line_items().len());
+    for (menu_item_id, quantity) in order.line_items() {
+        let special_requests = order
+            .special_requests_by_menu_item()
+            .get(menu_item_id)
+            .cloned()
+            .ok_or_else(|| VendorFulfillmentError::MissingSpecialRequestSnapshot {
+                order_id: order.order_id().clone(),
+                menu_item_id: menu_item_id.clone(),
+            })?;
+        line_items.push(FulfillmentOrderLineItem {
+            menu_item_id: menu_item_id.clone(),
+            quantity: *quantity,
+            special_requests,
+        });
+    }
+    Ok(line_items)
+}
+
+fn build_batch_artifacts(
+    vendor_id: &VendorId,
+    delivery_epoch_day: i32,
+    order_entries: &[VendorFulfillmentOrderEntry],
+) -> FulfillmentBatchArtifacts {
+    let mut per_plant_summary = BTreeMap::<PlantId, FulfillmentDailySummaryPlantRow>::new();
+    let mut plant_partition = BTreeMap::<PlantId, FulfillmentPlantPartitionSheetRow>::new();
+    let mut labels = Vec::new();
+    let mut total_orders = 0_u32;
+    let mut total_portions = 0_u32;
+    let mut total_special_requests = 0_u32;
+
+    for order_entry in order_entries {
+        total_orders = total_orders.saturating_add(1);
+        total_portions = total_portions.saturating_add(order_entry.total_portions());
+
+        let summary_row = per_plant_summary
+            .entry(order_entry.plant_id().clone())
+            .or_insert(FulfillmentDailySummaryPlantRow {
+                plant_id: order_entry.plant_id().clone(),
+                order_count: 0,
+                portion_count: 0,
+            });
+        summary_row.order_count = summary_row.order_count.saturating_add(1);
+        summary_row.portion_count = summary_row
+            .portion_count
+            .saturating_add(order_entry.total_portions());
+
+        let partition_row = plant_partition
+            .entry(order_entry.plant_id().clone())
+            .or_insert(FulfillmentPlantPartitionSheetRow {
+                plant_id: order_entry.plant_id().clone(),
+                total_orders: 0,
+                total_portions: 0,
+                special_request_counts: BTreeMap::new(),
+                orders: Vec::new(),
+            });
+        partition_row.total_orders = partition_row.total_orders.saturating_add(1);
+        partition_row.total_portions = partition_row
+            .total_portions
+            .saturating_add(order_entry.total_portions());
+
+        let mut order_special_requests = BTreeSet::new();
+        for line_item in order_entry.line_items() {
+            labels.push(FulfillmentLabelEntry {
+                order_id: order_entry.order_id().clone(),
+                plant_id: order_entry.plant_id().clone(),
+                delivery_status: order_entry.delivery_status(),
+                menu_item_id: line_item.menu_item_id().clone(),
+                quantity: line_item.quantity(),
+                special_requests: line_item.special_requests().clone(),
+            });
+
+            let quantity = u32::from(line_item.quantity());
+            for special_request in line_item.special_requests() {
+                order_special_requests.insert(*special_request);
+                *partition_row
+                    .special_request_counts
+                    .entry(*special_request)
+                    .or_insert(0) += quantity;
+                total_special_requests = total_special_requests.saturating_add(quantity);
+            }
+        }
+        partition_row
+            .orders
+            .push(FulfillmentPlantPartitionOrderRow {
+                order_id: order_entry.order_id().clone(),
+                delivery_status: order_entry.delivery_status(),
+                portion_count: order_entry.total_portions(),
+                special_requests: order_special_requests,
+            });
+    }
+
+    labels.sort_by(|left, right| {
+        left.plant_id()
+            .cmp(right.plant_id())
+            .then_with(|| left.order_id().cmp(right.order_id()))
+            .then_with(|| left.menu_item_id().cmp(right.menu_item_id()))
+    });
+
+    let per_plant = per_plant_summary.into_values().collect::<Vec<_>>();
+    let plant_partition_sheet = FulfillmentPlantPartitionSheetExport {
+        rows: plant_partition.into_values().collect::<Vec<_>>(),
+    };
+    let basket_list = build_basket_list(order_entries);
+
+    FulfillmentBatchArtifacts {
+        daily_summary: FulfillmentDailySummaryExport {
+            vendor_id: vendor_id.clone(),
+            delivery_epoch_day,
+            total_orders,
+            total_portions,
+            total_special_requests,
+            per_plant,
+        },
+        plant_partition_sheet,
+        labels: FulfillmentLabelSheetExport { labels },
+        basket_list,
+    }
+}
+
+fn build_basket_list(order_entries: &[VendorFulfillmentOrderEntry]) -> FulfillmentBasketListExport {
+    let mut per_plant_orders = BTreeMap::<PlantId, Vec<&VendorFulfillmentOrderEntry>>::new();
+    for order_entry in order_entries {
+        per_plant_orders
+            .entry(order_entry.plant_id().clone())
+            .or_default()
+            .push(order_entry);
+    }
+
+    let mut baskets = Vec::new();
+    for (plant_id, mut plant_orders) in per_plant_orders {
+        plant_orders.sort_by(|left, right| left.order_id().cmp(right.order_id()));
+
+        let mut basket_index = 1_u32;
+        let mut current_order_ids = Vec::new();
+        let mut current_portions = 0_u32;
+
+        for order in plant_orders {
+            let order_portions = order.total_portions();
+            let next_portions = current_portions.saturating_add(order_portions);
+            if !current_order_ids.is_empty() && next_portions > u32::from(BASKET_CAPACITY_PORTIONS)
+            {
+                baskets.push(FulfillmentBasketEntry {
+                    basket_code: format!("{}-{:02}", plant_id.as_str(), basket_index),
+                    plant_id: plant_id.clone(),
+                    order_ids: current_order_ids,
+                    portion_count: current_portions,
+                });
+                basket_index = basket_index.saturating_add(1);
+                current_order_ids = Vec::new();
+                current_portions = 0;
+            }
+
+            current_order_ids.push(order.order_id().clone());
+            current_portions = current_portions.saturating_add(order_portions);
+        }
+
+        if !current_order_ids.is_empty() {
+            baskets.push(FulfillmentBasketEntry {
+                basket_code: format!("{}-{:02}", plant_id.as_str(), basket_index),
+                plant_id,
+                order_ids: current_order_ids,
+                portion_count: current_portions,
+            });
+        }
+    }
+
+    FulfillmentBasketListExport {
+        basket_capacity_portions: BASKET_CAPACITY_PORTIONS,
+        baskets,
+    }
+}
+
+fn default_delivery_status(order_state: OrderLifecycleState) -> FulfillmentDeliveryStatus {
+    match order_state {
+        OrderLifecycleState::Pending | OrderLifecycleState::Modified => {
+            FulfillmentDeliveryStatus::PendingPrep
+        }
+        OrderLifecycleState::Fulfilled => FulfillmentDeliveryStatus::Delivered,
+        OrderLifecycleState::Cancelled
+        | OrderLifecycleState::SoldOut
+        | OrderLifecycleState::RefundPending
+        | OrderLifecycleState::Refunded => FulfillmentDeliveryStatus::Cancelled,
+    }
+}
+
+fn delivery_transition_allowed(
+    from_status: FulfillmentDeliveryStatus,
+    to_status: FulfillmentDeliveryStatus,
+) -> bool {
+    matches!(
+        (from_status, to_status),
+        (
+            FulfillmentDeliveryStatus::PendingPrep,
+            FulfillmentDeliveryStatus::Preparing
+        ) | (
+            FulfillmentDeliveryStatus::PendingPrep,
+            FulfillmentDeliveryStatus::Packed
+        ) | (
+            FulfillmentDeliveryStatus::PendingPrep,
+            FulfillmentDeliveryStatus::Cancelled
+        ) | (
+            FulfillmentDeliveryStatus::Preparing,
+            FulfillmentDeliveryStatus::Packed
+        ) | (
+            FulfillmentDeliveryStatus::Preparing,
+            FulfillmentDeliveryStatus::Cancelled
+        ) | (
+            FulfillmentDeliveryStatus::Packed,
+            FulfillmentDeliveryStatus::OutForDelivery
+        ) | (
+            FulfillmentDeliveryStatus::Packed,
+            FulfillmentDeliveryStatus::Cancelled
+        ) | (
+            FulfillmentDeliveryStatus::OutForDelivery,
+            FulfillmentDeliveryStatus::Delivered
+        ) | (
+            FulfillmentDeliveryStatus::OutForDelivery,
+            FulfillmentDeliveryStatus::Cancelled
+        )
+    )
+}
+
+fn ensure_role(
+    actor: &AuthenticatedActorContext,
+    role: Role,
+) -> Result<(), VendorFulfillmentError> {
+    if actor.role() != role {
+        return Err(VendorFulfillmentError::UnauthorizedRole {
+            expected: role,
+            actual: actor.role(),
+        });
+    }
+    Ok(())
+}
+
+fn lock_state(
+    state: &Arc<Mutex<VendorFulfillmentState>>,
+) -> Result<std::sync::MutexGuard<'_, VendorFulfillmentState>, VendorFulfillmentError> {
+    state
+        .lock()
+        .map_err(|_| VendorFulfillmentError::StatePoisoned)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VendorFulfillmentError {
+    InvalidBatchId,
+    BatchNotFound(FulfillmentBatchId),
+    BatchSequenceOverflow,
+    UnauthorizedRole {
+        expected: Role,
+        actual: Role,
+    },
+    TargetPlantOutOfScope {
+        actor_id: crate::identity::ActorId,
+        target_plant: PlantId,
+    },
+    OrderNotFound(OrderId),
+    MissingSpecialRequestSnapshot {
+        order_id: OrderId,
+        menu_item_id: MenuItemId,
+    },
+    InvalidDeliveryStatusTransition {
+        order_id: OrderId,
+        from_status: FulfillmentDeliveryStatus,
+        to_status: FulfillmentDeliveryStatus,
+    },
+    DeliveryStatusUnchanged {
+        order_id: OrderId,
+        status: FulfillmentDeliveryStatus,
+    },
+    MenuSupply(MenuSupplyWindowError),
+    StatePoisoned,
+}
+
+impl From<MenuSupplyWindowError> for VendorFulfillmentError {
+    fn from(value: MenuSupplyWindowError) -> Self {
+        Self::MenuSupply(value)
+    }
+}
+
+impl fmt::Display for VendorFulfillmentError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidBatchId => f.write_str("fulfillment batch id must not be empty"),
+            Self::BatchNotFound(batch_id) => write!(
+                f,
+                "fulfillment batch snapshot `{}` does not exist",
+                batch_id.as_str()
+            ),
+            Self::BatchSequenceOverflow => {
+                f.write_str("fulfillment batch sequence overflowed while allocating id")
+            }
+            Self::UnauthorizedRole { expected, actual } => write!(
+                f,
+                "operation requires role {expected:?}, but actor has role {actual:?}"
+            ),
+            Self::TargetPlantOutOfScope {
+                actor_id,
+                target_plant,
+            } => write!(
+                f,
+                "actor {actor_id} is not authorized for plant {}",
+                target_plant.as_str()
+            ),
+            Self::OrderNotFound(order_id) => {
+                write!(f, "order {order_id} does not exist in menu supply state")
+            }
+            Self::MissingSpecialRequestSnapshot {
+                order_id,
+                menu_item_id,
+            } => write!(
+                f,
+                "order {order_id} is missing controlled special-request snapshot for menu item {menu_item_id}"
+            ),
+            Self::InvalidDeliveryStatusTransition {
+                order_id,
+                from_status,
+                to_status,
+            } => write!(
+                f,
+                "order {order_id} cannot transition delivery status from {from_status} to {to_status}"
+            ),
+            Self::DeliveryStatusUnchanged { order_id, status } => {
+                write!(f, "order {order_id} is already in delivery status {status}")
+            }
+            Self::MenuSupply(error) => write!(f, "menu supply read failed: {error}"),
+            Self::StatePoisoned => {
+                f.write_str("vendor fulfillment state is poisoned due to a previous panic")
+            }
+        }
+    }
+}
+
+impl std::error::Error for VendorFulfillmentError {}

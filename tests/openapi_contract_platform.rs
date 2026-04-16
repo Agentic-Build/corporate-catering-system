@@ -211,6 +211,70 @@ fn admin_contract_exposes_vendor_compliance_and_delivery_mapping_capabilities() 
 }
 
 #[test]
+fn vendor_fulfillment_board_and_export_batch_contracts_are_declared_with_controlled_special_requests(
+) {
+    let spec = canonical_openapi_spec();
+    let paths = spec["paths"].as_object().expect("paths must be object");
+    assert!(paths.contains_key("/api/v1/vendor/fulfillment-board"));
+    assert!(paths.contains_key("/api/v1/vendor/orders/{orderId}/delivery-status"));
+    assert!(paths.contains_key("/api/v1/vendor/fulfillment-batches"));
+    assert!(paths.contains_key("/api/v1/vendor/fulfillment-batches/{batchId}"));
+
+    let board_operation =
+        operation_by_path_and_method(&spec, "/api/v1/vendor/fulfillment-board", "get");
+    let board_parameter_refs = board_operation["parameters"]
+        .as_array()
+        .expect("board parameters should be array")
+        .iter()
+        .map(|parameter| {
+            parameter["$ref"]
+                .as_str()
+                .expect("board parameter should be $ref")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        board_parameter_refs,
+        BTreeSet::from([
+            "#/components/parameters/DeliveryDateQuery".to_owned(),
+            "#/components/parameters/PlantIdFilterQuery".to_owned(),
+            "#/components/parameters/IncludeAuditTransitionsQuery".to_owned(),
+        ])
+    );
+
+    let transition_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/vendor/orders/{orderId}/delivery-status",
+        "post",
+    );
+    assert_error_response_ref(
+        transition_operation,
+        "409",
+        "#/components/responses/Conflict",
+    );
+    assert_eq!(
+        transition_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/VendorFulfillmentDeliveryStatusTransitionRequest"
+    );
+
+    let batch_create_operation =
+        operation_by_path_and_method(&spec, "/api/v1/vendor/fulfillment-batches", "post");
+    assert_eq!(
+        batch_create_operation["responses"]["201"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/VendorFulfillmentExportBatch"
+    );
+
+    let label_schema = &spec["components"]["schemas"]["VendorFulfillmentLabelEntry"];
+    let label_special_request_ref = label_schema["properties"]["specialRequests"]["items"]["$ref"]
+        .as_str()
+        .expect("label special requests should reference controlled enum");
+    assert_eq!(
+        label_special_request_ref,
+        "#/components/schemas/SpecialRequestOption"
+    );
+}
+
+#[test]
 fn delivery_mapping_endpoints_have_tested_error_code_to_schema_refs() {
     let spec = canonical_openapi_spec();
 
