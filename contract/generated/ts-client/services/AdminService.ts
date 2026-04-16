@@ -2,7 +2,14 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ActorId } from '../models/ActorId';
 import type { AdminVendorReviewRequest } from '../models/AdminVendorReviewRequest';
+import type { AuditAction } from '../models/AuditAction';
+import type { AuditEntityType } from '../models/AuditEntityType';
+import type { AuditInvestigationResponse } from '../models/AuditInvestigationResponse';
+import type { AuditResponsibilityResponse } from '../models/AuditResponsibilityResponse';
+import type { AuditRetentionPurgeRequest } from '../models/AuditRetentionPurgeRequest';
+import type { AuditRetentionPurgeResponse } from '../models/AuditRetentionPurgeResponse';
 import type { PlantId } from '../models/PlantId';
 import type { SortOrder } from '../models/SortOrder';
 import type { TaipeiBusinessDateTime } from '../models/TaipeiBusinessDateTime';
@@ -23,6 +30,110 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class AdminService {
+    /**
+     * Query immutable audit evidence for investigations
+     * @param actorId
+     * @param action
+     * @param entityType
+     * @param entityId
+     * @param occurredFromEpochDay
+     * @param occurredToEpochDay
+     * @param correlationId
+     * @returns AuditInvestigationResponse Immutable audit evidence matching investigation filters
+     * @throws ApiError
+     */
+    public static queryAuditInvestigations(
+        actorId?: ActorId,
+        action?: AuditAction,
+        entityType?: AuditEntityType,
+        entityId?: string,
+        occurredFromEpochDay?: number,
+        occurredToEpochDay?: number,
+        correlationId?: string,
+    ): CancelablePromise<AuditInvestigationResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/audit/investigations',
+            query: {
+                'actorId': actorId,
+                'action': action,
+                'entityType': entityType,
+                'entityId': entityId,
+                'occurredFromEpochDay': occurredFromEpochDay,
+                'occurredToEpochDay': occurredToEpochDay,
+                'correlationId': correlationId,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Attribute investigation responsibility by actor identity
+     * @param actorId
+     * @param action
+     * @param entityType
+     * @param entityId
+     * @param occurredFromEpochDay
+     * @param occurredToEpochDay
+     * @param correlationId
+     * @returns AuditResponsibilityResponse Investigation responsibility attribution grouped by actor
+     * @throws ApiError
+     */
+    public static queryAuditResponsibilities(
+        actorId?: ActorId,
+        action?: AuditAction,
+        entityType?: AuditEntityType,
+        entityId?: string,
+        occurredFromEpochDay?: number,
+        occurredToEpochDay?: number,
+        correlationId?: string,
+    ): CancelablePromise<AuditResponsibilityResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/audit/responsibilities',
+            query: {
+                'actorId': actorId,
+                'action': action,
+                'entityType': entityType,
+                'entityId': entityId,
+                'occurredFromEpochDay': occurredFromEpochDay,
+                'occurredToEpochDay': occurredToEpochDay,
+                'correlationId': correlationId,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Execute audit evidence retention purge by policy
+     * @param requestBody
+     * @returns AuditRetentionPurgeResponse Audit evidence retention purge result
+     * @throws ApiError
+     */
+    public static purgeAuditEvidence(
+        requestBody: AuditRetentionPurgeRequest,
+    ): CancelablePromise<AuditRetentionPurgeResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/audit/retention-purge',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
     /**
      * List vendor compliance document templates by category
      * @param vendorCategory

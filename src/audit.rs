@@ -1,7 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
 
 use crate::identity::{ActorId, AuthenticatedActorContext, AuthenticationSource, PlantScope, Role};
 
@@ -501,8 +505,30 @@ impl ImmutableAuditTrail {
                 retention_policy,
                 next_evidence_id: 0,
                 evidences: Vec::new(),
+                storage_backend: StorageBackend::InMemory,
             })),
         }
+    }
+
+    pub fn with_json_storage(
+        path: impl Into<PathBuf>,
+        retention_policy: AuditRetentionPolicy,
+    ) -> Result<Self, AuditTrailError> {
+        let path = path.into();
+        let storage_backend = StorageBackend::JsonFile(path.clone());
+        let state = if let Some(snapshot) = load_snapshot_from_json_file(&path)? {
+            AuditTrailState::from_persisted_snapshot(snapshot, retention_policy, storage_backend)?
+        } else {
+            AuditTrailState {
+                retention_policy,
+                next_evidence_id: 0,
+                evidences: Vec::new(),
+                storage_backend,
+            }
+        };
+        Ok(Self {
+            state: Arc::new(Mutex::new(state)),
+        })
     }
 
     pub fn retention_policy(&self) -> Result<AuditRetentionPolicy, AuditTrailError> {
@@ -515,6 +541,7 @@ impl ImmutableAuditTrail {
         write: AuditEvidenceWrite,
     ) -> Result<ImmutableAuditEvidence, AuditTrailError> {
         let mut state = lock_state(&self.state)?;
+        let previous_next_evidence_id = state.next_evidence_id;
         state.next_evidence_id = state
             .next_evidence_id
             .checked_add(1)
@@ -528,6 +555,11 @@ impl ImmutableAuditTrail {
             correlation_id: write.correlation_id,
         };
         state.evidences.push(evidence.clone());
+        if let Err(error) = persist_state_if_needed(&state) {
+            state.evidences.pop();
+            state.next_evidence_id = previous_next_evidence_id;
+            return Err(error);
+        }
         Ok(evidence)
     }
 
@@ -606,10 +638,15 @@ impl ImmutableAuditTrail {
         ensure_committee_admin(actor)?;
         let mut state = lock_state(&self.state)?;
         let before = state.evidences.len();
+        let previous_evidences = state.evidences.clone();
         let retention_days = i32::from(state.retention_policy.retention_days());
         state
             .evidences
             .retain(|evidence| as_of.days_since(evidence.occurred_at()) <= retention_days);
+        if let Err(error) = persist_state_if_needed(&state) {
+            state.evidences = previous_evidences;
+            return Err(error);
+        }
         Ok(AuditPurgeReport {
             purged_events: before.saturating_sub(state.evidences.len()),
         })
@@ -626,6 +663,68 @@ struct AuditTrailState {
     retention_policy: AuditRetentionPolicy,
     next_evidence_id: u64,
     evidences: Vec<ImmutableAuditEvidence>,
+    storage_backend: StorageBackend,
+}
+
+impl AuditTrailState {
+    fn to_persisted_snapshot(&self) -> PersistedAuditTrailSnapshot {
+        PersistedAuditTrailSnapshot {
+            next_evidence_id: self.next_evidence_id,
+            evidences: self
+                .evidences
+                .iter()
+                .map(persisted_evidence_from_domain)
+                .collect(),
+        }
+    }
+
+    fn from_persisted_snapshot(
+        snapshot: PersistedAuditTrailSnapshot,
+        retention_policy: AuditRetentionPolicy,
+        storage_backend: StorageBackend,
+    ) -> Result<Self, AuditTrailError> {
+        let evidences = snapshot
+            .evidences
+            .iter()
+            .map(domain_evidence_from_persisted)
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut seen_evidence_ids = BTreeSet::new();
+        for evidence in &evidences {
+            if !seen_evidence_ids.insert(evidence.evidence_id()) {
+                return Err(AuditTrailError::PersistenceDataCorrupted(
+                    "persisted evidence_id must be unique".to_owned(),
+                ));
+            }
+        }
+        let max_evidence_id = evidences
+            .iter()
+            .map(ImmutableAuditEvidence::evidence_id)
+            .max();
+        if let Some(max_evidence_id) = max_evidence_id {
+            if max_evidence_id == 0 {
+                return Err(AuditTrailError::PersistenceDataCorrupted(
+                    "persisted evidence_id must be greater than zero".to_owned(),
+                ));
+            }
+            if snapshot.next_evidence_id < max_evidence_id {
+                return Err(AuditTrailError::PersistenceDataCorrupted(
+                    "persisted next_evidence_id is smaller than max evidence id".to_owned(),
+                ));
+            }
+        }
+        Ok(Self {
+            retention_policy,
+            next_evidence_id: snapshot.next_evidence_id,
+            evidences,
+            storage_backend,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+enum StorageBackend {
+    InMemory,
+    JsonFile(PathBuf),
 }
 
 #[derive(Debug, Clone)]
@@ -636,6 +735,102 @@ struct ResponsibilityAccumulator {
     event_count: usize,
     actions: BTreeSet<AuditAction>,
     entities: BTreeSet<AuditEntityRef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedAuditTrailSnapshot {
+    next_evidence_id: u64,
+    evidences: Vec<PersistedImmutableAuditEvidence>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedImmutableAuditEvidence {
+    evidence_id: u64,
+    occurred_at: PersistedAuditTimestamp,
+    audit_identity: PersistedAuditIdentity,
+    action: PersistedAuditAction,
+    entity: PersistedAuditEntity,
+    correlation_id: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct PersistedAuditTimestamp {
+    epoch_day: i32,
+    minute_of_day: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedAuditIdentity {
+    actor_id: String,
+    role: PersistedRole,
+    authentication_source: PersistedAuthenticationSource,
+    plant_scope: PersistedPlantScope,
+    operation_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedPlantScope {
+    all_plants: bool,
+    plant_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PersistedRole {
+    Employee,
+    VendorOperator,
+    CommitteeAdmin,
+    PayrollOperator,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PersistedAuthenticationSource {
+    CorporateSso,
+    VendorAccountMfa,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PersistedAuditAction {
+    CreateEmployeeOrder,
+    UpdateEmployeeOrder,
+    VerifyPickupOrder,
+    MarkOrderSoldOut,
+    MarkOrderRefundPending,
+    MarkOrderRefunded,
+    UpsertVendorMenuItem,
+    UpsertVendorOrderingPolicy,
+    AdvanceVendorFulfillmentDeliveryStatus,
+    CreateVendorFulfillmentExportBatch,
+    UpsertVendorPlantDeliveryMapping,
+    DeleteVendorPlantDeliveryMapping,
+    UpsertComplianceDocumentTemplate,
+    RegisterVendorApplication,
+    SubmitVendorComplianceDocument,
+    ReviewVendorApplication,
+    RunVendorComplianceLifecycle,
+    PruneVendorComplianceHistory,
+    ExportPayrollDeductions,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedAuditEntity {
+    entity_type: PersistedAuditEntityType,
+    entity_id: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PersistedAuditEntityType {
+    Order,
+    MenuItem,
+    Vendor,
+    DeliveryMapping,
+    ComplianceDocumentTemplate,
+    FulfillmentBatch,
+    Settlement,
+    VendorOrderingPolicy,
 }
 
 fn ensure_committee_admin(actor: &AuthenticatedActorContext) -> Result<(), AuditTrailError> {
@@ -653,6 +848,314 @@ fn lock_state(
     state.lock().map_err(|_| AuditTrailError::StatePoisoned)
 }
 
+fn load_snapshot_from_json_file(
+    path: &Path,
+) -> Result<Option<PersistedAuditTrailSnapshot>, AuditTrailError> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(path)
+        .map_err(|error| AuditTrailError::PersistenceIo(error.to_string()))?;
+    if content.trim().is_empty() {
+        return Ok(None);
+    }
+    let snapshot = serde_json::from_str(&content)
+        .map_err(|error| AuditTrailError::PersistenceSerde(error.to_string()))?;
+    Ok(Some(snapshot))
+}
+
+fn persist_state_if_needed(state: &AuditTrailState) -> Result<(), AuditTrailError> {
+    let StorageBackend::JsonFile(path) = &state.storage_backend else {
+        return Ok(());
+    };
+
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .map_err(|error| AuditTrailError::PersistenceIo(error.to_string()))?;
+        }
+    }
+    let snapshot = state.to_persisted_snapshot();
+    let serialized = serde_json::to_string_pretty(&snapshot)
+        .map_err(|error| AuditTrailError::PersistenceSerde(error.to_string()))?;
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| {
+            AuditTrailError::PersistenceIo("audit storage path is missing file name".to_owned())
+        })?;
+    let temp_path = path.with_file_name(format!("{file_name}.tmp"));
+    fs::write(&temp_path, serialized)
+        .map_err(|error| AuditTrailError::PersistenceIo(error.to_string()))?;
+    if let Err(error) = fs::rename(&temp_path, path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(AuditTrailError::PersistenceIo(error.to_string()));
+    }
+    Ok(())
+}
+
+fn persisted_evidence_from_domain(
+    evidence: &ImmutableAuditEvidence,
+) -> PersistedImmutableAuditEvidence {
+    PersistedImmutableAuditEvidence {
+        evidence_id: evidence.evidence_id(),
+        occurred_at: PersistedAuditTimestamp {
+            epoch_day: evidence.occurred_at().epoch_day(),
+            minute_of_day: evidence.occurred_at().minute_of_day(),
+        },
+        audit_identity: persisted_audit_identity_from_domain(evidence.audit_identity()),
+        action: persisted_audit_action_from_domain(evidence.action()),
+        entity: persisted_audit_entity_from_domain(evidence.entity()),
+        correlation_id: evidence.correlation_id().as_str().to_owned(),
+    }
+}
+
+fn domain_evidence_from_persisted(
+    persisted: &PersistedImmutableAuditEvidence,
+) -> Result<ImmutableAuditEvidence, AuditTrailError> {
+    if persisted.evidence_id == 0 {
+        return Err(AuditTrailError::PersistenceDataCorrupted(
+            "persisted evidence_id must be greater than zero".to_owned(),
+        ));
+    }
+    Ok(ImmutableAuditEvidence {
+        evidence_id: persisted.evidence_id,
+        occurred_at: AuditTimestamp::new(
+            persisted.occurred_at.epoch_day,
+            persisted.occurred_at.minute_of_day,
+        )?,
+        audit_identity: domain_audit_identity_from_persisted(&persisted.audit_identity)?,
+        action: domain_audit_action_from_persisted(persisted.action),
+        entity: domain_audit_entity_from_persisted(&persisted.entity)?,
+        correlation_id: AuditCorrelationId::parse(persisted.correlation_id.clone())?,
+    })
+}
+
+fn persisted_audit_identity_from_domain(identity: &AuditIdentityLink) -> PersistedAuditIdentity {
+    PersistedAuditIdentity {
+        actor_id: identity.actor_id().as_str().to_owned(),
+        role: persisted_role_from_domain(identity.role()),
+        authentication_source: persisted_authentication_source_from_domain(
+            identity.authentication_source(),
+        ),
+        plant_scope: persisted_plant_scope_from_domain(identity.plant_scope()),
+        operation_id: identity.operation_id().to_owned(),
+    }
+}
+
+fn domain_audit_identity_from_persisted(
+    persisted: &PersistedAuditIdentity,
+) -> Result<AuditIdentityLink, AuditTrailError> {
+    let actor_id = ActorId::parse(persisted.actor_id.clone())
+        .map_err(|error| AuditTrailError::PersistenceDataCorrupted(error.to_string()))?;
+    let role = domain_role_from_persisted(persisted.role);
+    let authentication_source =
+        domain_authentication_source_from_persisted(persisted.authentication_source);
+    let plant_scope = domain_plant_scope_from_persisted(&persisted.plant_scope)?;
+    let actor = AuthenticatedActorContext::new(actor_id, role, plant_scope, authentication_source)
+        .map_err(|error| AuditTrailError::PersistenceDataCorrupted(error.to_string()))?;
+    Ok(AuditIdentityLink::from_actor(
+        &actor,
+        persisted.operation_id.clone(),
+    ))
+}
+
+fn persisted_plant_scope_from_domain(scope: &PlantScope) -> PersistedPlantScope {
+    match scope {
+        PlantScope::AllPlants => PersistedPlantScope {
+            all_plants: true,
+            plant_ids: Vec::new(),
+        },
+        PlantScope::Restricted(plants) => PersistedPlantScope {
+            all_plants: false,
+            plant_ids: plants
+                .iter()
+                .map(|plant_id| plant_id.as_str().to_owned())
+                .collect(),
+        },
+    }
+}
+
+fn domain_plant_scope_from_persisted(
+    persisted: &PersistedPlantScope,
+) -> Result<PlantScope, AuditTrailError> {
+    if persisted.all_plants {
+        return Ok(PlantScope::all());
+    }
+    let plant_ids = persisted
+        .plant_ids
+        .iter()
+        .map(|plant_id| {
+            crate::identity::PlantId::parse(plant_id.clone())
+                .map_err(|error| AuditTrailError::PersistenceDataCorrupted(error.to_string()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    PlantScope::restricted(plant_ids)
+        .map_err(|error| AuditTrailError::PersistenceDataCorrupted(error.to_string()))
+}
+
+fn persisted_role_from_domain(role: Role) -> PersistedRole {
+    match role {
+        Role::Employee => PersistedRole::Employee,
+        Role::VendorOperator => PersistedRole::VendorOperator,
+        Role::CommitteeAdmin => PersistedRole::CommitteeAdmin,
+        Role::PayrollOperator => PersistedRole::PayrollOperator,
+    }
+}
+
+fn domain_role_from_persisted(role: PersistedRole) -> Role {
+    match role {
+        PersistedRole::Employee => Role::Employee,
+        PersistedRole::VendorOperator => Role::VendorOperator,
+        PersistedRole::CommitteeAdmin => Role::CommitteeAdmin,
+        PersistedRole::PayrollOperator => Role::PayrollOperator,
+    }
+}
+
+fn persisted_authentication_source_from_domain(
+    source: AuthenticationSource,
+) -> PersistedAuthenticationSource {
+    match source {
+        AuthenticationSource::CorporateSso => PersistedAuthenticationSource::CorporateSso,
+        AuthenticationSource::VendorAccountMfa => PersistedAuthenticationSource::VendorAccountMfa,
+    }
+}
+
+fn domain_authentication_source_from_persisted(
+    source: PersistedAuthenticationSource,
+) -> AuthenticationSource {
+    match source {
+        PersistedAuthenticationSource::CorporateSso => AuthenticationSource::CorporateSso,
+        PersistedAuthenticationSource::VendorAccountMfa => AuthenticationSource::VendorAccountMfa,
+    }
+}
+
+fn persisted_audit_action_from_domain(action: AuditAction) -> PersistedAuditAction {
+    match action {
+        AuditAction::CreateEmployeeOrder => PersistedAuditAction::CreateEmployeeOrder,
+        AuditAction::UpdateEmployeeOrder => PersistedAuditAction::UpdateEmployeeOrder,
+        AuditAction::VerifyPickupOrder => PersistedAuditAction::VerifyPickupOrder,
+        AuditAction::MarkOrderSoldOut => PersistedAuditAction::MarkOrderSoldOut,
+        AuditAction::MarkOrderRefundPending => PersistedAuditAction::MarkOrderRefundPending,
+        AuditAction::MarkOrderRefunded => PersistedAuditAction::MarkOrderRefunded,
+        AuditAction::UpsertVendorMenuItem => PersistedAuditAction::UpsertVendorMenuItem,
+        AuditAction::UpsertVendorOrderingPolicy => PersistedAuditAction::UpsertVendorOrderingPolicy,
+        AuditAction::AdvanceVendorFulfillmentDeliveryStatus => {
+            PersistedAuditAction::AdvanceVendorFulfillmentDeliveryStatus
+        }
+        AuditAction::CreateVendorFulfillmentExportBatch => {
+            PersistedAuditAction::CreateVendorFulfillmentExportBatch
+        }
+        AuditAction::UpsertVendorPlantDeliveryMapping => {
+            PersistedAuditAction::UpsertVendorPlantDeliveryMapping
+        }
+        AuditAction::DeleteVendorPlantDeliveryMapping => {
+            PersistedAuditAction::DeleteVendorPlantDeliveryMapping
+        }
+        AuditAction::UpsertComplianceDocumentTemplate => {
+            PersistedAuditAction::UpsertComplianceDocumentTemplate
+        }
+        AuditAction::RegisterVendorApplication => PersistedAuditAction::RegisterVendorApplication,
+        AuditAction::SubmitVendorComplianceDocument => {
+            PersistedAuditAction::SubmitVendorComplianceDocument
+        }
+        AuditAction::ReviewVendorApplication => PersistedAuditAction::ReviewVendorApplication,
+        AuditAction::RunVendorComplianceLifecycle => {
+            PersistedAuditAction::RunVendorComplianceLifecycle
+        }
+        AuditAction::PruneVendorComplianceHistory => {
+            PersistedAuditAction::PruneVendorComplianceHistory
+        }
+        AuditAction::ExportPayrollDeductions => PersistedAuditAction::ExportPayrollDeductions,
+    }
+}
+
+fn domain_audit_action_from_persisted(action: PersistedAuditAction) -> AuditAction {
+    match action {
+        PersistedAuditAction::CreateEmployeeOrder => AuditAction::CreateEmployeeOrder,
+        PersistedAuditAction::UpdateEmployeeOrder => AuditAction::UpdateEmployeeOrder,
+        PersistedAuditAction::VerifyPickupOrder => AuditAction::VerifyPickupOrder,
+        PersistedAuditAction::MarkOrderSoldOut => AuditAction::MarkOrderSoldOut,
+        PersistedAuditAction::MarkOrderRefundPending => AuditAction::MarkOrderRefundPending,
+        PersistedAuditAction::MarkOrderRefunded => AuditAction::MarkOrderRefunded,
+        PersistedAuditAction::UpsertVendorMenuItem => AuditAction::UpsertVendorMenuItem,
+        PersistedAuditAction::UpsertVendorOrderingPolicy => AuditAction::UpsertVendorOrderingPolicy,
+        PersistedAuditAction::AdvanceVendorFulfillmentDeliveryStatus => {
+            AuditAction::AdvanceVendorFulfillmentDeliveryStatus
+        }
+        PersistedAuditAction::CreateVendorFulfillmentExportBatch => {
+            AuditAction::CreateVendorFulfillmentExportBatch
+        }
+        PersistedAuditAction::UpsertVendorPlantDeliveryMapping => {
+            AuditAction::UpsertVendorPlantDeliveryMapping
+        }
+        PersistedAuditAction::DeleteVendorPlantDeliveryMapping => {
+            AuditAction::DeleteVendorPlantDeliveryMapping
+        }
+        PersistedAuditAction::UpsertComplianceDocumentTemplate => {
+            AuditAction::UpsertComplianceDocumentTemplate
+        }
+        PersistedAuditAction::RegisterVendorApplication => AuditAction::RegisterVendorApplication,
+        PersistedAuditAction::SubmitVendorComplianceDocument => {
+            AuditAction::SubmitVendorComplianceDocument
+        }
+        PersistedAuditAction::ReviewVendorApplication => AuditAction::ReviewVendorApplication,
+        PersistedAuditAction::RunVendorComplianceLifecycle => {
+            AuditAction::RunVendorComplianceLifecycle
+        }
+        PersistedAuditAction::PruneVendorComplianceHistory => {
+            AuditAction::PruneVendorComplianceHistory
+        }
+        PersistedAuditAction::ExportPayrollDeductions => AuditAction::ExportPayrollDeductions,
+    }
+}
+
+fn persisted_audit_entity_from_domain(entity: &AuditEntityRef) -> PersistedAuditEntity {
+    PersistedAuditEntity {
+        entity_type: persisted_entity_type_from_domain(entity.entity_type()),
+        entity_id: entity.entity_id().to_owned(),
+    }
+}
+
+fn domain_audit_entity_from_persisted(
+    entity: &PersistedAuditEntity,
+) -> Result<AuditEntityRef, AuditTrailError> {
+    AuditEntityRef::new(
+        domain_entity_type_from_persisted(entity.entity_type),
+        entity.entity_id.clone(),
+    )
+}
+
+fn persisted_entity_type_from_domain(entity_type: AuditEntityType) -> PersistedAuditEntityType {
+    match entity_type {
+        AuditEntityType::Order => PersistedAuditEntityType::Order,
+        AuditEntityType::MenuItem => PersistedAuditEntityType::MenuItem,
+        AuditEntityType::Vendor => PersistedAuditEntityType::Vendor,
+        AuditEntityType::DeliveryMapping => PersistedAuditEntityType::DeliveryMapping,
+        AuditEntityType::ComplianceDocumentTemplate => {
+            PersistedAuditEntityType::ComplianceDocumentTemplate
+        }
+        AuditEntityType::FulfillmentBatch => PersistedAuditEntityType::FulfillmentBatch,
+        AuditEntityType::Settlement => PersistedAuditEntityType::Settlement,
+        AuditEntityType::VendorOrderingPolicy => PersistedAuditEntityType::VendorOrderingPolicy,
+    }
+}
+
+fn domain_entity_type_from_persisted(entity_type: PersistedAuditEntityType) -> AuditEntityType {
+    match entity_type {
+        PersistedAuditEntityType::Order => AuditEntityType::Order,
+        PersistedAuditEntityType::MenuItem => AuditEntityType::MenuItem,
+        PersistedAuditEntityType::Vendor => AuditEntityType::Vendor,
+        PersistedAuditEntityType::DeliveryMapping => AuditEntityType::DeliveryMapping,
+        PersistedAuditEntityType::ComplianceDocumentTemplate => {
+            AuditEntityType::ComplianceDocumentTemplate
+        }
+        PersistedAuditEntityType::FulfillmentBatch => AuditEntityType::FulfillmentBatch,
+        PersistedAuditEntityType::Settlement => AuditEntityType::Settlement,
+        PersistedAuditEntityType::VendorOrderingPolicy => AuditEntityType::VendorOrderingPolicy,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuditTrailError {
     InvalidMinuteOfDay { minute_of_day: u16 },
@@ -663,6 +1166,9 @@ pub enum AuditTrailError {
     EvidenceSequenceOverflow,
     SystemClockUnavailable(String),
     StatePoisoned,
+    PersistenceIo(String),
+    PersistenceSerde(String),
+    PersistenceDataCorrupted(String),
 }
 
 impl fmt::Display for AuditTrailError {
@@ -687,6 +1193,13 @@ impl fmt::Display for AuditTrailError {
             }
             Self::StatePoisoned => {
                 f.write_str("audit trail state is poisoned due to a previous panic")
+            }
+            Self::PersistenceIo(message) => write!(f, "audit persistence io failed: {message}"),
+            Self::PersistenceSerde(message) => {
+                write!(f, "audit persistence serialization failed: {message}")
+            }
+            Self::PersistenceDataCorrupted(message) => {
+                write!(f, "audit persistence data is corrupted: {message}")
             }
         }
     }

@@ -1,5 +1,51 @@
 components:
   parameters:
+    AuditActionFilterQuery:
+      in: query
+      name: action
+      required: false
+      schema:
+        $ref: '#/components/schemas/AuditAction'
+    AuditActorIdFilterQuery:
+      in: query
+      name: actorId
+      required: false
+      schema:
+        $ref: '#/components/schemas/ActorId'
+    AuditCorrelationIdFilterQuery:
+      in: query
+      name: correlationId
+      required: false
+      schema:
+        maxLength: 256
+        minLength: 1
+        type: string
+    AuditEntityIdFilterQuery:
+      in: query
+      name: entityId
+      required: false
+      schema:
+        maxLength: 128
+        minLength: 1
+        type: string
+    AuditEntityTypeFilterQuery:
+      in: query
+      name: entityType
+      required: false
+      schema:
+        $ref: '#/components/schemas/AuditEntityType'
+    AuditOccurredFromEpochDayQuery:
+      in: query
+      name: occurredFromEpochDay
+      required: false
+      schema:
+        type: integer
+    AuditOccurredToEpochDayQuery:
+      in: query
+      name: occurredToEpochDay
+      required: false
+      schema:
+        type: integer
     BatchIdPath:
       in: path
       name: batchId
@@ -304,6 +350,160 @@ components:
       - decision
       - comment
       type: object
+    AuditAction:
+      enum:
+      - CREATE_EMPLOYEE_ORDER
+      - UPDATE_EMPLOYEE_ORDER
+      - VERIFY_PICKUP_ORDER
+      - MARK_ORDER_SOLD_OUT
+      - MARK_ORDER_REFUND_PENDING
+      - MARK_ORDER_REFUNDED
+      - UPSERT_VENDOR_MENU_ITEM
+      - UPSERT_VENDOR_ORDERING_POLICY
+      - ADVANCE_VENDOR_FULFILLMENT_DELIVERY_STATUS
+      - CREATE_VENDOR_FULFILLMENT_EXPORT_BATCH
+      - UPSERT_VENDOR_PLANT_DELIVERY_MAPPING
+      - DELETE_VENDOR_PLANT_DELIVERY_MAPPING
+      - UPSERT_COMPLIANCE_DOCUMENT_TEMPLATE
+      - REGISTER_VENDOR_APPLICATION
+      - SUBMIT_VENDOR_COMPLIANCE_DOCUMENT
+      - REVIEW_VENDOR_APPLICATION
+      - RUN_VENDOR_COMPLIANCE_LIFECYCLE
+      - PRUNE_VENDOR_COMPLIANCE_HISTORY
+      - EXPORT_PAYROLL_DEDUCTIONS
+      type: string
+    AuditEntityRef:
+      additionalProperties: false
+      properties:
+        entityId:
+          maxLength: 128
+          minLength: 1
+          type: string
+        entityType:
+          $ref: '#/components/schemas/AuditEntityType'
+      required:
+      - entityType
+      - entityId
+      type: object
+    AuditEntityType:
+      enum:
+      - ORDER
+      - MENU_ITEM
+      - VENDOR
+      - DELIVERY_MAPPING
+      - COMPLIANCE_DOCUMENT_TEMPLATE
+      - FULFILLMENT_BATCH
+      - SETTLEMENT
+      - VENDOR_ORDERING_POLICY
+      type: string
+    AuditEvidence:
+      additionalProperties: false
+      properties:
+        action:
+          $ref: '#/components/schemas/AuditAction'
+        actorId:
+          $ref: '#/components/schemas/ActorId'
+        actorRole:
+          $ref: '#/components/schemas/Role'
+        authenticationSource:
+          $ref: '#/components/schemas/AuthenticationSource'
+        correlationId:
+          maxLength: 256
+          minLength: 1
+          type: string
+        entityId:
+          maxLength: 128
+          minLength: 1
+          type: string
+        entityType:
+          $ref: '#/components/schemas/AuditEntityType'
+        evidenceId:
+          minimum: 1
+          type: integer
+        occurredAt:
+          $ref: '#/components/schemas/TaipeiBusinessDateTime'
+        operationId:
+          maxLength: 128
+          minLength: 1
+          type: string
+      required:
+      - evidenceId
+      - occurredAt
+      - actorId
+      - actorRole
+      - authenticationSource
+      - operationId
+      - action
+      - entityType
+      - entityId
+      - correlationId
+      type: object
+    AuditInvestigationResponse:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AuditEvidence'
+          type: array
+      required:
+      - items
+      type: object
+    AuditResponsibilityAttribution:
+      additionalProperties: false
+      properties:
+        actions:
+          items:
+            $ref: '#/components/schemas/AuditAction'
+          type: array
+        actorId:
+          $ref: '#/components/schemas/ActorId'
+        authenticationSource:
+          $ref: '#/components/schemas/AuthenticationSource'
+        entities:
+          items:
+            $ref: '#/components/schemas/AuditEntityRef'
+          type: array
+        eventCount:
+          minimum: 0
+          type: integer
+        role:
+          $ref: '#/components/schemas/Role'
+      required:
+      - actorId
+      - role
+      - authenticationSource
+      - eventCount
+      - actions
+      - entities
+      type: object
+    AuditResponsibilityResponse:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AuditResponsibilityAttribution'
+          type: array
+      required:
+      - items
+      type: object
+    AuditRetentionPurgeRequest:
+      additionalProperties: false
+      properties:
+        asOfEpochDay:
+          type: integer
+      type: object
+    AuditRetentionPurgeResponse:
+      additionalProperties: false
+      properties:
+        asOfEpochDay:
+          type: integer
+        purgedEvents:
+          minimum: 0
+          type: integer
+      required:
+      - purgedEvents
+      - asOfEpochDay
+      type: object
     AuthenticationSource:
       enum:
       - CORPORATE_SSO
@@ -445,6 +645,9 @@ components:
       - PICKUP_VERIFICATION_INVALID_CODE
       - PICKUP_VERIFICATION_INTERNAL_ERROR
       - ORDER_NOT_FOUND
+      - INVALID_AUDIT_INVESTIGATION_QUERY
+      - AUDIT_INVESTIGATION_INTERNAL_ERROR
+      - AUDIT_RETENTION_PURGE_INTERNAL_ERROR
       - VENDOR_FULFILLMENT_INVALID_REQUEST
       - VENDOR_FULFILLMENT_STATUS_CONFLICT
       - VENDOR_FULFILLMENT_BATCH_NOT_FOUND
@@ -1890,6 +2093,97 @@ info:
 jsonSchemaDialect: https://spec.openapis.org/oas/3.1/dialect/base
 openapi: 3.1.0
 paths:
+  /api/v1/admin/audit/investigations:
+    get:
+      operationId: queryAuditInvestigations
+      parameters:
+      - $ref: '#/components/parameters/AuditActorIdFilterQuery'
+      - $ref: '#/components/parameters/AuditActionFilterQuery'
+      - $ref: '#/components/parameters/AuditEntityTypeFilterQuery'
+      - $ref: '#/components/parameters/AuditEntityIdFilterQuery'
+      - $ref: '#/components/parameters/AuditOccurredFromEpochDayQuery'
+      - $ref: '#/components/parameters/AuditOccurredToEpochDayQuery'
+      - $ref: '#/components/parameters/AuditCorrelationIdFilterQuery'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditInvestigationResponse'
+          description: Immutable audit evidence matching investigation filters
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      security:
+      - corporateSsoBearer: []
+      summary: Query immutable audit evidence for investigations
+      tags:
+      - Admin
+  /api/v1/admin/audit/responsibilities:
+    get:
+      operationId: queryAuditResponsibilities
+      parameters:
+      - $ref: '#/components/parameters/AuditActorIdFilterQuery'
+      - $ref: '#/components/parameters/AuditActionFilterQuery'
+      - $ref: '#/components/parameters/AuditEntityTypeFilterQuery'
+      - $ref: '#/components/parameters/AuditEntityIdFilterQuery'
+      - $ref: '#/components/parameters/AuditOccurredFromEpochDayQuery'
+      - $ref: '#/components/parameters/AuditOccurredToEpochDayQuery'
+      - $ref: '#/components/parameters/AuditCorrelationIdFilterQuery'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditResponsibilityResponse'
+          description: Investigation responsibility attribution grouped by actor
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      security:
+      - corporateSsoBearer: []
+      summary: Attribute investigation responsibility by actor identity
+      tags:
+      - Admin
+  /api/v1/admin/audit/retention-purge:
+    post:
+      operationId: purgeAuditEvidence
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditRetentionPurgeRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditRetentionPurgeResponse'
+          description: Audit evidence retention purge result
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      security:
+      - corporateSsoBearer: []
+      summary: Execute audit evidence retention purge by policy
+      tags:
+      - Admin
   /api/v1/admin/compliance/document-templates:
     get:
       operationId: listComplianceDocumentTemplates

@@ -208,9 +208,62 @@ fn admin_contract_exposes_vendor_compliance_and_delivery_mapping_capabilities() 
     assert!(paths
         .contains_key("/api/v1/admin/compliance/document-templates/{vendorCategory}/{templateId}"));
     assert!(paths.contains_key("/api/v1/admin/compliance/lifecycle/executions"));
+    assert!(paths.contains_key("/api/v1/admin/audit/investigations"));
+    assert!(paths.contains_key("/api/v1/admin/audit/responsibilities"));
+    assert!(paths.contains_key("/api/v1/admin/audit/retention-purge"));
     assert!(paths.contains_key("/api/v1/admin/vendor-plant-delivery-mappings"));
     assert!(
         paths.contains_key("/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}")
+    );
+
+    let investigations_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/audit/investigations", "get");
+    let investigation_parameter_refs = investigations_operation["parameters"]
+        .as_array()
+        .expect("audit investigation parameters should be array")
+        .iter()
+        .map(|parameter| {
+            parameter["$ref"]
+                .as_str()
+                .expect("audit investigation parameter should be $ref")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        investigation_parameter_refs,
+        BTreeSet::from([
+            "#/components/parameters/AuditActionFilterQuery".to_owned(),
+            "#/components/parameters/AuditActorIdFilterQuery".to_owned(),
+            "#/components/parameters/AuditCorrelationIdFilterQuery".to_owned(),
+            "#/components/parameters/AuditEntityIdFilterQuery".to_owned(),
+            "#/components/parameters/AuditEntityTypeFilterQuery".to_owned(),
+            "#/components/parameters/AuditOccurredFromEpochDayQuery".to_owned(),
+            "#/components/parameters/AuditOccurredToEpochDayQuery".to_owned(),
+        ])
+    );
+    assert_eq!(
+        investigations_operation["responses"]["200"]["content"]["application/json"]["schema"]
+            ["$ref"],
+        "#/components/schemas/AuditInvestigationResponse"
+    );
+
+    let responsibilities_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/audit/responsibilities", "get");
+    assert_eq!(
+        responsibilities_operation["responses"]["200"]["content"]["application/json"]["schema"]
+            ["$ref"],
+        "#/components/schemas/AuditResponsibilityResponse"
+    );
+
+    let purge_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/audit/retention-purge", "post");
+    assert_eq!(
+        purge_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/AuditRetentionPurgeRequest"
+    );
+    assert_eq!(
+        purge_operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/AuditRetentionPurgeResponse"
     );
 }
 

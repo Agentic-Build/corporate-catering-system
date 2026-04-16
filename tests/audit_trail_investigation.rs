@@ -1,4 +1,6 @@
 use std::collections::BTreeSet;
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use corporate_catering_system::audit::{
     AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
@@ -389,4 +391,51 @@ fn retention_purge_removes_expired_evidence_and_requires_committee_role() {
             actual: Role::Employee
         })
     ));
+}
+
+#[test]
+fn json_storage_recovers_immutable_evidence_after_restart() {
+    ensure_test_otel_endpoint();
+    let committee = committee_admin();
+    let employee = employee_actor();
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be monotonic")
+        .as_nanos();
+    let storage_path =
+        std::env::temp_dir().join(format!("corporate-catering-audit-trail-{nonce}.json"));
+
+    let retention = AuditRetentionPolicy::new(365).expect("policy should be valid");
+    {
+        let audit_trail = ImmutableAuditTrail::with_json_storage(storage_path.clone(), retention)
+            .expect("audit trail should initialize");
+        append_manual_evidence(
+            &audit_trail,
+            &employee,
+            AuditAction::CreateEmployeeOrder,
+            AuditEntityType::Order,
+            "ord-persisted-a",
+            20,
+        );
+        assert_eq!(
+            audit_trail
+                .evidence_count()
+                .expect("evidence count should resolve"),
+            1
+        );
+    }
+
+    {
+        let recovered = ImmutableAuditTrail::with_json_storage(storage_path.clone(), retention)
+            .expect("audit trail should recover from storage");
+        let gateway = HttpAuditInvestigationExecutionGateway::new(recovered);
+        let events = gateway
+            .execute_investigation_query(&committee, &AuditInvestigationFilter::default())
+            .expect("investigation query should succeed after restart");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].entity().entity_id(), "ord-persisted-a");
+        assert_eq!(events[0].audit_identity().actor_id(), employee.actor_id());
+    }
+
+    fs::remove_file(storage_path).expect("temporary audit trail file should be removable");
 }

@@ -1,6 +1,7 @@
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -9,6 +10,11 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, patch, post};
 use axum::{Json, Router};
+use corporate_catering_system::audit::{
+    AuditAction, AuditCorrelationId, AuditEntityType, AuditInvestigationFilter,
+    AuditRetentionPolicy, AuditTimestamp, AuditTrailError, ImmutableAuditEvidence,
+    ImmutableAuditTrail, ResponsibilityAttribution,
+};
 use corporate_catering_system::health::{evaluate_probe, HealthProbeKind, HealthState};
 use corporate_catering_system::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
@@ -25,8 +31,8 @@ use corporate_catering_system::pickup_totp::{
     PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
 };
 use corporate_catering_system::transport::http::{
-    HttpEmployeeDiscoveryExecutionGateway, HttpOrderExecutionError, HttpOrderingExecutionGateway,
-    HttpVendorMenuExecutionGateway,
+    HttpAuditInvestigationExecutionGateway, HttpEmployeeDiscoveryExecutionGateway,
+    HttpOrderExecutionError, HttpOrderingExecutionGateway, HttpVendorMenuExecutionGateway,
 };
 use corporate_catering_system::vendor_compliance::{
     ComplianceDate, ComplianceDocumentTemplate, DocumentTemplateId, HistoryRetentionPolicy,
@@ -38,17 +44,56 @@ use corporate_catering_system::vendor_delivery_mapping::{
     VendorPlantDeliveryMapping, VendorPlantDeliveryPolicy,
 };
 use serde::{Deserialize, Serialize};
+use tokio::time::{self, MissedTickBehavior};
 
 const DEFAULT_VENDOR_ID: &str = "ven-load-gate-a";
 const DEFAULT_PLANT_ID: &str = "fab-a";
 const DEFAULT_MENU_VARIANT_COUNT: u16 = 64;
 const DEFAULT_DELIVERY_DAY_OFFSET: i32 = 2;
+const DEFAULT_AUDIT_RETENTION_DAYS: u16 = 2555;
+const DEFAULT_AUDIT_PURGE_INTERVAL_SECONDS: u64 = 3600;
+const DEFAULT_AUDIT_TRAIL_PATH: &str = "ops/state/audit-trail.json";
 const LOAD_GATE_EMPLOYEE_ACTOR_ID: &str = "emp-load-gate";
+const LOAD_GATE_COMMITTEE_ACTOR_ID: &str = "committee-load-gate";
+
+const ALL_AUDIT_ACTIONS: [AuditAction; 19] = [
+    AuditAction::CreateEmployeeOrder,
+    AuditAction::UpdateEmployeeOrder,
+    AuditAction::VerifyPickupOrder,
+    AuditAction::MarkOrderSoldOut,
+    AuditAction::MarkOrderRefundPending,
+    AuditAction::MarkOrderRefunded,
+    AuditAction::UpsertVendorMenuItem,
+    AuditAction::UpsertVendorOrderingPolicy,
+    AuditAction::AdvanceVendorFulfillmentDeliveryStatus,
+    AuditAction::CreateVendorFulfillmentExportBatch,
+    AuditAction::UpsertVendorPlantDeliveryMapping,
+    AuditAction::DeleteVendorPlantDeliveryMapping,
+    AuditAction::UpsertComplianceDocumentTemplate,
+    AuditAction::RegisterVendorApplication,
+    AuditAction::SubmitVendorComplianceDocument,
+    AuditAction::ReviewVendorApplication,
+    AuditAction::RunVendorComplianceLifecycle,
+    AuditAction::PruneVendorComplianceHistory,
+    AuditAction::ExportPayrollDeductions,
+];
+
+const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 8] = [
+    AuditEntityType::Order,
+    AuditEntityType::MenuItem,
+    AuditEntityType::Vendor,
+    AuditEntityType::DeliveryMapping,
+    AuditEntityType::ComplianceDocumentTemplate,
+    AuditEntityType::FulfillmentBatch,
+    AuditEntityType::Settlement,
+    AuditEntityType::VendorOrderingPolicy,
+];
 
 #[derive(Debug, Clone)]
 struct AppState {
     next_order_sequence: Arc<AtomicU64>,
     plant_id: PlantId,
+    audit_trail: ImmutableAuditTrail,
     compliance_lifecycle: Arc<VendorComplianceLifecycle>,
     delivery_policy: Arc<VendorPlantDeliveryPolicy>,
     menu_supply_policy: MenuSupplyPolicy,
@@ -144,6 +189,76 @@ struct PickupVerificationRequest {
 struct PickupVerificationResponse {
     order_id: String,
     verified: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AuditInvestigationQuery {
+    actor_id: Option<String>,
+    action: Option<String>,
+    entity_type: Option<String>,
+    entity_id: Option<String>,
+    occurred_from_epoch_day: Option<i32>,
+    occurred_to_epoch_day: Option<i32>,
+    correlation_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AuditRetentionPurgeRequest {
+    as_of_epoch_day: Option<i32>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditInvestigationResponse {
+    items: Vec<AuditEvidencePayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditEvidencePayload {
+    evidence_id: u64,
+    occurred_at: String,
+    actor_id: String,
+    actor_role: String,
+    authentication_source: String,
+    operation_id: String,
+    action: String,
+    entity_type: String,
+    entity_id: String,
+    correlation_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditResponsibilityResponse {
+    items: Vec<AuditResponsibilityPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditResponsibilityPayload {
+    actor_id: String,
+    role: String,
+    authentication_source: String,
+    event_count: usize,
+    actions: Vec<String>,
+    entities: Vec<AuditEntityRefPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditEntityRefPayload {
+    entity_type: String,
+    entity_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditRetentionPurgeResponse {
+    purged_events: usize,
+    as_of_epoch_day: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -302,11 +417,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         parse_positive_u16_env("PRELAUNCH_MENU_VARIANT_COUNT", DEFAULT_MENU_VARIANT_COUNT)?;
 
     let delivery_epoch_day = resolve_delivery_epoch_day()?;
+    let audit_retention_days = parse_positive_u16_env(
+        "PRELAUNCH_AUDIT_RETENTION_DAYS",
+        DEFAULT_AUDIT_RETENTION_DAYS,
+    )?;
+    let audit_retention_policy = AuditRetentionPolicy::new(audit_retention_days)
+        .map_err(|error| format!("PRELAUNCH_AUDIT_RETENTION_DAYS is invalid: {error}"))?;
+    let audit_trail_path = PathBuf::from(
+        std::env::var("PRELAUNCH_AUDIT_TRAIL_PATH")
+            .unwrap_or_else(|_| DEFAULT_AUDIT_TRAIL_PATH.to_owned()),
+    );
+    let audit_trail =
+        ImmutableAuditTrail::with_json_storage(audit_trail_path.clone(), audit_retention_policy)
+            .map_err(|error| format!("failed to initialize audit trail storage: {error}"))?;
+    let audit_purge_interval_seconds = parse_positive_u64_env(
+        "PRELAUNCH_AUDIT_PURGE_INTERVAL_SECONDS",
+        DEFAULT_AUDIT_PURGE_INTERVAL_SECONDS,
+    )?;
     let pickup_totp_verifier = PickupTotpVerifier::from_env("PRELAUNCH_PICKUP_TOTP_SECRET")
         .map(Arc::new)
         .map_err(|error| format!("pickup TOTP verifier initialization failed: {error}"))?;
 
     let state = bootstrap_runtime_state(
+        audit_trail.clone(),
         vendor_id,
         plant_id,
         delivery_epoch_day,
@@ -314,6 +447,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         pickup_totp_verifier,
     )
     .map_err(|error| format!("failed to bootstrap runtime state: {error}"))?;
+    let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| {
+        format!(
+            "failed to load committee actor for purge job: {}",
+            error.message
+        )
+    })?;
+    spawn_audit_retention_purge_job(audit_trail, committee_actor, audit_purge_interval_seconds);
 
     let app = Router::new()
         .route("/health/ready", get(ready_probe))
@@ -328,6 +468,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         .route(
             "/api/v1/employee/orders/:orderId/pickup-verifications",
             post(verify_order_pickup),
+        )
+        .route(
+            "/api/v1/admin/audit/investigations",
+            get(query_audit_investigations),
+        )
+        .route(
+            "/api/v1/admin/audit/responsibilities",
+            get(query_audit_responsibilities),
+        )
+        .route(
+            "/api/v1/admin/audit/retention-purge",
+            post(purge_audit_evidence),
         )
         .with_state(state);
 
@@ -344,6 +496,20 @@ fn parse_positive_u16_env(key: &str, default_value: u16) -> Result<u16, String> 
     };
     let parsed = raw
         .parse::<u16>()
+        .map_err(|error| format!("{key} must be a positive integer: {error}"))?;
+    if parsed == 0 {
+        return Err(format!("{key} must be greater than zero"));
+    }
+    Ok(parsed)
+}
+
+fn parse_positive_u64_env(key: &str, default_value: u64) -> Result<u64, String> {
+    let raw = match std::env::var(key) {
+        Ok(value) => value,
+        Err(_) => return Ok(default_value),
+    };
+    let parsed = raw
+        .parse::<u64>()
         .map_err(|error| format!("{key} must be a positive integer: {error}"))?;
     if parsed == 0 {
         return Err(format!("{key} must be greater than zero"));
@@ -396,19 +562,14 @@ fn seeded_menu_health_tags(index: u16) -> Vec<MenuHealthTag> {
 }
 
 fn bootstrap_runtime_state(
+    audit_trail: ImmutableAuditTrail,
     vendor_id: VendorId,
     plant_id: PlantId,
     delivery_epoch_day: i32,
     menu_variant_count: u16,
     pickup_totp_verifier: Arc<PickupTotpVerifier>,
 ) -> Result<AppState, String> {
-    let committee_actor = AuthenticatedActorContext::new(
-        ActorId::parse("committee-load-gate").map_err(|error| error.to_string())?,
-        Role::CommitteeAdmin,
-        PlantScope::all(),
-        AuthenticationSource::CorporateSso,
-    )
-    .map_err(|error| error.to_string())?;
+    let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| error.message)?;
 
     let vendor_actor = AuthenticatedActorContext::new(
         ActorId::parse("vendor-load-gate").map_err(|error| error.to_string())?,
@@ -418,8 +579,10 @@ fn bootstrap_runtime_state(
     )
     .map_err(|error| error.to_string())?;
 
-    let mut compliance_lifecycle =
-        VendorComplianceLifecycle::new(HistoryRetentionPolicy::default());
+    let mut compliance_lifecycle = VendorComplianceLifecycle::with_audit_trail(
+        HistoryRetentionPolicy::default(),
+        audit_trail.clone(),
+    );
     let vendor_category = VendorCategory::parse("RESTAURANT").map_err(|error| error.to_string())?;
     let template_id =
         DocumentTemplateId::parse("tmpl-load-gate-license").map_err(|error| error.to_string())?;
@@ -477,7 +640,7 @@ fn bootstrap_runtime_state(
         )
         .map_err(|error| error.to_string())?;
 
-    let mut delivery_policy = VendorPlantDeliveryPolicy::new();
+    let mut delivery_policy = VendorPlantDeliveryPolicy::with_audit_trail(audit_trail.clone());
     let mapping_window_start = TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(30), 0)
         .map_err(|error| format!("failed to create delivery window start: {error}"))?;
     let mapping_window_end =
@@ -502,7 +665,8 @@ fn bootstrap_runtime_state(
         )
         .map_err(|error| error.to_string())?;
 
-    let menu_supply_policy = MenuSupplyPolicy::default();
+    let menu_supply_policy =
+        MenuSupplyPolicy::with_audit_trail(Default::default(), audit_trail.clone());
     let vendor_menu_gateway = HttpVendorMenuExecutionGateway::new(&menu_supply_policy);
 
     for index in 1..=menu_variant_count {
@@ -537,6 +701,7 @@ fn bootstrap_runtime_state(
     Ok(AppState {
         next_order_sequence: Arc::new(AtomicU64::new(1)),
         plant_id,
+        audit_trail,
         compliance_lifecycle: Arc::new(compliance_lifecycle),
         delivery_policy: Arc::new(delivery_policy),
         menu_supply_policy,
@@ -1313,6 +1478,30 @@ fn load_gate_employee_actor_for_plant(
     })
 }
 
+fn load_gate_committee_admin_actor() -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)>
+{
+    let actor_id = ActorId::parse(LOAD_GATE_COMMITTEE_ACTOR_ID).map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "IDENTITY_MODEL_ERROR",
+            format!("failed to parse load-gate committee actor id: {error}"),
+        )
+    })?;
+    AuthenticatedActorContext::new(
+        actor_id,
+        Role::CommitteeAdmin,
+        PlantScope::all(),
+        AuthenticationSource::CorporateSso,
+    )
+    .map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "IDENTITY_MODEL_ERROR",
+            format!("failed to construct load-gate committee actor context: {error}"),
+        )
+    })
+}
+
 fn generate_contract_order_id(state: &AppState) -> Result<OrderId, (StatusCode, ErrorPayload)> {
     let sequence = state
         .next_order_sequence
@@ -1675,6 +1864,403 @@ fn domain_error(
     )
 }
 
+fn spawn_audit_retention_purge_job(
+    audit_trail: ImmutableAuditTrail,
+    committee_actor: AuthenticatedActorContext,
+    interval_seconds: u64,
+) {
+    tokio::spawn(async move {
+        run_audit_retention_purge_once(&audit_trail, &committee_actor);
+        let mut interval = time::interval(std::time::Duration::from_secs(interval_seconds));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            run_audit_retention_purge_once(&audit_trail, &committee_actor);
+        }
+    });
+}
+
+fn run_audit_retention_purge_once(
+    audit_trail: &ImmutableAuditTrail,
+    committee_actor: &AuthenticatedActorContext,
+) {
+    let as_of = match AuditTimestamp::now_taipei() {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(error = %error, "audit retention purge skipped: failed to resolve Taipei time");
+            return;
+        }
+    };
+    match audit_trail.purge_expired_evidence(committee_actor, as_of) {
+        Ok(report) => tracing::info!(
+            purged_events = report.purged_events,
+            as_of_epoch_day = as_of.epoch_day(),
+            as_of_minute_of_day = as_of.minute_of_day(),
+            "audit retention purge job completed"
+        ),
+        Err(error) => tracing::error!(error = %error, "audit retention purge job failed"),
+    }
+}
+
+async fn query_audit_investigations(
+    State(state): State<AppState>,
+    Query(query): Query<AuditInvestigationQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "queryAuditInvestigations",
+        Some("load-gate"),
+        None,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_query_audit_investigations(&state, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("audit investigation payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("audit investigation error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_query_audit_investigations(
+    state: &AppState,
+    query: AuditInvestigationQuery,
+) -> Result<AuditInvestigationResponse, (StatusCode, ErrorPayload)> {
+    let investigator = load_gate_committee_admin_actor()?;
+    let filter = build_audit_investigation_filter(query)?;
+    let gateway = HttpAuditInvestigationExecutionGateway::new(state.audit_trail.clone());
+    let evidences = gateway
+        .execute_investigation_query(&investigator, &filter)
+        .map_err(|error| map_audit_trail_error(error, "AUDIT_INVESTIGATION_INTERNAL_ERROR"))?;
+    Ok(AuditInvestigationResponse {
+        items: evidences
+            .iter()
+            .map(to_audit_evidence_payload)
+            .collect::<Vec<_>>(),
+    })
+}
+
+async fn query_audit_responsibilities(
+    State(state): State<AppState>,
+    Query(query): Query<AuditInvestigationQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "queryAuditResponsibilities",
+        Some("load-gate"),
+        None,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_query_audit_responsibilities(&state, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("audit responsibilities payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "audit responsibilities error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_query_audit_responsibilities(
+    state: &AppState,
+    query: AuditInvestigationQuery,
+) -> Result<AuditResponsibilityResponse, (StatusCode, ErrorPayload)> {
+    let investigator = load_gate_committee_admin_actor()?;
+    let filter = build_audit_investigation_filter(query)?;
+    let gateway = HttpAuditInvestigationExecutionGateway::new(state.audit_trail.clone());
+    let attributions = gateway
+        .execute_responsibility_query(&investigator, &filter)
+        .map_err(|error| map_audit_trail_error(error, "AUDIT_INVESTIGATION_INTERNAL_ERROR"))?;
+    Ok(AuditResponsibilityResponse {
+        items: attributions
+            .iter()
+            .map(to_audit_responsibility_payload)
+            .collect::<Vec<_>>(),
+    })
+}
+
+async fn purge_audit_evidence(
+    State(state): State<AppState>,
+    Json(request): Json<AuditRetentionPurgeRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry =
+        TelemetryService::HttpApi.begin_operation("purgeAuditEvidence", Some("load-gate"), None);
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_purge_audit_evidence(&state, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("audit purge payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("audit purge error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_purge_audit_evidence(
+    state: &AppState,
+    request: AuditRetentionPurgeRequest,
+) -> Result<AuditRetentionPurgeResponse, (StatusCode, ErrorPayload)> {
+    let investigator = load_gate_committee_admin_actor()?;
+    let as_of = match request.as_of_epoch_day {
+        Some(epoch_day) => AuditTimestamp::from_epoch_day(epoch_day),
+        None => AuditTimestamp::now_taipei().map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "AUDIT_RETENTION_PURGE_INTERNAL_ERROR",
+                error.to_string(),
+            )
+        })?,
+    };
+    let gateway = HttpAuditInvestigationExecutionGateway::new(state.audit_trail.clone());
+    let report = gateway
+        .execute_retention_purge(&investigator, as_of)
+        .map_err(|error| map_audit_trail_error(error, "AUDIT_RETENTION_PURGE_INTERNAL_ERROR"))?;
+    Ok(AuditRetentionPurgeResponse {
+        purged_events: report.purged_events,
+        as_of_epoch_day: as_of.epoch_day(),
+    })
+}
+
+fn build_audit_investigation_filter(
+    query: AuditInvestigationQuery,
+) -> Result<AuditInvestigationFilter, (StatusCode, ErrorPayload)> {
+    let mut filter = AuditInvestigationFilter::default();
+    if let Some(actor_id) = query.actor_id {
+        filter = filter.with_actor_id(ActorId::parse(actor_id).map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "INVALID_AUDIT_INVESTIGATION_QUERY",
+                format!("actorId is invalid: {error}"),
+            )
+        })?);
+    }
+    if let Some(action) = query.action {
+        let action = parse_audit_action_filter(&action).ok_or_else(|| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "INVALID_AUDIT_INVESTIGATION_QUERY",
+                format!("action `{action}` is not supported"),
+            )
+        })?;
+        filter = filter.with_action(action);
+    }
+    match (query.entity_type, query.entity_id) {
+        (Some(entity_type), Some(entity_id)) => {
+            let entity_type = parse_audit_entity_type_filter(&entity_type).ok_or_else(|| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_AUDIT_INVESTIGATION_QUERY",
+                    format!("entityType `{entity_type}` is not supported"),
+                )
+            })?;
+            filter = filter
+                .with_entity(entity_type, entity_id)
+                .map_err(|error| {
+                    domain_error(
+                        StatusCode::BAD_REQUEST,
+                        "INVALID_AUDIT_INVESTIGATION_QUERY",
+                        error.to_string(),
+                    )
+                })?;
+        }
+        (Some(_), None) | (None, Some(_)) => {
+            return Err(domain_error(
+                StatusCode::BAD_REQUEST,
+                "INVALID_AUDIT_INVESTIGATION_QUERY",
+                "entityType and entityId must be provided together".to_owned(),
+            ));
+        }
+        (None, None) => {}
+    }
+    let occurred_from = query
+        .occurred_from_epoch_day
+        .map(AuditTimestamp::from_epoch_day);
+    let occurred_to = query
+        .occurred_to_epoch_day
+        .map(AuditTimestamp::from_epoch_day);
+    if let (Some(from), Some(to)) = (occurred_from, occurred_to) {
+        if from > to {
+            return Err(domain_error(
+                StatusCode::BAD_REQUEST,
+                "INVALID_AUDIT_INVESTIGATION_QUERY",
+                "occurredFromEpochDay must be less than or equal to occurredToEpochDay".to_owned(),
+            ));
+        }
+    }
+    filter = filter.with_time_range(occurred_from, occurred_to);
+    if let Some(correlation_id) = query.correlation_id {
+        filter = filter.with_correlation_id(AuditCorrelationId::parse(correlation_id).map_err(
+            |error| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_AUDIT_INVESTIGATION_QUERY",
+                    error.to_string(),
+                )
+            },
+        )?);
+    }
+    Ok(filter)
+}
+
+fn parse_audit_action_filter(value: &str) -> Option<AuditAction> {
+    let normalized = value.trim().to_ascii_uppercase();
+    ALL_AUDIT_ACTIONS
+        .iter()
+        .copied()
+        .find(|action| action.as_str() == normalized)
+}
+
+fn parse_audit_entity_type_filter(value: &str) -> Option<AuditEntityType> {
+    let normalized = value.trim().to_ascii_uppercase();
+    ALL_AUDIT_ENTITY_TYPES
+        .iter()
+        .copied()
+        .find(|entity_type| entity_type.as_str() == normalized)
+}
+
+fn to_audit_evidence_payload(evidence: &ImmutableAuditEvidence) -> AuditEvidencePayload {
+    AuditEvidencePayload {
+        evidence_id: evidence.evidence_id(),
+        occurred_at: audit_timestamp_to_iso_datetime(evidence.occurred_at()),
+        actor_id: evidence.audit_identity().actor_id().as_str().to_owned(),
+        actor_role: role_to_api_label(evidence.audit_identity().role()).to_owned(),
+        authentication_source: authentication_source_to_api_label(
+            evidence.audit_identity().authentication_source(),
+        )
+        .to_owned(),
+        operation_id: evidence.audit_identity().operation_id().to_owned(),
+        action: evidence.action().as_str().to_owned(),
+        entity_type: evidence.entity().entity_type().as_str().to_owned(),
+        entity_id: evidence.entity().entity_id().to_owned(),
+        correlation_id: evidence.correlation_id().as_str().to_owned(),
+    }
+}
+
+fn to_audit_responsibility_payload(
+    attribution: &ResponsibilityAttribution,
+) -> AuditResponsibilityPayload {
+    AuditResponsibilityPayload {
+        actor_id: attribution.actor_id().as_str().to_owned(),
+        role: role_to_api_label(attribution.role()).to_owned(),
+        authentication_source: authentication_source_to_api_label(
+            attribution.authentication_source(),
+        )
+        .to_owned(),
+        event_count: attribution.event_count(),
+        actions: attribution
+            .actions()
+            .iter()
+            .map(|action| action.as_str().to_owned())
+            .collect(),
+        entities: attribution
+            .entities()
+            .iter()
+            .map(|entity| AuditEntityRefPayload {
+                entity_type: entity.entity_type().as_str().to_owned(),
+                entity_id: entity.entity_id().to_owned(),
+            })
+            .collect(),
+    }
+}
+
+fn role_to_api_label(role: Role) -> &'static str {
+    match role {
+        Role::Employee => "EMPLOYEE",
+        Role::VendorOperator => "VENDOR_OPERATOR",
+        Role::CommitteeAdmin => "COMMITTEE_ADMIN",
+        Role::PayrollOperator => "PAYROLL_OPERATOR",
+    }
+}
+
+fn authentication_source_to_api_label(source: AuthenticationSource) -> &'static str {
+    match source {
+        AuthenticationSource::CorporateSso => "CORPORATE_SSO",
+        AuthenticationSource::VendorAccountMfa => "VENDOR_ACCOUNT_MFA",
+    }
+}
+
+fn audit_timestamp_to_iso_datetime(timestamp: AuditTimestamp) -> String {
+    let (year, month, day) = civil_from_days(i64::from(timestamp.epoch_day()));
+    let hour = timestamp.minute_of_day() / 60;
+    let minute = timestamp.minute_of_day() % 60;
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:00+08:00")
+}
+
+fn map_audit_trail_error(
+    error: AuditTrailError,
+    internal_error_code: &'static str,
+) -> (StatusCode, ErrorPayload) {
+    match error {
+        AuditTrailError::UnauthorizedInvestigatorRole { .. } => {
+            domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
+        }
+        AuditTrailError::InvalidMinuteOfDay { .. }
+        | AuditTrailError::InvalidEntityId
+        | AuditTrailError::InvalidCorrelationId
+        | AuditTrailError::InvalidRetentionPolicy => domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_AUDIT_INVESTIGATION_QUERY",
+            error.to_string(),
+        ),
+        _ => domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            internal_error_code,
+            error.to_string(),
+        ),
+    }
+}
+
 async fn verify_order_pickup(
     State(state): State<AppState>,
     Path(order_id): Path<String>,
@@ -2004,6 +2590,7 @@ fn emit_pickup_verification_audit_event(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corporate_catering_system::audit::{AuditEntityRef, AuditEvidenceWrite, AuditIdentityLink};
 
     fn actor_id(value: &str) -> ActorId {
         ActorId::parse(value).expect("actor id should be valid")
@@ -2068,9 +2655,12 @@ mod tests {
         let plant = plant_id("fab-a");
         let vendor_visible = vendor_id("ven-discoverytst-a1");
         let vendor_hidden = vendor_id("ven-discoverytst-b1");
+        let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
 
-        let mut compliance_lifecycle =
-            VendorComplianceLifecycle::new(HistoryRetentionPolicy::default());
+        let mut compliance_lifecycle = VendorComplianceLifecycle::with_audit_trail(
+            HistoryRetentionPolicy::default(),
+            audit_trail.clone(),
+        );
         let category = VendorCategory::parse("RESTAURANT").expect("category should be valid");
         let template = DocumentTemplateId::parse("tmpl-discovery-license")
             .expect("template id should be valid");
@@ -2127,7 +2717,7 @@ mod tests {
                 .expect("vendor should be approved");
         }
 
-        let mut delivery_policy = VendorPlantDeliveryPolicy::new();
+        let mut delivery_policy = VendorPlantDeliveryPolicy::with_audit_trail(audit_trail.clone());
         delivery_policy
             .upsert_mapping(
                 &committee,
@@ -2148,7 +2738,8 @@ mod tests {
             )
             .expect("allow mapping should be configured");
 
-        let menu_supply_policy = MenuSupplyPolicy::default();
+        let menu_supply_policy =
+            MenuSupplyPolicy::with_audit_trail(Default::default(), audit_trail.clone());
         menu_supply_policy
             .upsert_menu_item(
                 &vendor_actor,
@@ -2237,6 +2828,7 @@ mod tests {
         AppState {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             plant_id: plant,
+            audit_trail,
             compliance_lifecycle: Arc::new(compliance_lifecycle),
             delivery_policy: Arc::new(delivery_policy),
             menu_supply_policy,
@@ -2245,6 +2837,40 @@ mod tests {
                     .expect("test pickup verifier should be valid"),
             ),
         }
+    }
+
+    #[test]
+    fn audit_retention_purge_job_removes_expired_evidence() {
+        let committee = committee_admin();
+        let audit_trail =
+            ImmutableAuditTrail::new(AuditRetentionPolicy::new(1).expect("policy should be valid"));
+
+        audit_trail
+            .append(AuditEvidenceWrite::new(
+                AuditTimestamp::from_epoch_day(-100_000),
+                AuditIdentityLink::from_actor(&committee, "seedAuditEvidence"),
+                AuditAction::RunVendorComplianceLifecycle,
+                AuditEntityRef::new(AuditEntityType::Vendor, "ven-audit-retention-seed")
+                    .expect("entity ref should be valid"),
+                AuditCorrelationId::parse("case:audit-retention-seed")
+                    .expect("correlation id should be valid"),
+            ))
+            .expect("seed audit evidence should be appended");
+        assert_eq!(
+            audit_trail
+                .evidence_count()
+                .expect("evidence count should resolve"),
+            1
+        );
+
+        run_audit_retention_purge_once(&audit_trail, &committee);
+
+        assert_eq!(
+            audit_trail
+                .evidence_count()
+                .expect("evidence count should resolve"),
+            0
+        );
     }
 
     #[test]

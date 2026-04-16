@@ -54,11 +54,14 @@ pub enum HttpOperation {
     DeleteVendorPlantDeliveryMapping,
     ReviewVendorApplication,
     RunVendorComplianceLifecycle,
+    QueryAuditInvestigations,
+    QueryAuditResponsibilities,
+    PurgeAuditEvidence,
     ExportPayrollDeductions,
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 22] = [
         Self::ListEmployeeMenus,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
@@ -77,6 +80,9 @@ impl HttpOperation {
         Self::DeleteVendorPlantDeliveryMapping,
         Self::ReviewVendorApplication,
         Self::RunVendorComplianceLifecycle,
+        Self::QueryAuditInvestigations,
+        Self::QueryAuditResponsibilities,
+        Self::PurgeAuditEvidence,
         Self::ExportPayrollDeductions,
     ];
 
@@ -102,6 +108,9 @@ impl HttpOperation {
             Self::DeleteVendorPlantDeliveryMapping => "deleteVendorPlantDeliveryMapping",
             Self::ReviewVendorApplication => "reviewVendorApplication",
             Self::RunVendorComplianceLifecycle => "runVendorComplianceLifecycle",
+            Self::QueryAuditInvestigations => "queryAuditInvestigations",
+            Self::QueryAuditResponsibilities => "queryAuditResponsibilities",
+            Self::PurgeAuditEvidence => "purgeAuditEvidence",
             Self::ExportPayrollDeductions => "exportPayrollDeductions",
         }
     }
@@ -115,13 +124,16 @@ impl HttpOperation {
             | Self::ListAdminVendors
             | Self::ListVendorPlantDeliveryMappings
             | Self::ListComplianceDocumentTemplates
+            | Self::QueryAuditInvestigations
+            | Self::QueryAuditResponsibilities
             | Self::ExportPayrollDeductions => HttpMethod::Get,
             Self::CreateEmployeeOrder
             | Self::VerifyPickupOrder
             | Self::AdvanceVendorFulfillmentDeliveryStatus
             | Self::CreateVendorFulfillmentExportBatch
             | Self::ReviewVendorApplication
-            | Self::RunVendorComplianceLifecycle => HttpMethod::Post,
+            | Self::RunVendorComplianceLifecycle
+            | Self::PurgeAuditEvidence => HttpMethod::Post,
             Self::UpdateEmployeeOrder => HttpMethod::Patch,
             Self::UpsertVendorMenuItem
             | Self::UpsertComplianceDocumentTemplate
@@ -158,6 +170,9 @@ impl HttpOperation {
             }
             Self::ReviewVendorApplication => "/api/v1/admin/vendors/{vendorId}/reviews",
             Self::RunVendorComplianceLifecycle => "/api/v1/admin/compliance/lifecycle/executions",
+            Self::QueryAuditInvestigations => "/api/v1/admin/audit/investigations",
+            Self::QueryAuditResponsibilities => "/api/v1/admin/audit/responsibilities",
+            Self::PurgeAuditEvidence => "/api/v1/admin/audit/retention-purge",
             Self::ExportPayrollDeductions => "/api/v1/integrations/payroll/deductions",
         }
     }
@@ -181,7 +196,10 @@ impl HttpOperation {
             | Self::UpsertVendorPlantDeliveryMapping
             | Self::DeleteVendorPlantDeliveryMapping
             | Self::ReviewVendorApplication
-            | Self::RunVendorComplianceLifecycle => HttpAudience::Admin,
+            | Self::RunVendorComplianceLifecycle
+            | Self::QueryAuditInvestigations
+            | Self::QueryAuditResponsibilities
+            | Self::PurgeAuditEvidence => HttpAudience::Admin,
             Self::ExportPayrollDeductions => HttpAudience::Integration,
         }
     }
@@ -198,7 +216,8 @@ impl HttpOperation {
             | Self::UpsertVendorPlantDeliveryMapping
             | Self::DeleteVendorPlantDeliveryMapping
             | Self::ReviewVendorApplication
-            | Self::RunVendorComplianceLifecycle => Some(Action::ManageVendorComplianceLifecycle),
+            | Self::RunVendorComplianceLifecycle
+            | Self::PurgeAuditEvidence => Some(Action::ManageVendorComplianceLifecycle),
             Self::ListEmployeeMenus
             | Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
@@ -206,6 +225,8 @@ impl HttpOperation {
             | Self::ListAdminVendors
             | Self::ListVendorPlantDeliveryMappings
             | Self::ListComplianceDocumentTemplates
+            | Self::QueryAuditInvestigations
+            | Self::QueryAuditResponsibilities
             | Self::ExportPayrollDeductions => None,
         }
     }
@@ -236,6 +257,9 @@ impl HttpOperation {
             "deleteVendorPlantDeliveryMapping" => Some(Self::DeleteVendorPlantDeliveryMapping),
             "reviewVendorApplication" => Some(Self::ReviewVendorApplication),
             "runVendorComplianceLifecycle" => Some(Self::RunVendorComplianceLifecycle),
+            "queryAuditInvestigations" => Some(Self::QueryAuditInvestigations),
+            "queryAuditResponsibilities" => Some(Self::QueryAuditResponsibilities),
+            "purgeAuditEvidence" => Some(Self::PurgeAuditEvidence),
             "exportPayrollDeductions" => Some(Self::ExportPayrollDeductions),
             _ => None,
         }
@@ -973,6 +997,98 @@ pub fn canonical_openapi_spec() -> Value {
             }
           }
         },
+        "/api/v1/admin/audit/investigations": {
+          "get": {
+            "tags": ["Admin"],
+            "summary": "Query immutable audit evidence for investigations",
+            "operationId": HttpOperation::QueryAuditInvestigations.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/AuditActorIdFilterQuery" },
+              { "$ref": "#/components/parameters/AuditActionFilterQuery" },
+              { "$ref": "#/components/parameters/AuditEntityTypeFilterQuery" },
+              { "$ref": "#/components/parameters/AuditEntityIdFilterQuery" },
+              { "$ref": "#/components/parameters/AuditOccurredFromEpochDayQuery" },
+              { "$ref": "#/components/parameters/AuditOccurredToEpochDayQuery" },
+              { "$ref": "#/components/parameters/AuditCorrelationIdFilterQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Immutable audit evidence matching investigation filters",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/AuditInvestigationResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/admin/audit/responsibilities": {
+          "get": {
+            "tags": ["Admin"],
+            "summary": "Attribute investigation responsibility by actor identity",
+            "operationId": HttpOperation::QueryAuditResponsibilities.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/AuditActorIdFilterQuery" },
+              { "$ref": "#/components/parameters/AuditActionFilterQuery" },
+              { "$ref": "#/components/parameters/AuditEntityTypeFilterQuery" },
+              { "$ref": "#/components/parameters/AuditEntityIdFilterQuery" },
+              { "$ref": "#/components/parameters/AuditOccurredFromEpochDayQuery" },
+              { "$ref": "#/components/parameters/AuditOccurredToEpochDayQuery" },
+              { "$ref": "#/components/parameters/AuditCorrelationIdFilterQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Investigation responsibility attribution grouped by actor",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/AuditResponsibilityResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/admin/audit/retention-purge": {
+          "post": {
+            "tags": ["Admin"],
+            "summary": "Execute audit evidence retention purge by policy",
+            "operationId": HttpOperation::PurgeAuditEvidence.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/AuditRetentionPurgeRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Audit evidence retention purge result",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/AuditRetentionPurgeResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
         "/api/v1/integrations/payroll/deductions": {
           "get": {
             "tags": ["Integration"],
@@ -1243,6 +1359,60 @@ pub fn canonical_openapi_spec() -> Value {
             "description": "Evaluate mappings active at this fixed Asia/Taipei business timestamp.",
             "schema": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" }
           },
+          "AuditActorIdFilterQuery": {
+            "name": "actorId",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/ActorId" }
+          },
+          "AuditActionFilterQuery": {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/AuditAction" }
+          },
+          "AuditEntityTypeFilterQuery": {
+            "name": "entityType",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/AuditEntityType" }
+          },
+          "AuditEntityIdFilterQuery": {
+            "name": "entityId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "AuditOccurredFromEpochDayQuery": {
+            "name": "occurredFromEpochDay",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "AuditOccurredToEpochDayQuery": {
+            "name": "occurredToEpochDay",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "AuditCorrelationIdFilterQuery": {
+            "name": "correlationId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
           "OrderIdPath": {
             "name": "orderId",
             "in": "path",
@@ -1386,6 +1556,144 @@ pub fn canonical_openapi_spec() -> Value {
               "CORPORATE_SSO",
               "VENDOR_ACCOUNT_MFA"
             ]
+          },
+          "AuditAction": {
+            "type": "string",
+            "enum": [
+              "CREATE_EMPLOYEE_ORDER",
+              "UPDATE_EMPLOYEE_ORDER",
+              "VERIFY_PICKUP_ORDER",
+              "MARK_ORDER_SOLD_OUT",
+              "MARK_ORDER_REFUND_PENDING",
+              "MARK_ORDER_REFUNDED",
+              "UPSERT_VENDOR_MENU_ITEM",
+              "UPSERT_VENDOR_ORDERING_POLICY",
+              "ADVANCE_VENDOR_FULFILLMENT_DELIVERY_STATUS",
+              "CREATE_VENDOR_FULFILLMENT_EXPORT_BATCH",
+              "UPSERT_VENDOR_PLANT_DELIVERY_MAPPING",
+              "DELETE_VENDOR_PLANT_DELIVERY_MAPPING",
+              "UPSERT_COMPLIANCE_DOCUMENT_TEMPLATE",
+              "REGISTER_VENDOR_APPLICATION",
+              "SUBMIT_VENDOR_COMPLIANCE_DOCUMENT",
+              "REVIEW_VENDOR_APPLICATION",
+              "RUN_VENDOR_COMPLIANCE_LIFECYCLE",
+              "PRUNE_VENDOR_COMPLIANCE_HISTORY",
+              "EXPORT_PAYROLL_DEDUCTIONS"
+            ]
+          },
+          "AuditEntityType": {
+            "type": "string",
+            "enum": [
+              "ORDER",
+              "MENU_ITEM",
+              "VENDOR",
+              "DELIVERY_MAPPING",
+              "COMPLIANCE_DOCUMENT_TEMPLATE",
+              "FULFILLMENT_BATCH",
+              "SETTLEMENT",
+              "VENDOR_ORDERING_POLICY"
+            ]
+          },
+          "AuditEntityRef": {
+            "type": "object",
+            "required": ["entityType", "entityId"],
+            "properties": {
+              "entityType": { "$ref": "#/components/schemas/AuditEntityType" },
+              "entityId": { "type": "string", "minLength": 1, "maxLength": 128 }
+            },
+            "additionalProperties": false
+          },
+          "AuditEvidence": {
+            "type": "object",
+            "required": [
+              "evidenceId",
+              "occurredAt",
+              "actorId",
+              "actorRole",
+              "authenticationSource",
+              "operationId",
+              "action",
+              "entityType",
+              "entityId",
+              "correlationId"
+            ],
+            "properties": {
+              "evidenceId": { "type": "integer", "minimum": 1 },
+              "occurredAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "actorId": { "$ref": "#/components/schemas/ActorId" },
+              "actorRole": { "$ref": "#/components/schemas/Role" },
+              "authenticationSource": { "$ref": "#/components/schemas/AuthenticationSource" },
+              "operationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "action": { "$ref": "#/components/schemas/AuditAction" },
+              "entityType": { "$ref": "#/components/schemas/AuditEntityType" },
+              "entityId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "correlationId": { "type": "string", "minLength": 1, "maxLength": 256 }
+            },
+            "additionalProperties": false
+          },
+          "AuditInvestigationResponse": {
+            "type": "object",
+            "required": ["items"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AuditEvidence" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "AuditResponsibilityAttribution": {
+            "type": "object",
+            "required": [
+              "actorId",
+              "role",
+              "authenticationSource",
+              "eventCount",
+              "actions",
+              "entities"
+            ],
+            "properties": {
+              "actorId": { "$ref": "#/components/schemas/ActorId" },
+              "role": { "$ref": "#/components/schemas/Role" },
+              "authenticationSource": { "$ref": "#/components/schemas/AuthenticationSource" },
+              "eventCount": { "type": "integer", "minimum": 0 },
+              "actions": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AuditAction" }
+              },
+              "entities": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AuditEntityRef" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "AuditResponsibilityResponse": {
+            "type": "object",
+            "required": ["items"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AuditResponsibilityAttribution" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "AuditRetentionPurgeRequest": {
+            "type": "object",
+            "properties": {
+              "asOfEpochDay": { "type": "integer" }
+            },
+            "additionalProperties": false
+          },
+          "AuditRetentionPurgeResponse": {
+            "type": "object",
+            "required": ["purgedEvents", "asOfEpochDay"],
+            "properties": {
+              "purgedEvents": { "type": "integer", "minimum": 0 },
+              "asOfEpochDay": { "type": "integer" }
+            },
+            "additionalProperties": false
           },
           "SortOrder": {
             "type": "string",
@@ -2606,6 +2914,9 @@ pub fn canonical_openapi_spec() -> Value {
               "PICKUP_VERIFICATION_INVALID_CODE",
               "PICKUP_VERIFICATION_INTERNAL_ERROR",
               "ORDER_NOT_FOUND",
+              "INVALID_AUDIT_INVESTIGATION_QUERY",
+              "AUDIT_INVESTIGATION_INTERNAL_ERROR",
+              "AUDIT_RETENTION_PURGE_INTERNAL_ERROR",
               "VENDOR_FULFILLMENT_INVALID_REQUEST",
               "VENDOR_FULFILLMENT_STATUS_CONFLICT",
               "VENDOR_FULFILLMENT_BATCH_NOT_FOUND"

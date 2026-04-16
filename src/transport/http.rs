@@ -52,7 +52,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 19] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 22] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -134,6 +134,21 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 19] = [
         HttpMethod::Post,
         "/api/v1/admin/compliance/lifecycle/executions",
         "runVendorComplianceLifecycle",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/admin/audit/investigations",
+        "queryAuditInvestigations",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/admin/audit/responsibilities",
+        "queryAuditResponsibilities",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Post,
+        "/api/v1/admin/audit/retention-purge",
+        "purgeAuditEvidence",
     ),
     RuntimeHttpRoute::new(
         HttpMethod::Get,
