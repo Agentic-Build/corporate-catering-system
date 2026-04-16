@@ -1,5 +1,5 @@
 use std::cmp::Ordering as CmpOrdering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
@@ -69,6 +69,7 @@ const LOAD_GATE_EMPLOYEE_ACTOR_ID: &str = "emp-load-gate";
 const LOAD_GATE_COMMITTEE_ACTOR_ID: &str = "committee-load-gate";
 const LOAD_GATE_PAYROLL_ACTOR_ID: &str = "payroll-load-gate";
 const LOAD_GATE_PAYROLL_DISPUTE_OWNER_ACTOR_ID: &str = "payroll-dispute-owner";
+const PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV: &str = "PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS";
 
 const ALL_AUDIT_ACTIONS: [AuditAction; 27] = [
     AuditAction::CreateEmployeeOrder,
@@ -120,6 +121,7 @@ const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 13] = [
 struct AppState {
     next_order_sequence: Arc<AtomicU64>,
     plant_id: PlantId,
+    terminated_employee_actor_ids: Arc<HashSet<ActorId>>,
     audit_trail: ImmutableAuditTrail,
     payroll_ledger_service: PayrollLedgerService,
     compliance_lifecycle: Arc<VendorComplianceLifecycle>,
@@ -789,6 +791,23 @@ fn parse_positive_u64_env(key: &str, default_value: u64) -> Result<u64, String> 
     Ok(parsed)
 }
 
+fn parse_terminated_employee_actor_ids_from_env() -> Result<HashSet<ActorId>, String> {
+    let raw = match std::env::var(PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV) {
+        Ok(value) => value,
+        Err(_) => return Ok(HashSet::new()),
+    };
+    let mut actor_ids = HashSet::new();
+    for candidate in raw
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let actor_id = ActorId::parse(candidate.to_owned()).map_err(|error| error.to_string())?;
+        actor_ids.insert(actor_id);
+    }
+    Ok(actor_ids)
+}
+
 fn resolve_delivery_epoch_day() -> Result<i32, String> {
     if let Ok(raw) = std::env::var("PRELAUNCH_DELIVERY_EPOCH_DAY") {
         let parsed = raw
@@ -940,6 +959,10 @@ fn bootstrap_runtime_state(
 
     let menu_supply_policy =
         MenuSupplyPolicy::with_audit_trail(Default::default(), audit_trail.clone());
+    let terminated_employee_actor_ids =
+        parse_terminated_employee_actor_ids_from_env().map_err(|error| {
+            format!("{PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV} is invalid: {error}")
+        })?;
     let payroll_ledger_service =
         PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
     let vendor_menu_gateway = HttpVendorMenuExecutionGateway::new(&menu_supply_policy);
@@ -976,6 +999,7 @@ fn bootstrap_runtime_state(
     Ok(AppState {
         next_order_sequence: Arc::new(AtomicU64::new(1)),
         plant_id,
+        terminated_employee_actor_ids: Arc::new(terminated_employee_actor_ids),
         audit_trail,
         payroll_ledger_service,
         compliance_lifecycle: Arc::new(compliance_lifecycle),
@@ -1616,7 +1640,7 @@ fn handle_create_employee_order(
     })?;
 
     let order_id = generate_contract_order_id(state)?;
-    let employee_actor = load_gate_employee_actor_for_plant(&state.plant_id)?;
+    let employee_actor = load_gate_employee_actor_for_plant(state, &state.plant_id)?;
 
     let ordering_gateway = HttpOrderingExecutionGateway::new(
         state.compliance_lifecycle.as_ref(),
@@ -1699,7 +1723,7 @@ fn handle_update_employee_order(
     })?;
     let mutation = parse_order_mutation(request)?;
     let current_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
-    let employee_actor = load_gate_employee_actor_for_plant(current_snapshot.plant_id())?;
+    let employee_actor = load_gate_employee_actor_for_plant(state, current_snapshot.plant_id())?;
     let requested_at = current_taipei_business_moment().map_err(|error| {
         domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1785,7 +1809,7 @@ fn handle_get_employee_order_payroll_ledger(
         )
     })?;
     let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
-    let employee_actor = load_gate_employee_actor_for_plant(snapshot.plant_id())?;
+    let employee_actor = load_gate_employee_actor_for_plant(state, snapshot.plant_id())?;
     let view = state
         .payroll_ledger_service
         .employee_order_view(&employee_actor, &order_id)
@@ -1845,7 +1869,7 @@ fn handle_create_employee_order_dispute(
         )
     })?;
     let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
-    let employee_actor = load_gate_employee_actor_for_plant(snapshot.plant_id())?;
+    let employee_actor = load_gate_employee_actor_for_plant(state, snapshot.plant_id())?;
     let requested_at = current_taipei_business_moment().map_err(|error| {
         domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -2506,6 +2530,7 @@ fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayl
 }
 
 fn load_gate_employee_actor_for_plant(
+    state: &AppState,
     plant_id: &PlantId,
 ) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
     let actor_id = ActorId::parse(LOAD_GATE_EMPLOYEE_ACTOR_ID).map_err(|error| {
@@ -2522,11 +2547,17 @@ fn load_gate_employee_actor_for_plant(
             format!("failed to build load-gate employee plant scope: {error}"),
         )
     })?;
-    AuthenticatedActorContext::new(
+    let employment_status = if state.terminated_employee_actor_ids.contains(&actor_id) {
+        EmploymentStatus::Terminated
+    } else {
+        EmploymentStatus::Active
+    };
+    AuthenticatedActorContext::new_with_employment_status(
         actor_id,
         Role::Employee,
         plant_scope,
         AuthenticationSource::CorporateSso,
+        employment_status,
     )
     .map_err(|error| {
         domain_error(
@@ -3720,7 +3751,7 @@ fn handle_verify_order_pickup(
             error,
         )
     })?;
-    let employee_actor = load_gate_employee_actor_for_plant(snapshot.plant_id())?;
+    let employee_actor = load_gate_employee_actor_for_plant(state, snapshot.plant_id())?;
 
     state
         .menu_supply_policy
@@ -4120,6 +4151,7 @@ mod tests {
         AppState {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             plant_id: plant,
+            terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail,
             payroll_ledger_service,
             compliance_lifecycle: Arc::new(compliance_lifecycle),
@@ -4130,6 +4162,13 @@ mod tests {
                     .expect("test pickup verifier should be valid"),
             ),
         }
+    }
+
+    fn build_state_with_terminated_load_gate_employee(now_epoch_day: i32) -> AppState {
+        let mut state = build_state(now_epoch_day);
+        state.terminated_employee_actor_ids =
+            Arc::new(HashSet::from([actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID)]));
+        state
     }
 
     #[test]
@@ -4185,6 +4224,7 @@ mod tests {
         let state = AppState {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
             plant_id: plant_id("fab-a"),
+            terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail: audit_trail.clone(),
             payroll_ledger_service: PayrollLedgerService::new(
                 PayrollRetentionPolicy::default(),
@@ -4687,5 +4727,46 @@ mod tests {
         .expect("hr api adjunct sync should succeed");
         assert_eq!(synced.exchange_batch.hr_api_sync_status, "SUCCEEDED");
         assert!(synced.exchange_batch.hr_api_synced_at.is_some());
+    }
+
+    #[test]
+    fn payroll_export_handler_can_emit_terminated_employee_exception_status() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state_with_terminated_load_gate_employee(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order =
+            handle_create_employee_order(&state, create_request).expect("order should be created");
+        let pay_period = created_order.delivery_date[..7].to_owned();
+
+        let export_page = handle_export_payroll_deductions(
+            &state,
+            PayrollExportQuery {
+                pay_period: Some(pay_period),
+                cycle_key: Some("cycle-terminated-runtime-drill".to_owned()),
+                page: Some(1),
+                page_size: Some(20),
+                sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
+                sort_order: Some(SortOrderQuery::Asc),
+            },
+        )
+        .expect("payroll deductions export should succeed");
+
+        let exported = export_page
+            .items
+            .iter()
+            .find(|item| item.order_id == created_order.order_id)
+            .expect("created order should exist in exported deductions");
+        assert_eq!(exported.status, "EMPLOYEE_TERMINATED");
     }
 }

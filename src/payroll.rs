@@ -2413,7 +2413,7 @@ mod tests {
     }
 
     #[test]
-    fn deduction_status_covers_terminated_employee_and_deduction_failure_exceptions() {
+    fn deduction_status_covers_terminated_employee_refund_and_deduction_failure_exceptions() {
         let audit_trail = ImmutableAuditTrail::default();
         let service = PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail);
         let active_employee = employee_actor();
@@ -2421,6 +2421,7 @@ mod tests {
         let payroll = payroll_actor();
         let terminated_order = order_id("ord-payroll-ledger-terminated");
         let active_order = order_id("ord-payroll-ledger-failed");
+        let refunded_order = order_id("ord-payroll-ledger-refunded");
 
         service
             .reconcile_order_charge(
@@ -2450,6 +2451,34 @@ mod tests {
                 source_ref("order:create:active"),
             )
             .expect("active employee deduction should append");
+        service
+            .reconcile_order_charge(
+                &active_employee,
+                "createEmployeeOrder",
+                &refunded_order,
+                active_employee.actor_id(),
+                EmploymentStatus::Active,
+                101,
+                "TWD",
+                6100,
+                audit_timestamp(101, 457),
+                source_ref("order:create:refunded"),
+            )
+            .expect("refunded order initial deduction should append");
+        service
+            .reconcile_order_charge(
+                &active_employee,
+                "cancelEmployeeOrder",
+                &refunded_order,
+                active_employee.actor_id(),
+                EmploymentStatus::Active,
+                101,
+                "TWD",
+                0,
+                audit_timestamp(101, 458),
+                source_ref("order:cancel:refunded"),
+            )
+            .expect("refunded order adjustment should append");
 
         let exported = service
             .export_sftp_batch(
@@ -2498,6 +2527,68 @@ mod tests {
         assert_eq!(
             by_order.get(active_order.as_str()),
             Some(&PayrollDeductionStatus::DeductionFailed)
+        );
+        assert_eq!(
+            by_order.get(refunded_order.as_str()),
+            Some(&PayrollDeductionStatus::Refunded)
+        );
+    }
+
+    #[test]
+    fn export_second_cycle_marks_open_deductions_as_locked() {
+        let audit_trail = ImmutableAuditTrail::default();
+        let service = PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail);
+        let employee = employee_actor();
+        let payroll = payroll_actor();
+        let order = order_id("ord-payroll-ledger-locked");
+
+        service
+            .reconcile_order_charge(
+                &employee,
+                "createEmployeeOrder",
+                &order,
+                employee.actor_id(),
+                EmploymentStatus::Active,
+                112,
+                "TWD",
+                4800,
+                audit_timestamp(112, 500),
+                source_ref("order:create:lock"),
+            )
+            .expect("deduction should append");
+
+        let first_cycle = service
+            .export_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-lock-1",
+                1,
+                50,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+                audit_timestamp(112, 520),
+            )
+            .expect("first cycle export should succeed");
+        assert_eq!(
+            first_cycle.items()[0].status(),
+            PayrollDeductionStatus::Ready
+        );
+
+        let second_cycle = service
+            .export_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-lock-2",
+                1,
+                50,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+                audit_timestamp(112, 550),
+            )
+            .expect("second cycle export should succeed");
+        assert_eq!(
+            second_cycle.items()[0].status(),
+            PayrollDeductionStatus::Locked
         );
     }
 
