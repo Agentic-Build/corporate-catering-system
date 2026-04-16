@@ -3020,13 +3020,8 @@ fn handle_update_admin_anomaly_alert(
                 ));
             }
             let closure_note = parse_required_patch_note(request.closure_note, "closureNote")?;
-            let closure_evidence_refs = request.closure_evidence_refs.ok_or_else(|| {
-                domain_error(
-                    StatusCode::BAD_REQUEST,
-                    "BAD_REQUEST",
-                    "closureEvidenceRefs is required for CLOSE operation".to_owned(),
-                )
-            })?;
+            let closure_evidence_refs =
+                parse_required_patch_evidence_refs(request.closure_evidence_refs)?;
             state
                 .anomaly_alert_workflow
                 .transition_alert(
@@ -4059,6 +4054,31 @@ fn parse_required_patch_note(
         ));
     }
     Ok(trimmed.to_owned())
+}
+
+fn parse_required_patch_evidence_refs(
+    refs: Option<Vec<String>>,
+) -> Result<Vec<String>, (StatusCode, ErrorPayload)> {
+    let refs = refs.ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "closureEvidenceRefs is required for CLOSE operation".to_owned(),
+        )
+    })?;
+    let normalized = refs
+        .into_iter()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    if normalized.is_empty() {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "closureEvidenceRefs must include at least one non-empty evidence reference".to_owned(),
+        ));
+    }
+    Ok(normalized)
 }
 
 fn normalize_optional_patch_note(
@@ -6932,6 +6952,98 @@ mod tests {
                 error.1.message
             );
         }
+    }
+
+    #[test]
+    fn close_anomaly_alert_rejects_blank_evidence_without_persisting_closed_status() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let committee = committee_admin();
+
+        let evaluation = handle_evaluate_anomaly_alerts(
+            &state,
+            &committee,
+            AnomalyAlertEvaluationRequest {
+                vendor_id: "ven-discoverytst-a1".to_owned(),
+                observed_at_epoch_day: Some(now_epoch_day),
+                observed_at_minute_of_day: Some(600),
+                days_until_expiry: None,
+                on_time_rate: Some(0.80),
+                satisfaction_score: None,
+                complaint_count: None,
+                default_owner_actor_id: None,
+            },
+        )
+        .expect("anomaly evaluation should succeed");
+        let initial_alert = evaluation
+            .triggered_alerts
+            .iter()
+            .find(|alert| alert.rule_kind == "ON_TIME_DEGRADATION")
+            .expect("on-time degradation should trigger an alert");
+
+        let close_error = handle_update_admin_anomaly_alert(
+            &state,
+            &committee,
+            initial_alert.alert_id.clone(),
+            AdminAnomalyAlertPatchRequest {
+                operation: "CLOSE".to_owned(),
+                owner_actor_id: None,
+                note: Some("attempted close".to_owned()),
+                closure_note: Some("closure evidence pending".to_owned()),
+                closure_evidence_refs: Some(vec!["   ".to_owned()]),
+                ticket_reference: None,
+            },
+        )
+        .expect_err("blank closure evidence must be rejected");
+        assert_eq!(close_error.0, StatusCode::BAD_REQUEST);
+        assert!(
+            close_error.1.message.contains("closureEvidenceRefs"),
+            "expected close error to reference closureEvidenceRefs, got `{}`",
+            close_error.1.message
+        );
+
+        let open_listing = handle_list_anomaly_alerts(
+            &state,
+            &committee,
+            AnomalyAlertQueryRequest {
+                vendor_id: Some("ven-discoverytst-a1".to_owned()),
+                owner_actor_id: None,
+                status: Some("OPEN".to_owned()),
+                escalated_only: None,
+                sla_status: None,
+                as_of_epoch_day: Some(now_epoch_day),
+                as_of_minute_of_day: Some(1439),
+            },
+        )
+        .expect("open anomaly alerts should be queryable");
+        assert!(
+            open_listing
+                .items
+                .iter()
+                .any(|item| item.alert_id == initial_alert.alert_id),
+            "failed close must not persist CLOSED status"
+        );
+
+        let close_audit_events = handle_query_audit_investigations(
+            &state,
+            &committee,
+            AuditInvestigationQuery {
+                actor_id: None,
+                action: Some("CLOSE_ANOMALY_ALERT".to_owned()),
+                entity_type: Some("ANOMALY_ALERT".to_owned()),
+                entity_id: Some(initial_alert.alert_id.clone()),
+                occurred_from_epoch_day: None,
+                occurred_to_epoch_day: None,
+                correlation_id: None,
+            },
+        )
+        .expect("close anomaly audit events should be queryable");
+        assert!(
+            close_audit_events.items.is_empty(),
+            "failed close must not append close audit evidence"
+        );
     }
 
     #[test]

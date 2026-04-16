@@ -1065,6 +1065,16 @@ impl AnomalyAlertWorkflow {
         let normalized_note = normalize_optional_note(note)?;
         let mut normalized_ticket_reference =
             normalize_optional_ticket_reference(ticket_reference)?;
+        let mut normalized_close_note = if transition == AnomalyAlertTransition::Close {
+            Some(normalize_required_note(closure_note)?)
+        } else {
+            None
+        };
+        let mut normalized_close_evidence = if transition == AnomalyAlertTransition::Close {
+            Some(normalize_closure_evidence(closure_evidence_refs)?)
+        } else {
+            None
+        };
 
         let updated_alert = {
             let alert = state
@@ -1103,8 +1113,12 @@ impl AnomalyAlertWorkflow {
                     }
                 }
                 AnomalyAlertTransition::Close => {
-                    let required_note = normalize_required_note(closure_note)?;
-                    let required_evidence = normalize_closure_evidence(closure_evidence_refs)?;
+                    let required_note = normalized_close_note
+                        .take()
+                        .expect("close transition note should be pre-validated");
+                    let required_evidence = normalized_close_evidence
+                        .take()
+                        .expect("close transition evidence should be pre-validated");
                     alert.closed_at = Some(occurred_at);
                     alert.closure_note = Some(required_note);
                     alert.closure_evidence_refs = required_evidence;
@@ -1737,6 +1751,76 @@ mod tests {
                 "anomaly-alert:{}",
                 alert.alert_id().as_str()
             )])
+        );
+    }
+
+    #[test]
+    fn failed_close_validation_does_not_persist_closed_state() {
+        let committee = committee_actor();
+        let default_owner = actor_id("anomaly-owner-default");
+        let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
+        let workflow = AnomalyAlertWorkflow::with_default_rules(audit_trail.clone());
+        let observed_at = AuditTimestamp::new(200, 540).expect("timestamp should be valid");
+
+        let evaluation = workflow
+            .evaluate_rules(
+                &committee,
+                AnomalySignalSnapshot::new(vendor_id("ven-anomalytsta"), observed_at)
+                    .with_on_time_rate(Some(0.80)),
+                &default_owner,
+            )
+            .expect("evaluation should succeed");
+        let alert = evaluation
+            .triggered_alerts()
+            .iter()
+            .find(|item| item.rule_kind() == AnomalyRuleKind::OnTimeDegradation)
+            .expect("on-time degradation alert should exist");
+
+        let close_error = workflow
+            .transition_alert(
+                &committee,
+                alert.alert_id(),
+                AnomalyAlertTransition::Close,
+                AuditTimestamp::new(200, 560).expect("timestamp should be valid"),
+                Some("attempted close".to_owned()),
+                Some("closure note".to_owned()),
+                vec!["   ".to_owned()],
+                None,
+            )
+            .expect_err("close should fail when closure evidence is blank");
+        assert!(matches!(
+            close_error,
+            AnomalyAlertError::ClosureEvidenceRequired
+        ));
+
+        let open_alerts = workflow
+            .query_alerts(
+                &AnomalyAlertQuery {
+                    vendor_id: Some(vendor_id("ven-anomalytsta")),
+                    owner_actor_id: None,
+                    status: Some(AnomalyAlertStatus::Open),
+                    escalated_only: None,
+                    sla_status: None,
+                },
+                AuditTimestamp::new(200, 600).expect("timestamp should be valid"),
+            )
+            .expect("open anomaly alerts should be queryable");
+        assert!(
+            open_alerts
+                .iter()
+                .any(|item| item.alert_id() == alert.alert_id()),
+            "failed close attempt must not persist CLOSED status"
+        );
+
+        let close_events = audit_trail
+            .investigation_query(
+                &committee,
+                &AuditInvestigationFilter::default().with_action(AuditAction::CloseAnomalyAlert),
+            )
+            .expect("close audit events should be queryable");
+        assert!(
+            close_events.is_empty(),
+            "failed close attempt must not append close audit evidence"
         );
     }
 }
