@@ -7,6 +7,7 @@ pub mod contract;
 pub mod health;
 pub mod identity;
 pub mod menu_supply_window;
+pub mod object_storage;
 pub mod observability;
 pub mod operations_analytics;
 pub mod payroll;

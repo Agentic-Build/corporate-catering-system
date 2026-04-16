@@ -10,7 +10,8 @@ use corporate_catering_system::menu_supply_window::{
 use corporate_catering_system::vendor_compliance::VendorId;
 use corporate_catering_system::vendor_delivery_mapping::TaipeiBusinessMoment;
 use corporate_catering_system::vendor_fulfillment::{
-    FulfillmentDeliveryStatus, VendorFulfillmentError, VendorFulfillmentPolicy,
+    FulfillmentArtifactType, FulfillmentDeliveryStatus, VendorFulfillmentError,
+    VendorFulfillmentPolicy,
 };
 
 fn actor_id(value: &str) -> ActorId {
@@ -76,7 +77,7 @@ fn menu_item(
             "BENTO",
             vec![MenuHealthTag::HighProtein],
             Some(
-                MenuImageUrl::parse("https://cdn.example.com/menu/fulfillment-bento.jpg")
+                MenuImageUrl::parse("s3://menu-assets/menu/fulfillment-bento.jpg")
                     .expect("menu image URL should be valid"),
             ),
             Money::new("TWD", 12000).expect("money should be valid"),
@@ -308,15 +309,17 @@ fn export_batches_are_immutable_and_generated_from_snapshot_state() {
         .expect("first export batch should be created");
 
     assert_eq!(first_batch.batch_id().as_str(), "fbatch-220-000001");
-    assert_eq!(first_batch.artifacts().daily_summary().total_orders(), 3);
-    assert_eq!(first_batch.artifacts().daily_summary().total_portions(), 4);
-    assert_eq!(
-        first_batch
-            .artifacts()
-            .daily_summary()
-            .total_special_requests(),
-        4
-    );
+    assert_eq!(first_batch.artifacts().artifacts().len(), 4);
+    let first_daily_summary = first_batch
+        .artifacts()
+        .artifact(FulfillmentArtifactType::DailySummary)
+        .expect("daily summary artifact should exist");
+    assert!(first_daily_summary
+        .object_ref()
+        .contains("fbatch-220-000001"));
+    assert_eq!(first_daily_summary.mime_type(), "application/json");
+    assert_eq!(first_daily_summary.sha256().len(), 64);
+    let first_daily_summary_sha = first_daily_summary.sha256().to_owned();
 
     menu_supply
         .create_order(
@@ -351,10 +354,11 @@ fn export_batches_are_immutable_and_generated_from_snapshot_state() {
     assert_eq!(
         immutable_first_batch
             .artifacts()
-            .daily_summary()
-            .total_orders(),
-        3,
-        "first batch must stay immutable after live-state changes"
+            .artifact(FulfillmentArtifactType::DailySummary)
+            .expect("daily summary artifact should still exist")
+            .sha256(),
+        first_daily_summary_sha.as_str(),
+        "first batch artifact checksum must stay immutable after live-state changes"
     );
     assert_eq!(immutable_first_batch.board().order_entries().len(), 3);
 
@@ -369,20 +373,34 @@ fn export_batches_are_immutable_and_generated_from_snapshot_state() {
         .expect("second export batch should be created from updated state");
 
     assert_eq!(second_batch.batch_id().as_str(), "fbatch-220-000002");
-    assert_eq!(second_batch.artifacts().daily_summary().total_orders(), 4);
-    assert!(
-        second_batch
+    assert_eq!(second_batch.artifacts().artifacts().len(), 4);
+    let second_daily_summary = second_batch
+        .artifacts()
+        .artifact(FulfillmentArtifactType::DailySummary)
+        .expect("daily summary artifact should exist");
+    assert!(second_daily_summary
+        .object_ref()
+        .contains("fbatch-220-000002"));
+    assert_ne!(
+        second_daily_summary.sha256(),
+        first_daily_summary_sha.as_str(),
+        "updated state should produce a new daily summary artifact checksum"
+    );
+    for artifact_type in [
+        FulfillmentArtifactType::DailySummary,
+        FulfillmentArtifactType::PlantPartitionSheet,
+        FulfillmentArtifactType::Labels,
+        FulfillmentArtifactType::BasketList,
+    ] {
+        let artifact = second_batch
             .artifacts()
-            .labels()
-            .labels()
-            .iter()
-            .all(|label| label.special_requests().len() <= 3),
-        "labels must only render controlled special-request structure"
-    );
-    assert!(
-        !second_batch.artifacts().basket_list().baskets().is_empty(),
-        "basket list export must always be generated for snapshot batches"
-    );
+            .artifact(artifact_type)
+            .expect("all export artifact references should be present");
+        assert!(artifact.size_bytes() > 0);
+        assert!(artifact
+            .object_ref()
+            .starts_with("s3://fulfillment-exports/"));
+    }
 }
 
 #[test]

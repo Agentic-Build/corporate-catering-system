@@ -45,6 +45,11 @@ use corporate_catering_system::menu_supply_window::{
     OrderLineItemRequest, OrderMutation, OrderRetentionPolicy, OrderSnapshot, SpecialRequest,
     VendorMenuItem, VendorMenuItemDraft,
 };
+use corporate_catering_system::object_storage::{
+    ObjectStorageError, ObjectStorageReference, ObjectStorageUploadPipeline, ObjectUploadIntent,
+    PresignedDownloadPlan, PresignedUploadPlan, PresignedUploadTarget, S3ObjectStorageConfig,
+    StorageArtifactClass, StorageLocale,
+};
 use corporate_catering_system::observability::{
     initialize_telemetry_runtime_from_env, TelemetryService,
 };
@@ -142,6 +147,26 @@ const DEFAULT_RUSH_PREORDER_OPEN_MAX_LEAD_DAYS: u16 = 7;
 const DEFAULT_RUSH_PREORDER_OPEN_THROTTLE_MINUTES: u16 = 180;
 const DEFAULT_RUSH_DEMAND_SPIKE_REMAINING_THRESHOLD: u16 = 5;
 const DEFAULT_RUSH_DEMAND_SPIKE_THROTTLE_MINUTES: u16 = 30;
+const MINIO_ENDPOINT_ENV: &str = "MINIO_ENDPOINT";
+const MINIO_ROOT_USER_ENV: &str = "MINIO_ROOT_USER";
+const MINIO_ROOT_PASSWORD_ENV: &str = "MINIO_ROOT_PASSWORD";
+const MINIO_BUCKET_MENU_IMAGES_ENV: &str = "MINIO_BUCKET_MENU_IMAGES";
+const MINIO_BUCKET_COMPLIANCE_EVIDENCE_ENV: &str = "MINIO_BUCKET_COMPLIANCE_EVIDENCE";
+const MINIO_BUCKET_FULFILLMENT_EXPORTS_ENV: &str = "MINIO_BUCKET_FULFILLMENT_EXPORTS";
+const OBJECT_STORAGE_REGION_ENV: &str = "OBJECT_STORAGE_REGION";
+const OBJECT_STORAGE_KEY_NAMESPACE_ENV: &str = "OBJECT_STORAGE_KEY_NAMESPACE";
+const OBJECT_STORAGE_UPLOAD_TTL_SECONDS_ENV: &str = "OBJECT_STORAGE_UPLOAD_TTL_SECONDS";
+const OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS_ENV: &str = "OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS";
+const DEFAULT_OBJECT_STORAGE_ENDPOINT: &str = "127.0.0.1:9000";
+const DEFAULT_OBJECT_STORAGE_ACCESS_KEY: &str = "corporate-catering";
+const DEFAULT_OBJECT_STORAGE_SECRET_KEY: &str = "corporate-catering-dev";
+const DEFAULT_OBJECT_STORAGE_REGION: &str = "us-east-1";
+const DEFAULT_OBJECT_STORAGE_KEY_NAMESPACE: &str = "corporate-catering";
+const DEFAULT_MENU_IMAGE_BUCKET: &str = "menu-assets";
+const DEFAULT_COMPLIANCE_BUCKET: &str = "compliance-evidence";
+const DEFAULT_FULFILLMENT_BUCKET: &str = "fulfillment-exports";
+const DEFAULT_OBJECT_STORAGE_UPLOAD_TTL_SECONDS: u16 = 900;
+const DEFAULT_OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS: u16 = 600;
 const AUTHORIZATION_BEARER_PREFIX: &str = "Bearer ";
 const MCP_OAUTH_SERVICE_ACCOUNT_TOKEN_PREFIX: &str = "mcp-oauth-sa:";
 const MCP_OAUTH_SERVICE_ACCOUNT_ISSUER_ENV: &str = "MCP_OAUTH_SERVICE_ACCOUNT_ISSUER";
@@ -268,6 +293,7 @@ struct AppState {
     menu_recommendation_ranker: MenuRecommendationRanker,
     rush_reminder_workflow: RushReminderWorkflow,
     rush_reminder_delivery_gateway: ReminderDeliveryGateway,
+    object_storage_upload_pipeline: Arc<ObjectStorageUploadPipeline>,
     terminated_employee_actor_ids: Arc<HashSet<ActorId>>,
     audit_trail: ImmutableAuditTrail,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
@@ -1212,6 +1238,58 @@ impl ErrorPayload {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ObjectStorageUploadRequestPayload {
+    artifact_class: String,
+    file_name: String,
+    mime_type: String,
+    size_bytes: u64,
+    locale: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ObjectStorageAccessLinkRequestPayload {
+    object_ref: String,
+    locale: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ObjectStorageUploadTargetPayload {
+    object_ref: String,
+    upload_url: String,
+    upload_expires_at_epoch_seconds: i64,
+    required_headers: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ObjectStorageUploadMetadataPayload {
+    artifact_class: String,
+    file_name: String,
+    mime_type: String,
+    size_bytes: u64,
+    thumbnail_ref: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ObjectStorageUploadPlanPayload {
+    primary: ObjectStorageUploadTargetPayload,
+    thumbnail: Option<ObjectStorageUploadTargetPayload>,
+    metadata: ObjectStorageUploadMetadataPayload,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ObjectStorageAccessLinkPayload {
+    object_ref: String,
+    download_url: String,
+    download_expires_at_epoch_seconds: i64,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct McpServiceAccountJwtClaims {
     iss: String,
@@ -1397,6 +1475,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     let rush_reminder_runtime_enabled =
         parse_bool_env_default_false(PRELAUNCH_RUSH_REMINDER_ENABLED_ENV)?;
     let rush_reminder_policy = resolve_rush_reminder_policy(rush_reminder_runtime_enabled)?;
+    let object_storage_upload_pipeline = Arc::new(
+        parse_object_storage_upload_pipeline_from_env()
+            .map_err(|error| format!("object storage configuration is invalid: {error}"))?,
+    );
 
     let delivery_epoch_day = resolve_delivery_epoch_day()?;
     let audit_retention_days = parse_positive_u16_env(
@@ -1485,6 +1567,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         advanced_analytics_dashboard_runtime_enabled,
         rush_reminder_runtime_enabled,
         rush_reminder_policy,
+        object_storage_upload_pipeline,
         payroll_retention_policy,
         order_retention_policy,
         payroll_export_field_encryptor,
@@ -1540,8 +1623,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         )
         .route("/api/v1/vendor/orders", get(list_vendor_orders))
         .route(
+            "/api/v1/vendor/object-storage/upload-plans",
+            post(create_vendor_object_storage_upload_plan),
+        )
+        .route(
+            "/api/v1/vendor/object-storage/access-links",
+            post(create_vendor_object_storage_access_link),
+        )
+        .route(
             "/api/v1/admin/vendors/:vendorId/reviews",
             post(review_vendor_application),
+        )
+        .route(
+            "/api/v1/admin/object-storage/access-links",
+            post(create_admin_object_storage_access_link),
         )
         .route(
             "/api/v1/admin/compliance/lifecycle/executions",
@@ -3653,6 +3748,51 @@ fn parse_bool_env_default_false(key: &str) -> Result<bool, String> {
     }
 }
 
+fn parse_object_storage_upload_pipeline_from_env() -> Result<ObjectStorageUploadPipeline, String> {
+    let endpoint = std::env::var(MINIO_ENDPOINT_ENV)
+        .unwrap_or_else(|_| DEFAULT_OBJECT_STORAGE_ENDPOINT.to_owned());
+    let access_key_id = std::env::var(MINIO_ROOT_USER_ENV)
+        .unwrap_or_else(|_| DEFAULT_OBJECT_STORAGE_ACCESS_KEY.to_owned());
+    let secret_access_key = std::env::var(MINIO_ROOT_PASSWORD_ENV)
+        .unwrap_or_else(|_| DEFAULT_OBJECT_STORAGE_SECRET_KEY.to_owned());
+    let menu_bucket = std::env::var(MINIO_BUCKET_MENU_IMAGES_ENV)
+        .unwrap_or_else(|_| DEFAULT_MENU_IMAGE_BUCKET.to_owned());
+    let compliance_bucket = std::env::var(MINIO_BUCKET_COMPLIANCE_EVIDENCE_ENV)
+        .unwrap_or_else(|_| DEFAULT_COMPLIANCE_BUCKET.to_owned());
+    let fulfillment_bucket = std::env::var(MINIO_BUCKET_FULFILLMENT_EXPORTS_ENV)
+        .unwrap_or_else(|_| DEFAULT_FULFILLMENT_BUCKET.to_owned());
+    let region = std::env::var(OBJECT_STORAGE_REGION_ENV)
+        .unwrap_or_else(|_| DEFAULT_OBJECT_STORAGE_REGION.to_owned());
+    let key_namespace = std::env::var(OBJECT_STORAGE_KEY_NAMESPACE_ENV)
+        .unwrap_or_else(|_| DEFAULT_OBJECT_STORAGE_KEY_NAMESPACE.to_owned());
+    let upload_ttl_seconds = parse_positive_u16_env(
+        OBJECT_STORAGE_UPLOAD_TTL_SECONDS_ENV,
+        DEFAULT_OBJECT_STORAGE_UPLOAD_TTL_SECONDS,
+    )?;
+    let download_ttl_seconds = parse_positive_u16_env(
+        OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS_ENV,
+        DEFAULT_OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS,
+    )?;
+
+    let config = S3ObjectStorageConfig::new(
+        endpoint,
+        region,
+        access_key_id,
+        secret_access_key,
+        menu_bucket,
+        compliance_bucket,
+        fulfillment_bucket,
+    )
+    .map_err(|error| error.to_string())?
+    .with_ttls(
+        u32::from(upload_ttl_seconds),
+        u32::from(download_ttl_seconds),
+    )
+    .map_err(|error| error.to_string())?
+    .with_key_namespace(key_namespace);
+    ObjectStorageUploadPipeline::new(config).map_err(|error| error.to_string())
+}
+
 fn resolve_rush_reminder_policy(runtime_enabled: bool) -> Result<RushReminderPolicy, String> {
     if runtime_enabled {
         parse_rush_reminder_policy_from_env()
@@ -3887,6 +4027,7 @@ fn bootstrap_runtime_state(
     advanced_analytics_dashboard_runtime_enabled: bool,
     rush_reminder_runtime_enabled: bool,
     rush_reminder_policy: RushReminderPolicy,
+    object_storage_upload_pipeline: Arc<ObjectStorageUploadPipeline>,
     payroll_retention_policy: PayrollRetentionPolicy,
     order_retention_policy: OrderRetentionPolicy,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
@@ -4068,10 +4209,9 @@ fn bootstrap_runtime_state(
             let menu_item_id =
                 MenuItemId::parse(format!("menu-{index}")).map_err(|error| error.to_string())?;
             let delivery_epoch_day = delivery_epoch_day.saturating_add(i32::from((index - 1) % 7));
-            let image_url = MenuImageUrl::parse(format!(
-                "https://cdn.example.com/menu/load-gate-{index}.jpg"
-            ))
-            .map_err(|error| error.to_string())?;
+            let image_url =
+                MenuImageUrl::parse(format!("s3://menu-assets/menu/load-gate-{index}.jpg"))
+                    .map_err(|error| error.to_string())?;
             let menu_item = VendorMenuItem::new(
                 menu_item_id.clone(),
                 vendor_id.clone(),
@@ -4218,6 +4358,7 @@ fn bootstrap_runtime_state(
         menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
         rush_reminder_workflow,
         rush_reminder_delivery_gateway,
+        object_storage_upload_pipeline,
         terminated_employee_actor_ids: Arc::new(terminated_employee_actor_ids),
         audit_trail,
         payroll_export_field_encryptor,
@@ -5104,6 +5245,295 @@ fn handle_list_vendor_orders(
             total_pages,
         },
     })
+}
+
+async fn create_vendor_object_storage_upload_plan(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<ObjectStorageUploadRequestPayload>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "createVendorObjectStorageUploadPlan",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response =
+        match handle_create_vendor_object_storage_upload_plan(&state, &vendor_actor, request) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(
+                        serde_json::to_value(payload)
+                            .expect("object storage upload payload serialization should succeed"),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                            "object storage upload error payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+        };
+
+    response
+}
+
+fn handle_create_vendor_object_storage_upload_plan(
+    state: &AppState,
+    vendor_actor: &AuthenticatedActorContext,
+    request: ObjectStorageUploadRequestPayload,
+) -> Result<ObjectStorageUploadPlanPayload, (StatusCode, ErrorPayload)> {
+    if vendor_actor.role() != Role::VendorOperator {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::VendorOperator,
+                vendor_actor.role()
+            ),
+        ));
+    }
+
+    let locale = StorageLocale::from_language_tag(request.locale.as_deref());
+    let artifact_class = parse_storage_artifact_class_label(request.artifact_class.as_str())
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "OBJECT_STORAGE_INVALID_ARTIFACT_CLASS",
+                localized_invalid_artifact_class_message(locale, request.artifact_class.as_str()),
+            )
+        })?;
+    let plan = state
+        .object_storage_upload_pipeline
+        .create_upload_plan(
+            ObjectUploadIntent {
+                artifact_class,
+                file_name: request.file_name,
+                mime_type: request.mime_type,
+                size_bytes: request.size_bytes,
+            },
+            SystemTime::now(),
+        )
+        .map_err(|error| map_object_storage_error(error, locale))?;
+    Ok(to_object_storage_upload_plan_payload(plan))
+}
+
+async fn create_vendor_object_storage_access_link(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<ObjectStorageAccessLinkRequestPayload>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "createVendorObjectStorageAccessLink",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let _vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+    let response = match handle_create_object_storage_access_link(&state, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("object storage access-link payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "object storage access-link error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+async fn create_admin_object_storage_access_link(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<ObjectStorageAccessLinkRequestPayload>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "createAdminObjectStorageAccessLink",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let _committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+    let response = match handle_create_object_storage_access_link(&state, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("object storage access-link payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "object storage access-link error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_create_object_storage_access_link(
+    state: &AppState,
+    request: ObjectStorageAccessLinkRequestPayload,
+) -> Result<ObjectStorageAccessLinkPayload, (StatusCode, ErrorPayload)> {
+    let locale = StorageLocale::from_language_tag(request.locale.as_deref());
+    let object_ref = ObjectStorageReference::parse(request.object_ref)
+        .map_err(|error| map_object_storage_error(error, locale))?;
+    let plan = state
+        .object_storage_upload_pipeline
+        .create_download_plan(&object_ref, SystemTime::now())
+        .map_err(|error| map_object_storage_error(error, locale))?;
+    Ok(to_object_storage_access_link_payload(plan))
+}
+
+fn parse_storage_artifact_class_label(value: &str) -> Option<StorageArtifactClass> {
+    match value.trim().to_ascii_uppercase().replace('-', "_").as_str() {
+        "MENU_IMAGE" => Some(StorageArtifactClass::MenuImage),
+        "MENU_IMAGE_THUMBNAIL" => Some(StorageArtifactClass::MenuImageThumbnail),
+        "COMPLIANCE_DOCUMENT" => Some(StorageArtifactClass::ComplianceDocument),
+        "FULFILLMENT_DAILY_SUMMARY" => Some(StorageArtifactClass::FulfillmentDailySummary),
+        "FULFILLMENT_PLANT_PARTITION_SHEET" => {
+            Some(StorageArtifactClass::FulfillmentPlantPartitionSheet)
+        }
+        "FULFILLMENT_LABELS" => Some(StorageArtifactClass::FulfillmentLabels),
+        "FULFILLMENT_BASKET_LIST" => Some(StorageArtifactClass::FulfillmentBasketList),
+        _ => None,
+    }
+}
+
+fn localized_invalid_artifact_class_message(locale: StorageLocale, value: &str) -> String {
+    match locale {
+        StorageLocale::EnUs => format!("artifact class `{value}` is not supported"),
+        StorageLocale::ZhTw => format!("artifact class `{value}` 不支援。"),
+    }
+}
+
+fn map_object_storage_error(
+    error: ObjectStorageError,
+    locale: StorageLocale,
+) -> (StatusCode, ErrorPayload) {
+    let status = match error {
+        ObjectStorageError::InvalidObjectReference(_)
+        | ObjectStorageError::InvalidMimeType { .. }
+        | ObjectStorageError::SizeLimitExceeded { .. }
+        | ObjectStorageError::InvalidFileName(_) => StatusCode::BAD_REQUEST,
+        ObjectStorageError::InvalidConfiguration(_) | ObjectStorageError::PresignFailed(_) => {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    };
+    domain_error(status, error.error_code(), error.localized_message(locale))
+}
+
+fn to_object_storage_upload_plan_payload(
+    plan: PresignedUploadPlan,
+) -> ObjectStorageUploadPlanPayload {
+    let metadata = ObjectStorageUploadMetadataPayload {
+        artifact_class: plan.metadata.artifact_class.as_str().to_owned(),
+        file_name: plan.metadata.file_name,
+        mime_type: plan.metadata.mime_type,
+        size_bytes: plan.metadata.size_bytes,
+        thumbnail_ref: plan
+            .metadata
+            .thumbnail_ref
+            .map(|thumbnail_ref| thumbnail_ref.as_str().to_owned()),
+    };
+    ObjectStorageUploadPlanPayload {
+        primary: to_object_storage_upload_target_payload(plan.primary),
+        thumbnail: plan.thumbnail.map(to_object_storage_upload_target_payload),
+        metadata,
+    }
+}
+
+fn to_object_storage_upload_target_payload(
+    target: PresignedUploadTarget,
+) -> ObjectStorageUploadTargetPayload {
+    ObjectStorageUploadTargetPayload {
+        object_ref: target.object_ref.as_str().to_owned(),
+        upload_url: target.upload_url,
+        upload_expires_at_epoch_seconds: target.upload_expires_at_epoch_seconds,
+        required_headers: target.required_headers,
+    }
+}
+
+fn to_object_storage_access_link_payload(
+    plan: PresignedDownloadPlan,
+) -> ObjectStorageAccessLinkPayload {
+    ObjectStorageAccessLinkPayload {
+        object_ref: plan.object_ref.as_str().to_owned(),
+        download_url: plan.download_url,
+        download_expires_at_epoch_seconds: plan.download_expires_at_epoch_seconds,
+    }
 }
 
 async fn list_employee_menus(
@@ -10547,6 +10977,26 @@ mod tests {
         .expect("test payroll export encryption key should parse")
     }
 
+    fn test_object_storage_upload_pipeline() -> Arc<ObjectStorageUploadPipeline> {
+        let config = S3ObjectStorageConfig::new(
+            "http://127.0.0.1:9000",
+            "us-east-1",
+            "test-access-key",
+            "test-secret-key",
+            "menu-assets",
+            "compliance-evidence",
+            "fulfillment-exports",
+        )
+        .expect("test object storage config should be valid")
+        .with_ttls(900, 600)
+        .expect("test object storage ttl should be valid")
+        .with_key_namespace("corporate-catering-tests");
+        Arc::new(
+            ObjectStorageUploadPipeline::new(config)
+                .expect("test object storage pipeline should initialize"),
+        )
+    }
+
     fn bearer_headers(actor_id: &str, role: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -10752,7 +11202,7 @@ mod tests {
                         "BENTO",
                         vec![MenuHealthTag::HighProtein],
                         Some(
-                            MenuImageUrl::parse("https://cdn.example.com/menu/visible-bento.jpg")
+                            MenuImageUrl::parse("s3://menu-assets/menu/visible-bento.jpg")
                                 .expect("image should be valid"),
                         ),
                         Money::new("TWD", 12000).expect("money should be valid"),
@@ -10775,7 +11225,7 @@ mod tests {
                         "SALAD",
                         vec![MenuHealthTag::Vegan],
                         Some(
-                            MenuImageUrl::parse("https://cdn.example.com/menu/visible-salad.jpg")
+                            MenuImageUrl::parse("s3://menu-assets/menu/visible-salad.jpg")
                                 .expect("image should be valid"),
                         ),
                         Money::new("TWD", 9000).expect("money should be valid"),
@@ -10798,7 +11248,7 @@ mod tests {
                         "BENTO",
                         vec![MenuHealthTag::HighProtein],
                         Some(
-                            MenuImageUrl::parse("https://cdn.example.com/menu/hidden-bento.jpg")
+                            MenuImageUrl::parse("s3://menu-assets/menu/hidden-bento.jpg")
                                 .expect("image should be valid"),
                         ),
                         Money::new("TWD", 11000).expect("money should be valid"),
@@ -10836,6 +11286,7 @@ mod tests {
             menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
             rush_reminder_workflow: RushReminderWorkflow::new(RushReminderPolicy::default()),
             rush_reminder_delivery_gateway: Arc::new(NoopRushReminderDeliveryGateway),
+            object_storage_upload_pipeline: test_object_storage_upload_pipeline(),
             operations_analytics_warehouse: Arc::new(RwLock::new(
                 OperationsAnalyticsWarehouse::default(),
             )),
@@ -10993,6 +11444,7 @@ mod tests {
             false,
             false,
             RushReminderPolicy::default(),
+            test_object_storage_upload_pipeline(),
             PayrollRetentionPolicy::default(),
             OrderRetentionPolicy::default(),
             payroll_export_field_encryptor(),
@@ -11159,6 +11611,91 @@ mod tests {
         assert_eq!(
             vendor.authentication_source(),
             AuthenticationSource::VendorAccountMfa
+        );
+    }
+
+    #[test]
+    fn object_storage_vendor_upload_and_access_link_pipeline_succeeds() {
+        let state = build_state(20_000);
+        let vendor_actor = vendor_operator();
+        let upload_plan = handle_create_vendor_object_storage_upload_plan(
+            &state,
+            &vendor_actor,
+            ObjectStorageUploadRequestPayload {
+                artifact_class: "MENU_IMAGE".to_owned(),
+                file_name: "lunch-bento.png".to_owned(),
+                mime_type: "image/png".to_owned(),
+                size_bytes: 180_000,
+                locale: None,
+            },
+        )
+        .expect("menu image upload plan should succeed");
+        assert!(upload_plan
+            .primary
+            .object_ref
+            .starts_with("s3://menu-assets/"));
+        assert!(upload_plan.primary.upload_url.contains("X-Amz-Signature="));
+        assert!(upload_plan.thumbnail.is_some());
+
+        let access_link = handle_create_object_storage_access_link(
+            &state,
+            ObjectStorageAccessLinkRequestPayload {
+                object_ref: upload_plan.primary.object_ref.clone(),
+                locale: Some("en-US".to_owned()),
+            },
+        )
+        .expect("download access link should succeed");
+        assert_eq!(access_link.object_ref, upload_plan.primary.object_ref);
+        assert!(access_link.download_url.contains("X-Amz-Signature="));
+    }
+
+    #[test]
+    fn object_storage_upload_rejects_invalid_mime_with_localized_message() {
+        let state = build_state(20_000);
+        let vendor_actor = vendor_operator();
+        let (status, error) = handle_create_vendor_object_storage_upload_plan(
+            &state,
+            &vendor_actor,
+            ObjectStorageUploadRequestPayload {
+                artifact_class: "COMPLIANCE_DOCUMENT".to_owned(),
+                file_name: "not-allowed.bin".to_owned(),
+                mime_type: "application/octet-stream".to_owned(),
+                size_bytes: 1024,
+                locale: Some("zh-TW".to_owned()),
+            },
+        )
+        .expect_err("invalid mime should be rejected");
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.code, "OBJECT_STORAGE_INVALID_MIME");
+        assert!(
+            error.message.contains("不支援"),
+            "localized invalid mime message should be zh-TW, got `{}`",
+            error.message
+        );
+    }
+
+    #[test]
+    fn object_storage_upload_rejects_oversized_payload_with_localized_message() {
+        let state = build_state(20_000);
+        let vendor_actor = vendor_operator();
+        let (status, error) = handle_create_vendor_object_storage_upload_plan(
+            &state,
+            &vendor_actor,
+            ObjectStorageUploadRequestPayload {
+                artifact_class: "COMPLIANCE_DOCUMENT".to_owned(),
+                file_name: "oversized.pdf".to_owned(),
+                mime_type: "application/pdf".to_owned(),
+                size_bytes: 25 * 1024 * 1024,
+                locale: Some("zh-TW".to_owned()),
+            },
+        )
+        .expect_err("oversized payload should be rejected");
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.code, "OBJECT_STORAGE_SIZE_EXCEEDED");
+        assert!(
+            error.message.contains("超過"),
+            "localized size limit message should be zh-TW, got `{}`",
+            error.message
         );
     }
 
@@ -11482,6 +12019,7 @@ mod tests {
             menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
             rush_reminder_workflow: RushReminderWorkflow::new(RushReminderPolicy::default()),
             rush_reminder_delivery_gateway: Arc::new(NoopRushReminderDeliveryGateway),
+            object_storage_upload_pipeline: test_object_storage_upload_pipeline(),
             operations_analytics_warehouse: Arc::new(RwLock::new(
                 OperationsAnalyticsWarehouse::default(),
             )),

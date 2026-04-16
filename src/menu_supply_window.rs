@@ -9,6 +9,7 @@ use crate::audit::{
     AuditIdentityLink, AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
 };
 use crate::identity::{ActorId, AuthenticatedActorContext, PlantId, Role};
+use crate::object_storage::ObjectStorageReference;
 use crate::vendor_compliance::VendorId;
 use crate::vendor_delivery_mapping::TaipeiBusinessMoment;
 
@@ -132,11 +133,8 @@ impl MenuImageUrl {
                 "image URL must be at most {MAX_MENU_IMAGE_URL_LENGTH} characters"
             )));
         }
-        if !trimmed.starts_with("https://") {
-            return Err(MenuSupplyWindowError::InvalidMenuImageUrl(
-                "image URL must use https:// scheme".to_owned(),
-            ));
-        }
+        ObjectStorageReference::parse(trimmed)
+            .map_err(|error| MenuSupplyWindowError::InvalidMenuImageUrl(error.to_string()))?;
 
         Ok(Self(trimmed.to_owned()))
     }
@@ -2296,7 +2294,9 @@ impl fmt::Display for MenuSupplyWindowError {
             Self::InvalidCurrencyCode => {
                 f.write_str("currency must be a 3-letter uppercase ISO code")
             }
-            Self::InvalidMenuImageUrl(message) => write!(f, "invalid menu image URL: {message}"),
+            Self::InvalidMenuImageUrl(message) => {
+                write!(f, "invalid menu image object reference: {message}")
+            }
             Self::InvalidTextField { field, reason } => write!(f, "invalid {field}: {reason}"),
             Self::InvalidMaxDailyQuantity {
                 quantity,

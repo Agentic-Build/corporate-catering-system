@@ -2,6 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+
 use crate::audit::{
     AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
     AuditIdentityLink, AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
@@ -11,14 +14,16 @@ use crate::menu_supply_window::{
     MenuItemId, MenuSupplyPolicy, MenuSupplyWindowError, OrderId, OrderLifecycleState,
     OrderSnapshot, SpecialRequest,
 };
+use crate::object_storage::ObjectStorageReference;
 use crate::vendor_compliance::VendorId;
 use crate::vendor_delivery_mapping::TaipeiBusinessMoment;
 
 const ADVANCE_DELIVERY_STATUS_OPERATION_ID: &str = "advanceVendorFulfillmentDeliveryStatus";
 const CREATE_EXPORT_BATCH_OPERATION_ID: &str = "createVendorFulfillmentExportBatch";
 const BASKET_CAPACITY_PORTIONS: u16 = 12;
+const FULFILLMENT_EXPORT_BUCKET: &str = "fulfillment-exports";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum FulfillmentDeliveryStatus {
     PendingPrep,
     Preparing,
@@ -237,7 +242,7 @@ impl VendorFulfillmentBoardSnapshot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FulfillmentDailySummaryPlantRow {
     plant_id: PlantId,
     order_count: u32,
@@ -258,7 +263,7 @@ impl FulfillmentDailySummaryPlantRow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FulfillmentDailySummaryExport {
     vendor_id: VendorId,
     delivery_epoch_day: i32,
@@ -294,7 +299,7 @@ impl FulfillmentDailySummaryExport {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FulfillmentPlantPartitionOrderRow {
     order_id: OrderId,
     delivery_status: FulfillmentDeliveryStatus,
@@ -320,7 +325,7 @@ impl FulfillmentPlantPartitionOrderRow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FulfillmentPlantPartitionSheetRow {
     plant_id: PlantId,
     total_orders: u32,
@@ -351,7 +356,7 @@ impl FulfillmentPlantPartitionSheetRow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FulfillmentPlantPartitionSheetExport {
     rows: Vec<FulfillmentPlantPartitionSheetRow>,
 }
@@ -362,7 +367,7 @@ impl FulfillmentPlantPartitionSheetExport {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FulfillmentLabelEntry {
     order_id: OrderId,
     plant_id: PlantId,
@@ -398,7 +403,7 @@ impl FulfillmentLabelEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FulfillmentLabelSheetExport {
     labels: Vec<FulfillmentLabelEntry>,
 }
@@ -409,7 +414,7 @@ impl FulfillmentLabelSheetExport {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FulfillmentBasketEntry {
     basket_code: String,
     plant_id: PlantId,
@@ -435,7 +440,7 @@ impl FulfillmentBasketEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FulfillmentBasketListExport {
     basket_capacity_portions: u16,
     baskets: Vec<FulfillmentBasketEntry>,
@@ -451,29 +456,88 @@ impl FulfillmentBasketListExport {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+pub enum FulfillmentArtifactType {
+    DailySummary,
+    PlantPartitionSheet,
+    Labels,
+    BasketList,
+}
+
+impl FulfillmentArtifactType {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DailySummary => "DAILY_SUMMARY",
+            Self::PlantPartitionSheet => "PLANT_PARTITION_SHEET",
+            Self::Labels => "LABELS",
+            Self::BasketList => "BASKET_LIST",
+        }
+    }
+
+    const fn file_stem(self) -> &'static str {
+        match self {
+            Self::DailySummary => "daily-summary",
+            Self::PlantPartitionSheet => "plant-partition-sheet",
+            Self::Labels => "labels",
+            Self::BasketList => "basket-list",
+        }
+    }
+}
+
+impl fmt::Display for FulfillmentArtifactType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FulfillmentArtifactReference {
+    artifact_type: FulfillmentArtifactType,
+    object_ref: String,
+    mime_type: String,
+    size_bytes: u64,
+    sha256: String,
+}
+
+impl FulfillmentArtifactReference {
+    pub fn artifact_type(&self) -> FulfillmentArtifactType {
+        self.artifact_type
+    }
+
+    pub fn object_ref(&self) -> &str {
+        &self.object_ref
+    }
+
+    pub fn mime_type(&self) -> &str {
+        &self.mime_type
+    }
+
+    pub fn size_bytes(&self) -> u64 {
+        self.size_bytes
+    }
+
+    pub fn sha256(&self) -> &str {
+        &self.sha256
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FulfillmentBatchArtifacts {
-    daily_summary: FulfillmentDailySummaryExport,
-    plant_partition_sheet: FulfillmentPlantPartitionSheetExport,
-    labels: FulfillmentLabelSheetExport,
-    basket_list: FulfillmentBasketListExport,
+    artifacts: Vec<FulfillmentArtifactReference>,
 }
 
 impl FulfillmentBatchArtifacts {
-    pub fn daily_summary(&self) -> &FulfillmentDailySummaryExport {
-        &self.daily_summary
+    pub fn artifacts(&self) -> &[FulfillmentArtifactReference] {
+        &self.artifacts
     }
 
-    pub fn plant_partition_sheet(&self) -> &FulfillmentPlantPartitionSheetExport {
-        &self.plant_partition_sheet
-    }
-
-    pub fn labels(&self) -> &FulfillmentLabelSheetExport {
-        &self.labels
-    }
-
-    pub fn basket_list(&self) -> &FulfillmentBasketListExport {
-        &self.basket_list
+    pub fn artifact(
+        &self,
+        artifact_type: FulfillmentArtifactType,
+    ) -> Option<&FulfillmentArtifactReference> {
+        self.artifacts
+            .iter()
+            .find(|artifact| artifact.artifact_type == artifact_type)
     }
 }
 
@@ -683,8 +747,6 @@ impl VendorFulfillmentPolicy {
                 });
             }
         }
-        let artifacts = build_batch_artifacts(vendor_id, delivery_epoch_day, board.order_entries());
-
         let mut state = lock_state(&self.state)?;
         let previous_state = state.clone();
         state.next_batch_sequence = state
@@ -695,6 +757,12 @@ impl VendorFulfillmentPolicy {
             "fbatch-{delivery_epoch_day}-{:06}",
             state.next_batch_sequence
         ))?;
+        let artifacts = build_batch_artifacts(
+            vendor_id,
+            &batch_id,
+            delivery_epoch_day,
+            board.order_entries(),
+        )?;
 
         let snapshot = VendorFulfillmentBatchSnapshot {
             batch_id: batch_id.clone(),
@@ -874,9 +942,10 @@ fn build_order_line_items(
 
 fn build_batch_artifacts(
     vendor_id: &VendorId,
+    batch_id: &FulfillmentBatchId,
     delivery_epoch_day: i32,
     order_entries: &[VendorFulfillmentOrderEntry],
-) -> FulfillmentBatchArtifacts {
+) -> Result<FulfillmentBatchArtifacts, VendorFulfillmentError> {
     let mut per_plant_summary = BTreeMap::<PlantId, FulfillmentDailySummaryPlantRow>::new();
     let mut plant_partition = BTreeMap::<PlantId, FulfillmentPlantPartitionSheetRow>::new();
     let mut labels = Vec::new();
@@ -952,25 +1021,97 @@ fn build_batch_artifacts(
             .then_with(|| left.menu_item_id().cmp(right.menu_item_id()))
     });
 
-    let per_plant = per_plant_summary.into_values().collect::<Vec<_>>();
+    let daily_summary = FulfillmentDailySummaryExport {
+        vendor_id: vendor_id.clone(),
+        delivery_epoch_day,
+        total_orders,
+        total_portions,
+        total_special_requests,
+        per_plant: per_plant_summary.into_values().collect::<Vec<_>>(),
+    };
     let plant_partition_sheet = FulfillmentPlantPartitionSheetExport {
         rows: plant_partition.into_values().collect::<Vec<_>>(),
     };
+    let label_sheet = FulfillmentLabelSheetExport { labels };
     let basket_list = build_basket_list(order_entries);
-
-    FulfillmentBatchArtifacts {
-        daily_summary: FulfillmentDailySummaryExport {
-            vendor_id: vendor_id.clone(),
+    let artifacts = vec![
+        build_artifact_reference(
+            vendor_id,
+            batch_id,
             delivery_epoch_day,
-            total_orders,
-            total_portions,
-            total_special_requests,
-            per_plant,
-        },
-        plant_partition_sheet,
-        labels: FulfillmentLabelSheetExport { labels },
-        basket_list,
+            FulfillmentArtifactType::DailySummary,
+            &daily_summary,
+        )?,
+        build_artifact_reference(
+            vendor_id,
+            batch_id,
+            delivery_epoch_day,
+            FulfillmentArtifactType::PlantPartitionSheet,
+            &plant_partition_sheet,
+        )?,
+        build_artifact_reference(
+            vendor_id,
+            batch_id,
+            delivery_epoch_day,
+            FulfillmentArtifactType::Labels,
+            &label_sheet,
+        )?,
+        build_artifact_reference(
+            vendor_id,
+            batch_id,
+            delivery_epoch_day,
+            FulfillmentArtifactType::BasketList,
+            &basket_list,
+        )?,
+    ];
+    Ok(FulfillmentBatchArtifacts { artifacts })
+}
+
+fn build_artifact_reference<T: Serialize>(
+    vendor_id: &VendorId,
+    batch_id: &FulfillmentBatchId,
+    delivery_epoch_day: i32,
+    artifact_type: FulfillmentArtifactType,
+    payload: &T,
+) -> Result<FulfillmentArtifactReference, VendorFulfillmentError> {
+    let serialized = serde_json::to_vec(payload).map_err(|error| {
+        VendorFulfillmentError::ArtifactSerialization {
+            artifact_type,
+            reason: error.to_string(),
+        }
+    })?;
+    let object_ref = format!(
+        "s3://{}/{}/{}/{}/{}.json",
+        FULFILLMENT_EXPORT_BUCKET,
+        vendor_id.as_str(),
+        delivery_epoch_day,
+        batch_id.as_str(),
+        artifact_type.file_stem()
+    );
+    ObjectStorageReference::parse(object_ref.as_str()).map_err(|error| {
+        VendorFulfillmentError::InvalidArtifactObjectReference {
+            artifact_type,
+            reason: error.to_string(),
+        }
+    })?;
+    Ok(FulfillmentArtifactReference {
+        artifact_type,
+        object_ref,
+        mime_type: "application/json".to_owned(),
+        size_bytes: u64::try_from(serialized.len()).expect("serialized artifact length should fit"),
+        sha256: sha256_hex(serialized.as_slice()),
+    })
+}
+
+fn sha256_hex(payload: &[u8]) -> String {
+    let mut digest = Sha256::new();
+    digest.update(payload);
+    let digest = digest.finalize();
+    let mut output = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        output.push_str(format!("{byte:02x}").as_str());
     }
+    output
 }
 
 fn build_basket_list(order_entries: &[VendorFulfillmentOrderEntry]) -> FulfillmentBasketListExport {
@@ -1124,6 +1265,14 @@ pub enum VendorFulfillmentError {
         order_id: OrderId,
         status: FulfillmentDeliveryStatus,
     },
+    ArtifactSerialization {
+        artifact_type: FulfillmentArtifactType,
+        reason: String,
+    },
+    InvalidArtifactObjectReference {
+        artifact_type: FulfillmentArtifactType,
+        reason: String,
+    },
     AuditTrail(AuditTrailError),
     MenuSupply(MenuSupplyWindowError),
     StatePoisoned,
@@ -1180,6 +1329,20 @@ impl fmt::Display for VendorFulfillmentError {
             Self::DeliveryStatusUnchanged { order_id, status } => {
                 write!(f, "order {order_id} is already in delivery status {status}")
             }
+            Self::ArtifactSerialization {
+                artifact_type,
+                reason,
+            } => write!(
+                f,
+                "failed to serialize export artifact {artifact_type}: {reason}"
+            ),
+            Self::InvalidArtifactObjectReference {
+                artifact_type,
+                reason,
+            } => write!(
+                f,
+                "generated object reference for export artifact {artifact_type} is invalid: {reason}"
+            ),
             Self::AuditTrail(error) => write!(f, "audit trail write failed: {error}"),
             Self::MenuSupply(error) => write!(f, "menu supply read failed: {error}"),
             Self::StatePoisoned => {

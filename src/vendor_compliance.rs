@@ -8,6 +8,7 @@ use crate::audit::{
     AuditIdentityLink, AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
 };
 use crate::identity::{ActorId, AuthenticatedActorContext, Role};
+use crate::object_storage::ObjectStorageReference;
 use crate::observability::{TelemetryOutcome, TelemetryService};
 
 const UPSERT_COMPLIANCE_TEMPLATE_OPERATION_ID: &str = "upsertComplianceDocumentTemplate";
@@ -214,6 +215,8 @@ impl VendorDocumentSubmission {
         if document_ref.trim().is_empty() {
             return Err(VendorComplianceError::InvalidDocumentReference);
         }
+        ObjectStorageReference::parse(document_ref.as_str())
+            .map_err(|_| VendorComplianceError::InvalidDocumentReference)?;
         if submitted_on >= expires_on {
             return Err(VendorComplianceError::InvalidDocumentExpiryWindow);
         }
@@ -1173,7 +1176,7 @@ impl fmt::Display for VendorComplianceError {
                 f.write_str("reminder lead days cannot exceed template validity days")
             }
             Self::InvalidDocumentReference => {
-                f.write_str("document reference must not be empty")
+                f.write_str("document reference must be a valid s3:// object reference")
             }
             Self::InvalidDocumentExpiryWindow => {
                 f.write_str("document expiry must be after submission date")

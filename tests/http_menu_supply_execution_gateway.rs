@@ -183,7 +183,7 @@ fn menu_item_with_overrides(
             "BOWL",
             vec![MenuHealthTag::HighProtein],
             Some(
-                MenuImageUrl::parse("https://cdn.example.com/menu/herb-chicken-bowl.jpg")
+                MenuImageUrl::parse("s3://menu-assets/menu/herb-chicken-bowl.jpg")
                     .expect("menu image URL should be valid"),
             ),
             Money::new("TWD", 16000).expect("money should be valid"),

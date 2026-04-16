@@ -119,7 +119,7 @@ fn menu_item_with_overrides(
             "BENTO",
             vec![MenuHealthTag::HighProtein],
             Some(
-                MenuImageUrl::parse("https://cdn.example.com/menu/roasted-chicken-bento.jpg")
+                MenuImageUrl::parse("s3://menu-assets/menu/roasted-chicken-bento.jpg")
                     .expect("menu image URL should be valid"),
             ),
             Money::new("TWD", 14500).expect("money should be valid"),
@@ -148,7 +148,7 @@ fn menu_item_with_metadata(
             menu_type,
             health_tags,
             Some(
-                MenuImageUrl::parse("https://cdn.example.com/menu/discovery-menu.jpg")
+                MenuImageUrl::parse("s3://menu-assets/menu/discovery-menu.jpg")
                     .expect("menu image URL should be valid"),
             ),
             Money::new("TWD", 12000).expect("money should be valid"),
@@ -186,7 +186,7 @@ fn vendors_can_manage_menu_price_image_and_daily_quota() {
             .image_url()
             .expect("image URL should be present")
             .as_str(),
-        "https://cdn.example.com/menu/roasted-chicken-bento.jpg"
+        "s3://menu-assets/menu/roasted-chicken-bento.jpg"
     );
 }
 

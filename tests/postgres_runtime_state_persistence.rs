@@ -294,7 +294,7 @@ async fn runtime_order_payroll_anomaly_flows_persist_on_real_postgres_with_trans
                     "BENTO",
                     vec![MenuHealthTag::HighProtein],
                     Some(
-                        MenuImageUrl::parse("https://cdn.example.com/menu/runtime-sqlx.jpg")
+                        MenuImageUrl::parse("s3://menu-assets/menu/runtime-sqlx.jpg")
                             .expect("image url should parse"),
                     ),
                     Money::new("TWD", 12_000).expect("money should be valid"),
