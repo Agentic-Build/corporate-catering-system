@@ -11,7 +11,8 @@ use corporate_catering_system::identity::{
 };
 use corporate_catering_system::menu_supply_window::{
     MenuHealthTag, MenuImageUrl, MenuItemId, MenuSupplyPolicy, MenuSupplyPolicySnapshot, Money,
-    OrderId, OrderLineItemRequest, OrderRetentionPolicy, VendorMenuItem, VendorMenuItemDraft,
+    OrderId, OrderLifecycleState, OrderLineItemRequest, OrderMutation, OrderRetentionPolicy,
+    VendorMenuItem, VendorMenuItemDraft,
 };
 use corporate_catering_system::payroll::{
     PayrollLedgerService, PayrollLedgerServiceSnapshot, PayrollLedgerSourceKind,
@@ -33,6 +34,7 @@ use corporate_catering_system::vendor_delivery_mapping::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPoolOptions;
+use sqlx::Row;
 use testcontainers_modules::postgres::Postgres;
 use testcontainers_modules::testcontainers::runners::AsyncRunner;
 use testcontainers_modules::testcontainers::ImageExt;
@@ -683,6 +685,172 @@ async fn sql_state_mutation_with_outbox_commits_atomically_and_rolls_back_on_err
     assert_eq!(
         post_rollback_outbox_count, 1,
         "failed outbox mutation must not append outbox rows"
+    );
+}
+
+#[tokio::test]
+async fn sql_runtime_mark_fulfilled_transition_publishes_outbox_event() {
+    std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
+
+    let postgres = Postgres::default()
+        .with_tag("16-alpine")
+        .start()
+        .await
+        .expect("testcontainers postgres should start");
+    let database_url = format!(
+        "postgres://postgres:postgres@{}:{}/postgres",
+        postgres
+            .get_host()
+            .await
+            .expect("postgres host should resolve"),
+        postgres
+            .get_host_port_ipv4(5432)
+            .await
+            .expect("postgres mapped port should resolve"),
+    );
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(database_url.as_str())
+        .await
+        .expect("postgres pool should connect");
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("migrations should apply");
+
+    let menu_repo = SqlJsonStateRepository::for_menu_supply(pool.clone());
+    let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
+    let plant = plant_id("fab-a");
+    let vendor_actor = vendor_operator(&plant);
+    let employee = employee_actor(&plant);
+    let vendor_id = VendorId::parse("ven-runtime-fulfillment-001").expect("vendor id should parse");
+    let menu_item_id =
+        MenuItemId::parse("menu-runtime-fulfillment-001").expect("menu item id should parse");
+    let order_id = OrderId::parse("ord-runtime-fulfillment-001").expect("order id should parse");
+    let delivery_epoch_day: i32 = 21_550;
+    let order_requested_at =
+        TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(1), 600).expect("moment");
+    let fulfilled_at =
+        TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(1), 700).expect("moment");
+
+    let menu_supply_policy = MenuSupplyPolicy::with_audit_trail_and_retention(
+        Default::default(),
+        audit_trail.clone(),
+        OrderRetentionPolicy::default(),
+    );
+    menu_supply_policy
+        .upsert_menu_item(
+            &vendor_actor,
+            VendorMenuItem::new(
+                menu_item_id.clone(),
+                vendor_id.clone(),
+                VendorMenuItemDraft::new(
+                    "Runtime Fulfillment Bento",
+                    "seeded for fulfillment outbox transition test",
+                    "BENTO",
+                    vec![MenuHealthTag::HighProtein],
+                    Some(
+                        MenuImageUrl::parse(format!(
+                            "s3://menu-assets/menu-images/{}/media/262144-deadbeef-runtime-fulfillment.jpg",
+                            vendor_id.as_str()
+                        ))
+                        .expect("image url should parse"),
+                    ),
+                    Money::new("TWD", 12_000).expect("money should be valid"),
+                    5,
+                    delivery_epoch_day,
+                )
+                .expect("menu draft should be valid"),
+            ),
+        )
+        .expect("menu item should upsert");
+    menu_supply_policy
+        .create_order(
+            &employee,
+            order_id.clone(),
+            &vendor_id,
+            &plant,
+            delivery_epoch_day,
+            vec![OrderLineItemRequest::new(menu_item_id, 1, vec![])
+                .expect("line item should be valid")],
+            order_requested_at,
+        )
+        .expect("order should create");
+    menu_repo
+        .save_snapshot(
+            &menu_supply_policy
+                .snapshot()
+                .expect("menu supply snapshot should build"),
+        )
+        .await
+        .expect("snapshot should persist");
+
+    let outbox_event_id = "evt-runtime-fulfillment-outbox-0001";
+    let (_snapshot, updated_state) = menu_repo
+        .mutate_snapshot_with_outbox::<MenuSupplyPolicySnapshot, OrderLifecycleState, String, _>(
+            |snapshot| {
+                let snapshot = snapshot.ok_or("missing menu supply snapshot".to_owned())?;
+                let policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail.clone())
+                    .map_err(|error| error.to_string())?;
+                policy
+                    .update_order(
+                        &employee,
+                        &order_id,
+                        OrderMutation::MarkFulfilled,
+                        fulfilled_at,
+                    )
+                    .map_err(|error| error.to_string())?;
+                let updated_snapshot = policy
+                    .order_snapshot(&order_id)
+                    .map_err(|error| error.to_string())?
+                    .ok_or("updated order snapshot should exist".to_owned())?;
+                let persisted = policy.snapshot().map_err(|error| error.to_string())?;
+                let outbox_event = OutboxEventRecord {
+                    event_id: outbox_event_id.to_owned(),
+                    subject: "catering.order.state.changed.v1".to_owned(),
+                    payload: serde_json::json!({
+                        "eventId": outbox_event_id,
+                        "orderId": updated_snapshot.order_id().as_str(),
+                        "vendorId": updated_snapshot.vendor_id().as_str(),
+                        "plantId": updated_snapshot.plant_id().as_str(),
+                        "orderState": updated_snapshot.state().as_str(),
+                        "operationId": "verifyPickupOrder",
+                        "actorId": employee.actor_id().as_str(),
+                        "occurredAtEpochMillis": 1_715_500_000_000_i64,
+                    }),
+                };
+                Ok((persisted, updated_snapshot.state(), vec![outbox_event]))
+            },
+        )
+        .await
+        .expect("mark fulfilled mutation should persist with outbox");
+    assert_eq!(updated_state, OrderLifecycleState::Fulfilled);
+
+    let outbox_row = sqlx::query(
+        r#"
+SELECT subject, payload
+FROM domain_event_outbox
+WHERE event_id = $1
+        "#,
+    )
+    .bind(outbox_event_id)
+    .fetch_one(&pool)
+    .await
+    .expect("fulfillment outbox row should exist");
+    let subject: String = outbox_row
+        .try_get("subject")
+        .expect("subject should decode");
+    let payload: serde_json::Value = outbox_row
+        .try_get("payload")
+        .expect("payload should decode");
+    assert_eq!(subject, "catering.order.state.changed.v1");
+    assert_eq!(
+        payload["orderState"],
+        serde_json::Value::String("FULFILLED".to_owned())
+    );
+    assert_eq!(
+        payload["operationId"],
+        serde_json::Value::String("verifyPickupOrder".to_owned())
     );
 }
 

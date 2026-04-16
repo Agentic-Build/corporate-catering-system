@@ -3362,6 +3362,60 @@ where
     }
 }
 
+fn mutate_menu_supply_policy_with_outbox<T, F, M>(
+    state: &AppState,
+    mutator: F,
+    map_domain_error: M,
+    persistence_error_code: &'static str,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&MenuSupplyPolicy) -> Result<(T, Vec<OutboxEventRecord>), MenuSupplyWindowError>,
+    M: Fn(MenuSupplyWindowError) -> (StatusCode, ErrorPayload),
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let audit_trail = state.audit_trail.clone();
+            let persistence_result = tokio::task::block_in_place(|| {
+                Handle::current().block_on(repositories.menu_supply.mutate_snapshot_with_outbox::<
+                    MenuSupplyPolicySnapshot,
+                    T,
+                    MenuSupplyWindowError,
+                    _,
+                >(move |snapshot| {
+                    let snapshot = snapshot.ok_or(MenuSupplyWindowError::StatePoisoned)?;
+                    let menu_supply_policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail)?;
+                    let (value, outbox_events) = mutator(&menu_supply_policy)?;
+                    let snapshot = menu_supply_policy.snapshot()?;
+                    Ok((snapshot, value, outbox_events))
+                }))
+            });
+            match persistence_result {
+                Ok((snapshot, value)) => {
+                    write_runtime_state_snapshot_to_cache(state, MENU_SUPPLY_STATE_KEY, &snapshot);
+                    Ok(value)
+                }
+                Err(JsonStatePersistenceError::Domain(error)) => Err(map_domain_error(error)),
+                Err(JsonStatePersistenceError::Sqlx(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    persistence_error_code,
+                    format!("failed to persist menu supply state: {error}"),
+                )),
+                Err(JsonStatePersistenceError::Serialize(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    persistence_error_code,
+                    format!("failed to serialize menu supply state: {error}"),
+                )),
+            }
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            let (value, _outbox_events) =
+                mutator(&state.menu_supply_policy).map_err(map_domain_error)?;
+            Ok(value)
+        }
+    }
+}
+
 fn mutate_ordering_menu_supply_policy<T, F>(
     state: &AppState,
     mutator: F,
@@ -11366,7 +11420,7 @@ fn handle_verify_order_pickup_for_actor(
         )
     })?;
 
-    mutate_menu_supply_policy(
+    let _updated_snapshot = mutate_menu_supply_policy_with_outbox(
         state,
         |menu_supply_policy| {
             menu_supply_policy.update_order(
@@ -11374,7 +11428,18 @@ fn handle_verify_order_pickup_for_actor(
                 &order_id,
                 OrderMutation::MarkFulfilled,
                 requested_at,
-            )
+            )?;
+            let updated_snapshot = menu_supply_policy
+                .order_snapshot(&order_id)?
+                .ok_or_else(|| MenuSupplyWindowError::OrderNotFound(order_id.clone()))?;
+            let outbox_events = build_order_state_changed_outbox_records(
+                state,
+                actor,
+                "verifyPickupOrder",
+                &updated_snapshot,
+                requested_at,
+            );
+            Ok((updated_snapshot, outbox_events))
         },
         |error| map_pickup_claim_update_error(&order_id, request_id, error),
         "ORDER_POLICY_VIOLATION",
