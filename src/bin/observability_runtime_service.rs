@@ -45,6 +45,9 @@ use corporate_catering_system::menu_supply_window::{
 use corporate_catering_system::observability::{
     initialize_telemetry_runtime_from_env, TelemetryService,
 };
+use corporate_catering_system::operations_analytics::{
+    OperationsAnalyticsDashboardSnapshot, OperationsAnalyticsQuery, OperationsAnalyticsWarehouse,
+};
 use corporate_catering_system::payroll::{
     OrderPayrollView, PayrollDeductionRecord, PayrollDisputeId, PayrollDisputeRecord,
     PayrollDisputeTraceEvent, PayrollExchangeBatch, PayrollExchangeBatchId, PayrollExportPage,
@@ -113,6 +116,8 @@ const PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV: &str = "PRELAUNCH_AUDIT_TRAIL_EN
 const PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_ENV: &str =
     "PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_HEX";
 const PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED_ENV: &str = "PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED";
+const PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED_ENV: &str =
+    "PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED";
 const PRELAUNCH_RUSH_REMINDER_ENABLED_ENV: &str = "PRELAUNCH_RUSH_REMINDER_ENABLED";
 const PRELAUNCH_RUSH_PREORDER_MIN_LEAD_DAYS_ENV: &str = "PRELAUNCH_RUSH_PREORDER_MIN_LEAD_DAYS";
 const PRELAUNCH_RUSH_PREORDER_MAX_LEAD_DAYS_ENV: &str = "PRELAUNCH_RUSH_PREORDER_MAX_LEAD_DAYS";
@@ -142,6 +147,8 @@ const MCP_BRIDGE_AUDIT_REASON_HEADER: &str = "x-mcp-bridge-audit-reason";
 const MAX_AUDIT_REASON_CHARS: usize = 280;
 const PAYROLL_FIELD_ENVELOPE_VERSION: &str = "v1";
 const PAYROLL_FIELD_NONCE_BYTES: usize = 12;
+const DEFAULT_ADVANCED_ANALYTICS_LOOKBACK_DAYS: i32 = 30;
+const MAX_ADVANCED_ANALYTICS_RANGE_DAYS: i32 = 366;
 
 const ALL_AUDIT_ACTIONS: [AuditAction; 35] = [
     AuditAction::CreateEmployeeOrder,
@@ -211,12 +218,15 @@ type ReminderDeliveryGateway = Arc<dyn RushReminderDeliveryGateway + Send + Sync
 #[derive(Debug, Clone)]
 struct AppState {
     next_order_sequence: Arc<AtomicU64>,
+    vendor_id: VendorId,
     plant_id: PlantId,
     recommendation_engine_runtime_enabled: bool,
+    advanced_analytics_dashboard_runtime_enabled: bool,
     rush_reminder_runtime_enabled: bool,
     menu_recommendation_ranker: MenuRecommendationRanker,
     rush_reminder_workflow: RushReminderWorkflow,
     rush_reminder_delivery_gateway: ReminderDeliveryGateway,
+    operations_analytics_warehouse: Arc<RwLock<OperationsAnalyticsWarehouse>>,
     terminated_employee_actor_ids: Arc<HashSet<ActorId>>,
     audit_trail: ImmutableAuditTrail,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
@@ -686,6 +696,66 @@ struct AnomalyAlertEvaluationResponse {
 #[serde(rename_all = "camelCase")]
 struct AnomalyAlertListResponse {
     items: Vec<AnomalyAlertPayload>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct OperationsAnalyticsDashboardQueryRequest {
+    from_epoch_day: Option<i32>,
+    to_epoch_day: Option<i32>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationsAnalyticsMetricDefinitionPayload {
+    key: String,
+    display_name: String,
+    unit: String,
+    formula: String,
+    source: String,
+    version: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationsAnalyticsMetricValuePayload {
+    metric_key: String,
+    value: f64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationsAnalyticsVendorBreakdownPayload {
+    vendor_id: String,
+    metrics: Vec<OperationsAnalyticsMetricValuePayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationsAnalyticsPlantBreakdownPayload {
+    plant_id: String,
+    metrics: Vec<OperationsAnalyticsMetricValuePayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationsAnalyticsTimeBreakdownPayload {
+    epoch_day: i32,
+    date: String,
+    metrics: Vec<OperationsAnalyticsMetricValuePayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationsAnalyticsDashboardPayload {
+    metric_schema_version: String,
+    generated_at: String,
+    from_epoch_day: i32,
+    to_epoch_day: i32,
+    metric_definitions: Vec<OperationsAnalyticsMetricDefinitionPayload>,
+    vendor_breakdown: Vec<OperationsAnalyticsVendorBreakdownPayload>,
+    plant_breakdown: Vec<OperationsAnalyticsPlantBreakdownPayload>,
+    time_breakdown: Vec<OperationsAnalyticsTimeBreakdownPayload>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -1204,6 +1274,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         parse_positive_u16_env("PRELAUNCH_MENU_VARIANT_COUNT", DEFAULT_MENU_VARIANT_COUNT)?;
     let recommendation_engine_runtime_enabled =
         parse_bool_env_default_false(PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED_ENV)?;
+    let advanced_analytics_dashboard_runtime_enabled =
+        parse_bool_env_default_false(PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED_ENV)?;
     let rush_reminder_runtime_enabled =
         parse_bool_env_default_false(PRELAUNCH_RUSH_REMINDER_ENABLED_ENV)?;
     let rush_reminder_policy = resolve_rush_reminder_policy(rush_reminder_runtime_enabled)?;
@@ -1270,6 +1342,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         delivery_epoch_day,
         menu_variant_count,
         recommendation_engine_runtime_enabled,
+        advanced_analytics_dashboard_runtime_enabled,
         rush_reminder_runtime_enabled,
         rush_reminder_policy,
         payroll_retention_policy,
@@ -1395,6 +1468,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         app.route(
             "/api/v1/employee/rush-reminder-preferences",
             put(upsert_employee_rush_reminder_preferences),
+        )
+    } else {
+        app
+    };
+    let app = if advanced_analytics_dashboard_runtime_enabled {
+        app.route(
+            "/api/v1/admin/analytics/operations-dashboard",
+            get(get_admin_operations_analytics_dashboard),
+        )
+        .route(
+            "/api/v1/vendor/analytics/operations-dashboard",
+            get(get_vendor_operations_analytics_dashboard),
         )
     } else {
         app
@@ -2746,6 +2831,136 @@ fn write_compliance_lifecycle<'a>(
     })
 }
 
+fn read_operations_analytics_warehouse<'a>(
+    state: &'a AppState,
+) -> Result<RwLockReadGuard<'a, OperationsAnalyticsWarehouse>, (StatusCode, ErrorPayload)> {
+    state.operations_analytics_warehouse.read().map_err(|_| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
+            "operations analytics warehouse lock is poisoned".to_owned(),
+        )
+    })
+}
+
+fn write_operations_analytics_warehouse<'a>(
+    state: &'a AppState,
+) -> Result<RwLockWriteGuard<'a, OperationsAnalyticsWarehouse>, (StatusCode, ErrorPayload)> {
+    state.operations_analytics_warehouse.write().map_err(|_| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
+            "operations analytics warehouse lock is poisoned".to_owned(),
+        )
+    })
+}
+
+fn record_operations_analytics_anomaly_triggered_best_effort(
+    state: &AppState,
+    alerts: &[AnomalyAlertRecord],
+) {
+    if !state.advanced_analytics_dashboard_runtime_enabled || alerts.is_empty() {
+        return;
+    }
+    let mut warehouse = match write_operations_analytics_warehouse(state) {
+        Ok(warehouse) => warehouse,
+        Err((_status, error)) => {
+            tracing::warn!(
+                error_code = error.code,
+                reason = %error.message,
+                "advanced analytics update failed; anomaly evaluation command remains authoritative"
+            );
+            return;
+        }
+    };
+    for alert in alerts {
+        warehouse.record_anomaly_triggered(
+            alert.vendor_id().as_str(),
+            state.plant_id.as_str(),
+            alert.observed_at().epoch_day(),
+        );
+    }
+}
+
+fn record_operations_analytics_anomaly_closed_best_effort(
+    state: &AppState,
+    vendor_id: &VendorId,
+    epoch_day: i32,
+) {
+    if !state.advanced_analytics_dashboard_runtime_enabled {
+        return;
+    }
+    let mut warehouse = match write_operations_analytics_warehouse(state) {
+        Ok(warehouse) => warehouse,
+        Err((_status, error)) => {
+            tracing::warn!(
+                error_code = error.code,
+                reason = %error.message,
+                "advanced analytics update failed; anomaly lifecycle command remains authoritative"
+            );
+            return;
+        }
+    };
+    warehouse.record_anomaly_closed(vendor_id.as_str(), state.plant_id.as_str(), epoch_day);
+}
+
+fn record_operations_analytics_payroll_settlement_closed_best_effort(
+    state: &AppState,
+    epoch_day: i32,
+    batch: &PayrollExchangeBatch,
+) {
+    if !state.advanced_analytics_dashboard_runtime_enabled {
+        return;
+    }
+    let mut warehouse = match write_operations_analytics_warehouse(state) {
+        Ok(warehouse) => warehouse,
+        Err((_status, error)) => {
+            tracing::warn!(
+                error_code = error.code,
+                reason = %error.message,
+                "advanced analytics update failed; payroll settlement command remains authoritative"
+            );
+            return;
+        }
+    };
+    let reconciliation = batch.reconciliation();
+    warehouse.record_payroll_settlement_closed(
+        state.vendor_id.as_str(),
+        state.plant_id.as_str(),
+        epoch_day,
+        reconciliation.total_records(),
+        reconciliation.disputed_records(),
+        reconciliation.deduction_failed_records(),
+    );
+}
+
+fn record_operations_analytics_payroll_hr_sync_best_effort(
+    state: &AppState,
+    epoch_day: i32,
+    outcome: PayrollHrApiSyncOutcome,
+) {
+    if !state.advanced_analytics_dashboard_runtime_enabled {
+        return;
+    }
+    let mut warehouse = match write_operations_analytics_warehouse(state) {
+        Ok(warehouse) => warehouse,
+        Err((_status, error)) => {
+            tracing::warn!(
+                error_code = error.code,
+                reason = %error.message,
+                "advanced analytics update failed; payroll hr-sync command remains authoritative"
+            );
+            return;
+        }
+    };
+    warehouse.record_payroll_hr_sync_outcome(
+        state.vendor_id.as_str(),
+        state.plant_id.as_str(),
+        epoch_day,
+        matches!(outcome, PayrollHrApiSyncOutcome::Succeeded),
+    );
+}
+
 fn parse_positive_u16_env(key: &str, default_value: u16) -> Result<u16, String> {
     let raw = match std::env::var(key) {
         Ok(value) => value,
@@ -2911,6 +3126,7 @@ fn bootstrap_runtime_state(
     delivery_epoch_day: i32,
     menu_variant_count: u16,
     recommendation_engine_runtime_enabled: bool,
+    advanced_analytics_dashboard_runtime_enabled: bool,
     rush_reminder_runtime_enabled: bool,
     rush_reminder_policy: RushReminderPolicy,
     payroll_retention_policy: PayrollRetentionPolicy,
@@ -3029,6 +3245,8 @@ fn bootstrap_runtime_state(
     let rush_reminder_workflow = RushReminderWorkflow::new(rush_reminder_policy);
     let rush_reminder_delivery_gateway: ReminderDeliveryGateway =
         Arc::new(NoopRushReminderDeliveryGateway);
+    let operations_analytics_warehouse =
+        Arc::new(RwLock::new(OperationsAnalyticsWarehouse::default()));
     let vendor_menu_gateway = HttpVendorMenuExecutionGateway::new(&menu_supply_policy);
 
     for index in 1..=menu_variant_count {
@@ -3062,12 +3280,15 @@ fn bootstrap_runtime_state(
 
     Ok(AppState {
         next_order_sequence: Arc::new(AtomicU64::new(1)),
+        vendor_id,
         plant_id,
         recommendation_engine_runtime_enabled,
+        advanced_analytics_dashboard_runtime_enabled,
         rush_reminder_runtime_enabled,
         menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
         rush_reminder_workflow,
         rush_reminder_delivery_gateway,
+        operations_analytics_warehouse,
         terminated_employee_actor_ids: Arc::new(terminated_employee_actor_ids),
         audit_trail,
         payroll_export_field_encryptor,
@@ -4855,13 +5076,13 @@ fn handle_evaluate_anomaly_alerts(
         .map_err(map_anomaly_alert_error)?;
 
     let as_of = current_anomaly_audit_timestamp()?;
-    Ok(AnomalyAlertEvaluationResponse {
-        triggered_alerts: result
-            .triggered_alerts()
-            .iter()
-            .map(|alert| to_anomaly_alert_payload(alert, as_of))
-            .collect::<Vec<_>>(),
-    })
+    record_operations_analytics_anomaly_triggered_best_effort(state, result.triggered_alerts());
+    let triggered_alerts = result
+        .triggered_alerts()
+        .iter()
+        .map(|alert| to_anomaly_alert_payload(alert, as_of))
+        .collect::<Vec<_>>();
+    Ok(AnomalyAlertEvaluationResponse { triggered_alerts })
 }
 
 fn validate_anomaly_metric_minimum(
@@ -5045,6 +5266,260 @@ fn handle_list_anomaly_alerts(
     Ok(AnomalyAlertListResponse { items: alerts })
 }
 
+async fn get_admin_operations_analytics_dashboard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<OperationsAnalyticsDashboardQueryRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "getAdminOperationsAnalyticsDashboard",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response =
+        match handle_get_admin_operations_analytics_dashboard(&state, &committee_actor, query) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(
+                        serde_json::to_value(payload).expect(
+                            "admin operations analytics payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                            "admin operations analytics error payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+        };
+
+    response
+}
+
+fn handle_get_admin_operations_analytics_dashboard(
+    state: &AppState,
+    _committee_actor: &AuthenticatedActorContext,
+    query: OperationsAnalyticsDashboardQueryRequest,
+) -> Result<OperationsAnalyticsDashboardPayload, (StatusCode, ErrorPayload)> {
+    handle_get_operations_analytics_dashboard(state, query, None)
+}
+
+async fn get_vendor_operations_analytics_dashboard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<OperationsAnalyticsDashboardQueryRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "getVendorOperationsAnalyticsDashboard",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response =
+        match handle_get_vendor_operations_analytics_dashboard(&state, &vendor_actor, query) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(serde_json::to_value(payload).expect(
+                        "vendor operations analytics payload serialization should succeed",
+                    )),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "vendor operations analytics error payload serialization should succeed",
+                    ),
+                ),
+            )
+            }
+        };
+
+    response
+}
+
+fn handle_get_vendor_operations_analytics_dashboard(
+    state: &AppState,
+    _vendor_actor: &AuthenticatedActorContext,
+    query: OperationsAnalyticsDashboardQueryRequest,
+) -> Result<OperationsAnalyticsDashboardPayload, (StatusCode, ErrorPayload)> {
+    handle_get_operations_analytics_dashboard(state, query, Some(state.vendor_id.as_str()))
+}
+
+fn handle_get_operations_analytics_dashboard(
+    state: &AppState,
+    query: OperationsAnalyticsDashboardQueryRequest,
+    vendor_scope: Option<&str>,
+) -> Result<OperationsAnalyticsDashboardPayload, (StatusCode, ErrorPayload)> {
+    if !state.advanced_analytics_dashboard_runtime_enabled {
+        return Err(domain_error(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "advanced operations analytics dashboard endpoint is unavailable while feature flag is disabled"
+                .to_owned(),
+        ));
+    }
+
+    let generated_at = current_anomaly_audit_timestamp()?;
+    let (from_epoch_day, to_epoch_day) =
+        resolve_operations_analytics_query_range(query, generated_at.epoch_day())?;
+    let snapshot = {
+        let warehouse = read_operations_analytics_warehouse(state)?;
+        warehouse.query(OperationsAnalyticsQuery {
+            from_epoch_day,
+            to_epoch_day,
+            vendor_scope,
+        })
+    };
+
+    Ok(to_operations_analytics_dashboard_payload(
+        snapshot,
+        generated_at,
+    ))
+}
+
+fn resolve_operations_analytics_query_range(
+    query: OperationsAnalyticsDashboardQueryRequest,
+    default_to_epoch_day: i32,
+) -> Result<(i32, i32), (StatusCode, ErrorPayload)> {
+    let default_from_epoch_day =
+        default_to_epoch_day.saturating_sub(DEFAULT_ADVANCED_ANALYTICS_LOOKBACK_DAYS - 1);
+    let from_epoch_day = query.from_epoch_day.unwrap_or(default_from_epoch_day);
+    let to_epoch_day = query.to_epoch_day.unwrap_or(default_to_epoch_day);
+
+    if from_epoch_day <= 0 || to_epoch_day <= 0 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "fromEpochDay and toEpochDay must be positive epoch-day integers".to_owned(),
+        ));
+    }
+    if from_epoch_day > to_epoch_day {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "fromEpochDay must be less than or equal to toEpochDay".to_owned(),
+        ));
+    }
+    let range_days = to_epoch_day
+        .saturating_sub(from_epoch_day)
+        .saturating_add(1);
+    if range_days > MAX_ADVANCED_ANALYTICS_RANGE_DAYS {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!(
+                "analytics query range exceeds maximum supported span of {MAX_ADVANCED_ANALYTICS_RANGE_DAYS} days"
+            ),
+        ));
+    }
+
+    Ok((from_epoch_day, to_epoch_day))
+}
+
+fn to_operations_analytics_dashboard_payload(
+    snapshot: OperationsAnalyticsDashboardSnapshot,
+    generated_at: AuditTimestamp,
+) -> OperationsAnalyticsDashboardPayload {
+    OperationsAnalyticsDashboardPayload {
+        metric_schema_version: snapshot.metric_schema_version.to_owned(),
+        generated_at: audit_timestamp_to_iso_datetime(generated_at),
+        from_epoch_day: snapshot.from_epoch_day,
+        to_epoch_day: snapshot.to_epoch_day,
+        metric_definitions: snapshot
+            .metric_definitions
+            .into_iter()
+            .map(|definition| OperationsAnalyticsMetricDefinitionPayload {
+                key: definition.key.to_owned(),
+                display_name: definition.display_name.to_owned(),
+                unit: definition.unit.to_owned(),
+                formula: definition.formula.to_owned(),
+                source: definition.source.to_owned(),
+                version: definition.version.to_owned(),
+            })
+            .collect(),
+        vendor_breakdown: snapshot
+            .vendor_breakdown
+            .into_iter()
+            .map(|row| OperationsAnalyticsVendorBreakdownPayload {
+                vendor_id: row.dimension_value,
+                metrics: to_operations_analytics_metric_values_payload(row.metrics),
+            })
+            .collect(),
+        plant_breakdown: snapshot
+            .plant_breakdown
+            .into_iter()
+            .map(|row| OperationsAnalyticsPlantBreakdownPayload {
+                plant_id: row.dimension_value,
+                metrics: to_operations_analytics_metric_values_payload(row.metrics),
+            })
+            .collect(),
+        time_breakdown: snapshot
+            .time_breakdown
+            .into_iter()
+            .map(|row| OperationsAnalyticsTimeBreakdownPayload {
+                epoch_day: row.epoch_day,
+                date: epoch_day_to_iso_date(row.epoch_day),
+                metrics: to_operations_analytics_metric_values_payload(row.metrics),
+            })
+            .collect(),
+    }
+}
+
+fn to_operations_analytics_metric_values_payload(
+    metrics: Vec<corporate_catering_system::operations_analytics::OperationsAnalyticsMetricValue>,
+) -> Vec<OperationsAnalyticsMetricValuePayload> {
+    metrics
+        .into_iter()
+        .map(|metric| OperationsAnalyticsMetricValuePayload {
+            metric_key: metric.key.to_owned(),
+            value: metric.value,
+        })
+        .collect()
+}
+
 async fn update_admin_anomaly_alert(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -5222,6 +5697,14 @@ fn handle_update_admin_anomaly_alert(
             ));
         }
     };
+
+    if alert.status() == AnomalyAlertStatus::Closed {
+        record_operations_analytics_anomaly_closed_best_effort(
+            state,
+            alert.vendor_id(),
+            occurred_at.epoch_day(),
+        );
+    }
 
     Ok(to_anomaly_alert_payload(&alert, occurred_at))
 }
@@ -5560,6 +6043,12 @@ fn handle_close_payroll_monthly_settlement(
         )
         .map_err(map_payroll_ledger_error)?;
 
+    record_operations_analytics_payroll_settlement_closed_best_effort(
+        state,
+        occurred_at.epoch_day(),
+        export_page.batch(),
+    );
+
     to_payroll_deduction_page_payload(&export_page, &state.payroll_export_field_encryptor)
 }
 
@@ -5788,6 +6277,12 @@ fn handle_sync_payroll_hr_api_adjunct(
         .payroll_ledger_service
         .sync_hr_api_adjunct(payroll_actor, &batch_id, outcome, request.note, occurred_at)
         .map_err(map_payroll_ledger_error)?;
+
+    record_operations_analytics_payroll_hr_sync_best_effort(
+        state,
+        occurred_at.epoch_day(),
+        outcome,
+    );
 
     Ok(PayrollHrApiSyncResponse {
         exchange_batch: to_payroll_exchange_batch_payload(&batch),
@@ -6407,6 +6902,24 @@ fn require_corporate_actor_for_role(
     headers: &HeaderMap,
     required_role: Role,
 ) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+    require_bearer_actor_for_role(headers, required_role, AuthenticationSource::CorporateSso)
+}
+
+fn require_vendor_operator_actor(
+    headers: &HeaderMap,
+) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+    require_bearer_actor_for_role(
+        headers,
+        Role::VendorOperator,
+        AuthenticationSource::VendorAccountMfa,
+    )
+}
+
+fn require_bearer_actor_for_role(
+    headers: &HeaderMap,
+    required_role: Role,
+    authentication_source: AuthenticationSource,
+) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
     let authorization = headers
         .get(AUTHORIZATION)
         .ok_or_else(|| {
@@ -6461,19 +6974,36 @@ fn require_corporate_actor_for_role(
             format!("bearer actor id is invalid: {error}"),
         )
     })?;
-    AuthenticatedActorContext::new(
-        actor_id,
-        role,
-        PlantScope::all(),
-        AuthenticationSource::CorporateSso,
-    )
-    .map_err(|error| {
-        domain_error(
-            StatusCode::UNAUTHORIZED,
-            "UNAUTHORIZED",
-            format!("bearer actor context is invalid: {error}"),
+    let plant_scope = if role == Role::VendorOperator {
+        let plant_id = PlantId::parse(
+            std::env::var("PRELAUNCH_PLANT_ID").unwrap_or_else(|_| DEFAULT_PLANT_ID.to_owned()),
         )
-    })
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "IDENTITY_MODEL_ERROR",
+                format!("failed to parse runtime plant id for vendor bearer actor: {error}"),
+            )
+        })?;
+        PlantScope::restricted(vec![plant_id]).map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "IDENTITY_MODEL_ERROR",
+                format!("failed to build vendor bearer actor plant scope: {error}"),
+            )
+        })?
+    } else {
+        PlantScope::all()
+    };
+    AuthenticatedActorContext::new(actor_id, role, plant_scope, authentication_source).map_err(
+        |error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("bearer actor context is invalid: {error}"),
+            )
+        },
+    )
 }
 
 fn parse_role_label(value: &str) -> Option<Role> {
@@ -8392,12 +8922,17 @@ mod tests {
 
         AppState {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
+            vendor_id: vendor_visible,
             plant_id: plant,
             recommendation_engine_runtime_enabled: false,
+            advanced_analytics_dashboard_runtime_enabled: false,
             rush_reminder_runtime_enabled: false,
             menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
             rush_reminder_workflow: RushReminderWorkflow::new(RushReminderPolicy::default()),
             rush_reminder_delivery_gateway: Arc::new(NoopRushReminderDeliveryGateway),
+            operations_analytics_warehouse: Arc::new(RwLock::new(
+                OperationsAnalyticsWarehouse::default(),
+            )),
             terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail: audit_trail.clone(),
             payroll_export_field_encryptor: payroll_export_field_encryptor(),
@@ -8428,6 +8963,16 @@ mod tests {
     ) -> AppState {
         let mut state = build_state(now_epoch_day);
         state.rush_reminder_runtime_enabled = rush_reminder_runtime_enabled;
+        state
+    }
+
+    fn build_state_with_advanced_analytics_runtime(
+        now_epoch_day: i32,
+        advanced_analytics_dashboard_runtime_enabled: bool,
+    ) -> AppState {
+        let mut state = build_state(now_epoch_day);
+        state.advanced_analytics_dashboard_runtime_enabled =
+            advanced_analytics_dashboard_runtime_enabled;
         state
     }
 
@@ -8495,6 +9040,28 @@ mod tests {
             .expect("payroll actor header should authorize");
         assert_eq!(payroll.actor_id().as_str(), "payroll-test");
         assert_eq!(payroll.role(), Role::PayrollOperator);
+    }
+
+    #[test]
+    fn vendor_operator_authorization_uses_vendor_mfa_authentication_source() {
+        let missing = require_vendor_operator_actor(&HeaderMap::new())
+            .expect_err("missing authorization header should fail");
+        assert_eq!(missing.0, StatusCode::UNAUTHORIZED);
+
+        let committee_headers = bearer_headers("committee-test", "COMMITTEE_ADMIN");
+        let forbidden = require_vendor_operator_actor(&committee_headers)
+            .expect_err("non-vendor role should be forbidden");
+        assert_eq!(forbidden.0, StatusCode::FORBIDDEN);
+
+        let vendor_headers = bearer_headers("vendor-test", "VENDOR_OPERATOR");
+        let vendor =
+            require_vendor_operator_actor(&vendor_headers).expect("vendor actor should authorize");
+        assert_eq!(vendor.actor_id().as_str(), "vendor-test");
+        assert_eq!(vendor.role(), Role::VendorOperator);
+        assert_eq!(
+            vendor.authentication_source(),
+            AuthenticationSource::VendorAccountMfa
+        );
     }
 
     #[test]
@@ -8808,12 +9375,17 @@ mod tests {
         let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
         let state = AppState {
             next_order_sequence: Arc::new(AtomicU64::new(1)),
+            vendor_id: vendor_id("ven-filter-day"),
             plant_id: plant_id("fab-a"),
             recommendation_engine_runtime_enabled: false,
+            advanced_analytics_dashboard_runtime_enabled: false,
             rush_reminder_runtime_enabled: false,
             menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
             rush_reminder_workflow: RushReminderWorkflow::new(RushReminderPolicy::default()),
             rush_reminder_delivery_gateway: Arc::new(NoopRushReminderDeliveryGateway),
+            operations_analytics_warehouse: Arc::new(RwLock::new(
+                OperationsAnalyticsWarehouse::default(),
+            )),
             terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail: audit_trail.clone(),
             payroll_export_field_encryptor: payroll_export_field_encryptor(),
@@ -9071,6 +9643,136 @@ mod tests {
             .delivered_notifications()
             .expect("delivered reminders should be queryable");
         assert!(delivered.is_empty());
+    }
+
+    #[test]
+    fn advanced_analytics_dashboard_feature_flag_defaults_off() {
+        let now_epoch_day = 300;
+        let state = build_state(now_epoch_day);
+        assert!(
+            !state.advanced_analytics_dashboard_runtime_enabled,
+            "advanced analytics dashboard runtime should default to off"
+        );
+
+        let error = handle_get_admin_operations_analytics_dashboard(
+            &state,
+            &committee_admin(),
+            OperationsAnalyticsDashboardQueryRequest::default(),
+        )
+        .expect_err("feature-disabled analytics dashboard should return 404");
+        assert_eq!(error.0, StatusCode::NOT_FOUND);
+        assert_eq!(error.1.code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn advanced_analytics_dashboard_reports_metric_definitions_and_breakdowns_when_enabled() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state_with_advanced_analytics_runtime(now_epoch_day, true);
+        let committee = committee_admin();
+        let payroll = payroll_operator();
+
+        let created_order = handle_create_employee_order(
+            &state,
+            EmployeeOrderCreateRequestPayload {
+                plant_id: "fab-a".to_owned(),
+                delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
+                line_items: vec![OrderLineItemRequestPayload {
+                    menu_item_id: "menu-discoverytsta1".to_owned(),
+                    quantity: 1,
+                    special_requests: vec![],
+                }],
+                employee_note: None,
+            },
+        )
+        .expect("order creation should succeed");
+
+        let payroll_export = handle_export_payroll_deductions(
+            &state,
+            &payroll,
+            PayrollExportQuery {
+                pay_period: Some(created_order.delivery_date[..7].to_owned()),
+                cycle_key: Some("cycle-analytics-dashboard".to_owned()),
+                page: Some(1),
+                page_size: Some(20),
+                sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
+                sort_order: Some(SortOrderQuery::Asc),
+            },
+        )
+        .expect("payroll export should succeed");
+        handle_sync_payroll_hr_api_adjunct(
+            &state,
+            &payroll,
+            payroll_export.exchange_batch.batch_id.clone(),
+            PayrollHrApiSyncRequest {
+                outcome: PayrollHrApiSyncOutcomePayload::Failed,
+                note: Some("analytics sync failure drill".to_owned()),
+            },
+        )
+        .expect("payroll hr sync update should succeed");
+
+        let evaluation = handle_evaluate_anomaly_alerts(
+            &state,
+            &committee,
+            AnomalyAlertEvaluationRequest {
+                vendor_id: state.vendor_id.as_str().to_owned(),
+                observed_at_epoch_day: Some(now_epoch_day),
+                observed_at_minute_of_day: Some(600),
+                days_until_expiry: None,
+                on_time_rate: Some(0.80),
+                satisfaction_score: None,
+                complaint_count: None,
+                default_owner_actor_id: None,
+            },
+        )
+        .expect("anomaly evaluation should succeed");
+        assert!(
+            !evaluation.triggered_alerts.is_empty(),
+            "anomaly evaluation should produce at least one triggered alert"
+        );
+
+        let dashboard = handle_get_admin_operations_analytics_dashboard(
+            &state,
+            &committee,
+            OperationsAnalyticsDashboardQueryRequest::default(),
+        )
+        .expect("admin analytics dashboard should be queryable");
+        assert_eq!(dashboard.metric_schema_version, "operations-v1");
+        assert!(
+            !dashboard.metric_definitions.is_empty(),
+            "dashboard must expose metric definitions"
+        );
+        assert!(
+            !dashboard.vendor_breakdown.is_empty(),
+            "dashboard must expose vendor breakdown rows"
+        );
+        assert!(
+            !dashboard.plant_breakdown.is_empty(),
+            "dashboard must expose plant breakdown rows"
+        );
+        assert!(
+            !dashboard.time_breakdown.is_empty(),
+            "dashboard must expose time breakdown rows"
+        );
+
+        let vendor_row = dashboard
+            .vendor_breakdown
+            .iter()
+            .find(|row| row.vendor_id == state.vendor_id.as_str())
+            .expect("vendor breakdown should include runtime vendor");
+        let anomaly_triggered_metric = vendor_row
+            .metrics
+            .iter()
+            .find(|metric| metric.metric_key == "anomaly_triggered_total")
+            .expect("vendor breakdown should include anomaly triggered metric");
+        assert!(anomaly_triggered_metric.value >= 1.0);
+        let payroll_sync_failed_metric = vendor_row
+            .metrics
+            .iter()
+            .find(|metric| metric.metric_key == "payroll_hr_sync_failed_total")
+            .expect("vendor breakdown should include payroll hr sync failure metric");
+        assert!(payroll_sync_failed_metric.value >= 1.0);
     }
 
     #[test]

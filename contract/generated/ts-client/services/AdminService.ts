@@ -21,6 +21,7 @@ import type { AuditInvestigationResponse } from '../models/AuditInvestigationRes
 import type { AuditResponsibilityResponse } from '../models/AuditResponsibilityResponse';
 import type { AuditRetentionPurgeRequest } from '../models/AuditRetentionPurgeRequest';
 import type { AuditRetentionPurgeResponse } from '../models/AuditRetentionPurgeResponse';
+import type { OperationsAnalyticsDashboard } from '../models/OperationsAnalyticsDashboard';
 import type { OrderRetentionPurgeRequest } from '../models/OrderRetentionPurgeRequest';
 import type { OrderRetentionPurgeResponse } from '../models/OrderRetentionPurgeResponse';
 import type { PayrollDeductionPage } from '../models/PayrollDeductionPage';
@@ -50,6 +51,33 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class AdminService {
+    /**
+     * Get advanced operations analytics dashboard with vendor/plant/time breakdowns
+     * @param fromEpochDay Inclusive start epoch day for operations analytics dashboard range.
+     * @param toEpochDay Inclusive end epoch day for operations analytics dashboard range.
+     * @returns OperationsAnalyticsDashboard Admin operations analytics breakdown and metric catalog
+     * @throws ApiError
+     */
+    public static getAdminOperationsAnalyticsDashboard(
+        fromEpochDay?: number,
+        toEpochDay?: number,
+    ): CancelablePromise<OperationsAnalyticsDashboard> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/analytics/operations-dashboard',
+            query: {
+                'fromEpochDay': fromEpochDay,
+                'toEpochDay': toEpochDay,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
     /**
      * Query anomaly alerts with escalation and SLA state
      * @param vendorId

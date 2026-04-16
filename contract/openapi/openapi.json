@@ -1,6 +1,26 @@
 {
   "components": {
     "parameters": {
+      "AnalyticsFromEpochDayQuery": {
+        "description": "Inclusive start epoch day for operations analytics dashboard range.",
+        "in": "query",
+        "name": "fromEpochDay",
+        "required": false,
+        "schema": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "AnalyticsToEpochDayQuery": {
+        "description": "Inclusive end epoch day for operations analytics dashboard range.",
+        "in": "query",
+        "name": "toEpochDay",
+        "required": false,
+        "schema": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
       "AnomalyAlertIdPath": {
         "in": "path",
         "name": "alertId",
@@ -1749,6 +1769,7 @@
           "ORDER_RETENTION_PURGE_INTERNAL_ERROR",
           "PAYROLL_LEDGER_INTERNAL_ERROR",
           "ANOMALY_ALERT_INTERNAL_ERROR",
+          "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
           "INVALID_MCP_TOOL_NAME",
           "MCP_TOOL_NOT_FOUND",
           "INVALID_MCP_TOOL_ARGUMENTS",
@@ -2156,6 +2177,188 @@
         "required": [
           "currency",
           "amountMinor"
+        ],
+        "type": "object"
+      },
+      "OperationsAnalyticsDashboard": {
+        "additionalProperties": false,
+        "properties": {
+          "fromEpochDay": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "generatedAt": {
+            "$ref": "#/components/schemas/TaipeiBusinessDateTime"
+          },
+          "metricDefinitions": {
+            "items": {
+              "$ref": "#/components/schemas/OperationsAnalyticsMetricDefinition"
+            },
+            "type": "array"
+          },
+          "metricSchemaVersion": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "plantBreakdown": {
+            "items": {
+              "$ref": "#/components/schemas/OperationsAnalyticsPlantBreakdown"
+            },
+            "type": "array"
+          },
+          "timeBreakdown": {
+            "items": {
+              "$ref": "#/components/schemas/OperationsAnalyticsTimeBreakdown"
+            },
+            "type": "array"
+          },
+          "toEpochDay": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "vendorBreakdown": {
+            "items": {
+              "$ref": "#/components/schemas/OperationsAnalyticsVendorBreakdown"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "metricSchemaVersion",
+          "generatedAt",
+          "fromEpochDay",
+          "toEpochDay",
+          "metricDefinitions",
+          "vendorBreakdown",
+          "plantBreakdown",
+          "timeBreakdown"
+        ],
+        "type": "object"
+      },
+      "OperationsAnalyticsMetricDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "maxLength": 180,
+            "minLength": 1,
+            "type": "string"
+          },
+          "formula": {
+            "maxLength": 280,
+            "minLength": 1,
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "source": {
+            "maxLength": 180,
+            "minLength": 1,
+            "type": "string"
+          },
+          "unit": {
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "displayName",
+          "unit",
+          "formula",
+          "source",
+          "version"
+        ],
+        "type": "object"
+      },
+      "OperationsAnalyticsMetricValue": {
+        "additionalProperties": false,
+        "properties": {
+          "metricKey": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "metricKey",
+          "value"
+        ],
+        "type": "object"
+      },
+      "OperationsAnalyticsPlantBreakdown": {
+        "additionalProperties": false,
+        "properties": {
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/OperationsAnalyticsMetricValue"
+            },
+            "type": "array"
+          },
+          "plantId": {
+            "$ref": "#/components/schemas/PlantId"
+          }
+        },
+        "required": [
+          "plantId",
+          "metrics"
+        ],
+        "type": "object"
+      },
+      "OperationsAnalyticsTimeBreakdown": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "type": "string"
+          },
+          "epochDay": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/OperationsAnalyticsMetricValue"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "epochDay",
+          "date",
+          "metrics"
+        ],
+        "type": "object"
+      },
+      "OperationsAnalyticsVendorBreakdown": {
+        "additionalProperties": false,
+        "properties": {
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/OperationsAnalyticsMetricValue"
+            },
+            "type": "array"
+          },
+          "vendorId": {
+            "pattern": "^ven-[a-z0-9]{8,32}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vendorId",
+          "metrics"
         ],
         "type": "object"
       },
@@ -4370,6 +4573,66 @@
   "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/analytics/operations-dashboard": {
+      "get": {
+        "operationId": "getAdminOperationsAnalyticsDashboard",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AnalyticsFromEpochDayQuery"
+          },
+          {
+            "$ref": "#/components/parameters/AnalyticsToEpochDayQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationsAnalyticsDashboard"
+                }
+              }
+            },
+            "description": "Admin operations analytics breakdown and metric catalog"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "corporateSsoBearer": []
+          }
+        ],
+        "summary": "Get advanced operations analytics dashboard with vendor/plant/time breakdowns",
+        "tags": [
+          "Admin"
+        ],
+        "x-analytics-governance": {
+          "defaultEnabled": false,
+          "featureFlag": "PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED",
+          "model": "PREAGGREGATED_VENDOR_PLANT_DAY",
+          "phase": "OPTIONAL_PHASE_2",
+          "sourceContracts": [
+            "vendor-fulfillment-board-exports",
+            "monthly-settlement-and-hr-export",
+            "anomaly-alert-workflow"
+          ]
+        }
+      }
+    },
     "/api/v1/admin/anomaly/alerts": {
       "get": {
         "operationId": "listAnomalyAlerts",
@@ -6158,6 +6421,66 @@
         "tags": [
           "Integration"
         ]
+      }
+    },
+    "/api/v1/vendor/analytics/operations-dashboard": {
+      "get": {
+        "operationId": "getVendorOperationsAnalyticsDashboard",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AnalyticsFromEpochDayQuery"
+          },
+          {
+            "$ref": "#/components/parameters/AnalyticsToEpochDayQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationsAnalyticsDashboard"
+                }
+              }
+            },
+            "description": "Vendor-scoped operations analytics breakdown and metric catalog"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "vendorMfaBearer": []
+          }
+        ],
+        "summary": "Get advanced operations analytics dashboard scoped to the authenticated vendor",
+        "tags": [
+          "Vendor"
+        ],
+        "x-analytics-governance": {
+          "defaultEnabled": false,
+          "featureFlag": "PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED",
+          "model": "PREAGGREGATED_VENDOR_PLANT_DAY",
+          "phase": "OPTIONAL_PHASE_2",
+          "sourceContracts": [
+            "vendor-fulfillment-board-exports",
+            "monthly-settlement-and-hr-export",
+            "anomaly-alert-workflow"
+          ]
+        }
       }
     },
     "/api/v1/vendor/fulfillment-batches": {

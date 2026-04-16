@@ -45,6 +45,7 @@ pub enum HttpOperation {
     CreateEmployeeOrderDispute,
     ListVendorOrders,
     ListVendorFulfillmentBoard,
+    GetVendorOperationsAnalyticsDashboard,
     UpsertVendorMenuItem,
     AdvanceVendorFulfillmentDeliveryStatus,
     CreateVendorFulfillmentExportBatch,
@@ -66,6 +67,7 @@ pub enum HttpOperation {
     EvaluateAnomalyAlerts,
     ListAnomalyAlerts,
     UpdateAdminAnomalyAlert,
+    GetAdminOperationsAnalyticsDashboard,
     UpdateAdminPayrollDispute,
     PurgePayrollData,
     CloseMonthlyPayrollSettlement,
@@ -76,7 +78,7 @@ pub enum HttpOperation {
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 39] = [
         Self::ListEmployeeMenus,
         Self::UpsertEmployeeRushReminderPreferences,
         Self::CreateEmployeeOrder,
@@ -86,6 +88,7 @@ impl HttpOperation {
         Self::CreateEmployeeOrderDispute,
         Self::ListVendorOrders,
         Self::ListVendorFulfillmentBoard,
+        Self::GetVendorOperationsAnalyticsDashboard,
         Self::UpsertVendorMenuItem,
         Self::AdvanceVendorFulfillmentDeliveryStatus,
         Self::CreateVendorFulfillmentExportBatch,
@@ -107,6 +110,7 @@ impl HttpOperation {
         Self::EvaluateAnomalyAlerts,
         Self::ListAnomalyAlerts,
         Self::UpdateAdminAnomalyAlert,
+        Self::GetAdminOperationsAnalyticsDashboard,
         Self::UpdateAdminPayrollDispute,
         Self::PurgePayrollData,
         Self::CloseMonthlyPayrollSettlement,
@@ -127,6 +131,7 @@ impl HttpOperation {
             Self::CreateEmployeeOrderDispute => "createEmployeeOrderDispute",
             Self::ListVendorOrders => "listVendorOrders",
             Self::ListVendorFulfillmentBoard => "listVendorFulfillmentBoard",
+            Self::GetVendorOperationsAnalyticsDashboard => "getVendorOperationsAnalyticsDashboard",
             Self::UpsertVendorMenuItem => "upsertVendorMenuItem",
             Self::AdvanceVendorFulfillmentDeliveryStatus => {
                 "advanceVendorFulfillmentDeliveryStatus"
@@ -150,6 +155,7 @@ impl HttpOperation {
             Self::EvaluateAnomalyAlerts => "evaluateAnomalyAlerts",
             Self::ListAnomalyAlerts => "listAnomalyAlerts",
             Self::UpdateAdminAnomalyAlert => "updateAdminAnomalyAlert",
+            Self::GetAdminOperationsAnalyticsDashboard => "getAdminOperationsAnalyticsDashboard",
             Self::UpdateAdminPayrollDispute => "updateAdminPayrollDispute",
             Self::PurgePayrollData => "purgePayrollData",
             Self::CloseMonthlyPayrollSettlement => "closePayrollMonthlySettlement",
@@ -166,12 +172,14 @@ impl HttpOperation {
             | Self::GetEmployeeOrderPayrollLedger
             | Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
+            | Self::GetVendorOperationsAnalyticsDashboard
             | Self::GetVendorFulfillmentExportBatch
             | Self::ListAdminVendors
             | Self::ListVendorPlantDeliveryMappings
             | Self::ListComplianceDocumentTemplates
             | Self::QueryAuditInvestigations
             | Self::QueryAuditResponsibilities
+            | Self::GetAdminOperationsAnalyticsDashboard
             | Self::ExportPayrollDeductions => HttpMethod::Get,
             Self::UpsertEmployeeRushReminderPreferences
             | Self::UpsertVendorMenuItem
@@ -216,6 +224,9 @@ impl HttpOperation {
             Self::CreateEmployeeOrderDispute => "/api/v1/employee/orders/{orderId}/disputes",
             Self::ListVendorOrders => "/api/v1/vendor/orders",
             Self::ListVendorFulfillmentBoard => "/api/v1/vendor/fulfillment-board",
+            Self::GetVendorOperationsAnalyticsDashboard => {
+                "/api/v1/vendor/analytics/operations-dashboard"
+            }
             Self::UpsertVendorMenuItem => "/api/v1/vendor/menu-items/{menuItemId}",
             Self::AdvanceVendorFulfillmentDeliveryStatus => {
                 "/api/v1/vendor/orders/{orderId}/delivery-status"
@@ -245,6 +256,9 @@ impl HttpOperation {
             Self::EvaluateAnomalyAlerts => "/api/v1/admin/anomaly/alerts/evaluations",
             Self::ListAnomalyAlerts => "/api/v1/admin/anomaly/alerts",
             Self::UpdateAdminAnomalyAlert => "/api/v1/admin/anomaly/alerts/{alertId}",
+            Self::GetAdminOperationsAnalyticsDashboard => {
+                "/api/v1/admin/analytics/operations-dashboard"
+            }
             Self::UpdateAdminPayrollDispute => "/api/v1/admin/payroll/disputes/{disputeId}",
             Self::PurgePayrollData => "/api/v1/admin/payroll/retention-purge",
             Self::CloseMonthlyPayrollSettlement => {
@@ -274,6 +288,7 @@ impl HttpOperation {
             | Self::CreateEmployeeOrderDispute => HttpAudience::Employee,
             Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
+            | Self::GetVendorOperationsAnalyticsDashboard
             | Self::UpsertVendorMenuItem
             | Self::AdvanceVendorFulfillmentDeliveryStatus
             | Self::CreateVendorFulfillmentExportBatch
@@ -295,6 +310,7 @@ impl HttpOperation {
             | Self::EvaluateAnomalyAlerts
             | Self::ListAnomalyAlerts
             | Self::UpdateAdminAnomalyAlert
+            | Self::GetAdminOperationsAnalyticsDashboard
             | Self::UpdateAdminPayrollDispute
             | Self::PurgePayrollData
             | Self::CloseMonthlyPayrollSettlement
@@ -344,6 +360,8 @@ impl HttpOperation {
             | Self::QueryAuditResponsibilities
             | Self::ListAnomalyRules
             | Self::ListAnomalyAlerts
+            | Self::GetAdminOperationsAnalyticsDashboard
+            | Self::GetVendorOperationsAnalyticsDashboard
             | Self::ExportPayrollDeductions => None,
         }
     }
@@ -365,6 +383,9 @@ impl HttpOperation {
             "createEmployeeOrderDispute" => Some(Self::CreateEmployeeOrderDispute),
             "listVendorOrders" => Some(Self::ListVendorOrders),
             "listVendorFulfillmentBoard" => Some(Self::ListVendorFulfillmentBoard),
+            "getVendorOperationsAnalyticsDashboard" => {
+                Some(Self::GetVendorOperationsAnalyticsDashboard)
+            }
             "upsertVendorMenuItem" => Some(Self::UpsertVendorMenuItem),
             "advanceVendorFulfillmentDeliveryStatus" => {
                 Some(Self::AdvanceVendorFulfillmentDeliveryStatus)
@@ -388,6 +409,9 @@ impl HttpOperation {
             "evaluateAnomalyAlerts" => Some(Self::EvaluateAnomalyAlerts),
             "listAnomalyAlerts" => Some(Self::ListAnomalyAlerts),
             "updateAdminAnomalyAlert" => Some(Self::UpdateAdminAnomalyAlert),
+            "getAdminOperationsAnalyticsDashboard" => {
+                Some(Self::GetAdminOperationsAnalyticsDashboard)
+            }
             "updateAdminPayrollDispute" => Some(Self::UpdateAdminPayrollDispute),
             "purgePayrollData" => Some(Self::PurgePayrollData),
             "closePayrollMonthlySettlement" => Some(Self::CloseMonthlyPayrollSettlement),
@@ -854,6 +878,44 @@ pub fn canonical_openapi_spec() -> Value {
               "400": { "$ref": "#/components/responses/BadRequest" },
               "401": { "$ref": "#/components/responses/Unauthorized" },
               "403": { "$ref": "#/components/responses/Forbidden" }
+            }
+          }
+        },
+        "/api/v1/vendor/analytics/operations-dashboard": {
+          "get": {
+            "tags": ["Vendor"],
+            "summary": "Get advanced operations analytics dashboard scoped to the authenticated vendor",
+            "operationId": HttpOperation::GetVendorOperationsAnalyticsDashboard.operation_id(),
+            "x-analytics-governance": {
+              "phase": "OPTIONAL_PHASE_2",
+              "featureFlag": "PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED",
+              "defaultEnabled": false,
+              "model": "PREAGGREGATED_VENDOR_PLANT_DAY",
+              "sourceContracts": [
+                "vendor-fulfillment-board-exports",
+                "monthly-settlement-and-hr-export",
+                "anomaly-alert-workflow"
+              ]
+            },
+            "security": [{ "vendorMfaBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/AnalyticsFromEpochDayQuery" },
+              { "$ref": "#/components/parameters/AnalyticsToEpochDayQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Vendor-scoped operations analytics breakdown and metric catalog",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/OperationsAnalyticsDashboard" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
         },
@@ -1499,6 +1561,44 @@ pub fn canonical_openapi_spec() -> Value {
               "403": { "$ref": "#/components/responses/Forbidden" },
               "404": { "$ref": "#/components/responses/NotFound" },
               "409": { "$ref": "#/components/responses/Conflict" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/admin/analytics/operations-dashboard": {
+          "get": {
+            "tags": ["Admin"],
+            "summary": "Get advanced operations analytics dashboard with vendor/plant/time breakdowns",
+            "operationId": HttpOperation::GetAdminOperationsAnalyticsDashboard.operation_id(),
+            "x-analytics-governance": {
+              "phase": "OPTIONAL_PHASE_2",
+              "featureFlag": "PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED",
+              "defaultEnabled": false,
+              "model": "PREAGGREGATED_VENDOR_PLANT_DAY",
+              "sourceContracts": [
+                "vendor-fulfillment-board-exports",
+                "monthly-settlement-and-hr-export",
+                "anomaly-alert-workflow"
+              ]
+            },
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/AnalyticsFromEpochDayQuery" },
+              { "$ref": "#/components/parameters/AnalyticsToEpochDayQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Admin operations analytics breakdown and metric catalog",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/OperationsAnalyticsDashboard" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
               "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
@@ -2172,6 +2272,26 @@ pub fn canonical_openapi_spec() -> Value {
               "type": "integer",
               "minimum": 0,
               "maximum": 1439
+            }
+          },
+          "AnalyticsFromEpochDayQuery": {
+            "name": "fromEpochDay",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive start epoch day for operations analytics dashboard range.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "AnalyticsToEpochDayQuery": {
+            "name": "toEpochDay",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive end epoch day for operations analytics dashboard range.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
             }
           },
           "OrderIdPath": {
@@ -4060,6 +4180,101 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "additionalProperties": false
           },
+          "OperationsAnalyticsMetricDefinition": {
+            "type": "object",
+            "required": ["key", "displayName", "unit", "formula", "source", "version"],
+            "properties": {
+              "key": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "displayName": { "type": "string", "minLength": 1, "maxLength": 180 },
+              "unit": { "type": "string", "minLength": 1, "maxLength": 32 },
+              "formula": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "source": { "type": "string", "minLength": 1, "maxLength": 180 },
+              "version": { "type": "string", "minLength": 1, "maxLength": 64 }
+            },
+            "additionalProperties": false
+          },
+          "OperationsAnalyticsMetricValue": {
+            "type": "object",
+            "required": ["metricKey", "value"],
+            "properties": {
+              "metricKey": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "value": { "type": "number" }
+            },
+            "additionalProperties": false
+          },
+          "OperationsAnalyticsVendorBreakdown": {
+            "type": "object",
+            "required": ["vendorId", "metrics"],
+            "properties": {
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "metrics": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/OperationsAnalyticsMetricValue" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "OperationsAnalyticsPlantBreakdown": {
+            "type": "object",
+            "required": ["plantId", "metrics"],
+            "properties": {
+              "plantId": { "$ref": "#/components/schemas/PlantId" },
+              "metrics": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/OperationsAnalyticsMetricValue" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "OperationsAnalyticsTimeBreakdown": {
+            "type": "object",
+            "required": ["epochDay", "date", "metrics"],
+            "properties": {
+              "epochDay": { "type": "integer", "minimum": 1 },
+              "date": { "type": "string", "format": "date" },
+              "metrics": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/OperationsAnalyticsMetricValue" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "OperationsAnalyticsDashboard": {
+            "type": "object",
+            "required": [
+              "metricSchemaVersion",
+              "generatedAt",
+              "fromEpochDay",
+              "toEpochDay",
+              "metricDefinitions",
+              "vendorBreakdown",
+              "plantBreakdown",
+              "timeBreakdown"
+            ],
+            "properties": {
+              "metricSchemaVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "generatedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "fromEpochDay": { "type": "integer", "minimum": 1 },
+              "toEpochDay": { "type": "integer", "minimum": 1 },
+              "metricDefinitions": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/OperationsAnalyticsMetricDefinition" }
+              },
+              "vendorBreakdown": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/OperationsAnalyticsVendorBreakdown" }
+              },
+              "plantBreakdown": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/OperationsAnalyticsPlantBreakdown" }
+              },
+              "timeBreakdown": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/OperationsAnalyticsTimeBreakdown" }
+              }
+            },
+            "additionalProperties": false
+          },
           "AdminAnomalyAlertAssignOwnerPatchRequest": {
             "type": "object",
             "required": ["operation", "ownerActorId"],
@@ -4623,6 +4838,7 @@ pub fn canonical_openapi_spec() -> Value {
               "ORDER_RETENTION_PURGE_INTERNAL_ERROR",
               "PAYROLL_LEDGER_INTERNAL_ERROR",
               "ANOMALY_ALERT_INTERNAL_ERROR",
+              "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
               "INVALID_MCP_TOOL_NAME",
               "MCP_TOOL_NOT_FOUND",
               "INVALID_MCP_TOOL_ARGUMENTS",

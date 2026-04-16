@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { EmployeeOrderStatus } from '../models/EmployeeOrderStatus';
+import type { OperationsAnalyticsDashboard } from '../models/OperationsAnalyticsDashboard';
 import type { PlantId } from '../models/PlantId';
 import type { SortOrder } from '../models/SortOrder';
 import type { VendorFulfillmentBatchCreateRequest } from '../models/VendorFulfillmentBatchCreateRequest';
@@ -18,6 +19,33 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class VendorService {
+    /**
+     * Get advanced operations analytics dashboard scoped to the authenticated vendor
+     * @param fromEpochDay Inclusive start epoch day for operations analytics dashboard range.
+     * @param toEpochDay Inclusive end epoch day for operations analytics dashboard range.
+     * @returns OperationsAnalyticsDashboard Vendor-scoped operations analytics breakdown and metric catalog
+     * @throws ApiError
+     */
+    public static getVendorOperationsAnalyticsDashboard(
+        fromEpochDay?: number,
+        toEpochDay?: number,
+    ): CancelablePromise<OperationsAnalyticsDashboard> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/vendor/analytics/operations-dashboard',
+            query: {
+                'fromEpochDay': fromEpochDay,
+                'toEpochDay': toEpochDay,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
     /**
      * Create immutable fulfillment export batch snapshot
      * @param requestBody

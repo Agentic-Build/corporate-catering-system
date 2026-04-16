@@ -430,6 +430,71 @@ fn vendor_fulfillment_board_and_export_batch_contracts_are_declared_with_control
 }
 
 #[test]
+fn advanced_operations_analytics_dashboard_contracts_are_flagged_and_documented() {
+    let spec = canonical_openapi_spec();
+
+    let admin_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/analytics/operations-dashboard", "get");
+    assert_eq!(
+        admin_operation["operationId"],
+        HttpOperation::GetAdminOperationsAnalyticsDashboard.operation_id()
+    );
+    assert_eq!(
+        admin_operation["x-analytics-governance"]["featureFlag"],
+        "PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED"
+    );
+    assert_eq!(
+        admin_operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/OperationsAnalyticsDashboard"
+    );
+
+    let vendor_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/vendor/analytics/operations-dashboard",
+        "get",
+    );
+    assert_eq!(
+        vendor_operation["operationId"],
+        HttpOperation::GetVendorOperationsAnalyticsDashboard.operation_id()
+    );
+    let vendor_parameter_refs = vendor_operation["parameters"]
+        .as_array()
+        .expect("vendor analytics parameters should be array")
+        .iter()
+        .map(|parameter| {
+            parameter["$ref"]
+                .as_str()
+                .expect("vendor analytics parameter should be $ref")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        vendor_parameter_refs,
+        BTreeSet::from([
+            "#/components/parameters/AnalyticsFromEpochDayQuery".to_owned(),
+            "#/components/parameters/AnalyticsToEpochDayQuery".to_owned(),
+        ])
+    );
+
+    let dashboard_schema = &spec["components"]["schemas"]["OperationsAnalyticsDashboard"];
+    let required_fields = dashboard_schema["required"]
+        .as_array()
+        .expect("dashboard required fields should be array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("required field should be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(required_fields.contains("metricDefinitions"));
+    assert!(required_fields.contains("vendorBreakdown"));
+    assert!(required_fields.contains("plantBreakdown"));
+    assert!(required_fields.contains("timeBreakdown"));
+}
+
+#[test]
 fn delivery_mapping_endpoints_have_tested_error_code_to_schema_refs() {
     let spec = canonical_openapi_spec();
 

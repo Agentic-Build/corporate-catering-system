@@ -52,7 +52,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 40] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 42] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -93,6 +93,11 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 40] = [
         HttpMethod::Get,
         "/api/v1/vendor/fulfillment-board",
         "listVendorFulfillmentBoard",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/vendor/analytics/operations-dashboard",
+        "getVendorOperationsAnalyticsDashboard",
     ),
     RuntimeHttpRoute::new(
         HttpMethod::Put,
@@ -194,6 +199,11 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 40] = [
         HttpMethod::Patch,
         "/api/v1/admin/anomaly/alerts/{alertId}",
         "updateAdminAnomalyAlert",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/admin/analytics/operations-dashboard",
+        "getAdminOperationsAnalyticsDashboard",
     ),
     RuntimeHttpRoute::new(
         HttpMethod::Patch,

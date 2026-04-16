@@ -563,6 +563,12 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
         "evaluateAnomalyAlerts" => ("/api/v1/admin/anomaly/alerts/evaluations", "POST"),
         "listAnomalyAlerts" => ("/api/v1/admin/anomaly/alerts", "GET"),
         "updateAdminAnomalyAlert" => ("/api/v1/admin/anomaly/alerts/{alertId}", "PATCH"),
+        "getAdminOperationsAnalyticsDashboard" => {
+            ("/api/v1/admin/analytics/operations-dashboard", "GET")
+        }
+        "getVendorOperationsAnalyticsDashboard" => {
+            ("/api/v1/vendor/analytics/operations-dashboard", "GET")
+        }
         "reviewVendorApplication" => ("/api/v1/admin/vendors/{vendorId}/reviews", "POST"),
         "runVendorComplianceLifecycle" => ("/api/v1/admin/compliance/lifecycle/executions", "POST"),
         "updateAdminPayrollDispute" => ("/api/v1/admin/payroll/disputes/{disputeId}", "PATCH"),
@@ -872,6 +878,18 @@ mod tests {
         assert_eq!(
             http_route_and_method("upsertEmployeeRushReminderPreferences"),
             ("/api/v1/employee/rush-reminder-preferences", "PUT")
+        );
+    }
+
+    #[test]
+    fn telemetry_route_mapping_covers_operations_analytics_dashboards() {
+        assert_eq!(
+            http_route_and_method("getAdminOperationsAnalyticsDashboard"),
+            ("/api/v1/admin/analytics/operations-dashboard", "GET")
+        );
+        assert_eq!(
+            http_route_and_method("getVendorOperationsAnalyticsDashboard"),
+            ("/api/v1/vendor/analytics/operations-dashboard", "GET")
         );
     }
 }
