@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::audit::{
@@ -25,7 +26,7 @@ const PAYROLL_EXCHANGE_CORRELATION_PREFIX: &str = "payroll-exchange";
 const PAYROLL_SETTLEMENT_CORRELATION_PREFIX: &str = "payroll-settlement";
 const MAX_PAYROLL_EXPORT_PAGE_SIZE: usize = 200;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayrollRetentionPolicy {
     ledger_retention_days: u16,
     dispute_retention_days: u16,
@@ -72,7 +73,7 @@ impl Default for PayrollRetentionPolicy {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PayrollLedgerEntryKind {
     Deduction,
     AdjustmentDebit,
@@ -104,7 +105,7 @@ impl fmt::Display for PayrollLedgerEntryKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PayrollLedgerSourceKind {
     OrderMutation,
     DisputeWorkflow,
@@ -129,7 +130,7 @@ impl fmt::Display for PayrollLedgerSourceKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayrollLedgerSourceRef {
     kind: PayrollLedgerSourceKind,
     event_reference: String,
@@ -159,7 +160,7 @@ impl PayrollLedgerSourceRef {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayrollLedgerEntry {
     entry_id: u64,
     order_id: OrderId,
@@ -209,7 +210,7 @@ impl PayrollLedgerEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct PayrollDisputeId(String);
 
 impl PayrollDisputeId {
@@ -232,7 +233,7 @@ impl fmt::Display for PayrollDisputeId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PayrollDisputeStatus {
     Open,
     InReview,
@@ -261,7 +262,7 @@ impl fmt::Display for PayrollDisputeStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PayrollDisputeTraceEventType {
     Opened,
     OwnerAssigned,
@@ -286,7 +287,7 @@ impl fmt::Display for PayrollDisputeTraceEventType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayrollDisputeTraceEvent {
     occurred_at: AuditTimestamp,
     actor_id: ActorId,
@@ -332,7 +333,7 @@ impl PayrollDisputeTraceEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayrollDisputeRecord {
     dispute_id: PayrollDisputeId,
     order_id: OrderId,
@@ -432,7 +433,7 @@ pub enum SortOrder {
     Desc,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PayrollDeductionStatus {
     Ready,
     Locked,
@@ -455,7 +456,7 @@ impl PayrollDeductionStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum PayrollExceptionClass {
     Disputed,
     DeductionFailed,
@@ -474,7 +475,7 @@ impl PayrollExceptionClass {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayrollReconciliationMetadata {
     total_records: usize,
     total_amount_minor: u64,
@@ -535,7 +536,7 @@ impl PayrollReconciliationMetadata {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PayrollSettlementLockState {
     Locked,
     Unlocked,
@@ -550,7 +551,7 @@ impl PayrollSettlementLockState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayrollDeductionRecord {
     employee_actor_id: ActorId,
     order_id: OrderId,
@@ -596,7 +597,7 @@ impl PayrollDeductionRecord {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HrApiSyncStatus {
     NotSynced,
     Succeeded,
@@ -613,13 +614,13 @@ impl HrApiSyncStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PayrollHrApiSyncOutcome {
     Succeeded,
     Failed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct PayrollExchangeBatchId(String);
 
 impl PayrollExchangeBatchId {
@@ -642,7 +643,7 @@ impl fmt::Display for PayrollExchangeBatchId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayrollSettlementLockReceipt {
     cycle_key: String,
     pay_period: String,
@@ -688,7 +689,7 @@ impl PayrollSettlementLockReceipt {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HrApiSyncReceipt {
     synced_at: AuditTimestamp,
     actor_id: ActorId,
@@ -709,7 +710,7 @@ impl HrApiSyncReceipt {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayrollExchangeBatch {
     batch_id: PayrollExchangeBatchId,
     pay_period: String,
@@ -810,6 +811,11 @@ pub struct PayrollLedgerService {
     audit_trail: ImmutableAuditTrail,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PayrollLedgerServiceSnapshot {
+    state: PayrollLedgerState,
+}
+
 impl PayrollLedgerService {
     pub fn new(retention_policy: PayrollRetentionPolicy, audit_trail: ImmutableAuditTrail) -> Self {
         Self {
@@ -824,6 +830,23 @@ impl PayrollLedgerService {
     pub fn retention_policy(&self) -> Result<PayrollRetentionPolicy, PayrollLedgerError> {
         let state = lock_state(&self.state)?;
         Ok(state.retention_policy)
+    }
+
+    pub fn snapshot(&self) -> Result<PayrollLedgerServiceSnapshot, PayrollLedgerError> {
+        let state = lock_state(&self.state)?;
+        Ok(PayrollLedgerServiceSnapshot {
+            state: state.clone(),
+        })
+    }
+
+    pub fn from_snapshot(
+        snapshot: PayrollLedgerServiceSnapshot,
+        audit_trail: ImmutableAuditTrail,
+    ) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(snapshot.state)),
+            audit_trail,
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1814,7 +1837,7 @@ impl PayrollLedgerService {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct PayrollLedgerState {
     retention_policy: PayrollRetentionPolicy,
     next_entry_id: u64,
@@ -1831,7 +1854,7 @@ struct PayrollLedgerState {
     exchange_batches: BTreeMap<PayrollExchangeBatchId, PayrollExchangeBatch>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct OrderPayrollMetadata {
     employee_actor_id: ActorId,
     employee_employment_status: EmploymentStatus,

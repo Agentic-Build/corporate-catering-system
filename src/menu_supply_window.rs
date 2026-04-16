@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
+use serde::{Deserialize, Serialize};
+
 use crate::audit::{
     AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
     AuditIdentityLink, AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
@@ -37,7 +39,7 @@ const MARK_ORDER_REFUNDED_OPERATION_ID: &str = "markOrderRefunded";
 const PURGE_ORDER_DATA_OPERATION_ID: &str = "purgeOrderData";
 const ORDER_RETENTION_CORRELATION_PREFIX: &str = "order-retention";
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MenuItemId(String);
 
 impl MenuItemId {
@@ -60,7 +62,7 @@ impl fmt::Display for MenuItemId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct OrderId(String);
 
 impl OrderId {
@@ -83,7 +85,7 @@ impl fmt::Display for OrderId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Money {
     currency: String,
     amount_minor: u32,
@@ -113,7 +115,7 @@ impl Money {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MenuImageUrl(String);
 
 impl MenuImageUrl {
@@ -150,7 +152,7 @@ impl fmt::Display for MenuImageUrl {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum MenuHealthTag {
     LowCalorie,
     HighProtein,
@@ -188,7 +190,7 @@ impl fmt::Display for MenuHealthTag {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum SpecialRequest {
     LessRice,
     NoGreenOnion,
@@ -377,7 +379,7 @@ impl VendorMenuItemDraft {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VendorMenuItem {
     menu_item_id: MenuItemId,
     vendor_id: VendorId,
@@ -533,7 +535,7 @@ impl EmployeeMenuDiscoveryEntry {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VendorOrderingPolicy {
     preorder_open_days_ahead: u16,
     modify_cancel_cutoff_minute_of_day: u16,
@@ -549,13 +551,13 @@ impl VendorOrderingPolicy {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct VendorOrderingPolicyOverride {
     pub preorder_open_days_ahead: Option<u16>,
     pub modify_cancel_cutoff_minute_of_day: Option<u16>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderingGovernancePolicy {
     max_preorder_open_days_ahead: u16,
     default_preorder_open_days_ahead: u16,
@@ -694,7 +696,7 @@ impl Default for OrderingGovernancePolicy {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderRetentionPolicy {
     retention_days: u16,
 }
@@ -754,7 +756,7 @@ impl OrderMutation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderLifecycleState {
     Pending,
     Modified,
@@ -785,7 +787,7 @@ impl fmt::Display for OrderLifecycleState {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderTimelineEventType {
     Created,
     Modified,
@@ -816,7 +818,7 @@ impl fmt::Display for OrderTimelineEventType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderTimelineEvent {
     occurred_at: TaipeiBusinessMoment,
     event_type: OrderTimelineEventType,
@@ -905,7 +907,7 @@ impl OrderSnapshot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct StoredOrder {
     employee_actor_id: ActorId,
     vendor_id: VendorId,
@@ -924,7 +926,7 @@ struct AggregatedOrderLineItems {
     special_requests_by_menu_item: BTreeMap<MenuItemId, BTreeSet<SpecialRequest>>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct MenuSupplyState {
     menu_items: BTreeMap<MenuItemId, VendorMenuItem>,
     allocated_quantity_by_menu_item: BTreeMap<MenuItemId, u16>,
@@ -938,6 +940,13 @@ pub struct MenuSupplyPolicy {
     retention_policy: OrderRetentionPolicy,
     state: Arc<Mutex<MenuSupplyState>>,
     audit_trail: ImmutableAuditTrail,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MenuSupplyPolicySnapshot {
+    governance: OrderingGovernancePolicy,
+    retention_policy: OrderRetentionPolicy,
+    state: MenuSupplyState,
 }
 
 impl Default for MenuSupplyPolicy {
@@ -989,6 +998,27 @@ impl MenuSupplyPolicy {
 
     pub fn audit_trail(&self) -> ImmutableAuditTrail {
         self.audit_trail.clone()
+    }
+
+    pub fn snapshot(&self) -> Result<MenuSupplyPolicySnapshot, MenuSupplyWindowError> {
+        let state = lock_state(&self.state)?;
+        Ok(MenuSupplyPolicySnapshot {
+            governance: self.governance,
+            retention_policy: self.retention_policy,
+            state: state.clone(),
+        })
+    }
+
+    pub fn from_snapshot(
+        snapshot: MenuSupplyPolicySnapshot,
+        audit_trail: ImmutableAuditTrail,
+    ) -> Self {
+        Self {
+            governance: snapshot.governance,
+            retention_policy: snapshot.retention_policy,
+            state: Arc::new(Mutex::new(snapshot.state)),
+            audit_trail,
+        }
     }
 
     pub fn upsert_vendor_ordering_policy(

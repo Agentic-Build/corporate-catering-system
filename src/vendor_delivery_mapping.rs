@@ -61,7 +61,7 @@ impl fmt::Display for DeliveryMappingId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TaipeiBusinessMoment {
     epoch_day: i32,
     minute_of_day: u16,
@@ -296,6 +296,17 @@ impl VendorPlantDeliveryPolicy {
             policy.persist_if_needed()?;
         }
         Ok(policy)
+    }
+
+    pub fn snapshot(&self) -> PersistedPolicySnapshot {
+        self.to_persisted_snapshot()
+    }
+
+    pub fn from_snapshot(
+        snapshot: PersistedPolicySnapshot,
+        audit_trail: ImmutableAuditTrail,
+    ) -> Result<Self, VendorPlantDeliveryError> {
+        Self::from_persisted_snapshot(snapshot, StorageBackend::InMemory, audit_trail)
     }
 
     pub fn upsert_mapping(
@@ -689,7 +700,7 @@ impl VendorPlantDeliveryPolicy {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PersistedPolicySnapshot {
+pub struct PersistedPolicySnapshot {
     next_revision: u64,
     mappings: Vec<PersistedVersionedMapping>,
     audit_log: Vec<PersistedAuditEntry>,

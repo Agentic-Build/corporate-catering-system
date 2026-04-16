@@ -1,6 +1,7 @@
 use std::fmt;
 use std::time::Duration;
 
+use serde::de::DeserializeOwned;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Postgres, Transaction};
 
@@ -22,6 +23,11 @@ const DEFAULT_DB_POOL_MIN_CONNECTIONS: u32 = 4;
 const DEFAULT_DB_POOL_ACQUIRE_TIMEOUT_MS: u64 = 5_000;
 const DEFAULT_DB_POOL_IDLE_TIMEOUT_SECONDS: u64 = 300;
 const DEFAULT_DB_POOL_MAX_LIFETIME_SECONDS: u64 = 1_800;
+const MENU_SUPPLY_STATE_KEY: &str = "menu_supply_policy";
+const PAYROLL_LEDGER_STATE_KEY: &str = "payroll_ledger_service";
+const ANOMALY_ALERT_STATE_KEY: &str = "anomaly_alert_workflow";
+const DELIVERY_POLICY_STATE_KEY: &str = "vendor_delivery_policy";
+const OPERATIONS_ANALYTICS_STATE_KEY: &str = "operations_analytics_warehouse";
 
 pub async fn build_operational_pg_pool_from_env() -> Result<PgPool, String> {
     let database_url = std::env::var(DATABASE_URL_ENV)
@@ -95,6 +101,210 @@ fn parse_positive_u64_env(env_name: &str, default: u64) -> Result<u64, String> {
         Err(std::env::VarError::NotPresent) => Ok(default),
         Err(error) => Err(format!("{env_name} is invalid: {error}")),
     }
+}
+
+#[derive(Debug)]
+pub enum JsonStatePersistenceError<E = String> {
+    Sqlx(sqlx::Error),
+    Serialize(serde_json::Error),
+    Domain(E),
+}
+
+impl<E> fmt::Display for JsonStatePersistenceError<E>
+where
+    E: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Sqlx(error) => write!(f, "sql persistence operation failed: {error}"),
+            Self::Serialize(error) => write!(f, "snapshot serialization failed: {error}"),
+            Self::Domain(message) => write!(f, "domain mutation failed: {message}"),
+        }
+    }
+}
+
+impl<E> std::error::Error for JsonStatePersistenceError<E> where
+    E: fmt::Debug + fmt::Display + 'static
+{
+}
+
+impl<E> From<sqlx::Error> for JsonStatePersistenceError<E> {
+    fn from(value: sqlx::Error) -> Self {
+        Self::Sqlx(value)
+    }
+}
+
+impl<E> From<serde_json::Error> for JsonStatePersistenceError<E> {
+    fn from(value: serde_json::Error) -> Self {
+        Self::Serialize(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SqlJsonStateRepository {
+    pool: PgPool,
+    state_key: &'static str,
+}
+
+impl SqlJsonStateRepository {
+    pub fn for_menu_supply(pool: PgPool) -> Self {
+        Self {
+            pool,
+            state_key: MENU_SUPPLY_STATE_KEY,
+        }
+    }
+
+    pub fn for_payroll_ledger(pool: PgPool) -> Self {
+        Self {
+            pool,
+            state_key: PAYROLL_LEDGER_STATE_KEY,
+        }
+    }
+
+    pub fn for_anomaly_alert(pool: PgPool) -> Self {
+        Self {
+            pool,
+            state_key: ANOMALY_ALERT_STATE_KEY,
+        }
+    }
+
+    pub fn for_delivery_policy(pool: PgPool) -> Self {
+        Self {
+            pool,
+            state_key: DELIVERY_POLICY_STATE_KEY,
+        }
+    }
+
+    pub fn for_operations_analytics(pool: PgPool) -> Self {
+        Self {
+            pool,
+            state_key: OPERATIONS_ANALYTICS_STATE_KEY,
+        }
+    }
+
+    pub fn state_key(&self) -> &'static str {
+        self.state_key
+    }
+
+    pub async fn load_snapshot<T>(&self) -> Result<Option<T>, JsonStatePersistenceError>
+    where
+        T: DeserializeOwned,
+    {
+        let payload = load_payload(&self.pool, self.state_key).await?;
+        payload
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(JsonStatePersistenceError::from)
+    }
+
+    pub async fn save_snapshot<T>(&self, snapshot: &T) -> Result<(), JsonStatePersistenceError>
+    where
+        T: serde::Serialize,
+    {
+        let payload = serde_json::to_value(snapshot)?;
+        save_payload(&self.pool, self.state_key, payload).await?;
+        Ok(())
+    }
+
+    pub async fn mutate_snapshot<T, R, E, F>(
+        &self,
+        mutator: F,
+    ) -> Result<(T, R), JsonStatePersistenceError<E>>
+    where
+        T: serde::Serialize + DeserializeOwned,
+        F: FnOnce(Option<T>) -> Result<(T, R), E>,
+    {
+        let mut transaction = self.pool.begin().await?;
+        let payload = load_payload_for_update(&mut transaction, self.state_key).await?;
+        let current = payload
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(JsonStatePersistenceError::<E>::from)?;
+        let (snapshot, value) = mutator(current).map_err(JsonStatePersistenceError::Domain)?;
+        let payload = serde_json::to_value(&snapshot)?;
+        save_payload_in_transaction(&mut transaction, self.state_key, payload).await?;
+        transaction.commit().await?;
+        Ok((snapshot, value))
+    }
+}
+
+async fn load_payload(
+    pool: &PgPool,
+    state_key: &str,
+) -> Result<Option<serde_json::Value>, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+SELECT payload
+FROM vendor_compliance_state
+WHERE state_key = $1
+        "#,
+        state_key
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|row| row.payload))
+}
+
+async fn load_payload_for_update(
+    transaction: &mut Transaction<'_, Postgres>,
+    state_key: &str,
+) -> Result<Option<serde_json::Value>, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+SELECT payload
+FROM vendor_compliance_state
+WHERE state_key = $1
+FOR UPDATE
+        "#,
+        state_key
+    )
+    .fetch_optional(&mut **transaction)
+    .await?;
+    Ok(row.map(|row| row.payload))
+}
+
+async fn save_payload(
+    pool: &PgPool,
+    state_key: &str,
+    payload: serde_json::Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+INSERT INTO vendor_compliance_state (state_key, payload)
+VALUES ($1, $2)
+ON CONFLICT (state_key)
+DO UPDATE
+SET payload = EXCLUDED.payload,
+    updated_at_utc = CURRENT_TIMESTAMP
+        "#,
+        state_key,
+        payload
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn save_payload_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    state_key: &str,
+    payload: serde_json::Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+INSERT INTO vendor_compliance_state (state_key, payload)
+VALUES ($1, $2)
+ON CONFLICT (state_key)
+DO UPDATE
+SET payload = EXCLUDED.payload,
+    updated_at_utc = CURRENT_TIMESTAMP
+        "#,
+        state_key,
+        payload
+    )
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
 }
 
 #[derive(Debug)]

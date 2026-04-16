@@ -23,8 +23,8 @@ use corporate_catering_system::access::AccessController;
 use corporate_catering_system::anomaly_alert::{
     AnomalyAlertError, AnomalyAlertId, AnomalyAlertRecord, AnomalyAlertSeverity,
     AnomalyAlertStatus, AnomalyAlertTraceEvent, AnomalyAlertTransition, AnomalyAlertWorkflow,
-    AnomalyRule, AnomalyRuleId, AnomalyRuleKind, AnomalySignalSnapshot, AnomalySlaStatus,
-    AnomalyThresholdComparator,
+    AnomalyAlertWorkflowSnapshot, AnomalyRule, AnomalyRuleId, AnomalyRuleKind,
+    AnomalySignalSnapshot, AnomalySlaStatus, AnomalyThresholdComparator,
 };
 use corporate_catering_system::audit::{
     AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
@@ -38,27 +38,28 @@ use corporate_catering_system::identity::{
 };
 use corporate_catering_system::menu_supply_window::{
     EmployeeMenuDiscoveryEntry, MenuHealthTag, MenuImageUrl, MenuItemId, MenuSupplyPolicy,
-    MenuSupplyWindowError, Money, OrderId, OrderLifecycleState, OrderLineItemRequest,
-    OrderMutation, OrderRetentionPolicy, OrderSnapshot, SpecialRequest, VendorMenuItem,
-    VendorMenuItemDraft,
+    MenuSupplyPolicySnapshot, MenuSupplyWindowError, Money, OrderId, OrderLifecycleState,
+    OrderLineItemRequest, OrderMutation, OrderRetentionPolicy, OrderSnapshot, SpecialRequest,
+    VendorMenuItem, VendorMenuItemDraft,
 };
 use corporate_catering_system::observability::{
     initialize_telemetry_runtime_from_env, TelemetryService,
 };
 use corporate_catering_system::operations_analytics::{
     OperationsAnalyticsDashboardSnapshot, OperationsAnalyticsQuery, OperationsAnalyticsWarehouse,
+    OperationsAnalyticsWarehouseSnapshot,
 };
 use corporate_catering_system::payroll::{
     HrApiSyncStatus, OrderPayrollView, PayrollDeductionRecord, PayrollDisputeId,
     PayrollDisputeRecord, PayrollDisputeTraceEvent, PayrollExchangeBatch, PayrollExchangeBatchId,
     PayrollExportPage, PayrollHrApiSyncOutcome, PayrollLedgerError, PayrollLedgerService,
-    PayrollLedgerSourceKind, PayrollLedgerSourceRef, PayrollReconciliationMetadata,
-    PayrollRetentionPolicy, PayrollSettlementLockReceipt,
+    PayrollLedgerServiceSnapshot, PayrollLedgerSourceKind, PayrollLedgerSourceRef,
+    PayrollReconciliationMetadata, PayrollRetentionPolicy, PayrollSettlementLockReceipt,
     PayrollSortField as PayrollSortFieldDomain, SortOrder as PayrollSortOrderDomain,
 };
 use corporate_catering_system::persistence::{
-    build_operational_pg_pool_from_env, VendorCompliancePersistenceError,
-    VendorComplianceSqlRepository,
+    build_operational_pg_pool_from_env, JsonStatePersistenceError, SqlJsonStateRepository,
+    VendorCompliancePersistenceError, VendorComplianceSqlRepository,
 };
 use corporate_catering_system::pickup_totp::{
     PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
@@ -89,12 +90,13 @@ use corporate_catering_system::vendor_compliance::{
     VendorDocumentSubmission, VendorId, VendorReviewDecision,
 };
 use corporate_catering_system::vendor_delivery_mapping::{
-    DeliveryMappingId, DeliveryRuleEffect, ServiceWindow, TaipeiBusinessMoment,
-    VendorPlantDeliveryMapping, VendorPlantDeliveryPolicy,
+    DeliveryMappingId, DeliveryRuleEffect, PersistedPolicySnapshot, ServiceWindow,
+    TaipeiBusinessMoment, VendorPlantDeliveryMapping, VendorPlantDeliveryPolicy,
 };
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tokio::runtime::Handle;
 use tokio::time::{self, MissedTickBehavior};
 
 const DEFAULT_VENDOR_ID: &str = "ven-load-gate-a";
@@ -235,6 +237,22 @@ enum CompliancePersistence {
 }
 
 #[derive(Debug, Clone)]
+struct SqlRuntimeStateRepositories {
+    menu_supply: SqlJsonStateRepository,
+    payroll_ledger: SqlJsonStateRepository,
+    anomaly_alert: SqlJsonStateRepository,
+    delivery_policy: SqlJsonStateRepository,
+    operations_analytics: SqlJsonStateRepository,
+}
+
+#[derive(Debug, Clone)]
+enum RuntimeStatePersistence {
+    Sql(SqlRuntimeStateRepositories),
+    #[cfg(test)]
+    InMemoryOnly,
+}
+
+#[derive(Debug, Clone)]
 struct AppState {
     next_order_sequence: Arc<AtomicU64>,
     vendor_id: VendorId,
@@ -245,17 +263,23 @@ struct AppState {
     menu_recommendation_ranker: MenuRecommendationRanker,
     rush_reminder_workflow: RushReminderWorkflow,
     rush_reminder_delivery_gateway: ReminderDeliveryGateway,
-    operations_analytics_warehouse: Arc<RwLock<OperationsAnalyticsWarehouse>>,
     terminated_employee_actor_ids: Arc<HashSet<ActorId>>,
     audit_trail: ImmutableAuditTrail,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
-    payroll_ledger_service: PayrollLedgerService,
-    anomaly_alert_workflow: AnomalyAlertWorkflow,
     compliance_lifecycle: Arc<RwLock<VendorComplianceLifecycle>>,
     compliance_persistence: CompliancePersistence,
-    delivery_policy: Arc<VendorPlantDeliveryPolicy>,
-    menu_supply_policy: MenuSupplyPolicy,
+    runtime_state_persistence: RuntimeStatePersistence,
     pickup_totp_verifier: Arc<PickupTotpVerifier>,
+    #[cfg(test)]
+    operations_analytics_warehouse: Arc<RwLock<OperationsAnalyticsWarehouse>>,
+    #[cfg(test)]
+    payroll_ledger_service: PayrollLedgerService,
+    #[cfg(test)]
+    anomaly_alert_workflow: AnomalyAlertWorkflow,
+    #[cfg(test)]
+    delivery_policy: Arc<VendorPlantDeliveryPolicy>,
+    #[cfg(test)]
+    menu_supply_policy: MenuSupplyPolicy,
 }
 
 #[derive(Debug, Clone)]
@@ -1354,11 +1378,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     let pickup_totp_verifier = PickupTotpVerifier::from_env("PRELAUNCH_PICKUP_TOTP_SECRET")
         .map(Arc::new)
         .map_err(|error| format!("pickup TOTP verifier initialization failed: {error}"))?;
-    let compliance_repository = Arc::new(VendorComplianceSqlRepository::new(
-        build_operational_pg_pool_from_env()
-            .await
-            .map_err(|error| format!("PostgreSQL pool configuration is invalid: {error}"))?,
-    ));
+    let operational_pool = build_operational_pg_pool_from_env()
+        .await
+        .map_err(|error| format!("PostgreSQL pool configuration is invalid: {error}"))?;
+    let compliance_repository =
+        Arc::new(VendorComplianceSqlRepository::new(operational_pool.clone()));
+    let runtime_state_repositories = SqlRuntimeStateRepositories {
+        menu_supply: SqlJsonStateRepository::for_menu_supply(operational_pool.clone()),
+        payroll_ledger: SqlJsonStateRepository::for_payroll_ledger(operational_pool.clone()),
+        anomaly_alert: SqlJsonStateRepository::for_anomaly_alert(operational_pool.clone()),
+        delivery_policy: SqlJsonStateRepository::for_delivery_policy(operational_pool.clone()),
+        operations_analytics: SqlJsonStateRepository::for_operations_analytics(operational_pool),
+    };
     let (compliance_lifecycle, include_lifecycle_seed_baseline) =
         load_or_seed_compliance_lifecycle(
             compliance_repository.as_ref(),
@@ -1386,6 +1417,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         pickup_totp_verifier,
         compliance_lifecycle,
         CompliancePersistence::Sql(compliance_repository),
+        RuntimeStatePersistence::Sql(runtime_state_repositories),
         include_lifecycle_seed_baseline,
     )
     .map_err(|error| format!("failed to bootstrap runtime state: {error}"))?;
@@ -1418,15 +1450,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         audit_purge_interval_seconds,
     );
     spawn_payroll_retention_purge_job(
-        state.payroll_ledger_service.clone(),
+        state.clone(),
         committee_actor.clone(),
         payroll_purge_interval_seconds,
     );
-    spawn_order_retention_purge_job(
-        state.menu_supply_policy.clone(),
-        committee_actor,
-        order_purge_interval_seconds,
-    );
+    spawn_order_retention_purge_job(state.clone(), committee_actor, order_purge_interval_seconds);
 
     let app = Router::new()
         .route("/health/ready", get(ready_probe))
@@ -2941,28 +2969,473 @@ where
     }
 }
 
-fn read_operations_analytics_warehouse<'a>(
-    state: &'a AppState,
-) -> Result<RwLockReadGuard<'a, OperationsAnalyticsWarehouse>, (StatusCode, ErrorPayload)> {
-    state.operations_analytics_warehouse.read().map_err(|_| {
-        domain_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
-            "operations analytics warehouse lock is poisoned".to_owned(),
-        )
-    })
+fn with_delivery_policy<T, F>(state: &AppState, reader: F) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&VendorPlantDeliveryPolicy) -> Result<T, (StatusCode, ErrorPayload)>,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let snapshot = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .delivery_policy
+                        .load_snapshot::<PersistedPolicySnapshot>(),
+                )
+            })
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!("failed to load delivery policy state from SQL: {error}"),
+                )
+            })?
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    "delivery policy state is uninitialized".to_owned(),
+                )
+            })?;
+            let delivery_policy =
+                VendorPlantDeliveryPolicy::from_snapshot(snapshot, state.audit_trail.clone())
+                    .map_err(|error| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ORDER_POLICY_VIOLATION",
+                            format!("failed to restore delivery policy state: {error}"),
+                        )
+                    })?;
+            reader(&delivery_policy)
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => reader(state.delivery_policy.as_ref()),
+    }
 }
 
-fn write_operations_analytics_warehouse<'a>(
-    state: &'a AppState,
-) -> Result<RwLockWriteGuard<'a, OperationsAnalyticsWarehouse>, (StatusCode, ErrorPayload)> {
-    state.operations_analytics_warehouse.write().map_err(|_| {
-        domain_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
-            "operations analytics warehouse lock is poisoned".to_owned(),
-        )
-    })
+fn with_menu_supply_policy<T, F>(
+    state: &AppState,
+    reader: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&MenuSupplyPolicy) -> Result<T, (StatusCode, ErrorPayload)>,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let snapshot = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .menu_supply
+                        .load_snapshot::<MenuSupplyPolicySnapshot>(),
+                )
+            })
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!("failed to load menu supply state from SQL: {error}"),
+                )
+            })?
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    "menu supply state is uninitialized".to_owned(),
+                )
+            })?;
+            let menu_supply_policy =
+                MenuSupplyPolicy::from_snapshot(snapshot, state.audit_trail.clone());
+            reader(&menu_supply_policy)
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => reader(&state.menu_supply_policy),
+    }
+}
+
+fn mutate_menu_supply_policy<T, F, M>(
+    state: &AppState,
+    mutator: F,
+    map_domain_error: M,
+    persistence_error_code: &'static str,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&MenuSupplyPolicy) -> Result<T, MenuSupplyWindowError>,
+    M: Fn(MenuSupplyWindowError) -> (StatusCode, ErrorPayload),
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let audit_trail = state.audit_trail.clone();
+            let persistence_result =
+                tokio::task::block_in_place(|| {
+                    Handle::current().block_on(repositories.menu_supply.mutate_snapshot::<
+                    MenuSupplyPolicySnapshot,
+                    T,
+                    MenuSupplyWindowError,
+                    _,
+                >(move |snapshot| {
+                    let snapshot = snapshot.ok_or(MenuSupplyWindowError::StatePoisoned)?;
+                    let menu_supply_policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail);
+                    let value = mutator(&menu_supply_policy)?;
+                    let snapshot = menu_supply_policy.snapshot()?;
+                    Ok((snapshot, value))
+                }))
+                });
+            match persistence_result {
+                Ok((_snapshot, value)) => Ok(value),
+                Err(JsonStatePersistenceError::Domain(error)) => Err(map_domain_error(error)),
+                Err(JsonStatePersistenceError::Sqlx(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    persistence_error_code,
+                    format!("failed to persist menu supply state: {error}"),
+                )),
+                Err(JsonStatePersistenceError::Serialize(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    persistence_error_code,
+                    format!("failed to serialize menu supply state: {error}"),
+                )),
+            }
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            mutator(&state.menu_supply_policy).map_err(map_domain_error)
+        }
+    }
+}
+
+fn mutate_ordering_menu_supply_policy<T, F>(
+    state: &AppState,
+    mutator: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&MenuSupplyPolicy) -> Result<T, HttpOrderExecutionError>,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let audit_trail = state.audit_trail.clone();
+            let persistence_result =
+                tokio::task::block_in_place(|| {
+                    Handle::current().block_on(repositories.menu_supply.mutate_snapshot::<
+                    MenuSupplyPolicySnapshot,
+                    T,
+                    HttpOrderExecutionError,
+                    _,
+                >(move |snapshot| {
+                    let snapshot = snapshot.ok_or_else(|| {
+                        HttpOrderExecutionError::MenuSupply(MenuSupplyWindowError::StatePoisoned)
+                    })?;
+                    let menu_supply_policy = MenuSupplyPolicy::from_snapshot(snapshot, audit_trail);
+                    let value = mutator(&menu_supply_policy)?;
+                    let snapshot = menu_supply_policy
+                        .snapshot()
+                        .map_err(HttpOrderExecutionError::MenuSupply)?;
+                    Ok((snapshot, value))
+                }))
+                });
+            match persistence_result {
+                Ok((_snapshot, value)) => Ok(value),
+                Err(JsonStatePersistenceError::Domain(error)) => {
+                    Err(map_http_order_execution_error(error))
+                }
+                Err(JsonStatePersistenceError::Sqlx(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!("failed to persist ordering state: {error}"),
+                )),
+                Err(JsonStatePersistenceError::Serialize(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!("failed to serialize ordering state: {error}"),
+                )),
+            }
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            mutator(&state.menu_supply_policy).map_err(map_http_order_execution_error)
+        }
+    }
+}
+
+fn with_payroll_ledger_service<T, F>(
+    state: &AppState,
+    reader: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&PayrollLedgerService) -> Result<T, PayrollLedgerError>,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let snapshot = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .payroll_ledger
+                        .load_snapshot::<PayrollLedgerServiceSnapshot>(),
+                )
+            })
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "PAYROLL_LEDGER_INTERNAL_ERROR",
+                    format!("failed to load payroll ledger state from SQL: {error}"),
+                )
+            })?
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "PAYROLL_LEDGER_INTERNAL_ERROR",
+                    "payroll ledger state is uninitialized".to_owned(),
+                )
+            })?;
+            let payroll_ledger_service =
+                PayrollLedgerService::from_snapshot(snapshot, state.audit_trail.clone());
+            reader(&payroll_ledger_service).map_err(map_payroll_ledger_error)
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            reader(&state.payroll_ledger_service).map_err(map_payroll_ledger_error)
+        }
+    }
+}
+
+fn mutate_payroll_ledger_service<T, F>(
+    state: &AppState,
+    mutator: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&PayrollLedgerService) -> Result<T, PayrollLedgerError>,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let audit_trail = state.audit_trail.clone();
+            let persistence_result = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .payroll_ledger
+                        .mutate_snapshot::<PayrollLedgerServiceSnapshot, T, PayrollLedgerError, _>(
+                            move |snapshot| {
+                                let snapshot = snapshot.ok_or(PayrollLedgerError::StatePoisoned)?;
+                                let payroll_ledger_service =
+                                    PayrollLedgerService::from_snapshot(snapshot, audit_trail);
+                                let value = mutator(&payroll_ledger_service)?;
+                                let snapshot = payroll_ledger_service.snapshot()?;
+                                Ok((snapshot, value))
+                            },
+                        ),
+                )
+            });
+            match persistence_result {
+                Ok((_snapshot, value)) => Ok(value),
+                Err(JsonStatePersistenceError::Domain(error)) => {
+                    Err(map_payroll_ledger_error(error))
+                }
+                Err(JsonStatePersistenceError::Sqlx(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "PAYROLL_LEDGER_INTERNAL_ERROR",
+                    format!("failed to persist payroll ledger state: {error}"),
+                )),
+                Err(JsonStatePersistenceError::Serialize(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "PAYROLL_LEDGER_INTERNAL_ERROR",
+                    format!("failed to serialize payroll ledger state: {error}"),
+                )),
+            }
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            mutator(&state.payroll_ledger_service).map_err(map_payroll_ledger_error)
+        }
+    }
+}
+
+fn with_anomaly_alert_workflow<T, F>(
+    state: &AppState,
+    reader: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&AnomalyAlertWorkflow) -> Result<T, AnomalyAlertError>,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let snapshot = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .anomaly_alert
+                        .load_snapshot::<AnomalyAlertWorkflowSnapshot>(),
+                )
+            })
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ANOMALY_ALERT_INTERNAL_ERROR",
+                    format!("failed to load anomaly alert state from SQL: {error}"),
+                )
+            })?
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ANOMALY_ALERT_INTERNAL_ERROR",
+                    "anomaly alert state is uninitialized".to_owned(),
+                )
+            })?;
+            let anomaly_alert_workflow =
+                AnomalyAlertWorkflow::from_snapshot(snapshot, state.audit_trail.clone());
+            reader(&anomaly_alert_workflow).map_err(map_anomaly_alert_error)
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            reader(&state.anomaly_alert_workflow).map_err(map_anomaly_alert_error)
+        }
+    }
+}
+
+fn mutate_anomaly_alert_workflow<T, F>(
+    state: &AppState,
+    mutator: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&AnomalyAlertWorkflow) -> Result<T, AnomalyAlertError>,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let audit_trail = state.audit_trail.clone();
+            let persistence_result = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .anomaly_alert
+                        .mutate_snapshot::<AnomalyAlertWorkflowSnapshot, T, AnomalyAlertError, _>(
+                            move |snapshot| {
+                                let snapshot = snapshot.ok_or(AnomalyAlertError::StatePoisoned)?;
+                                let anomaly_alert_workflow =
+                                    AnomalyAlertWorkflow::from_snapshot(snapshot, audit_trail);
+                                let value = mutator(&anomaly_alert_workflow)?;
+                                let snapshot = anomaly_alert_workflow.snapshot()?;
+                                Ok((snapshot, value))
+                            },
+                        ),
+                )
+            });
+            match persistence_result {
+                Ok((_snapshot, value)) => Ok(value),
+                Err(JsonStatePersistenceError::Domain(error)) => {
+                    Err(map_anomaly_alert_error(error))
+                }
+                Err(JsonStatePersistenceError::Sqlx(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ANOMALY_ALERT_INTERNAL_ERROR",
+                    format!("failed to persist anomaly alert state: {error}"),
+                )),
+                Err(JsonStatePersistenceError::Serialize(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ANOMALY_ALERT_INTERNAL_ERROR",
+                    format!("failed to serialize anomaly alert state: {error}"),
+                )),
+            }
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            mutator(&state.anomaly_alert_workflow).map_err(map_anomaly_alert_error)
+        }
+    }
+}
+
+fn with_operations_analytics_warehouse<T, F>(
+    state: &AppState,
+    reader: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&OperationsAnalyticsWarehouse) -> T,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let snapshot = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .operations_analytics
+                        .load_snapshot::<OperationsAnalyticsWarehouseSnapshot>(),
+                )
+            })
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
+                    format!("failed to load analytics warehouse state from SQL: {error}"),
+                )
+            })?
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
+                    "analytics warehouse state is uninitialized".to_owned(),
+                )
+            })?;
+            let warehouse =
+                OperationsAnalyticsWarehouse::from_snapshot(snapshot).map_err(|error| {
+                    domain_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
+                        format!("failed to restore analytics warehouse state: {error}"),
+                    )
+                })?;
+            Ok(reader(&warehouse))
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            let warehouse = state.operations_analytics_warehouse.read().map_err(|_| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
+                    "operations analytics warehouse lock is poisoned".to_owned(),
+                )
+            })?;
+            Ok(reader(&warehouse))
+        }
+    }
+}
+
+fn mutate_operations_analytics_warehouse_best_effort<F>(
+    state: &AppState,
+    warning_context: &'static str,
+    mutator: F,
+) where
+    F: FnOnce(&mut OperationsAnalyticsWarehouse),
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let persistence_result = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .operations_analytics
+                        .mutate_snapshot::<OperationsAnalyticsWarehouseSnapshot, (), String, _>(
+                            move |snapshot| {
+                                let mut warehouse = match snapshot {
+                                    Some(snapshot) => {
+                                        OperationsAnalyticsWarehouse::from_snapshot(snapshot)?
+                                    }
+                                    None => OperationsAnalyticsWarehouse::default(),
+                                };
+                                mutator(&mut warehouse);
+                                Ok((warehouse.snapshot(), ()))
+                            },
+                        ),
+                )
+            });
+            if let Err(error) = persistence_result {
+                tracing::warn!(
+                    error = %error,
+                    "{warning_context}"
+                );
+            }
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            match state.operations_analytics_warehouse.write() {
+                Ok(mut warehouse) => mutator(&mut warehouse),
+                Err(_poisoned) => {
+                    tracing::warn!(
+                        "{warning_context}: operations analytics state lock is poisoned"
+                    );
+                }
+            }
+        }
+    }
 }
 
 fn record_operations_analytics_anomaly_triggered_best_effort(
@@ -2972,24 +3445,19 @@ fn record_operations_analytics_anomaly_triggered_best_effort(
     if !state.advanced_analytics_dashboard_runtime_enabled || alerts.is_empty() {
         return;
     }
-    let mut warehouse = match write_operations_analytics_warehouse(state) {
-        Ok(warehouse) => warehouse,
-        Err((_status, error)) => {
-            tracing::warn!(
-                error_code = error.code,
-                reason = %error.message,
-                "advanced analytics update failed; anomaly evaluation command remains authoritative"
-            );
-            return;
-        }
-    };
-    for alert in alerts {
-        warehouse.record_anomaly_triggered(
-            alert.vendor_id().as_str(),
-            state.plant_id.as_str(),
-            alert.observed_at().epoch_day(),
-        );
-    }
+    mutate_operations_analytics_warehouse_best_effort(
+        state,
+        "advanced analytics update failed; anomaly evaluation command remains authoritative",
+        |warehouse| {
+            for alert in alerts {
+                warehouse.record_anomaly_triggered(
+                    alert.vendor_id().as_str(),
+                    state.plant_id.as_str(),
+                    alert.observed_at().epoch_day(),
+                );
+            }
+        },
+    );
 }
 
 fn record_operations_analytics_anomaly_closed_best_effort(
@@ -3000,18 +3468,13 @@ fn record_operations_analytics_anomaly_closed_best_effort(
     if !state.advanced_analytics_dashboard_runtime_enabled {
         return;
     }
-    let mut warehouse = match write_operations_analytics_warehouse(state) {
-        Ok(warehouse) => warehouse,
-        Err((_status, error)) => {
-            tracing::warn!(
-                error_code = error.code,
-                reason = %error.message,
-                "advanced analytics update failed; anomaly lifecycle command remains authoritative"
-            );
-            return;
-        }
-    };
-    warehouse.record_anomaly_closed(vendor_id.as_str(), state.plant_id.as_str(), epoch_day);
+    mutate_operations_analytics_warehouse_best_effort(
+        state,
+        "advanced analytics update failed; anomaly lifecycle command remains authoritative",
+        |warehouse| {
+            warehouse.record_anomaly_closed(vendor_id.as_str(), state.plant_id.as_str(), epoch_day);
+        },
+    );
 }
 
 fn record_operations_analytics_payroll_settlement_closed_best_effort(
@@ -3022,26 +3485,21 @@ fn record_operations_analytics_payroll_settlement_closed_best_effort(
     if !state.advanced_analytics_dashboard_runtime_enabled {
         return;
     }
-    let mut warehouse = match write_operations_analytics_warehouse(state) {
-        Ok(warehouse) => warehouse,
-        Err((_status, error)) => {
-            tracing::warn!(
-                error_code = error.code,
-                reason = %error.message,
-                "advanced analytics update failed; payroll settlement command remains authoritative"
+    mutate_operations_analytics_warehouse_best_effort(
+        state,
+        "advanced analytics update failed; payroll settlement command remains authoritative",
+        |warehouse| {
+            let reconciliation = batch.reconciliation();
+            warehouse.record_payroll_settlement_closed(
+                state.vendor_id.as_str(),
+                state.plant_id.as_str(),
+                epoch_day,
+                batch.batch_id().as_str(),
+                reconciliation.total_records(),
+                reconciliation.disputed_records(),
+                reconciliation.deduction_failed_records(),
             );
-            return;
-        }
-    };
-    let reconciliation = batch.reconciliation();
-    warehouse.record_payroll_settlement_closed(
-        state.vendor_id.as_str(),
-        state.plant_id.as_str(),
-        epoch_day,
-        batch.batch_id().as_str(),
-        reconciliation.total_records(),
-        reconciliation.disputed_records(),
-        reconciliation.deduction_failed_records(),
+        },
     );
 }
 
@@ -3061,23 +3519,18 @@ fn record_operations_analytics_payroll_hr_sync_best_effort(
         HrApiSyncStatus::Failed => false,
         HrApiSyncStatus::NotSynced => return,
     };
-    let mut warehouse = match write_operations_analytics_warehouse(state) {
-        Ok(warehouse) => warehouse,
-        Err((_status, error)) => {
-            tracing::warn!(
-                error_code = error.code,
-                reason = %error.message,
-                "advanced analytics update failed; payroll hr-sync command remains authoritative"
+    mutate_operations_analytics_warehouse_best_effort(
+        state,
+        "advanced analytics update failed; payroll hr-sync command remains authoritative",
+        |warehouse| {
+            warehouse.record_payroll_hr_sync_outcome(
+                state.vendor_id.as_str(),
+                state.plant_id.as_str(),
+                epoch_day,
+                batch.batch_id().as_str(),
+                sync_succeeded,
             );
-            return;
-        }
-    };
-    warehouse.record_payroll_hr_sync_outcome(
-        state.vendor_id.as_str(),
-        state.plant_id.as_str(),
-        epoch_day,
-        batch.batch_id().as_str(),
-        sync_succeeded,
+        },
     );
 }
 
@@ -3361,6 +3814,7 @@ fn bootstrap_runtime_state(
     pickup_totp_verifier: Arc<PickupTotpVerifier>,
     compliance_lifecycle: VendorComplianceLifecycle,
     compliance_persistence: CompliancePersistence,
+    runtime_state_persistence: RuntimeStatePersistence,
     include_lifecycle_seed_baseline: bool,
 ) -> Result<AppState, String> {
     let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| error.message)?;
@@ -3374,93 +3828,290 @@ fn bootstrap_runtime_state(
     .map_err(|error| error.to_string())?;
 
     let mut compliance_lifecycle = compliance_lifecycle;
-
-    let mut delivery_policy = VendorPlantDeliveryPolicy::with_audit_trail(audit_trail.clone());
-    let mapping_window_start = TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(30), 0)
-        .map_err(|error| format!("failed to create delivery window start: {error}"))?;
-    let mapping_window_end =
-        TaipeiBusinessMoment::new(delivery_epoch_day.saturating_add(30), 23 * 60 + 59)
-            .map_err(|error| format!("failed to create delivery window end: {error}"))?;
-
-    delivery_policy
-        .upsert_mapping(
-            &committee_actor,
-            TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(30), 1)
-                .map_err(|error| error.to_string())?,
-            VendorPlantDeliveryMapping::new(
-                DeliveryMappingId::parse("map-load-gate-allow")
-                    .map_err(|error| error.to_string())?,
-                vendor_id.clone(),
-                plant_id.clone(),
-                ServiceWindow::new(mapping_window_start, mapping_window_end)
-                    .map_err(|error| error.to_string())?,
-                DeliveryRuleEffect::Allow,
-                100,
-            ),
-        )
-        .map_err(|error| error.to_string())?;
-
-    let menu_supply_policy = MenuSupplyPolicy::with_audit_trail_and_retention(
-        Default::default(),
-        audit_trail.clone(),
-        order_retention_policy,
-    );
     let terminated_employee_actor_ids =
         parse_terminated_employee_actor_ids_from_env().map_err(|error| {
             format!("{PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV} is invalid: {error}")
         })?;
-    let payroll_ledger_service =
-        PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
-    let anomaly_alert_workflow = AnomalyAlertWorkflow::with_default_rules(audit_trail.clone());
     let rush_reminder_workflow = RushReminderWorkflow::new(rush_reminder_policy);
     let rush_reminder_delivery_gateway: ReminderDeliveryGateway =
         Arc::new(NoopRushReminderDeliveryGateway);
-    let operations_analytics_warehouse =
-        Arc::new(RwLock::new(OperationsAnalyticsWarehouse::default()));
-    let vendor_menu_gateway = HttpVendorMenuExecutionGateway::new(&menu_supply_policy);
 
-    for index in 1..=menu_variant_count {
-        let menu_item_id =
-            MenuItemId::parse(format!("menu-{index}")).map_err(|error| error.to_string())?;
-        let delivery_epoch_day = delivery_epoch_day.saturating_add(i32::from((index - 1) % 7));
-        let image_url = MenuImageUrl::parse(format!(
-            "https://cdn.example.com/menu/load-gate-{index}.jpg"
-        ))
-        .map_err(|error| error.to_string())?;
-        let menu_item = VendorMenuItem::new(
-            menu_item_id.clone(),
-            vendor_id.clone(),
-            VendorMenuItemDraft::new(
-                format!("Load Gate Meal {index}"),
-                "Seeded menu item for hard-SLO prelaunch verification",
-                seeded_menu_type(index).to_owned(),
-                seeded_menu_health_tags(index),
-                Some(image_url),
-                Money::new("TWD", 12000).map_err(|error| error.to_string())?,
-                2000,
-                delivery_epoch_day,
-            )
-            .map_err(|error| error.to_string())?,
-        );
+    let mut should_seed_runtime_baseline = true;
+    let mut delivery_policy;
+    let menu_supply_policy;
+    let payroll_ledger_service;
+    let anomaly_alert_workflow;
+    let operations_analytics_warehouse;
 
-        vendor_menu_gateway
-            .execute_upsert_vendor_menu_item(&vendor_actor, menu_item)
-            .map_err(|error| error.to_string())?;
+    match &runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let repositories = repositories.clone();
+            let (
+                delivery_snapshot,
+                menu_snapshot,
+                payroll_snapshot,
+                anomaly_snapshot,
+                analytics_snapshot,
+            ) = tokio::task::block_in_place(|| {
+                Handle::current().block_on(async move {
+                    let delivery_snapshot = repositories
+                        .delivery_policy
+                        .load_snapshot::<PersistedPolicySnapshot>()
+                        .await?;
+                    let menu_snapshot = repositories
+                        .menu_supply
+                        .load_snapshot::<MenuSupplyPolicySnapshot>()
+                        .await?;
+                    let payroll_snapshot = repositories
+                        .payroll_ledger
+                        .load_snapshot::<PayrollLedgerServiceSnapshot>()
+                        .await?;
+                    let anomaly_snapshot = repositories
+                        .anomaly_alert
+                        .load_snapshot::<AnomalyAlertWorkflowSnapshot>()
+                        .await?;
+                    let analytics_snapshot = repositories
+                        .operations_analytics
+                        .load_snapshot::<OperationsAnalyticsWarehouseSnapshot>()
+                        .await?;
+                    Ok::<_, JsonStatePersistenceError>((
+                        delivery_snapshot,
+                        menu_snapshot,
+                        payroll_snapshot,
+                        anomaly_snapshot,
+                        analytics_snapshot,
+                    ))
+                })
+            })
+            .map_err(|error| format!("failed to load runtime SQL state snapshots: {error}"))?;
+
+            match (
+                delivery_snapshot,
+                menu_snapshot,
+                payroll_snapshot,
+                anomaly_snapshot,
+                analytics_snapshot,
+            ) {
+                (
+                    Some(delivery_snapshot),
+                    Some(menu_snapshot),
+                    Some(payroll_snapshot),
+                    Some(anomaly_snapshot),
+                    Some(analytics_snapshot),
+                ) => {
+                    delivery_policy = VendorPlantDeliveryPolicy::from_snapshot(
+                        delivery_snapshot,
+                        audit_trail.clone(),
+                    )
+                    .map_err(|error| {
+                        format!("failed to restore delivery policy from SQL snapshot: {error}")
+                    })?;
+                    menu_supply_policy =
+                        MenuSupplyPolicy::from_snapshot(menu_snapshot, audit_trail.clone());
+                    payroll_ledger_service =
+                        PayrollLedgerService::from_snapshot(payroll_snapshot, audit_trail.clone());
+                    anomaly_alert_workflow =
+                        AnomalyAlertWorkflow::from_snapshot(anomaly_snapshot, audit_trail.clone());
+                    operations_analytics_warehouse =
+                        OperationsAnalyticsWarehouse::from_snapshot(analytics_snapshot)
+                            .map_err(|error| {
+                                format!(
+                                    "failed to restore operations analytics state from SQL snapshot: {error}"
+                                )
+                            })?;
+                    should_seed_runtime_baseline = false;
+                }
+                (None, None, None, None, None) => {
+                    delivery_policy =
+                        VendorPlantDeliveryPolicy::with_audit_trail(audit_trail.clone());
+                    menu_supply_policy = MenuSupplyPolicy::with_audit_trail_and_retention(
+                        Default::default(),
+                        audit_trail.clone(),
+                        order_retention_policy,
+                    );
+                    payroll_ledger_service =
+                        PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
+                    anomaly_alert_workflow =
+                        AnomalyAlertWorkflow::with_default_rules(audit_trail.clone());
+                    operations_analytics_warehouse = OperationsAnalyticsWarehouse::default();
+                }
+                _ => {
+                    return Err(
+                        "runtime SQL state snapshots are partially initialized; expected all-or-none persisted snapshots"
+                            .to_owned(),
+                    );
+                }
+            }
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            delivery_policy = VendorPlantDeliveryPolicy::with_audit_trail(audit_trail.clone());
+            menu_supply_policy = MenuSupplyPolicy::with_audit_trail_and_retention(
+                Default::default(),
+                audit_trail.clone(),
+                order_retention_policy,
+            );
+            payroll_ledger_service =
+                PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
+            anomaly_alert_workflow = AnomalyAlertWorkflow::with_default_rules(audit_trail.clone());
+            operations_analytics_warehouse = OperationsAnalyticsWarehouse::default();
+        }
     }
 
-    seed_runtime_baseline_scenarios(
-        &committee_actor,
-        &vendor_actor,
-        &vendor_id,
-        &plant_id,
-        delivery_epoch_day,
-        include_lifecycle_seed_baseline,
-        &mut compliance_lifecycle,
-        &mut delivery_policy,
-        &menu_supply_policy,
-        &payroll_ledger_service,
-        &anomaly_alert_workflow,
-    )?;
+    if should_seed_runtime_baseline {
+        let mapping_window_start =
+            TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(30), 0)
+                .map_err(|error| format!("failed to create delivery window start: {error}"))?;
+        let mapping_window_end =
+            TaipeiBusinessMoment::new(delivery_epoch_day.saturating_add(30), 23 * 60 + 59)
+                .map_err(|error| format!("failed to create delivery window end: {error}"))?;
+
+        delivery_policy
+            .upsert_mapping(
+                &committee_actor,
+                TaipeiBusinessMoment::new(delivery_epoch_day.saturating_sub(30), 1)
+                    .map_err(|error| error.to_string())?,
+                VendorPlantDeliveryMapping::new(
+                    DeliveryMappingId::parse("map-load-gate-allow")
+                        .map_err(|error| error.to_string())?,
+                    vendor_id.clone(),
+                    plant_id.clone(),
+                    ServiceWindow::new(mapping_window_start, mapping_window_end)
+                        .map_err(|error| error.to_string())?,
+                    DeliveryRuleEffect::Allow,
+                    100,
+                ),
+            )
+            .map_err(|error| error.to_string())?;
+
+        let vendor_menu_gateway = HttpVendorMenuExecutionGateway::new(&menu_supply_policy);
+        for index in 1..=menu_variant_count {
+            let menu_item_id =
+                MenuItemId::parse(format!("menu-{index}")).map_err(|error| error.to_string())?;
+            let delivery_epoch_day = delivery_epoch_day.saturating_add(i32::from((index - 1) % 7));
+            let image_url = MenuImageUrl::parse(format!(
+                "https://cdn.example.com/menu/load-gate-{index}.jpg"
+            ))
+            .map_err(|error| error.to_string())?;
+            let menu_item = VendorMenuItem::new(
+                menu_item_id.clone(),
+                vendor_id.clone(),
+                VendorMenuItemDraft::new(
+                    format!("Load Gate Meal {index}"),
+                    "Seeded menu item for hard-SLO prelaunch verification",
+                    seeded_menu_type(index).to_owned(),
+                    seeded_menu_health_tags(index),
+                    Some(image_url),
+                    Money::new("TWD", 12000).map_err(|error| error.to_string())?,
+                    2000,
+                    delivery_epoch_day,
+                )
+                .map_err(|error| error.to_string())?,
+            );
+
+            vendor_menu_gateway
+                .execute_upsert_vendor_menu_item(&vendor_actor, menu_item)
+                .map_err(|error| error.to_string())?;
+        }
+
+        seed_runtime_baseline_scenarios(
+            &committee_actor,
+            &vendor_actor,
+            &vendor_id,
+            &plant_id,
+            delivery_epoch_day,
+            include_lifecycle_seed_baseline,
+            &mut compliance_lifecycle,
+            &mut delivery_policy,
+            &menu_supply_policy,
+            &payroll_ledger_service,
+            &anomaly_alert_workflow,
+        )?;
+
+        #[cfg(not(test))]
+        {
+            let RuntimeStatePersistence::Sql(repositories) = &runtime_state_persistence;
+            let repositories = repositories.clone();
+            let delivery_snapshot = delivery_policy.snapshot();
+            let menu_snapshot = menu_supply_policy
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot menu supply state: {error}"))?;
+            let payroll_snapshot = payroll_ledger_service
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot payroll ledger state: {error}"))?;
+            let anomaly_snapshot = anomaly_alert_workflow
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot anomaly alert state: {error}"))?;
+            let operations_analytics_snapshot = operations_analytics_warehouse.snapshot();
+            tokio::task::block_in_place(|| {
+                Handle::current().block_on(async move {
+                    repositories
+                        .delivery_policy
+                        .save_snapshot(&delivery_snapshot)
+                        .await?;
+                    repositories
+                        .menu_supply
+                        .save_snapshot(&menu_snapshot)
+                        .await?;
+                    repositories
+                        .payroll_ledger
+                        .save_snapshot(&payroll_snapshot)
+                        .await?;
+                    repositories
+                        .anomaly_alert
+                        .save_snapshot(&anomaly_snapshot)
+                        .await?;
+                    repositories
+                        .operations_analytics
+                        .save_snapshot(&operations_analytics_snapshot)
+                        .await?;
+                    Ok::<(), JsonStatePersistenceError>(())
+                })
+            })
+            .map_err(|error| format!("failed to persist seeded runtime SQL snapshots: {error}"))?;
+        }
+        #[cfg(test)]
+        if let RuntimeStatePersistence::Sql(repositories) = &runtime_state_persistence {
+            let repositories = repositories.clone();
+            let delivery_snapshot = delivery_policy.snapshot();
+            let menu_snapshot = menu_supply_policy
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot menu supply state: {error}"))?;
+            let payroll_snapshot = payroll_ledger_service
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot payroll ledger state: {error}"))?;
+            let anomaly_snapshot = anomaly_alert_workflow
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot anomaly alert state: {error}"))?;
+            let operations_analytics_snapshot = operations_analytics_warehouse.snapshot();
+            tokio::task::block_in_place(|| {
+                Handle::current().block_on(async move {
+                    repositories
+                        .delivery_policy
+                        .save_snapshot(&delivery_snapshot)
+                        .await?;
+                    repositories
+                        .menu_supply
+                        .save_snapshot(&menu_snapshot)
+                        .await?;
+                    repositories
+                        .payroll_ledger
+                        .save_snapshot(&payroll_snapshot)
+                        .await?;
+                    repositories
+                        .anomaly_alert
+                        .save_snapshot(&anomaly_snapshot)
+                        .await?;
+                    repositories
+                        .operations_analytics
+                        .save_snapshot(&operations_analytics_snapshot)
+                        .await?;
+                    Ok::<(), JsonStatePersistenceError>(())
+                })
+            })
+            .map_err(|error| format!("failed to persist seeded runtime SQL snapshots: {error}"))?;
+        }
+    }
 
     Ok(AppState {
         next_order_sequence: Arc::new(AtomicU64::new(1)),
@@ -3472,17 +4123,23 @@ fn bootstrap_runtime_state(
         menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
         rush_reminder_workflow,
         rush_reminder_delivery_gateway,
-        operations_analytics_warehouse,
         terminated_employee_actor_ids: Arc::new(terminated_employee_actor_ids),
         audit_trail,
         payroll_export_field_encryptor,
-        payroll_ledger_service,
-        anomaly_alert_workflow,
         compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
         compliance_persistence,
-        delivery_policy: Arc::new(delivery_policy),
-        menu_supply_policy,
+        runtime_state_persistence,
         pickup_totp_verifier,
+        #[cfg(test)]
+        operations_analytics_warehouse: Arc::new(RwLock::new(operations_analytics_warehouse)),
+        #[cfg(test)]
+        payroll_ledger_service,
+        #[cfg(test)]
+        anomaly_alert_workflow,
+        #[cfg(test)]
+        delivery_policy: Arc::new(delivery_policy),
+        #[cfg(test)]
+        menu_supply_policy,
     })
 }
 
@@ -4212,10 +4869,12 @@ fn handle_list_employee_menus_at(
     let recommendation_requested = state.recommendation_engine_runtime_enabled;
 
     let compliance_lifecycle = read_compliance_lifecycle(state)?;
+    let delivery_policy = with_delivery_policy(state, |policy| Ok(policy.clone()))?;
+    let menu_supply_policy = with_menu_supply_policy(state, |policy| Ok(policy.clone()))?;
     let discovery_gateway = HttpEmployeeDiscoveryExecutionGateway::new(
         &compliance_lifecycle,
-        state.delivery_policy.as_ref(),
-        &state.menu_supply_policy,
+        &delivery_policy,
+        &menu_supply_policy,
     );
     let for_search = query_has_search_filters(&query);
     let mut entries = discovery_gateway
@@ -4833,14 +5492,14 @@ fn handle_create_employee_order_for_actor(
 
     let order_id = generate_contract_order_id(state)?;
     let compliance_lifecycle = read_compliance_lifecycle(state)?;
-    let ordering_gateway = HttpOrderingExecutionGateway::new(
-        &compliance_lifecycle,
-        state.delivery_policy.as_ref(),
-        &state.menu_supply_policy,
-    );
-
-    ordering_gateway
-        .execute_create_employee_order(
+    let delivery_policy = with_delivery_policy(state, |policy| Ok(policy.clone()))?;
+    let snapshot = mutate_ordering_menu_supply_policy(state, |menu_supply_policy| {
+        let ordering_gateway = HttpOrderingExecutionGateway::new(
+            &compliance_lifecycle,
+            &delivery_policy,
+            menu_supply_policy,
+        );
+        ordering_gateway.execute_create_employee_order(
             &employee_actor,
             order_id.clone(),
             &request_vendor_id,
@@ -4848,10 +5507,16 @@ fn handle_create_employee_order_for_actor(
             delivery_epoch_day,
             line_items,
             requested_at,
-        )
-        .map_err(map_http_order_execution_error)?;
-
-    let snapshot = load_order_snapshot_or_policy_error(state, &order_id)?;
+        )?;
+        menu_supply_policy
+            .order_snapshot(&order_id)
+            .map_err(HttpOrderExecutionError::MenuSupply)?
+            .ok_or_else(|| {
+                HttpOrderExecutionError::MenuSupply(MenuSupplyWindowError::OrderNotFound(
+                    order_id.clone(),
+                ))
+            })
+    })?;
     sync_payroll_ledger_from_order_snapshot(
         state,
         employee_actor,
@@ -4948,24 +5613,31 @@ fn handle_update_employee_order_for_actor(
     })?;
 
     let compliance_lifecycle = read_compliance_lifecycle(state)?;
-    let ordering_gateway = HttpOrderingExecutionGateway::new(
-        &compliance_lifecycle,
-        state.delivery_policy.as_ref(),
-        &state.menu_supply_policy,
-    );
-
-    ordering_gateway
-        .execute_update_employee_order(
+    let delivery_policy = with_delivery_policy(state, |policy| Ok(policy.clone()))?;
+    let current_vendor_id = current_snapshot.vendor_id().clone();
+    let updated_snapshot = mutate_ordering_menu_supply_policy(state, |menu_supply_policy| {
+        let ordering_gateway = HttpOrderingExecutionGateway::new(
+            &compliance_lifecycle,
+            &delivery_policy,
+            menu_supply_policy,
+        );
+        ordering_gateway.execute_update_employee_order(
             actor,
             &order_id,
-            current_snapshot.vendor_id(),
+            &current_vendor_id,
             &state.plant_id,
             mutation,
             requested_at,
-        )
-        .map_err(map_http_order_execution_error)?;
-
-    let updated_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
+        )?;
+        menu_supply_policy
+            .order_snapshot(&order_id)
+            .map_err(HttpOrderExecutionError::MenuSupply)?
+            .ok_or_else(|| {
+                HttpOrderExecutionError::MenuSupply(MenuSupplyWindowError::OrderNotFound(
+                    order_id.clone(),
+                ))
+            })
+    })?;
     sync_payroll_ledger_from_order_snapshot(
         state,
         actor,
@@ -5041,10 +5713,9 @@ fn handle_get_employee_order_payroll_ledger_for_actor(
             format!("orderId path parameter is invalid: {error}"),
         )
     })?;
-    let view = state
-        .payroll_ledger_service
-        .employee_order_view(actor, &order_id)
-        .map_err(map_payroll_ledger_error)?;
+    let view = with_payroll_ledger_service(state, |service| {
+        service.employee_order_view(actor, &order_id)
+    })?;
 
     Ok(to_employee_order_payroll_ledger_response(&view))
 }
@@ -5127,16 +5798,15 @@ fn handle_create_employee_order_dispute(
         )
     })?;
     let default_owner_actor_id = load_gate_payroll_dispute_owner_actor_id()?;
-    let dispute = state
-        .payroll_ledger_service
-        .open_dispute(
+    let dispute = mutate_payroll_ledger_service(state, |service| {
+        service.open_dispute(
             &employee_actor,
             &order_id,
             &default_owner_actor_id,
             request.reason,
             occurred_at,
         )
-        .map_err(map_payroll_ledger_error)?;
+    })?;
 
     Ok(to_payroll_dispute_payload(&dispute))
 }
@@ -5369,36 +6039,33 @@ fn handle_update_admin_payroll_dispute(
                 )
             })?;
             let note = normalize_optional_patch_note(request.note)?;
-            state
-                .payroll_ledger_service
-                .assign_dispute_owner(
+            mutate_payroll_ledger_service(state, |service| {
+                service.assign_dispute_owner(
                     &payroll_actor,
                     &dispute_id,
                     &owner_actor_id,
                     occurred_at,
                     note,
                 )
-                .map_err(map_payroll_ledger_error)?
+            })?
         }
         "RESOLVE_REFUND" => {
             let note = parse_required_patch_note(request.note, "note")?;
-            state
-                .payroll_ledger_service
-                .resolve_dispute_refund(
+            mutate_payroll_ledger_service(state, |service| {
+                service.resolve_dispute_refund(
                     &payroll_actor,
                     &dispute_id,
                     occurred_at,
                     note,
                     request.refund_amount_minor,
                 )
-                .map_err(map_payroll_ledger_error)?
+            })?
         }
         "RESOLVE_REJECTED" => {
             let note = parse_required_patch_note(request.note, "note")?;
-            state
-                .payroll_ledger_service
-                .resolve_dispute_rejected(&payroll_actor, &dispute_id, occurred_at, note)
-                .map_err(map_payroll_ledger_error)?
+            mutate_payroll_ledger_service(state, |service| {
+                service.resolve_dispute_rejected(&payroll_actor, &dispute_id, occurred_at, note)
+            })?
         }
         other => {
             return Err(domain_error(
@@ -5463,10 +6130,7 @@ fn handle_list_anomaly_rules(
     state: &AppState,
     _committee_actor: &AuthenticatedActorContext,
 ) -> Result<AnomalyRuleListResponse, (StatusCode, ErrorPayload)> {
-    let rules = state
-        .anomaly_alert_workflow
-        .list_rules()
-        .map_err(map_anomaly_alert_error)?
+    let rules = with_anomaly_alert_workflow(state, |workflow| workflow.list_rules())?
         .iter()
         .map(to_anomaly_rule_payload)
         .collect::<Vec<_>>();
@@ -5578,10 +6242,9 @@ fn handle_upsert_anomaly_rule(
     .map_err(map_anomaly_alert_error)?;
 
     let occurred_at = current_audit_timestamp()?;
-    let upserted = state
-        .anomaly_alert_workflow
-        .upsert_rule(committee_actor, rule, occurred_at)
-        .map_err(map_anomaly_alert_error)?;
+    let upserted = mutate_anomaly_alert_workflow(state, |workflow| {
+        workflow.upsert_rule(committee_actor, rule, occurred_at)
+    })?;
     Ok(to_anomaly_rule_payload(&upserted))
 }
 
@@ -5691,9 +6354,8 @@ fn handle_evaluate_anomaly_alerts(
         None => load_gate_anomaly_alert_owner_actor_id()?,
     };
 
-    let result = state
-        .anomaly_alert_workflow
-        .evaluate_rules(
+    let result = mutate_anomaly_alert_workflow(state, |workflow| {
+        workflow.evaluate_rules(
             committee_actor,
             AnomalySignalSnapshot::new(vendor_id, observed_at)
                 .with_days_until_expiry(days_until_expiry)
@@ -5702,7 +6364,7 @@ fn handle_evaluate_anomaly_alerts(
                 .with_complaint_count(complaint_count),
             &default_owner_actor_id,
         )
-        .map_err(map_anomaly_alert_error)?;
+    })?;
 
     let as_of = current_anomaly_audit_timestamp()?;
     record_operations_analytics_anomaly_triggered_best_effort(state, result.triggered_alerts());
@@ -5875,9 +6537,8 @@ fn handle_list_anomaly_alerts(
         })
         .transpose()?;
 
-    let alerts = state
-        .anomaly_alert_workflow
-        .query_alerts(
+    let alerts = with_anomaly_alert_workflow(state, |workflow| {
+        workflow.query_alerts(
             &corporate_catering_system::anomaly_alert::AnomalyAlertQuery {
                 vendor_id,
                 owner_actor_id,
@@ -5887,10 +6548,10 @@ fn handle_list_anomaly_alerts(
             },
             as_of,
         )
-        .map_err(map_anomaly_alert_error)?
-        .iter()
-        .map(|alert| to_anomaly_alert_payload(alert, as_of))
-        .collect::<Vec<_>>();
+    })?
+    .iter()
+    .map(|alert| to_anomaly_alert_payload(alert, as_of))
+    .collect::<Vec<_>>();
 
     Ok(AnomalyAlertListResponse { items: alerts })
 }
@@ -6034,14 +6695,13 @@ fn handle_get_operations_analytics_dashboard(
     let generated_at = current_anomaly_audit_timestamp()?;
     let (from_epoch_day, to_epoch_day) =
         resolve_operations_analytics_query_range(query, generated_at.epoch_day())?;
-    let snapshot = {
-        let warehouse = read_operations_analytics_warehouse(state)?;
+    let snapshot = with_operations_analytics_warehouse(state, |warehouse| {
         warehouse.query(OperationsAnalyticsQuery {
             from_epoch_day,
             to_epoch_day,
             vendor_scope,
         })
-    };
+    })?;
 
     Ok(to_operations_analytics_dashboard_payload(
         snapshot,
@@ -6245,16 +6905,15 @@ fn handle_update_admin_anomaly_alert(
                     format!("ownerActorId is invalid: {error}"),
                 )
             })?;
-            state
-                .anomaly_alert_workflow
-                .assign_owner(
+            mutate_anomaly_alert_workflow(state, |workflow| {
+                workflow.assign_owner(
                     committee_actor,
                     &alert_id,
                     &owner_actor_id,
                     occurred_at,
                     note,
                 )
-                .map_err(map_anomaly_alert_error)?
+            })?
         }
         "ACKNOWLEDGE" | "START_REMEDIATION" | "ESCALATE" => {
             if request.owner_actor_id.is_some()
@@ -6279,9 +6938,8 @@ fn handle_update_admin_anomaly_alert(
                         ),
                     )
                 })?;
-            state
-                .anomaly_alert_workflow
-                .transition_alert(
+            mutate_anomaly_alert_workflow(state, |workflow| {
+                workflow.transition_alert(
                     committee_actor,
                     &alert_id,
                     transition,
@@ -6291,7 +6949,7 @@ fn handle_update_admin_anomaly_alert(
                     Vec::new(),
                     None,
                 )
-                .map_err(map_anomaly_alert_error)?
+            })?
         }
         "CLOSE" => {
             if request.owner_actor_id.is_some() {
@@ -6304,9 +6962,8 @@ fn handle_update_admin_anomaly_alert(
             let closure_note = parse_required_patch_note(request.closure_note, "closureNote")?;
             let closure_evidence_refs =
                 parse_required_patch_evidence_refs(request.closure_evidence_refs)?;
-            state
-                .anomaly_alert_workflow
-                .transition_alert(
+            mutate_anomaly_alert_workflow(state, |workflow| {
+                workflow.transition_alert(
                     committee_actor,
                     &alert_id,
                     AnomalyAlertTransition::Close,
@@ -6316,7 +6973,7 @@ fn handle_update_admin_anomaly_alert(
                     closure_evidence_refs,
                     request.ticket_reference,
                 )
-                .map_err(map_anomaly_alert_error)?
+            })?
         }
         other => {
             return Err(domain_error(
@@ -6449,10 +7106,9 @@ fn handle_purge_payroll_data(
             )
         })?,
     };
-    let report = state
-        .payroll_ledger_service
-        .purge_expired_data(committee_actor, as_of)
-        .map_err(map_payroll_ledger_error)?;
+    let report = mutate_payroll_ledger_service(state, |service| {
+        service.purge_expired_data(committee_actor, as_of)
+    })?;
 
     Ok(PayrollRetentionPurgeResponse {
         purged_ledger_entries: report.purged_ledger_entries,
@@ -6477,10 +7133,12 @@ fn handle_purge_order_data(
             )
         })?,
     };
-    let report = state
-        .menu_supply_policy
-        .purge_expired_orders(committee_actor, as_of)
-        .map_err(map_order_retention_purge_error)?;
+    let report = mutate_menu_supply_policy(
+        state,
+        |policy| policy.purge_expired_orders(committee_actor, as_of),
+        map_order_retention_purge_error,
+        "ORDER_RETENTION_PURGE_INTERNAL_ERROR",
+    )?;
 
     Ok(OrderRetentionPurgeResponse {
         purged_orders: report.purged_orders,
@@ -6569,9 +7227,8 @@ fn handle_export_payroll_deductions(
         .unwrap_or(SortOrderQuery::Asc)
         .into_payroll_domain();
     let occurred_at = current_audit_timestamp()?;
-    let export_page = state
-        .payroll_ledger_service
-        .export_sftp_batch(
+    let export_page = mutate_payroll_ledger_service(state, |service| {
+        service.export_sftp_batch(
             payroll_actor,
             &pay_period,
             &cycle_key,
@@ -6581,7 +7238,7 @@ fn handle_export_payroll_deductions(
             sort_order,
             occurred_at,
         )
-        .map_err(map_payroll_ledger_error)?;
+    })?;
 
     to_payroll_deduction_page_payload(&export_page, &state.payroll_export_field_encryptor)
 }
@@ -6659,9 +7316,8 @@ fn handle_close_payroll_monthly_settlement(
         .unwrap_or(SortOrderQuery::Asc)
         .into_payroll_domain();
     let occurred_at = current_audit_timestamp()?;
-    let export_page = state
-        .payroll_ledger_service
-        .close_monthly_settlement(
+    let export_page = mutate_payroll_ledger_service(state, |service| {
+        service.close_monthly_settlement(
             payroll_actor,
             request.cycle_key.as_deref(),
             page,
@@ -6670,7 +7326,7 @@ fn handle_close_payroll_monthly_settlement(
             sort_order,
             occurred_at,
         )
-        .map_err(map_payroll_ledger_error)?;
+    })?;
 
     record_operations_analytics_payroll_settlement_closed_best_effort(
         state,
@@ -6747,10 +7403,9 @@ fn handle_unlock_payroll_settlement_cycle(
 ) -> Result<PayrollSettlementCycleLockResponse, (StatusCode, ErrorPayload)> {
     let occurred_at = current_audit_timestamp()?;
     let reason = parse_required_patch_note(request.reason, "reason")?;
-    let receipt = state
-        .payroll_ledger_service
-        .unlock_cycle_for_recompute(committee_actor, &cycle_key, reason, occurred_at)
-        .map_err(map_payroll_ledger_error)?;
+    let receipt = mutate_payroll_ledger_service(state, |service| {
+        service.unlock_cycle_for_recompute(committee_actor, &cycle_key, reason, occurred_at)
+    })?;
 
     Ok(PayrollSettlementCycleLockResponse {
         settlement_cycle: to_payroll_settlement_cycle_lock_payload(&receipt),
@@ -6823,10 +7478,9 @@ fn handle_lock_payroll_settlement_cycle(
 ) -> Result<PayrollSettlementCycleLockResponse, (StatusCode, ErrorPayload)> {
     let occurred_at = current_audit_timestamp()?;
     let reason = parse_required_patch_note(request.reason, "reason")?;
-    let receipt = state
-        .payroll_ledger_service
-        .lock_cycle(committee_actor, &cycle_key, reason, occurred_at)
-        .map_err(map_payroll_ledger_error)?;
+    let receipt = mutate_payroll_ledger_service(state, |service| {
+        service.lock_cycle(committee_actor, &cycle_key, reason, occurred_at)
+    })?;
 
     Ok(PayrollSettlementCycleLockResponse {
         settlement_cycle: to_payroll_settlement_cycle_lock_payload(&receipt),
@@ -6902,10 +7556,9 @@ fn handle_sync_payroll_hr_api_adjunct(
     })?;
     let occurred_at = current_audit_timestamp()?;
     let outcome = request.outcome.into_domain();
-    let batch = state
-        .payroll_ledger_service
-        .sync_hr_api_adjunct(payroll_actor, &batch_id, outcome, request.note, occurred_at)
-        .map_err(map_payroll_ledger_error)?;
+    let batch = mutate_payroll_ledger_service(state, |service| {
+        service.sync_hr_api_adjunct(payroll_actor, &batch_id, outcome, request.note, occurred_at)
+    })?;
 
     record_operations_analytics_payroll_hr_sync_best_effort(state, occurred_at.epoch_day(), &batch);
 
@@ -7764,10 +8417,10 @@ fn resolve_vendor_for_line_items(
     state: &AppState,
     line_items: &[OrderLineItemRequest],
 ) -> Result<VendorId, (StatusCode, ErrorPayload)> {
+    let menu_supply_policy = with_menu_supply_policy(state, |policy| Ok(policy.clone()))?;
     let mut resolved_vendor_id: Option<VendorId> = None;
     for line_item in line_items {
-        let menu_item = state
-            .menu_supply_policy
+        let menu_item = menu_supply_policy
             .menu_item(line_item.menu_item_id())
             .map_err(|error| {
                 domain_error(
@@ -7809,66 +8462,41 @@ fn resolve_vendor_for_line_items(
     })
 }
 
-fn load_order_snapshot_or_policy_error(
-    state: &AppState,
-    order_id: &OrderId,
-) -> Result<OrderSnapshot, (StatusCode, ErrorPayload)> {
-    state
-        .menu_supply_policy
-        .order_snapshot(order_id)
-        .map_err(|error| {
-            domain_error(
-                StatusCode::CONFLICT,
-                "ORDER_POLICY_VIOLATION",
-                error.to_string(),
-            )
-        })?
-        .ok_or_else(|| {
-            domain_error(
-                StatusCode::CONFLICT,
-                "ORDER_POLICY_VIOLATION",
-                format!(
-                    "order `{}` is missing after successful mutation",
-                    order_id.as_str()
-                ),
-            )
-        })
-}
-
 fn load_order_snapshot_or_not_found(
     state: &AppState,
     order_id: &OrderId,
 ) -> Result<OrderSnapshot, (StatusCode, ErrorPayload)> {
-    state
-        .menu_supply_policy
-        .order_snapshot(order_id)
-        .map_err(|error| {
-            domain_error(
-                StatusCode::CONFLICT,
-                "ORDER_POLICY_VIOLATION",
-                error.to_string(),
-            )
-        })?
-        .ok_or_else(|| {
-            domain_error(
-                StatusCode::NOT_FOUND,
-                "ORDER_NOT_FOUND",
-                format!("order `{}` was not found", order_id.as_str()),
-            )
-        })
+    with_menu_supply_policy(state, |menu_supply_policy| {
+        menu_supply_policy
+            .order_snapshot(order_id)
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::CONFLICT,
+                    "ORDER_POLICY_VIOLATION",
+                    error.to_string(),
+                )
+            })?
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::NOT_FOUND,
+                    "ORDER_NOT_FOUND",
+                    format!("order `{}` was not found", order_id.as_str()),
+                )
+            })
+    })
 }
 
 fn build_employee_order_payload(
     state: &AppState,
     snapshot: &OrderSnapshot,
 ) -> Result<EmployeeOrderPayload, (StatusCode, ErrorPayload)> {
+    let menu_supply_policy = with_menu_supply_policy(state, |policy| Ok(policy.clone()))?;
     let mut line_items = Vec::with_capacity(snapshot.line_items().len());
     let mut total_minor: u64 = 0;
     let mut order_currency: Option<String> = None;
 
     for (menu_item_id, quantity) in snapshot.line_items() {
-        let menu_item = state
-            .menu_supply_policy
+        let menu_item = menu_supply_policy
             .menu_item(menu_item_id)
             .map_err(|error| {
                 domain_error(
@@ -7998,11 +8626,11 @@ fn compute_order_total_for_payroll(
     state: &AppState,
     snapshot: &OrderSnapshot,
 ) -> Result<(String, u32), (StatusCode, ErrorPayload)> {
+    let menu_supply_policy = with_menu_supply_policy(state, |policy| Ok(policy.clone()))?;
     let mut total_minor: u64 = 0;
     let mut currency: Option<String> = None;
     for (menu_item_id, quantity) in snapshot.line_items() {
-        let menu_item = state
-            .menu_supply_policy
+        let menu_item = menu_supply_policy
             .menu_item(menu_item_id)
             .map_err(|error| {
                 domain_error(
@@ -8107,15 +8735,25 @@ fn sync_payroll_ledger_from_order_snapshot(
     })?;
 
     let target_amount_minor = expected_payroll_target_amount(snapshot, gross_total_minor);
+    let occurred_at_timestamp = AuditTimestamp::from_taipei_business_moment(
+        occurred_at.epoch_day(),
+        occurred_at.minute_of_day(),
+    )
+    .map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PAYROLL_LEDGER_INTERNAL_ERROR",
+            error.to_string(),
+        )
+    })?;
     let employee_employment_status =
         if actor.role() == Role::Employee && actor.actor_id() == snapshot.employee_actor_id() {
             actor.employment_status()
         } else {
             EmploymentStatus::Active
         };
-    state
-        .payroll_ledger_service
-        .reconcile_order_charge(
+    mutate_payroll_ledger_service(state, |service| {
+        service.reconcile_order_charge(
             actor,
             operation_id,
             snapshot.order_id(),
@@ -8124,26 +8762,10 @@ fn sync_payroll_ledger_from_order_snapshot(
             snapshot.delivery_epoch_day(),
             &currency,
             target_amount_minor,
-            AuditTimestamp::from_taipei_business_moment(
-                occurred_at.epoch_day(),
-                occurred_at.minute_of_day(),
-            )
-            .map_err(|error| {
-                domain_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "PAYROLL_LEDGER_INTERNAL_ERROR",
-                    error.to_string(),
-                )
-            })?,
+            occurred_at_timestamp,
             source_event,
         )
-        .map_err(|error| {
-            domain_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "PAYROLL_LEDGER_INTERNAL_ERROR",
-                error.to_string(),
-            )
-        })?;
+    })?;
     Ok(())
 }
 
@@ -8317,25 +8939,22 @@ fn run_audit_retention_purge_once(
 }
 
 fn spawn_payroll_retention_purge_job(
-    payroll_ledger_service: PayrollLedgerService,
+    state: AppState,
     committee_actor: AuthenticatedActorContext,
     interval_seconds: u64,
 ) {
     tokio::spawn(async move {
-        run_payroll_retention_purge_once(&payroll_ledger_service, &committee_actor);
+        run_payroll_retention_purge_once(&state, &committee_actor);
         let mut interval = time::interval(std::time::Duration::from_secs(interval_seconds));
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
-            run_payroll_retention_purge_once(&payroll_ledger_service, &committee_actor);
+            run_payroll_retention_purge_once(&state, &committee_actor);
         }
     });
 }
 
-fn run_payroll_retention_purge_once(
-    payroll_ledger_service: &PayrollLedgerService,
-    committee_actor: &AuthenticatedActorContext,
-) {
+fn run_payroll_retention_purge_once(state: &AppState, committee_actor: &AuthenticatedActorContext) {
     let as_of = match AuditTimestamp::now_taipei() {
         Ok(value) => value,
         Err(error) => {
@@ -8346,7 +8965,9 @@ fn run_payroll_retention_purge_once(
             return;
         }
     };
-    match payroll_ledger_service.purge_expired_data(committee_actor, as_of) {
+    match mutate_payroll_ledger_service(state, |service| {
+        service.purge_expired_data(committee_actor, as_of)
+    }) {
         Ok(report) => tracing::info!(
             purged_ledger_entries = report.purged_ledger_entries,
             purged_disputes = report.purged_disputes,
@@ -8355,30 +8976,31 @@ fn run_payroll_retention_purge_once(
             as_of_minute_of_day = as_of.minute_of_day(),
             "payroll retention purge job completed"
         ),
-        Err(error) => tracing::error!(error = %error, "payroll retention purge job failed"),
+        Err((_, error)) => tracing::error!(
+            error_code = error.code,
+            reason = %error.message,
+            "payroll retention purge job failed"
+        ),
     }
 }
 
 fn spawn_order_retention_purge_job(
-    menu_supply_policy: MenuSupplyPolicy,
+    state: AppState,
     committee_actor: AuthenticatedActorContext,
     interval_seconds: u64,
 ) {
     tokio::spawn(async move {
-        run_order_retention_purge_once(&menu_supply_policy, &committee_actor);
+        run_order_retention_purge_once(&state, &committee_actor);
         let mut interval = time::interval(std::time::Duration::from_secs(interval_seconds));
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
-            run_order_retention_purge_once(&menu_supply_policy, &committee_actor);
+            run_order_retention_purge_once(&state, &committee_actor);
         }
     });
 }
 
-fn run_order_retention_purge_once(
-    menu_supply_policy: &MenuSupplyPolicy,
-    committee_actor: &AuthenticatedActorContext,
-) {
+fn run_order_retention_purge_once(state: &AppState, committee_actor: &AuthenticatedActorContext) {
     let as_of = match AuditTimestamp::now_taipei() {
         Ok(value) => value,
         Err(error) => {
@@ -8389,14 +9011,23 @@ fn run_order_retention_purge_once(
             return;
         }
     };
-    match menu_supply_policy.purge_expired_orders(committee_actor, as_of) {
+    match mutate_menu_supply_policy(
+        state,
+        |policy| policy.purge_expired_orders(committee_actor, as_of),
+        map_order_retention_purge_error,
+        "ORDER_RETENTION_PURGE_INTERNAL_ERROR",
+    ) {
         Ok(report) => tracing::info!(
             purged_orders = report.purged_orders,
             as_of_epoch_day = as_of.epoch_day(),
             as_of_minute_of_day = as_of.minute_of_day(),
             "order retention purge job completed"
         ),
-        Err(error) => tracing::error!(error = %error, "order retention purge job failed"),
+        Err((_, error)) => tracing::error!(
+            error_code = error.code,
+            reason = %error.message,
+            "order retention purge job failed"
+        ),
     }
 }
 
@@ -8995,10 +9626,19 @@ fn handle_verify_order_pickup_for_actor(
         )
     })?;
 
-    state
-        .menu_supply_policy
-        .update_order(actor, &order_id, OrderMutation::MarkFulfilled, requested_at)
-        .map_err(|error| map_pickup_claim_update_error(&order_id, request_id, error))?;
+    mutate_menu_supply_policy(
+        state,
+        |menu_supply_policy| {
+            menu_supply_policy.update_order(
+                actor,
+                &order_id,
+                OrderMutation::MarkFulfilled,
+                requested_at,
+            )
+        },
+        |error| map_pickup_claim_update_error(&order_id, request_id, error),
+        "ORDER_POLICY_VIOLATION",
+    )?;
 
     emit_pickup_verification_audit_event(
         request_id,
@@ -9568,6 +10208,7 @@ mod tests {
             anomaly_alert_workflow: AnomalyAlertWorkflow::with_default_rules(audit_trail.clone()),
             compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
             compliance_persistence: CompliancePersistence::InMemoryOnly,
+            runtime_state_persistence: RuntimeStatePersistence::InMemoryOnly,
             delivery_policy: Arc::new(delivery_policy),
             menu_supply_policy,
             pickup_totp_verifier: Arc::new(
@@ -9723,6 +10364,7 @@ mod tests {
             ),
             compliance_lifecycle,
             CompliancePersistence::InMemoryOnly,
+            RuntimeStatePersistence::InMemoryOnly,
             true,
         )
         .expect("runtime bootstrap should seed baseline scenarios");
@@ -10219,6 +10861,7 @@ mod tests {
                 ),
             )),
             compliance_persistence: CompliancePersistence::InMemoryOnly,
+            runtime_state_persistence: RuntimeStatePersistence::InMemoryOnly,
             delivery_policy: Arc::new(VendorPlantDeliveryPolicy::with_audit_trail(
                 audit_trail.clone(),
             )),

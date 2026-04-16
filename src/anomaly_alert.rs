@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
+use serde::{Deserialize, Serialize};
+
 use crate::audit::{
     AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
     AuditIdentityLink, AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
@@ -20,7 +22,7 @@ const MAX_NOTE_LENGTH: usize = 280;
 const MAX_EVIDENCE_REF_LENGTH: usize = 280;
 const MAX_TICKET_REFERENCE_LENGTH: usize = 128;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct AnomalyRuleId(String);
 
 impl AnomalyRuleId {
@@ -50,7 +52,7 @@ impl fmt::Display for AnomalyRuleId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct AnomalyAlertId(String);
 
 impl AnomalyAlertId {
@@ -82,7 +84,7 @@ impl fmt::Display for AnomalyAlertId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum AnomalyRuleKind {
     ExpiryRisk,
     OnTimeDegradation,
@@ -117,7 +119,7 @@ impl fmt::Display for AnomalyRuleKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AnomalyThresholdComparator {
     LessThan,
     LessThanOrEqual,
@@ -155,7 +157,7 @@ impl AnomalyThresholdComparator {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AnomalyAlertSeverity {
     Warning,
     Critical,
@@ -178,7 +180,7 @@ impl AnomalyAlertSeverity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnomalyRule {
     rule_id: AnomalyRuleId,
     kind: AnomalyRuleKind,
@@ -500,7 +502,7 @@ impl AnomalySignalSnapshot {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AnomalyAlertStatus {
     Open,
     Acknowledged,
@@ -542,7 +544,7 @@ impl fmt::Display for AnomalyAlertStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AnomalySlaStatus {
     OnTrack,
     Breached,
@@ -565,7 +567,7 @@ impl AnomalySlaStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AnomalyAlertTransition {
     Acknowledge,
     StartRemediation,
@@ -603,7 +605,7 @@ impl AnomalyAlertTransition {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AnomalyAlertTraceEventType {
     Triggered,
     OwnerAssigned,
@@ -622,7 +624,7 @@ impl AnomalyAlertTraceEventType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AnomalyAlertTraceEvent {
     occurred_at: AuditTimestamp,
     actor_id: ActorId,
@@ -653,7 +655,7 @@ impl AnomalyAlertTraceEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnomalyAlertRecord {
     alert_id: AnomalyAlertId,
     vendor_id: VendorId,
@@ -807,12 +809,27 @@ pub struct AnomalyAlertWorkflow {
     audit_trail: ImmutableAuditTrail,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct AnomalyAlertState {
     next_alert_sequence: u64,
     rules: BTreeMap<AnomalyRuleId, AnomalyRule>,
     alerts: BTreeMap<AnomalyAlertId, AnomalyAlertRecord>,
     open_alert_index: BTreeMap<(VendorId, AnomalyRuleId), AnomalyAlertId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnomalyAlertWorkflowSnapshot {
+    next_alert_sequence: u64,
+    rules: BTreeMap<AnomalyRuleId, AnomalyRule>,
+    alerts: BTreeMap<AnomalyAlertId, AnomalyAlertRecord>,
+    open_alert_index: Vec<AnomalyOpenAlertIndexEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AnomalyOpenAlertIndexEntry {
+    vendor_id: VendorId,
+    rule_id: AnomalyRuleId,
+    alert_id: AnomalyAlertId,
 }
 
 impl AnomalyAlertWorkflow {
@@ -827,6 +844,47 @@ impl AnomalyAlertWorkflow {
                 rules,
                 alerts: BTreeMap::new(),
                 open_alert_index: BTreeMap::new(),
+            })),
+            audit_trail,
+        }
+    }
+
+    pub fn snapshot(&self) -> Result<AnomalyAlertWorkflowSnapshot, AnomalyAlertError> {
+        let state = lock_state(&self.state)?;
+        let open_alert_index = state
+            .open_alert_index
+            .iter()
+            .map(
+                |((vendor_id, rule_id), alert_id)| AnomalyOpenAlertIndexEntry {
+                    vendor_id: vendor_id.clone(),
+                    rule_id: rule_id.clone(),
+                    alert_id: alert_id.clone(),
+                },
+            )
+            .collect::<Vec<_>>();
+        Ok(AnomalyAlertWorkflowSnapshot {
+            next_alert_sequence: state.next_alert_sequence,
+            rules: state.rules.clone(),
+            alerts: state.alerts.clone(),
+            open_alert_index,
+        })
+    }
+
+    pub fn from_snapshot(
+        snapshot: AnomalyAlertWorkflowSnapshot,
+        audit_trail: ImmutableAuditTrail,
+    ) -> Self {
+        let open_alert_index = snapshot
+            .open_alert_index
+            .into_iter()
+            .map(|entry| ((entry.vendor_id, entry.rule_id), entry.alert_id))
+            .collect::<BTreeMap<_, _>>();
+        Self {
+            state: Arc::new(Mutex::new(AnomalyAlertState {
+                next_alert_sequence: snapshot.next_alert_sequence,
+                rules: snapshot.rules,
+                alerts: snapshot.alerts,
+                open_alert_index,
             })),
             audit_trail,
         }

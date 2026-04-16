@@ -67,7 +67,7 @@ impl AuditIdentityLink {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct AuditTimestamp {
     epoch_day: i32,
     minute_of_day: u16,

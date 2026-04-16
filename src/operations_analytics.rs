@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 pub const OPERATIONS_ANALYTICS_METRIC_SCHEMA_VERSION_V1: &str = "operations-v1";
 
 pub const METRIC_KEY_ANOMALY_TRIGGERED_TOTAL: &str = "anomaly_triggered_total";
@@ -78,6 +80,21 @@ pub struct OperationsAnalyticsWarehouse {
     by_vendor_plant_day: BTreeMap<(String, String, i32), MetricBucket>,
     recorded_payroll_settlement_batches: BTreeSet<String>,
     recorded_payroll_hr_sync_batches: BTreeSet<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperationsAnalyticsWarehouseSnapshot {
+    rows: Vec<OperationsAnalyticsWarehouseRowSnapshot>,
+    recorded_payroll_settlement_batches: BTreeSet<String>,
+    recorded_payroll_hr_sync_batches: BTreeSet<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperationsAnalyticsWarehouseRowSnapshot {
+    vendor_id: String,
+    plant_id: String,
+    epoch_day: i32,
+    metrics: BTreeMap<String, f64>,
 }
 
 impl OperationsAnalyticsWarehouse {
@@ -165,6 +182,51 @@ impl OperationsAnalyticsWarehouse {
         }
     }
 
+    pub fn snapshot(&self) -> OperationsAnalyticsWarehouseSnapshot {
+        let rows = self
+            .by_vendor_plant_day
+            .iter()
+            .map(|((vendor_id, plant_id, epoch_day), bucket)| {
+                let metrics = bucket
+                    .totals
+                    .iter()
+                    .map(|(key, value)| ((*key).to_owned(), *value))
+                    .collect::<BTreeMap<_, _>>();
+                OperationsAnalyticsWarehouseRowSnapshot {
+                    vendor_id: vendor_id.clone(),
+                    plant_id: plant_id.clone(),
+                    epoch_day: *epoch_day,
+                    metrics,
+                }
+            })
+            .collect::<Vec<_>>();
+        OperationsAnalyticsWarehouseSnapshot {
+            rows,
+            recorded_payroll_settlement_batches: self.recorded_payroll_settlement_batches.clone(),
+            recorded_payroll_hr_sync_batches: self.recorded_payroll_hr_sync_batches.clone(),
+        }
+    }
+
+    pub fn from_snapshot(snapshot: OperationsAnalyticsWarehouseSnapshot) -> Result<Self, String> {
+        let mut by_vendor_plant_day = BTreeMap::new();
+        for row in snapshot.rows {
+            let mut totals = BTreeMap::new();
+            for (key, value) in row.metrics {
+                let metric_key = metric_key_from_owned(key.as_str())?;
+                totals.insert(metric_key, value);
+            }
+            by_vendor_plant_day.insert(
+                (row.vendor_id, row.plant_id, row.epoch_day),
+                MetricBucket { totals },
+            );
+        }
+        Ok(Self {
+            by_vendor_plant_day,
+            recorded_payroll_settlement_batches: snapshot.recorded_payroll_settlement_batches,
+            recorded_payroll_hr_sync_batches: snapshot.recorded_payroll_hr_sync_batches,
+        })
+    }
+
     pub fn query(
         &self,
         query: OperationsAnalyticsQuery<'_>,
@@ -248,6 +310,24 @@ impl OperationsAnalyticsWarehouse {
             .entry((vendor_id.to_owned(), plant_id.to_owned(), epoch_day))
             .or_default()
             .add_metric(metric_key, delta);
+    }
+}
+
+fn metric_key_from_owned(value: &str) -> Result<&'static str, String> {
+    match value {
+        METRIC_KEY_ANOMALY_TRIGGERED_TOTAL => Ok(METRIC_KEY_ANOMALY_TRIGGERED_TOTAL),
+        METRIC_KEY_ANOMALY_CLOSED_TOTAL => Ok(METRIC_KEY_ANOMALY_CLOSED_TOTAL),
+        METRIC_KEY_PAYROLL_SETTLEMENT_RECORDS_TOTAL => {
+            Ok(METRIC_KEY_PAYROLL_SETTLEMENT_RECORDS_TOTAL)
+        }
+        METRIC_KEY_PAYROLL_DISPUTED_RECORDS_TOTAL => Ok(METRIC_KEY_PAYROLL_DISPUTED_RECORDS_TOTAL),
+        METRIC_KEY_PAYROLL_DEDUCTION_FAILED_RECORDS_TOTAL => {
+            Ok(METRIC_KEY_PAYROLL_DEDUCTION_FAILED_RECORDS_TOTAL)
+        }
+        METRIC_KEY_PAYROLL_HR_SYNC_FAILED_TOTAL => Ok(METRIC_KEY_PAYROLL_HR_SYNC_FAILED_TOTAL),
+        _ => Err(format!(
+            "unsupported operations analytics metric key `{value}`"
+        )),
     }
 }
 

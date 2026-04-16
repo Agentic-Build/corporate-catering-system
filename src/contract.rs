@@ -4839,6 +4839,8 @@ pub fn canonical_openapi_spec() -> Value {
               "PAYROLL_LEDGER_INTERNAL_ERROR",
               "ANOMALY_ALERT_INTERNAL_ERROR",
               "ANALYTICS_WAREHOUSE_INTERNAL_ERROR",
+              "VENDOR_COMPLIANCE_INTERNAL_ERROR",
+              "VENDOR_COMPLIANCE_PERSISTENCE_ERROR",
               "INVALID_MCP_TOOL_NAME",
               "MCP_TOOL_NOT_FOUND",
               "INVALID_MCP_TOOL_ARGUMENTS",
