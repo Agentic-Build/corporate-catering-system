@@ -39,7 +39,7 @@ Database schema is managed only via `sqlx migrate` migrations under `migrations/
 - Global PK standard: `UUID` (`global_pk`) on every table primary key.
 - Monetary values: `BIGINT` minor units (`money_minor` domain), never float/double.
 - State enums: PostgreSQL `ENUM` types.
-- Append-only protections: trigger-enforced guards on `audit_event` and `payroll_ledger_entry`.
+- Append-only protections: trigger-enforced guards on `audit_event` and `payroll_ledger_entry` for `UPDATE`/`DELETE`/`TRUNCATE`.
 
 Canonical commands:
 

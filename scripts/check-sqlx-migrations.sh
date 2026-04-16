@@ -336,6 +336,16 @@ BEGIN
                 RAISE;
             END IF;
     END;
+
+    BEGIN
+        EXECUTE 'TRUNCATE TABLE audit_event';
+        RAISE EXCEPTION 'append-only invariant failed: truncate unexpectedly succeeded';
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF SQLSTATE <> '55000' THEN
+                RAISE;
+            END IF;
+    END;
 END $$;
 
 DO $$
@@ -356,6 +366,16 @@ BEGIN
         DELETE FROM payroll_ledger_entry
         WHERE order_id = (SELECT id FROM employee_order WHERE order_external_id = 'order-payroll-check');
         RAISE EXCEPTION 'append-only invariant failed: payroll delete unexpectedly succeeded';
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF SQLSTATE <> '55000' THEN
+                RAISE;
+            END IF;
+    END;
+
+    BEGIN
+        EXECUTE 'TRUNCATE TABLE payroll_ledger_entry';
+        RAISE EXCEPTION 'append-only invariant failed: payroll truncate unexpectedly succeeded';
     EXCEPTION
         WHEN OTHERS THEN
             IF SQLSTATE <> '55000' THEN

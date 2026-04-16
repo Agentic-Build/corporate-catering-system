@@ -336,7 +336,17 @@ BEFORE UPDATE OR DELETE ON audit_event
 FOR EACH ROW
 EXECUTE FUNCTION enforce_append_only();
 
+CREATE TRIGGER audit_event_append_only_truncate_guard
+BEFORE TRUNCATE ON audit_event
+FOR EACH STATEMENT
+EXECUTE FUNCTION enforce_append_only();
+
 CREATE TRIGGER payroll_ledger_entry_append_only_guard
 BEFORE UPDATE OR DELETE ON payroll_ledger_entry
 FOR EACH ROW
+EXECUTE FUNCTION enforce_append_only();
+
+CREATE TRIGGER payroll_ledger_entry_append_only_truncate_guard
+BEFORE TRUNCATE ON payroll_ledger_entry
+FOR EACH STATEMENT
 EXECUTE FUNCTION enforce_append_only();

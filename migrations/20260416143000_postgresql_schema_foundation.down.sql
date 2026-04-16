@@ -1,5 +1,7 @@
 DROP TRIGGER IF EXISTS audit_event_append_only_guard ON audit_event;
+DROP TRIGGER IF EXISTS audit_event_append_only_truncate_guard ON audit_event;
 DROP TRIGGER IF EXISTS payroll_ledger_entry_append_only_guard ON payroll_ledger_entry;
+DROP TRIGGER IF EXISTS payroll_ledger_entry_append_only_truncate_guard ON payroll_ledger_entry;
 
 DROP TRIGGER IF EXISTS actor_account_append_audit_event ON actor_account;
 DROP TRIGGER IF EXISTS plant_append_audit_event ON plant;
