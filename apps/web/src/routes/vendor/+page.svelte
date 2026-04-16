@@ -1,19 +1,17 @@
 <script lang="ts">
+  import PortalSurface from "$lib/components/portal-surface.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 </script>
 
-<svelte:head>
-  <title>Vendor Portal</title>
-</svelte:head>
-
-<main>
-  <h1>Vendor Portal</h1>
-  <p>Authenticated actor: {data.actor?.displayName} ({data.actor?.id})</p>
-  <p>Role: {data.actor?.role}</p>
-  <p>Provider: {data.provider}</p>
-  <p>Refresh after: {data.refreshAfterEpochMs}</p>
-  <p>Expires at: {data.expiresAtEpochMs}</p>
-  <p><a href="/auth/mock?logout=1&next=/">Sign out</a></p>
-</main>
+{#if data.actor}
+  <PortalSurface
+    role="vendor"
+    sectionId={data.sectionId}
+    actorDisplayName={data.actor.displayName}
+    actorId={data.actor.id}
+    provider={data.auth.provider}
+    experienceMode={data.experienceMode}
+  />
+{/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import PortalSurface from "$lib/components/portal-surface.svelte";
+
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
