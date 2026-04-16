@@ -2007,6 +2007,8 @@ pub fn canonical_openapi_spec() -> Value {
               "ASSIGN_PAYROLL_DISPUTE_OWNER",
               "RESOLVE_PAYROLL_DISPUTE",
               "EXPORT_PAYROLL_SFTP_BATCH",
+              "LOCK_PAYROLL_SETTLEMENT_CYCLE",
+              "UNLOCK_PAYROLL_SETTLEMENT_CYCLE",
               "SYNC_PAYROLL_HR_API_ADJUNCT",
               "PURGE_PAYROLL_DATA",
               "PURGE_ORDER_DATA"
@@ -3691,19 +3693,31 @@ pub fn canonical_openapi_spec() -> Value {
           "PayrollDeductionRecord": {
             "type": "object",
             "required": [
-              "employeeActorId",
-              "orderId",
+              "employeeActorCiphertext",
+              "orderIdCiphertext",
               "deliveryDate",
-              "amount",
+              "amountCiphertext",
               "payPeriod",
               "status",
               "sourceEntryIds"
             ],
             "properties": {
-              "employeeActorId": { "$ref": "#/components/schemas/ActorId" },
-              "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
+              "employeeActorCiphertext": {
+                "type": "string",
+                "minLength": 1,
+                "description": "AES-GCM encrypted employee actor identifier envelope (`v1:nonce:ciphertext`) for payroll privacy controls."
+              },
+              "orderIdCiphertext": {
+                "type": "string",
+                "minLength": 1,
+                "description": "AES-GCM encrypted order identifier envelope (`v1:nonce:ciphertext`) for payroll privacy controls."
+              },
               "deliveryDate": { "type": "string", "format": "date" },
-              "amount": { "$ref": "#/components/schemas/Money" },
+              "amountCiphertext": {
+                "type": "string",
+                "minLength": 1,
+                "description": "AES-GCM encrypted serialized money payload envelope (`v1:nonce:ciphertext`)."
+              },
               "payPeriod": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$" },
               "status": { "$ref": "#/components/schemas/PayrollDeductionStatus" },
               "disputeStatus": { "$ref": "#/components/schemas/PayrollDisputeStatus" },

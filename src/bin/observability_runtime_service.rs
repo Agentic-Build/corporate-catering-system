@@ -6,10 +6,13 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::{Aes256Gcm, Nonce};
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{header::AUTHORIZATION, HeaderMap, StatusCode};
 use axum::routing::{get, patch, post};
 use axum::{Json, Router};
+use base64::prelude::{Engine as _, BASE64_STANDARD};
 use corporate_catering_system::audit::{
     AuditAction, AuditCorrelationId, AuditEntityType, AuditInvestigationFilter,
     AuditRetentionPolicy, AuditSnapshotEncryptionKey, AuditTimestamp, AuditTrailError,
@@ -54,6 +57,7 @@ use corporate_catering_system::vendor_delivery_mapping::{
     VendorPlantDeliveryMapping, VendorPlantDeliveryPolicy,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tokio::time::{self, MissedTickBehavior};
 
 const DEFAULT_VENDOR_ID: &str = "ven-load-gate-a";
@@ -75,6 +79,11 @@ const LOAD_GATE_PAYROLL_ACTOR_ID: &str = "payroll-load-gate";
 const LOAD_GATE_PAYROLL_DISPUTE_OWNER_ACTOR_ID: &str = "payroll-dispute-owner";
 const PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV: &str = "PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS";
 const PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV: &str = "PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_HEX";
+const PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_ENV: &str =
+    "PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_HEX";
+const AUTHORIZATION_BEARER_PREFIX: &str = "Bearer ";
+const PAYROLL_FIELD_ENVELOPE_VERSION: &str = "v1";
+const PAYROLL_FIELD_NONCE_BYTES: usize = 12;
 
 const ALL_AUDIT_ACTIONS: [AuditAction; 30] = [
     AuditAction::CreateEmployeeOrder,
@@ -131,11 +140,86 @@ struct AppState {
     plant_id: PlantId,
     terminated_employee_actor_ids: Arc<HashSet<ActorId>>,
     audit_trail: ImmutableAuditTrail,
+    payroll_export_field_encryptor: PayrollExportFieldEncryptor,
     payroll_ledger_service: PayrollLedgerService,
     compliance_lifecycle: Arc<VendorComplianceLifecycle>,
     delivery_policy: Arc<VendorPlantDeliveryPolicy>,
     menu_supply_policy: MenuSupplyPolicy,
     pickup_totp_verifier: Arc<PickupTotpVerifier>,
+}
+
+#[derive(Debug, Clone)]
+struct PayrollExportFieldEncryptor([u8; 32]);
+
+impl PayrollExportFieldEncryptor {
+    fn parse_hex(value: impl AsRef<str>) -> Result<Self, String> {
+        let raw = value.as_ref().trim();
+        if raw.len() != 64 {
+            return Err("encryption key must be exactly 64 hex characters".to_owned());
+        }
+        if !raw.chars().all(|character| character.is_ascii_hexdigit()) {
+            return Err("encryption key must be hexadecimal".to_owned());
+        }
+        let mut bytes = [0u8; 32];
+        for index in 0..32 {
+            let hex_slice = &raw[index * 2..index * 2 + 2];
+            bytes[index] = u8::from_str_radix(hex_slice, 16)
+                .map_err(|error| format!("failed to decode key byte {index}: {error}"))?;
+        }
+        Ok(Self(bytes))
+    }
+
+    fn encrypt_field(&self, context: &str, plaintext: &str) -> Result<String, String> {
+        let nonce = self.derive_nonce(context);
+        let cipher = Aes256Gcm::new_from_slice(&self.0)
+            .map_err(|error| format!("failed to initialize cipher: {error}"))?;
+        let ciphertext = cipher
+            .encrypt(Nonce::from_slice(&nonce), plaintext.as_bytes())
+            .map_err(|error| error.to_string())?;
+        Ok(format!(
+            "{PAYROLL_FIELD_ENVELOPE_VERSION}:{}:{}",
+            BASE64_STANDARD.encode(nonce),
+            BASE64_STANDARD.encode(ciphertext)
+        ))
+    }
+
+    #[cfg(test)]
+    fn decrypt_field(&self, envelope: &str) -> Result<String, String> {
+        let mut parts = envelope.splitn(3, ':');
+        let version = parts.next().ok_or("missing envelope version")?;
+        if version != PAYROLL_FIELD_ENVELOPE_VERSION {
+            return Err(format!("unsupported envelope version `{version}`"));
+        }
+        let nonce_b64 = parts.next().ok_or("missing envelope nonce")?;
+        let ciphertext_b64 = parts.next().ok_or("missing envelope ciphertext")?;
+        let nonce = BASE64_STANDARD
+            .decode(nonce_b64.as_bytes())
+            .map_err(|error| error.to_string())?;
+        if nonce.len() != PAYROLL_FIELD_NONCE_BYTES {
+            return Err(format!(
+                "envelope nonce must be {PAYROLL_FIELD_NONCE_BYTES} bytes"
+            ));
+        }
+        let ciphertext = BASE64_STANDARD
+            .decode(ciphertext_b64.as_bytes())
+            .map_err(|error| error.to_string())?;
+        let cipher = Aes256Gcm::new_from_slice(&self.0)
+            .map_err(|error| format!("failed to initialize cipher: {error}"))?;
+        let plaintext = cipher
+            .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
+            .map_err(|error| error.to_string())?;
+        String::from_utf8(plaintext).map_err(|error| error.to_string())
+    }
+
+    fn derive_nonce(&self, context: &str) -> [u8; PAYROLL_FIELD_NONCE_BYTES] {
+        let mut digest = Sha256::new();
+        digest.update(self.0);
+        digest.update(context.as_bytes());
+        let digest = digest.finalize();
+        let mut nonce = [0u8; PAYROLL_FIELD_NONCE_BYTES];
+        nonce.copy_from_slice(&digest[..PAYROLL_FIELD_NONCE_BYTES]);
+        nonce
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -449,10 +533,10 @@ struct PayrollSettlementCycleLockRequest {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PayrollDeductionRecordPayload {
-    employee_actor_id: String,
-    order_id: String,
+    employee_actor_ciphertext: String,
+    order_id_ciphertext: String,
     delivery_date: String,
-    amount: MenuPricePayload,
+    amount_ciphertext: String,
     pay_period: String,
     status: String,
     dispute_status: Option<String>,
@@ -724,6 +808,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
             .unwrap_or_else(|_| DEFAULT_AUDIT_TRAIL_PATH.to_owned()),
     );
     let audit_trail_encryption_key = parse_audit_trail_encryption_key_from_env()?;
+    let payroll_export_field_encryptor = parse_payroll_export_encryption_key_from_env()?;
     let audit_trail = ImmutableAuditTrail::with_json_storage(
         audit_trail_path.clone(),
         audit_retention_policy,
@@ -774,6 +859,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         menu_variant_count,
         payroll_retention_policy,
         order_retention_policy,
+        payroll_export_field_encryptor,
         pickup_totp_verifier,
     )
     .map_err(|error| format!("failed to bootstrap runtime state: {error}"))?;
@@ -909,6 +995,15 @@ fn parse_audit_trail_encryption_key_from_env() -> Result<AuditSnapshotEncryption
         .map_err(|error| format!("{PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV} is invalid: {error}"))
 }
 
+fn parse_payroll_export_encryption_key_from_env() -> Result<PayrollExportFieldEncryptor, String> {
+    let raw = std::env::var(PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_ENV).map_err(|_| {
+        format!("{PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_ENV} must be set to a 64-char hex key")
+    })?;
+    PayrollExportFieldEncryptor::parse_hex(raw).map_err(|error| {
+        format!("{PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_ENV} is invalid: {error}")
+    })
+}
+
 fn parse_terminated_employee_actor_ids_from_env() -> Result<HashSet<ActorId>, String> {
     let raw = match std::env::var(PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV) {
         Ok(value) => value,
@@ -978,6 +1073,7 @@ fn bootstrap_runtime_state(
     menu_variant_count: u16,
     payroll_retention_policy: PayrollRetentionPolicy,
     order_retention_policy: OrderRetentionPolicy,
+    payroll_export_field_encryptor: PayrollExportFieldEncryptor,
     pickup_totp_verifier: Arc<PickupTotpVerifier>,
 ) -> Result<AppState, String> {
     let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| error.message)?;
@@ -1123,6 +1219,7 @@ fn bootstrap_runtime_state(
         plant_id,
         terminated_employee_actor_ids: Arc::new(terminated_employee_actor_ids),
         audit_trail,
+        payroll_export_field_encryptor,
         payroll_ledger_service,
         compliance_lifecycle: Arc::new(compliance_lifecycle),
         delivery_policy: Arc::new(delivery_policy),
@@ -2147,13 +2244,27 @@ fn handle_update_admin_payroll_dispute(
 
 async fn purge_payroll_data(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<PayrollRetentionPurgeRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry =
-        TelemetryService::HttpApi.begin_operation("purgePayrollData", Some("load-gate"), None);
+        TelemetryService::HttpApi.begin_operation("purgePayrollData", None::<&str>, None::<&str>);
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_purge_payroll_data(&state, request) {
+    let response = match handle_purge_payroll_data(&state, &committee_actor, request) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -2181,13 +2292,27 @@ async fn purge_payroll_data(
 
 async fn purge_order_data(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<OrderRetentionPurgeRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry =
-        TelemetryService::HttpApi.begin_operation("purgeOrderData", Some("load-gate"), None);
+        TelemetryService::HttpApi.begin_operation("purgeOrderData", None::<&str>, None::<&str>);
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_purge_order_data(&state, request) {
+    let response = match handle_purge_order_data(&state, &committee_actor, request) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -2215,9 +2340,9 @@ async fn purge_order_data(
 
 fn handle_purge_payroll_data(
     state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
     request: PayrollRetentionPurgeRequest,
 ) -> Result<PayrollRetentionPurgeResponse, (StatusCode, ErrorPayload)> {
-    let committee_actor = load_gate_committee_admin_actor()?;
     let as_of = match request.as_of_epoch_day {
         Some(epoch_day) => AuditTimestamp::from_epoch_day(epoch_day),
         None => AuditTimestamp::now_taipei().map_err(|error| {
@@ -2230,7 +2355,7 @@ fn handle_purge_payroll_data(
     };
     let report = state
         .payroll_ledger_service
-        .purge_expired_data(&committee_actor, as_of)
+        .purge_expired_data(committee_actor, as_of)
         .map_err(map_payroll_ledger_error)?;
 
     Ok(PayrollRetentionPurgeResponse {
@@ -2243,9 +2368,9 @@ fn handle_purge_payroll_data(
 
 fn handle_purge_order_data(
     state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
     request: OrderRetentionPurgeRequest,
 ) -> Result<OrderRetentionPurgeResponse, (StatusCode, ErrorPayload)> {
-    let committee_actor = load_gate_committee_admin_actor()?;
     let as_of = match request.as_of_epoch_day {
         Some(epoch_day) => AuditTimestamp::from_epoch_day(epoch_day),
         None => AuditTimestamp::now_taipei().map_err(|error| {
@@ -2258,7 +2383,7 @@ fn handle_purge_order_data(
     };
     let report = state
         .menu_supply_policy
-        .purge_expired_orders(&committee_actor, as_of)
+        .purge_expired_orders(committee_actor, as_of)
         .map_err(map_order_retention_purge_error)?;
 
     Ok(OrderRetentionPurgeResponse {
@@ -2348,7 +2473,7 @@ fn handle_export_payroll_deductions(
         )
         .map_err(map_payroll_ledger_error)?;
 
-    Ok(to_payroll_deduction_page_payload(&export_page))
+    to_payroll_deduction_page_payload(&export_page, &state.payroll_export_field_encryptor)
 }
 
 async fn close_payroll_monthly_settlement(
@@ -2422,22 +2547,41 @@ fn handle_close_payroll_monthly_settlement(
         )
         .map_err(map_payroll_ledger_error)?;
 
-    Ok(to_payroll_deduction_page_payload(&export_page))
+    to_payroll_deduction_page_payload(&export_page, &state.payroll_export_field_encryptor)
 }
 
 async fn unlock_payroll_settlement_cycle(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(cycle_key): Path<String>,
     request: Json<PayrollSettlementCycleLockRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "unlockPayrollSettlementCycle",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_unlock_payroll_settlement_cycle(&state, cycle_key, request.0) {
+    let response = match handle_unlock_payroll_settlement_cycle(
+        &state,
+        &committee_actor,
+        cycle_key,
+        request.0,
+    ) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -2466,15 +2610,15 @@ async fn unlock_payroll_settlement_cycle(
 
 fn handle_unlock_payroll_settlement_cycle(
     state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
     cycle_key: String,
     request: PayrollSettlementCycleLockRequest,
 ) -> Result<PayrollSettlementCycleLockResponse, (StatusCode, ErrorPayload)> {
-    let committee_actor = load_gate_committee_admin_actor()?;
     let occurred_at = current_audit_timestamp()?;
     let reason = parse_required_patch_note(request.reason, "reason")?;
     let receipt = state
         .payroll_ledger_service
-        .unlock_cycle_for_recompute(&committee_actor, &cycle_key, reason, occurred_at)
+        .unlock_cycle_for_recompute(committee_actor, &cycle_key, reason, occurred_at)
         .map_err(map_payroll_ledger_error)?;
 
     Ok(PayrollSettlementCycleLockResponse {
@@ -2484,17 +2628,36 @@ fn handle_unlock_payroll_settlement_cycle(
 
 async fn lock_payroll_settlement_cycle(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(cycle_key): Path<String>,
     request: Json<PayrollSettlementCycleLockRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "lockPayrollSettlementCycle",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_lock_payroll_settlement_cycle(&state, cycle_key, request.0) {
+    let response = match handle_lock_payroll_settlement_cycle(
+        &state,
+        &committee_actor,
+        cycle_key,
+        request.0,
+    ) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -2523,15 +2686,15 @@ async fn lock_payroll_settlement_cycle(
 
 fn handle_lock_payroll_settlement_cycle(
     state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
     cycle_key: String,
     request: PayrollSettlementCycleLockRequest,
 ) -> Result<PayrollSettlementCycleLockResponse, (StatusCode, ErrorPayload)> {
-    let committee_actor = load_gate_committee_admin_actor()?;
     let occurred_at = current_audit_timestamp()?;
     let reason = parse_required_patch_note(request.reason, "reason")?;
     let receipt = state
         .payroll_ledger_service
-        .lock_cycle(&committee_actor, &cycle_key, reason, occurred_at)
+        .lock_cycle(committee_actor, &cycle_key, reason, occurred_at)
         .map_err(map_payroll_ledger_error)?;
 
     Ok(PayrollSettlementCycleLockResponse {
@@ -2675,18 +2838,21 @@ fn to_payroll_dispute_trace_payload(
 
 fn to_payroll_deduction_page_payload(
     export_page: &PayrollExportPage,
-) -> PayrollDeductionPagePayload {
+    field_encryptor: &PayrollExportFieldEncryptor,
+) -> Result<PayrollDeductionPagePayload, (StatusCode, ErrorPayload)> {
     let total_pages = if export_page.total_items() == 0 {
         0
     } else {
         (export_page.total_items() - 1) / export_page.page_size() + 1
     };
-    PayrollDeductionPagePayload {
+    Ok(PayrollDeductionPagePayload {
         items: export_page
             .items()
             .iter()
-            .map(to_payroll_deduction_record_payload)
-            .collect::<Vec<_>>(),
+            .map(|record| {
+                to_payroll_deduction_record_payload(export_page.batch(), record, field_encryptor)
+            })
+            .collect::<Result<Vec<_>, _>>()?,
         page: PageMetaPayload {
             page: export_page.page(),
             page_size: export_page.page_size(),
@@ -2694,27 +2860,80 @@ fn to_payroll_deduction_page_payload(
             total_pages,
         },
         exchange_batch: to_payroll_exchange_batch_payload(export_page.batch()),
-    }
+    })
 }
 
 fn to_payroll_deduction_record_payload(
+    batch: &PayrollExchangeBatch,
     record: &PayrollDeductionRecord,
-) -> PayrollDeductionRecordPayload {
-    PayrollDeductionRecordPayload {
-        employee_actor_id: record.employee_actor_id().as_str().to_owned(),
-        order_id: record.order_id().as_str().to_owned(),
+    field_encryptor: &PayrollExportFieldEncryptor,
+) -> Result<PayrollDeductionRecordPayload, (StatusCode, ErrorPayload)> {
+    let sensitive_context_prefix = format!(
+        "payroll:{}:{}:{}",
+        batch.cycle_key(),
+        batch.snapshot_checksum(),
+        record.order_id().as_str()
+    );
+    let employee_actor_ciphertext = field_encryptor
+        .encrypt_field(
+            format!("{sensitive_context_prefix}:employeeActorId").as_str(),
+            record.employee_actor_id().as_str(),
+        )
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "PAYROLL_LEDGER_INTERNAL_ERROR",
+                format!("failed to encrypt payroll employee actor id: {error}"),
+            )
+        })?;
+    let order_id_ciphertext = field_encryptor
+        .encrypt_field(
+            format!("{sensitive_context_prefix}:orderId").as_str(),
+            record.order_id().as_str(),
+        )
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "PAYROLL_LEDGER_INTERNAL_ERROR",
+                format!("failed to encrypt payroll order id: {error}"),
+            )
+        })?;
+    let amount_plaintext = serde_json::to_string(&MenuPricePayload {
+        currency: record.amount().currency().to_owned(),
+        amount_minor: record.amount().amount_minor(),
+    })
+    .map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PAYROLL_LEDGER_INTERNAL_ERROR",
+            format!("failed to serialize payroll amount for encryption: {error}"),
+        )
+    })?;
+    let amount_ciphertext = field_encryptor
+        .encrypt_field(
+            format!("{sensitive_context_prefix}:amount").as_str(),
+            amount_plaintext.as_str(),
+        )
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "PAYROLL_LEDGER_INTERNAL_ERROR",
+                format!("failed to encrypt payroll amount: {error}"),
+            )
+        })?;
+
+    Ok(PayrollDeductionRecordPayload {
+        employee_actor_ciphertext,
+        order_id_ciphertext,
         delivery_date: epoch_day_to_iso_date(record.delivery_epoch_day()),
-        amount: MenuPricePayload {
-            currency: record.amount().currency().to_owned(),
-            amount_minor: record.amount().amount_minor(),
-        },
+        amount_ciphertext,
         pay_period: record.pay_period().to_owned(),
         status: record.status().as_str().to_owned(),
         dispute_status: record
             .dispute_status()
             .map(|status| status.as_str().to_owned()),
         source_entry_ids: record.source_entry_ids().to_vec(),
-    }
+    })
 }
 
 fn to_payroll_exchange_batch_payload(batch: &PayrollExchangeBatch) -> PayrollExchangeBatchPayload {
@@ -2938,6 +3157,89 @@ fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayl
             "PAYROLL_LEDGER_INTERNAL_ERROR",
             error.to_string(),
         ),
+    }
+}
+
+fn require_corporate_actor_for_role(
+    headers: &HeaderMap,
+    required_role: Role,
+) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+    let authorization = headers
+        .get(AUTHORIZATION)
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "authorization header is required".to_owned(),
+            )
+        })?
+        .to_str()
+        .map_err(|_| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "authorization header must be ASCII".to_owned(),
+            )
+        })?;
+    let token = authorization
+        .strip_prefix(AUTHORIZATION_BEARER_PREFIX)
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "authorization header must use Bearer token".to_owned(),
+            )
+        })?;
+    let (actor_id_raw, role_raw) = token.split_once('|').ok_or_else(|| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "bearer token must use `actorId|ROLE` format".to_owned(),
+        )
+    })?;
+    let role = parse_role_label(role_raw).ok_or_else(|| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("unsupported bearer role `{}`", role_raw.trim()),
+        )
+    })?;
+    if role != required_role {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!("operation requires role {required_role:?}, got {role:?}"),
+        ));
+    }
+    let actor_id = ActorId::parse(actor_id_raw.trim()).map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("bearer actor id is invalid: {error}"),
+        )
+    })?;
+    AuthenticatedActorContext::new(
+        actor_id,
+        role,
+        PlantScope::all(),
+        AuthenticationSource::CorporateSso,
+    )
+    .map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("bearer actor context is invalid: {error}"),
+        )
+    })
+}
+
+fn parse_role_label(value: &str) -> Option<Role> {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "EMPLOYEE" => Some(Role::Employee),
+        "VENDOR_OPERATOR" => Some(Role::VendorOperator),
+        "COMMITTEE_ADMIN" => Some(Role::CommitteeAdmin),
+        "PAYROLL_OPERATOR" => Some(Role::PayrollOperator),
+        _ => None,
     }
 }
 
@@ -3692,16 +3994,27 @@ fn run_order_retention_purge_once(
 
 async fn query_audit_investigations(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<AuditInvestigationQuery>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    let telemetry = TelemetryService::HttpApi.begin_operation(
-        "queryAuditInvestigations",
-        Some("load-gate"),
-        None,
-    );
+    let telemetry =
+        TelemetryService::HttpApi.begin_operation("queryAuditInvestigations", None::<&str>, None);
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let investigator = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_query_audit_investigations(&state, query) {
+    let response = match handle_query_audit_investigations(&state, &investigator, query) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -3729,13 +4042,13 @@ async fn query_audit_investigations(
 
 fn handle_query_audit_investigations(
     state: &AppState,
+    investigator: &AuthenticatedActorContext,
     query: AuditInvestigationQuery,
 ) -> Result<AuditInvestigationResponse, (StatusCode, ErrorPayload)> {
-    let investigator = load_gate_committee_admin_actor()?;
     let filter = build_audit_investigation_filter(query)?;
     let gateway = HttpAuditInvestigationExecutionGateway::new(state.audit_trail.clone());
     let evidences = gateway
-        .execute_investigation_query(&investigator, &filter)
+        .execute_investigation_query(investigator, &filter)
         .map_err(|error| map_audit_trail_error(error, "AUDIT_INVESTIGATION_INTERNAL_ERROR"))?;
     Ok(AuditInvestigationResponse {
         items: evidences
@@ -3747,16 +4060,27 @@ fn handle_query_audit_investigations(
 
 async fn query_audit_responsibilities(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<AuditInvestigationQuery>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    let telemetry = TelemetryService::HttpApi.begin_operation(
-        "queryAuditResponsibilities",
-        Some("load-gate"),
-        None,
-    );
+    let telemetry =
+        TelemetryService::HttpApi.begin_operation("queryAuditResponsibilities", None::<&str>, None);
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let investigator = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_query_audit_responsibilities(&state, query) {
+    let response = match handle_query_audit_responsibilities(&state, &investigator, query) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -3785,13 +4109,13 @@ async fn query_audit_responsibilities(
 
 fn handle_query_audit_responsibilities(
     state: &AppState,
+    investigator: &AuthenticatedActorContext,
     query: AuditInvestigationQuery,
 ) -> Result<AuditResponsibilityResponse, (StatusCode, ErrorPayload)> {
-    let investigator = load_gate_committee_admin_actor()?;
     let filter = build_audit_investigation_filter(query)?;
     let gateway = HttpAuditInvestigationExecutionGateway::new(state.audit_trail.clone());
     let attributions = gateway
-        .execute_responsibility_query(&investigator, &filter)
+        .execute_responsibility_query(investigator, &filter)
         .map_err(|error| map_audit_trail_error(error, "AUDIT_INVESTIGATION_INTERNAL_ERROR"))?;
     Ok(AuditResponsibilityResponse {
         items: attributions
@@ -3803,13 +4127,27 @@ fn handle_query_audit_responsibilities(
 
 async fn purge_audit_evidence(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<AuditRetentionPurgeRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry =
-        TelemetryService::HttpApi.begin_operation("purgeAuditEvidence", Some("load-gate"), None);
+        TelemetryService::HttpApi.begin_operation("purgeAuditEvidence", None::<&str>, None::<&str>);
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let investigator = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_purge_audit_evidence(&state, request) {
+    let response = match handle_purge_audit_evidence(&state, &investigator, request) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -3837,9 +4175,9 @@ async fn purge_audit_evidence(
 
 fn handle_purge_audit_evidence(
     state: &AppState,
+    investigator: &AuthenticatedActorContext,
     request: AuditRetentionPurgeRequest,
 ) -> Result<AuditRetentionPurgeResponse, (StatusCode, ErrorPayload)> {
-    let investigator = load_gate_committee_admin_actor()?;
     let as_of = match request.as_of_epoch_day {
         Some(epoch_day) => AuditTimestamp::from_epoch_day(epoch_day),
         None => AuditTimestamp::now_taipei().map_err(|error| {
@@ -3852,7 +4190,7 @@ fn handle_purge_audit_evidence(
     };
     let gateway = HttpAuditInvestigationExecutionGateway::new(state.audit_trail.clone());
     let report = gateway
-        .execute_retention_purge(&investigator, as_of)
+        .execute_retention_purge(investigator, as_of)
         .map_err(|error| map_audit_trail_error(error, "AUDIT_RETENTION_PURGE_INTERNAL_ERROR"))?;
     Ok(AuditRetentionPurgeResponse {
         purged_events: report.purged_events,
@@ -4446,6 +4784,25 @@ mod tests {
         .expect("employee actor should be valid")
     }
 
+    fn payroll_export_field_encryptor() -> PayrollExportFieldEncryptor {
+        PayrollExportFieldEncryptor::parse_hex(
+            "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+        )
+        .expect("test payroll export encryption key should parse")
+    }
+
+    fn bearer_headers(actor_id: &str, role: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AUTHORIZATION,
+            axum::http::HeaderValue::from_str(
+                format!("{AUTHORIZATION_BEARER_PREFIX}{actor_id}|{role}").as_str(),
+            )
+            .expect("authorization header should be valid"),
+        );
+        headers
+    }
+
     fn build_state(now_epoch_day: i32) -> AppState {
         std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
 
@@ -4632,6 +4989,7 @@ mod tests {
             plant_id: plant,
             terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail,
+            payroll_export_field_encryptor: payroll_export_field_encryptor(),
             payroll_ledger_service,
             compliance_lifecycle: Arc::new(compliance_lifecycle),
             delivery_policy: Arc::new(delivery_policy),
@@ -4648,6 +5006,24 @@ mod tests {
         state.terminated_employee_actor_ids =
             Arc::new(HashSet::from([actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID)]));
         state
+    }
+
+    #[test]
+    fn committee_admin_authorization_requires_bearer_actor_context() {
+        let missing = require_corporate_actor_for_role(&HeaderMap::new(), Role::CommitteeAdmin)
+            .expect_err("missing authorization header should fail");
+        assert_eq!(missing.0, StatusCode::UNAUTHORIZED);
+
+        let payroll_headers = bearer_headers("payroll-test", "PAYROLL_OPERATOR");
+        let forbidden = require_corporate_actor_for_role(&payroll_headers, Role::CommitteeAdmin)
+            .expect_err("non-committee role should be forbidden");
+        assert_eq!(forbidden.0, StatusCode::FORBIDDEN);
+
+        let committee_headers = bearer_headers("committee-test", "COMMITTEE_ADMIN");
+        let committee = require_corporate_actor_for_role(&committee_headers, Role::CommitteeAdmin)
+            .expect("committee actor header should authorize");
+        assert_eq!(committee.actor_id().as_str(), "committee-test");
+        assert_eq!(committee.role(), Role::CommitteeAdmin);
     }
 
     #[test]
@@ -4702,6 +5078,7 @@ mod tests {
             .expect("current time should resolve for test")
             .epoch_day();
         let state = build_state(now_epoch_day);
+        let committee = committee_admin();
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
             delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
@@ -4731,6 +5108,7 @@ mod tests {
 
         let purge_report = handle_purge_payroll_data(
             &state,
+            &committee,
             PayrollRetentionPurgeRequest {
                 as_of_epoch_day: Some(now_epoch_day.saturating_add(800)),
             },
@@ -4740,6 +5118,7 @@ mod tests {
 
         let investigations = handle_query_audit_investigations(
             &state,
+            &committee,
             AuditInvestigationQuery {
                 actor_id: None,
                 action: Some("PURGE_PAYROLL_DATA".to_owned()),
@@ -4761,6 +5140,7 @@ mod tests {
             .expect("current time should resolve for test")
             .epoch_day();
         let state = build_state(now_epoch_day);
+        let committee = committee_admin();
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
             delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
@@ -4778,6 +5158,7 @@ mod tests {
 
         let purge_report = handle_purge_order_data(
             &state,
+            &committee,
             OrderRetentionPurgeRequest {
                 as_of_epoch_day: Some(now_epoch_day.saturating_add(800)),
             },
@@ -4792,6 +5173,7 @@ mod tests {
 
         let investigations = handle_query_audit_investigations(
             &state,
+            &committee,
             AuditInvestigationQuery {
                 actor_id: None,
                 action: Some("PURGE_ORDER_DATA".to_owned()),
@@ -4816,6 +5198,7 @@ mod tests {
             plant_id: plant_id("fab-a"),
             terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail: audit_trail.clone(),
+            payroll_export_field_encryptor: payroll_export_field_encryptor(),
             payroll_ledger_service: PayrollLedgerService::new(
                 PayrollRetentionPolicy::default(),
                 audit_trail.clone(),
@@ -4862,6 +5245,7 @@ mod tests {
 
         let response = handle_query_audit_investigations(
             &state,
+            &committee,
             AuditInvestigationQuery {
                 actor_id: None,
                 action: None,
@@ -5358,9 +5742,90 @@ mod tests {
         let exported = export_page
             .items
             .iter()
-            .find(|item| item.order_id == created_order.order_id)
+            .find(|item| {
+                state
+                    .payroll_export_field_encryptor
+                    .decrypt_field(&item.order_id_ciphertext)
+                    .expect("encrypted order id should decrypt")
+                    == created_order.order_id
+            })
             .expect("created order should exist in exported deductions");
+        assert_ne!(
+            exported.order_id_ciphertext, created_order.order_id,
+            "order id must not be exposed in plaintext"
+        );
         assert_eq!(exported.status, "EMPLOYEE_TERMINATED");
+    }
+
+    #[test]
+    fn payroll_export_payload_encrypts_sensitive_record_fields() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order =
+            handle_create_employee_order(&state, create_request).expect("order should be created");
+        let pay_period = created_order.delivery_date[..7].to_owned();
+
+        let export_page = handle_export_payroll_deductions(
+            &state,
+            PayrollExportQuery {
+                pay_period: Some(pay_period),
+                cycle_key: Some("cycle-encryption-evidence-runtime".to_owned()),
+                page: Some(1),
+                page_size: Some(20),
+                sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
+                sort_order: Some(SortOrderQuery::Asc),
+            },
+        )
+        .expect("payroll deductions export should succeed");
+
+        let exported = export_page
+            .items
+            .first()
+            .expect("at least one payroll deduction record should exist");
+        assert!(
+            exported.employee_actor_ciphertext.contains(':'),
+            "employee actor must be envelope ciphertext"
+        );
+        assert!(
+            exported.order_id_ciphertext.contains(':'),
+            "order id must be envelope ciphertext"
+        );
+        assert!(
+            exported.amount_ciphertext.contains(':'),
+            "amount must be envelope ciphertext"
+        );
+
+        let decrypted_employee = state
+            .payroll_export_field_encryptor
+            .decrypt_field(&exported.employee_actor_ciphertext)
+            .expect("employee actor ciphertext should decrypt");
+        let decrypted_order_id = state
+            .payroll_export_field_encryptor
+            .decrypt_field(&exported.order_id_ciphertext)
+            .expect("order id ciphertext should decrypt");
+        let decrypted_amount = state
+            .payroll_export_field_encryptor
+            .decrypt_field(&exported.amount_ciphertext)
+            .expect("amount ciphertext should decrypt");
+        let decrypted_amount: serde_json::Value =
+            serde_json::from_str(&decrypted_amount).expect("amount payload should deserialize");
+
+        assert_eq!(decrypted_employee, LOAD_GATE_EMPLOYEE_ACTOR_ID);
+        assert_eq!(decrypted_order_id, created_order.order_id);
+        assert_eq!(decrypted_amount["currency"], "TWD");
+        assert_eq!(decrypted_amount["amountMinor"], 12000);
     }
 
     #[test]
@@ -5403,6 +5868,7 @@ mod tests {
             .expect("current time should resolve for test")
             .epoch_day();
         let state = build_state(now_epoch_day);
+        let committee = committee_admin();
 
         let closed = handle_close_payroll_monthly_settlement(
             &state,
@@ -5413,6 +5879,7 @@ mod tests {
 
         let unlock_error = handle_unlock_payroll_settlement_cycle(
             &state,
+            &committee,
             cycle_key.clone(),
             PayrollSettlementCycleLockRequest::default(),
         )
@@ -5421,6 +5888,7 @@ mod tests {
 
         let unlocked = handle_unlock_payroll_settlement_cycle(
             &state,
+            &committee,
             cycle_key.clone(),
             PayrollSettlementCycleLockRequest {
                 reason: Some("authorized recompute for corrected totals".to_owned()),
@@ -5431,6 +5899,7 @@ mod tests {
 
         let lock_error = handle_lock_payroll_settlement_cycle(
             &state,
+            &committee,
             cycle_key.clone(),
             PayrollSettlementCycleLockRequest::default(),
         )
@@ -5439,6 +5908,7 @@ mod tests {
 
         let locked = handle_lock_payroll_settlement_cycle(
             &state,
+            &committee,
             cycle_key,
             PayrollSettlementCycleLockRequest {
                 reason: Some("manual governance relock".to_owned()),

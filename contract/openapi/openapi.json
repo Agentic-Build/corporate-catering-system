@@ -618,6 +618,8 @@
           "ASSIGN_PAYROLL_DISPUTE_OWNER",
           "RESOLVE_PAYROLL_DISPUTE",
           "EXPORT_PAYROLL_SFTP_BATCH",
+          "LOCK_PAYROLL_SETTLEMENT_CYCLE",
+          "UNLOCK_PAYROLL_SETTLEMENT_CYCLE",
           "SYNC_PAYROLL_HR_API_ADJUNCT",
           "PURGE_PAYROLL_DATA",
           "PURGE_ORDER_DATA"
@@ -1504,8 +1506,10 @@
       "PayrollDeductionRecord": {
         "additionalProperties": false,
         "properties": {
-          "amount": {
-            "$ref": "#/components/schemas/Money"
+          "amountCiphertext": {
+            "description": "AES-GCM encrypted serialized money payload envelope (`v1:nonce:ciphertext`).",
+            "minLength": 1,
+            "type": "string"
           },
           "deliveryDate": {
             "format": "date",
@@ -1514,11 +1518,14 @@
           "disputeStatus": {
             "$ref": "#/components/schemas/PayrollDisputeStatus"
           },
-          "employeeActorId": {
-            "$ref": "#/components/schemas/ActorId"
+          "employeeActorCiphertext": {
+            "description": "AES-GCM encrypted employee actor identifier envelope (`v1:nonce:ciphertext`) for payroll privacy controls.",
+            "minLength": 1,
+            "type": "string"
           },
-          "orderId": {
-            "pattern": "^ord-[a-z0-9]{8,32}$",
+          "orderIdCiphertext": {
+            "description": "AES-GCM encrypted order identifier envelope (`v1:nonce:ciphertext`) for payroll privacy controls.",
+            "minLength": 1,
             "type": "string"
           },
           "payPeriod": {
@@ -1537,10 +1544,10 @@
           }
         },
         "required": [
-          "employeeActorId",
-          "orderId",
+          "employeeActorCiphertext",
+          "orderIdCiphertext",
           "deliveryDate",
-          "amount",
+          "amountCiphertext",
           "payPeriod",
           "status",
           "sourceEntryIds"
