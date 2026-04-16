@@ -1120,6 +1120,32 @@ fn anomaly_alert_workflow_contract_exposes_governance_endpoints_and_schemas() {
         evaluate_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
         "#/components/schemas/AnomalyAlertEvaluationRequest"
     );
+    let anomaly_evaluation_properties =
+        &spec["components"]["schemas"]["AnomalyAlertEvaluationRequest"]["properties"];
+    assert_eq!(
+        anomaly_evaluation_properties["daysUntilExpiry"]["minimum"].as_f64(),
+        Some(0.0)
+    );
+    assert_eq!(
+        anomaly_evaluation_properties["onTimeRate"]["minimum"].as_f64(),
+        Some(0.0)
+    );
+    assert_eq!(
+        anomaly_evaluation_properties["onTimeRate"]["maximum"].as_f64(),
+        Some(1.0)
+    );
+    assert_eq!(
+        anomaly_evaluation_properties["satisfactionScore"]["minimum"].as_f64(),
+        Some(0.0)
+    );
+    assert_eq!(
+        anomaly_evaluation_properties["satisfactionScore"]["maximum"].as_f64(),
+        Some(5.0)
+    );
+    assert_eq!(
+        anomaly_evaluation_properties["complaintCount"]["minimum"].as_f64(),
+        Some(0.0)
+    );
 
     let list_alerts_operation =
         operation_by_path_and_method(&spec, "/api/v1/admin/anomaly/alerts", "get");
@@ -1153,6 +1179,23 @@ fn anomaly_alert_workflow_contract_exposes_governance_endpoints_and_schemas() {
         update_alert_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
         "#/components/schemas/AdminAnomalyAlertPatchRequest"
     );
+    for schema_name in [
+        "AdminAnomalyAlertAssignOwnerPatchRequest",
+        "AdminAnomalyAlertAcknowledgePatchRequest",
+        "AdminAnomalyAlertStartRemediationPatchRequest",
+        "AdminAnomalyAlertEscalatePatchRequest",
+        "AdminAnomalyAlertClosePatchRequest",
+    ] {
+        let note_schema = &spec["components"]["schemas"][schema_name]["properties"]["note"];
+        assert_eq!(note_schema["minLength"].as_u64(), Some(1));
+        assert_eq!(note_schema["maxLength"].as_u64(), Some(280));
+        assert_eq!(note_schema["pattern"].as_str(), Some(r".*\S.*"));
+    }
+    let close_schema = &spec["components"]["schemas"]["AdminAnomalyAlertClosePatchRequest"]
+        ["properties"]["closureNote"];
+    assert_eq!(close_schema["minLength"].as_u64(), Some(1));
+    assert_eq!(close_schema["maxLength"].as_u64(), Some(280));
+    assert_eq!(close_schema["pattern"].as_str(), Some(r".*\S.*"));
 
     let anomaly_rule_kind_enum = spec["components"]["schemas"]["AnomalyRuleKind"]["enum"]
         .as_array()

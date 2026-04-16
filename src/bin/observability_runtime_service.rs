@@ -2334,7 +2334,7 @@ fn handle_update_admin_payroll_dispute(
             format!("disputeId path parameter is invalid: {error}"),
         )
     })?;
-    let occurred_at = current_anomaly_audit_timestamp()?;
+    let occurred_at = current_audit_timestamp()?;
 
     let dispute = match request.operation.as_str() {
         "ASSIGN_OWNER" => {
@@ -2625,10 +2625,21 @@ fn handle_evaluate_anomaly_alerts(
     committee_actor: &AuthenticatedActorContext,
     request: AnomalyAlertEvaluationRequest,
 ) -> Result<AnomalyAlertEvaluationResponse, (StatusCode, ErrorPayload)> {
-    if request.days_until_expiry.is_none()
-        && request.on_time_rate.is_none()
-        && request.satisfaction_score.is_none()
-        && request.complaint_count.is_none()
+    let AnomalyAlertEvaluationRequest {
+        vendor_id,
+        observed_at_epoch_day,
+        observed_at_minute_of_day,
+        days_until_expiry,
+        on_time_rate,
+        satisfaction_score,
+        complaint_count,
+        default_owner_actor_id,
+    } = request;
+
+    if days_until_expiry.is_none()
+        && on_time_rate.is_none()
+        && satisfaction_score.is_none()
+        && complaint_count.is_none()
     {
         return Err(domain_error(
             StatusCode::BAD_REQUEST,
@@ -2637,18 +2648,23 @@ fn handle_evaluate_anomaly_alerts(
         ));
     }
 
-    let vendor_id = VendorId::parse(request.vendor_id).map_err(|error| {
+    let days_until_expiry =
+        validate_anomaly_metric_minimum("daysUntilExpiry", days_until_expiry, 0.0)?;
+    let on_time_rate = validate_anomaly_metric_range("onTimeRate", on_time_rate, 0.0, 1.0)?;
+    let satisfaction_score =
+        validate_anomaly_metric_range("satisfactionScore", satisfaction_score, 0.0, 5.0)?;
+    let complaint_count = validate_anomaly_metric_minimum("complaintCount", complaint_count, 0.0)?;
+
+    let vendor_id = VendorId::parse(vendor_id).map_err(|error| {
         domain_error(
             StatusCode::BAD_REQUEST,
             "BAD_REQUEST",
             format!("vendorId is invalid: {error}"),
         )
     })?;
-    let observed_at = resolve_anomaly_observed_at_timestamp(
-        request.observed_at_epoch_day,
-        request.observed_at_minute_of_day,
-    )?;
-    let default_owner_actor_id = match request.default_owner_actor_id {
+    let observed_at =
+        resolve_anomaly_observed_at_timestamp(observed_at_epoch_day, observed_at_minute_of_day)?;
+    let default_owner_actor_id = match default_owner_actor_id {
         Some(value) => ActorId::parse(value).map_err(|error| {
             domain_error(
                 StatusCode::BAD_REQUEST,
@@ -2664,10 +2680,10 @@ fn handle_evaluate_anomaly_alerts(
         .evaluate_rules(
             committee_actor,
             AnomalySignalSnapshot::new(vendor_id, observed_at)
-                .with_days_until_expiry(request.days_until_expiry)
-                .with_on_time_rate(request.on_time_rate)
-                .with_satisfaction_score(request.satisfaction_score)
-                .with_complaint_count(request.complaint_count),
+                .with_days_until_expiry(days_until_expiry)
+                .with_on_time_rate(on_time_rate)
+                .with_satisfaction_score(satisfaction_score)
+                .with_complaint_count(complaint_count),
             &default_owner_actor_id,
         )
         .map_err(map_anomaly_alert_error)?;
@@ -2680,6 +2696,54 @@ fn handle_evaluate_anomaly_alerts(
             .map(|alert| to_anomaly_alert_payload(alert, as_of))
             .collect::<Vec<_>>(),
     })
+}
+
+fn validate_anomaly_metric_minimum(
+    field_name: &'static str,
+    value: Option<f64>,
+    minimum_inclusive: f64,
+) -> Result<Option<f64>, (StatusCode, ErrorPayload)> {
+    match value {
+        None => Ok(None),
+        Some(value) => {
+            if !value.is_finite() {
+                return Err(domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    format!("{field_name} must be a finite number"),
+                ));
+            }
+            if value < minimum_inclusive {
+                return Err(domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    format!("{field_name} must be greater than or equal to {minimum_inclusive}"),
+                ));
+            }
+            Ok(Some(value))
+        }
+    }
+}
+
+fn validate_anomaly_metric_range(
+    field_name: &'static str,
+    value: Option<f64>,
+    minimum_inclusive: f64,
+    maximum_inclusive: f64,
+) -> Result<Option<f64>, (StatusCode, ErrorPayload)> {
+    match validate_anomaly_metric_minimum(field_name, value, minimum_inclusive)? {
+        None => Ok(None),
+        Some(value) => {
+            if value > maximum_inclusive {
+                return Err(domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    format!("{field_name} must be less than or equal to {maximum_inclusive}"),
+                ));
+            }
+            Ok(Some(value))
+        }
+    }
 }
 
 async fn list_anomaly_alerts(
@@ -6755,6 +6819,94 @@ mod tests {
             assert!(
                 parse_contract_anomaly_rule_id(&candidate).is_err(),
                 "expected `{candidate}` to be rejected by contract rule id parser"
+            );
+        }
+    }
+
+    #[test]
+    fn anomaly_evaluation_rejects_out_of_contract_metric_ranges() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let committee = committee_admin();
+
+        let invalid_cases = vec![
+            (
+                AnomalyAlertEvaluationRequest {
+                    vendor_id: "ven-discoverytst-a1".to_owned(),
+                    observed_at_epoch_day: Some(now_epoch_day),
+                    observed_at_minute_of_day: Some(600),
+                    days_until_expiry: Some(-0.1),
+                    on_time_rate: None,
+                    satisfaction_score: None,
+                    complaint_count: None,
+                    default_owner_actor_id: None,
+                },
+                "daysUntilExpiry must be greater than or equal to 0",
+            ),
+            (
+                AnomalyAlertEvaluationRequest {
+                    vendor_id: "ven-discoverytst-a1".to_owned(),
+                    observed_at_epoch_day: Some(now_epoch_day),
+                    observed_at_minute_of_day: Some(600),
+                    days_until_expiry: None,
+                    on_time_rate: Some(1.1),
+                    satisfaction_score: None,
+                    complaint_count: None,
+                    default_owner_actor_id: None,
+                },
+                "onTimeRate must be less than or equal to 1",
+            ),
+            (
+                AnomalyAlertEvaluationRequest {
+                    vendor_id: "ven-discoverytst-a1".to_owned(),
+                    observed_at_epoch_day: Some(now_epoch_day),
+                    observed_at_minute_of_day: Some(600),
+                    days_until_expiry: None,
+                    on_time_rate: None,
+                    satisfaction_score: Some(5.1),
+                    complaint_count: None,
+                    default_owner_actor_id: None,
+                },
+                "satisfactionScore must be less than or equal to 5",
+            ),
+            (
+                AnomalyAlertEvaluationRequest {
+                    vendor_id: "ven-discoverytst-a1".to_owned(),
+                    observed_at_epoch_day: Some(now_epoch_day),
+                    observed_at_minute_of_day: Some(600),
+                    days_until_expiry: None,
+                    on_time_rate: None,
+                    satisfaction_score: None,
+                    complaint_count: Some(-1.0),
+                    default_owner_actor_id: None,
+                },
+                "complaintCount must be greater than or equal to 0",
+            ),
+            (
+                AnomalyAlertEvaluationRequest {
+                    vendor_id: "ven-discoverytst-a1".to_owned(),
+                    observed_at_epoch_day: Some(now_epoch_day),
+                    observed_at_minute_of_day: Some(600),
+                    days_until_expiry: None,
+                    on_time_rate: Some(f64::NAN),
+                    satisfaction_score: None,
+                    complaint_count: None,
+                    default_owner_actor_id: None,
+                },
+                "onTimeRate must be a finite number",
+            ),
+        ];
+
+        for (request, expected_message) in invalid_cases {
+            let error = handle_evaluate_anomaly_alerts(&state, &committee, request)
+                .expect_err("out-of-contract anomaly metrics should be rejected");
+            assert_eq!(error.0, StatusCode::BAD_REQUEST);
+            assert!(
+                error.1.message.contains(expected_message),
+                "expected error message to contain `{expected_message}`, got `{}`",
+                error.1.message
             );
         }
     }

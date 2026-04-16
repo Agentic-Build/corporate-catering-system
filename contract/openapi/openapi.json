@@ -563,6 +563,8 @@
         "properties": {
           "note": {
             "maxLength": 280,
+            "minLength": 1,
+            "pattern": ".*\\S.*",
             "type": "string"
           },
           "operation": {
@@ -582,6 +584,8 @@
         "properties": {
           "note": {
             "maxLength": 280,
+            "minLength": 1,
+            "pattern": ".*\\S.*",
             "type": "string"
           },
           "operation": {
@@ -615,10 +619,13 @@
           "closureNote": {
             "maxLength": 280,
             "minLength": 1,
+            "pattern": ".*\\S.*",
             "type": "string"
           },
           "note": {
             "maxLength": 280,
+            "minLength": 1,
+            "pattern": ".*\\S.*",
             "type": "string"
           },
           "operation": {
@@ -644,6 +651,8 @@
         "properties": {
           "note": {
             "maxLength": 280,
+            "minLength": 1,
+            "pattern": ".*\\S.*",
             "type": "string"
           },
           "operation": {
@@ -683,6 +692,8 @@
         "properties": {
           "note": {
             "maxLength": 280,
+            "minLength": 1,
+            "pattern": ".*\\S.*",
             "type": "string"
           },
           "operation": {
@@ -818,6 +829,8 @@
           },
           "closureNote": {
             "maxLength": 280,
+            "minLength": 1,
+            "pattern": ".*\\S.*",
             "type": "string"
           },
           "escalatedAt": {
@@ -1013,6 +1026,8 @@
           },
           "note": {
             "maxLength": 280,
+            "minLength": 1,
+            "pattern": ".*\\S.*",
             "type": "string"
           },
           "occurredAt": {

@@ -3701,7 +3701,12 @@ pub fn canonical_openapi_spec() -> Value {
               "actorId": { "$ref": "#/components/schemas/ActorId" },
               "eventType": { "$ref": "#/components/schemas/AnomalyAlertTraceEventType" },
               "status": { "$ref": "#/components/schemas/AnomalyAlertStatus" },
-              "note": { "type": "string", "maxLength": 280 }
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 280,
+                "pattern": ".*\\S.*"
+              }
             },
             "additionalProperties": false
           },
@@ -3748,7 +3753,12 @@ pub fn canonical_openapi_spec() -> Value {
               "slaStatus": { "$ref": "#/components/schemas/AnomalySlaStatus" },
               "escalatedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
               "closedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
-              "closureNote": { "type": "string", "maxLength": 280 },
+              "closureNote": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 280,
+                "pattern": ".*\\S.*"
+              },
               "closureEvidenceRefs": {
                 "type": "array",
                 "items": { "type": "string", "minLength": 1, "maxLength": 280 }
@@ -3790,7 +3800,12 @@ pub fn canonical_openapi_spec() -> Value {
             "properties": {
               "operation": { "type": "string", "enum": ["ASSIGN_OWNER"] },
               "ownerActorId": { "$ref": "#/components/schemas/ActorId" },
-              "note": { "type": "string", "maxLength": 280 }
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 280,
+                "pattern": ".*\\S.*"
+              }
             },
             "additionalProperties": false
           },
@@ -3799,7 +3814,12 @@ pub fn canonical_openapi_spec() -> Value {
             "required": ["operation"],
             "properties": {
               "operation": { "type": "string", "enum": ["ACKNOWLEDGE"] },
-              "note": { "type": "string", "maxLength": 280 }
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 280,
+                "pattern": ".*\\S.*"
+              }
             },
             "additionalProperties": false
           },
@@ -3808,7 +3828,12 @@ pub fn canonical_openapi_spec() -> Value {
             "required": ["operation"],
             "properties": {
               "operation": { "type": "string", "enum": ["START_REMEDIATION"] },
-              "note": { "type": "string", "maxLength": 280 }
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 280,
+                "pattern": ".*\\S.*"
+              }
             },
             "additionalProperties": false
           },
@@ -3817,7 +3842,12 @@ pub fn canonical_openapi_spec() -> Value {
             "required": ["operation"],
             "properties": {
               "operation": { "type": "string", "enum": ["ESCALATE"] },
-              "note": { "type": "string", "maxLength": 280 }
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 280,
+                "pattern": ".*\\S.*"
+              }
             },
             "additionalProperties": false
           },
@@ -3826,8 +3856,18 @@ pub fn canonical_openapi_spec() -> Value {
             "required": ["operation", "closureNote", "closureEvidenceRefs"],
             "properties": {
               "operation": { "type": "string", "enum": ["CLOSE"] },
-              "note": { "type": "string", "maxLength": 280 },
-              "closureNote": { "type": "string", "minLength": 1, "maxLength": 280 },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 280,
+                "pattern": ".*\\S.*"
+              },
+              "closureNote": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 280,
+                "pattern": ".*\\S.*"
+              },
               "closureEvidenceRefs": {
                 "type": "array",
                 "items": { "type": "string", "minLength": 1, "maxLength": 280 },

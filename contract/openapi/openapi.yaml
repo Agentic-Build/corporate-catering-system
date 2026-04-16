@@ -422,6 +422,8 @@ components:
       properties:
         note:
           maxLength: 280
+          minLength: 1
+          pattern: .*\S.*
           type: string
         operation:
           enum:
@@ -435,6 +437,8 @@ components:
       properties:
         note:
           maxLength: 280
+          minLength: 1
+          pattern: .*\S.*
           type: string
         operation:
           enum:
@@ -459,9 +463,12 @@ components:
         closureNote:
           maxLength: 280
           minLength: 1
+          pattern: .*\S.*
           type: string
         note:
           maxLength: 280
+          minLength: 1
+          pattern: .*\S.*
           type: string
         operation:
           enum:
@@ -480,6 +487,8 @@ components:
       properties:
         note:
           maxLength: 280
+          minLength: 1
+          pattern: .*\S.*
           type: string
         operation:
           enum:
@@ -501,6 +510,8 @@ components:
       properties:
         note:
           maxLength: 280
+          minLength: 1
+          pattern: .*\S.*
           type: string
         operation:
           enum:
@@ -593,6 +604,8 @@ components:
           type: array
         closureNote:
           maxLength: 280
+          minLength: 1
+          pattern: .*\S.*
           type: string
         escalatedAt:
           $ref: '#/components/schemas/TaipeiBusinessDateTime'
@@ -737,6 +750,8 @@ components:
           $ref: '#/components/schemas/AnomalyAlertTraceEventType'
         note:
           maxLength: 280
+          minLength: 1
+          pattern: .*\S.*
           type: string
         occurredAt:
           $ref: '#/components/schemas/TaipeiBusinessDateTime'
