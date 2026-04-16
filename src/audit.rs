@@ -968,6 +968,7 @@ enum PersistedRole {
 enum PersistedAuthenticationSource {
     CorporateSso,
     VendorAccountMfa,
+    OAuthServiceAccount,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -1293,6 +1294,9 @@ fn persisted_authentication_source_from_domain(
     match source {
         AuthenticationSource::CorporateSso => PersistedAuthenticationSource::CorporateSso,
         AuthenticationSource::VendorAccountMfa => PersistedAuthenticationSource::VendorAccountMfa,
+        AuthenticationSource::OAuthServiceAccount => {
+            PersistedAuthenticationSource::OAuthServiceAccount
+        }
     }
 }
 
@@ -1302,6 +1306,9 @@ fn domain_authentication_source_from_persisted(
     match source {
         PersistedAuthenticationSource::CorporateSso => AuthenticationSource::CorporateSso,
         PersistedAuthenticationSource::VendorAccountMfa => AuthenticationSource::VendorAccountMfa,
+        PersistedAuthenticationSource::OAuthServiceAccount => {
+            AuthenticationSource::OAuthServiceAccount
+        }
     }
 }
 

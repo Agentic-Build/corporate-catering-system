@@ -2228,7 +2228,8 @@ pub fn canonical_openapi_spec() -> Value {
             "type": "string",
             "enum": [
               "CORPORATE_SSO",
-              "VENDOR_ACCOUNT_MFA"
+              "VENDOR_ACCOUNT_MFA",
+              "OAUTH_SERVICE_ACCOUNT"
             ]
           },
           "AuditAction": {

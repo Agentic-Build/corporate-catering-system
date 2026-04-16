@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use aes_gcm::aead::{Aead, KeyInit};
@@ -13,6 +13,7 @@ use axum::http::{header::AUTHORIZATION, HeaderMap, StatusCode};
 use axum::routing::{get, patch, post, put};
 use axum::{Json, Router};
 use base64::prelude::{Engine as _, BASE64_STANDARD};
+use corporate_catering_system::access::AccessController;
 use corporate_catering_system::anomaly_alert::{
     AnomalyAlertError, AnomalyAlertId, AnomalyAlertRecord, AnomalyAlertSeverity,
     AnomalyAlertStatus, AnomalyAlertTraceEvent, AnomalyAlertTransition, AnomalyAlertWorkflow,
@@ -20,9 +21,9 @@ use corporate_catering_system::anomaly_alert::{
     AnomalyThresholdComparator,
 };
 use corporate_catering_system::audit::{
-    AuditAction, AuditCorrelationId, AuditEntityType, AuditInvestigationFilter,
-    AuditRetentionPolicy, AuditSnapshotEncryptionKey, AuditTimestamp, AuditTrailError,
-    ImmutableAuditEvidence, ImmutableAuditTrail, ResponsibilityAttribution,
+    AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
+    AuditInvestigationFilter, AuditRetentionPolicy, AuditSnapshotEncryptionKey, AuditTimestamp,
+    AuditTrailError, ImmutableAuditEvidence, ImmutableAuditTrail, ResponsibilityAttribution,
 };
 use corporate_catering_system::health::{evaluate_probe, HealthProbeKind, HealthState};
 use corporate_catering_system::identity::{
@@ -53,10 +54,22 @@ use corporate_catering_system::transport::http::{
     HttpAuditInvestigationExecutionGateway, HttpEmployeeDiscoveryExecutionGateway,
     HttpOrderExecutionError, HttpOrderingExecutionGateway, HttpVendorMenuExecutionGateway,
 };
+use corporate_catering_system::transport::mcp::{
+    runtime_mcp_resources, runtime_mcp_tools, AuthorizedMcpToolWrite, McpAuthenticationModel,
+    McpAuthorizationError, McpAuthorizationGateway, McpServiceAccountGrant, McpShortLivedKeyBridge,
+    MCP_TOOL_ANOMALY_EVALUATE_ALERTS, MCP_TOOL_ANOMALY_LIST_ALERTS,
+    MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS, MCP_TOOL_ANOMALY_UPSERT_RULE,
+    MCP_TOOL_COMPLIANCE_REVIEW_VENDOR_APPLICATION, MCP_TOOL_COMPLIANCE_RUN_VENDOR_LIFECYCLE,
+    MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER, MCP_TOOL_ORDERING_LIST_MENU_DISCOVERY,
+    MCP_TOOL_ORDERING_UPDATE_EMPLOYEE_ORDER, MCP_TOOL_SETTLEMENT_CLOSE_MONTHLY_SETTLEMENT,
+    MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS, MCP_TOOL_SETTLEMENT_LOCK_CYCLE,
+    MCP_TOOL_SETTLEMENT_QUERY_ORDER_LEDGER, MCP_TOOL_SETTLEMENT_UNLOCK_CYCLE,
+    MCP_TOOL_VERIFICATION_VERIFY_PICKUP_TOTP,
+};
 use corporate_catering_system::vendor_compliance::{
     ComplianceDate, ComplianceDocumentTemplate, DocumentTemplateId, HistoryRetentionPolicy,
-    VendorCategory, VendorComplianceLifecycle, VendorDocumentSubmission, VendorId,
-    VendorReviewDecision,
+    VendorCategory, VendorComplianceError, VendorComplianceLifecycle, VendorComplianceStatus,
+    VendorDocumentSubmission, VendorId, VendorReviewDecision,
 };
 use corporate_catering_system::vendor_delivery_mapping::{
     DeliveryMappingId, DeliveryRuleEffect, ServiceWindow, TaipeiBusinessMoment,
@@ -89,6 +102,13 @@ const PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV: &str = "PRELAUNCH_AUDIT_TRAIL_EN
 const PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_ENV: &str =
     "PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_HEX";
 const AUTHORIZATION_BEARER_PREFIX: &str = "Bearer ";
+const MCP_OAUTH_SERVICE_ACCOUNT_TOKEN_PREFIX: &str = "mcp-oauth-sa:";
+const MCP_BRIDGE_KEY_ID_HEADER: &str = "x-mcp-bridge-key-id";
+const MCP_BRIDGE_ISSUED_AT_HEADER: &str = "x-mcp-bridge-issued-at";
+const MCP_BRIDGE_EXPIRES_AT_HEADER: &str = "x-mcp-bridge-expires-at";
+const MCP_BRIDGE_ROTATED_AT_HEADER: &str = "x-mcp-bridge-rotated-at";
+const MCP_BRIDGE_AUDIT_REASON_HEADER: &str = "x-mcp-bridge-audit-reason";
+const MAX_AUDIT_REASON_CHARS: usize = 280;
 const PAYROLL_FIELD_ENVELOPE_VERSION: &str = "v1";
 const PAYROLL_FIELD_NONCE_BYTES: usize = 12;
 
@@ -157,7 +177,7 @@ struct AppState {
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
     payroll_ledger_service: PayrollLedgerService,
     anomaly_alert_workflow: AnomalyAlertWorkflow,
-    compliance_lifecycle: Arc<VendorComplianceLifecycle>,
+    compliance_lifecycle: Arc<RwLock<VendorComplianceLifecycle>>,
     delivery_policy: Arc<VendorPlantDeliveryPolicy>,
     menu_supply_policy: MenuSupplyPolicy,
     pickup_totp_verifier: Arc<PickupTotpVerifier>,
@@ -466,6 +486,35 @@ struct PayrollDisputeTracePayload {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct EmployeePayrollDisputeCreateRequest {
     reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VendorApplicationReviewRequest {
+    decision: String,
+    comment: String,
+    decided_on_epoch_day: i32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorApplicationReviewResponse {
+    vendor_id: String,
+    status: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VendorLifecycleRunRequest {
+    run_on_epoch_day: i32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorLifecycleRunResponse {
+    reminder_count: usize,
+    suspension_count: usize,
+    reinstatement_count: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -913,6 +962,117 @@ impl ErrorPayload {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct McpServiceAccountTokenClaims {
+    service_account_id: String,
+    role: String,
+    all_plants: bool,
+    #[serde(default)]
+    plant_ids: Vec<String>,
+    allowed_tools: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct McpToolInvocationRequest {
+    #[serde(default)]
+    args: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct McpToolInvocationResponse {
+    tool_name: String,
+    capability_domain: String,
+    risk: String,
+    result: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct McpToolCatalogResponse {
+    tools: Vec<McpToolCatalogItem>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct McpToolCatalogItem {
+    name: String,
+    operation_id: String,
+    capability_domain: String,
+    risk: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct McpResourceCatalogResponse {
+    resources: Vec<McpResourceCatalogItem>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct McpResourceCatalogItem {
+    uri: String,
+    capability_domain: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct McpOrderingUpdateArgs {
+    order_id: String,
+    request: UpdateOrderRequest,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct McpVerifyPickupArgs {
+    order_id: String,
+    request: PickupVerificationRequest,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct McpQueryOrderLedgerArgs {
+    order_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct McpReviewVendorApplicationArgs {
+    vendor_id: String,
+    decision: String,
+    comment: String,
+    decided_on_epoch_day: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct McpRunVendorLifecycleArgs {
+    run_on_epoch_day: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct McpSettlementCycleArgs {
+    cycle_key: String,
+    request: PayrollSettlementCycleLockRequest,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct McpUpsertAnomalyRuleArgs {
+    rule_id: String,
+    request: AnomalyRuleUpsertRequest,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct McpUpdateAnomalyAlertArgs {
+    alert_id: String,
+    request: AdminAnomalyAlertPatchRequest,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     initialize_telemetry_runtime_from_env(TelemetryService::HttpApi.service_name())?;
@@ -1046,6 +1206,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
             post(create_employee_order_dispute),
         )
         .route(
+            "/api/v1/admin/vendors/:vendorId/reviews",
+            post(review_vendor_application),
+        )
+        .route(
+            "/api/v1/admin/compliance/lifecycle/executions",
+            post(run_vendor_compliance_lifecycle),
+        )
+        .route(
             "/api/v1/admin/audit/investigations",
             get(query_audit_investigations),
         )
@@ -1103,12 +1271,1077 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
             "/api/v1/integrations/payroll/sftp-batches/:batchId/hr-api-sync",
             post(sync_payroll_hr_api_adjunct),
         )
+        .route("/mcp/v1/tools", get(list_mcp_tools))
+        .route("/mcp/v1/resources", get(list_mcp_resources))
+        .route("/mcp/v1/tools/:toolName/invoke", post(invoke_mcp_tool))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(socket_addr).await?;
     tracing::info!(bind_addr = %socket_addr, "observability runtime service listening");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+async fn list_mcp_tools(
+    State(_state): State<AppState>,
+    headers: HeaderMap,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry =
+        TelemetryService::McpGateway.begin_operation("mcp.list_tools", None::<&str>, None::<&str>);
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let grant = match require_mcp_service_account_grant(&headers) {
+        Ok(grant) => grant,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("mcp tool-list auth error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let tools = runtime_mcp_tools()
+        .iter()
+        .filter(|tool| grant.allowed_tool_names().contains(tool.tool_name()))
+        .map(|tool| McpToolCatalogItem {
+            name: tool.tool_name().to_owned(),
+            operation_id: tool.operation_id().to_owned(),
+            capability_domain: tool.capability_domain().as_str().to_owned(),
+            risk: mcp_tool_risk_label(tool.risk().is_write(), tool.risk().is_high_risk_write())
+                .to_owned(),
+        })
+        .collect::<Vec<_>>();
+
+    telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+    (
+        StatusCode::OK,
+        Json(
+            serde_json::to_value(McpToolCatalogResponse { tools })
+                .expect("mcp tool-list payload serialization should succeed"),
+        ),
+    )
+}
+
+async fn list_mcp_resources(
+    State(_state): State<AppState>,
+    headers: HeaderMap,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::McpGateway.begin_operation(
+        "mcp.list_resources",
+        None::<&str>,
+        None::<&str>,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let grant = match require_mcp_service_account_grant(&headers) {
+        Ok(grant) => grant,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "mcp resource-list auth error payload serialization should succeed",
+                    ),
+                ),
+            );
+        }
+    };
+
+    let granted_domains = runtime_mcp_tools()
+        .iter()
+        .filter(|tool| grant.allowed_tool_names().contains(tool.tool_name()))
+        .map(|tool| tool.capability_domain())
+        .collect::<HashSet<_>>();
+    let resources = runtime_mcp_resources()
+        .iter()
+        .filter(|resource| granted_domains.contains(&resource.capability_domain()))
+        .map(|resource| McpResourceCatalogItem {
+            uri: resource.resource_uri().to_owned(),
+            capability_domain: resource.capability_domain().as_str().to_owned(),
+        })
+        .collect::<Vec<_>>();
+
+    telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+    (
+        StatusCode::OK,
+        Json(
+            serde_json::to_value(McpResourceCatalogResponse { resources })
+                .expect("mcp resource-list payload serialization should succeed"),
+        ),
+    )
+}
+
+async fn invoke_mcp_tool(
+    State(state): State<AppState>,
+    Path(tool_name): Path<String>,
+    headers: HeaderMap,
+    Json(request): Json<McpToolInvocationRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::McpGateway.begin_operation(
+        tool_name.as_str(),
+        None::<&str>,
+        None::<&str>,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let normalized_tool_name = tool_name.trim();
+    if normalized_tool_name.is_empty() {
+        let (status, error) = domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_MCP_TOOL_NAME",
+            "tool name must be non-empty".to_owned(),
+        );
+        telemetry.finish_with_http_status(status.as_u16());
+        return (
+            status,
+            Json(
+                serde_json::to_value(error.with_request_id(request_id.as_str()))
+                    .expect("mcp tool error payload serialization should succeed"),
+            ),
+        );
+    }
+
+    let tool = match runtime_mcp_tools()
+        .iter()
+        .copied()
+        .find(|tool| tool.tool_name() == normalized_tool_name)
+    {
+        Some(tool) => tool,
+        None => {
+            let (status, error) = domain_error(
+                StatusCode::NOT_FOUND,
+                "MCP_TOOL_NOT_FOUND",
+                format!("MCP tool `{normalized_tool_name}` is not defined"),
+            );
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("mcp tool error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let grant = match require_mcp_service_account_grant(&headers) {
+        Ok(grant) => grant,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("mcp auth error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+    let bridge = match parse_optional_mcp_short_lived_bridge(&headers) {
+        Ok(bridge) => bridge,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("mcp bridge error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+    let now_epoch_seconds = match current_epoch_seconds_i64() {
+        Ok(value) => value,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("mcp time error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let auth_gateway = McpAuthorizationGateway::new(AccessController::with_default_policy());
+    let result = if tool.risk().is_write() {
+        invoke_mcp_write_tool(
+            &state,
+            &auth_gateway,
+            &grant,
+            normalized_tool_name,
+            request.args,
+            bridge.as_ref(),
+            now_epoch_seconds,
+            request_id.as_str(),
+        )
+    } else {
+        match auth_gateway.authorize_tool_read(&grant, normalized_tool_name) {
+            Ok(_) => invoke_mcp_read_tool(
+                &state,
+                &grant,
+                normalized_tool_name,
+                request.args,
+                request_id.as_str(),
+            ),
+            Err(error) => Err(map_mcp_authorization_error(error)),
+        }
+    };
+
+    match result {
+        Ok(result_payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(McpToolInvocationResponse {
+                        tool_name: normalized_tool_name.to_owned(),
+                        capability_domain: tool.capability_domain().as_str().to_owned(),
+                        risk: mcp_tool_risk_label(
+                            tool.risk().is_write(),
+                            tool.risk().is_high_risk_write(),
+                        )
+                        .to_owned(),
+                        result: result_payload,
+                    })
+                    .expect("mcp invoke payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("mcp invoke error payload serialization should succeed"),
+                ),
+            )
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn authorize_mcp_write_and_audit(
+    state: &AppState,
+    auth_gateway: &McpAuthorizationGateway,
+    grant: &McpServiceAccountGrant,
+    tool_name: &str,
+    target_plant: Option<&PlantId>,
+    now_epoch_seconds: i64,
+    bridge: Option<&McpShortLivedKeyBridge>,
+    request_id: &str,
+) -> Result<AuthorizedMcpToolWrite, (StatusCode, ErrorPayload)> {
+    let authorized = auth_gateway
+        .authorize_tool_write(grant, tool_name, target_plant, now_epoch_seconds, bridge)
+        .map_err(map_mcp_authorization_error)?;
+    append_mcp_write_authorization_audit(state, &authorized, request_id)?;
+    Ok(authorized)
+}
+
+fn append_mcp_write_authorization_audit(
+    state: &AppState,
+    authorized: &AuthorizedMcpToolWrite,
+    request_id: &str,
+) -> Result<(), (StatusCode, ErrorPayload)> {
+    let moment = current_taipei_business_moment().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+    let occurred_at =
+        AuditTimestamp::from_taipei_business_moment(moment.epoch_day(), moment.minute_of_day())
+            .map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "MCP_AUTHORIZATION_AUDIT_INTERNAL_ERROR",
+                    error.to_string(),
+                )
+            })?;
+    let action = mcp_tool_authorization_audit_action(authorized.tool_name()).ok_or_else(|| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "MCP_AUTHORIZATION_AUDIT_INTERNAL_ERROR",
+            format!(
+                "missing MCP authorization audit action mapping for tool `{}`",
+                authorized.tool_name()
+            ),
+        )
+    })?;
+    let entity = AuditEntityRef::new(
+        AuditEntityType::AuditTrail,
+        format!("mcp-write-authz:{}", authorized.tool_name()),
+    )
+    .map_err(|error| map_audit_trail_error(error, "MCP_AUTHORIZATION_AUDIT_INTERNAL_ERROR"))?;
+    let correlation_id =
+        AuditCorrelationId::parse(format!("mcp-authz:{}:{request_id}", authorized.tool_name()))
+            .map_err(|error| {
+                map_audit_trail_error(error, "MCP_AUTHORIZATION_AUDIT_INTERNAL_ERROR")
+            })?;
+    let write = AuditEvidenceWrite::new_with_reason(
+        occurred_at,
+        authorized.authorized_write().audit_identity().clone(),
+        action,
+        entity,
+        format_mcp_write_authorization_reason(authorized, request_id),
+        correlation_id,
+    )
+    .map_err(|error| map_audit_trail_error(error, "MCP_AUTHORIZATION_AUDIT_INTERNAL_ERROR"))?;
+    state
+        .audit_trail
+        .append(write)
+        .map_err(|error| map_audit_trail_error(error, "MCP_AUTHORIZATION_AUDIT_INTERNAL_ERROR"))?;
+    Ok(())
+}
+
+fn mcp_tool_authorization_audit_action(tool_name: &str) -> Option<AuditAction> {
+    match tool_name {
+        MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER => Some(AuditAction::CreateEmployeeOrder),
+        MCP_TOOL_ORDERING_UPDATE_EMPLOYEE_ORDER => Some(AuditAction::UpdateEmployeeOrder),
+        MCP_TOOL_VERIFICATION_VERIFY_PICKUP_TOTP => Some(AuditAction::VerifyPickupOrder),
+        MCP_TOOL_COMPLIANCE_REVIEW_VENDOR_APPLICATION => Some(AuditAction::ReviewVendorApplication),
+        MCP_TOOL_COMPLIANCE_RUN_VENDOR_LIFECYCLE => Some(AuditAction::RunVendorComplianceLifecycle),
+        MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS => Some(AuditAction::ExportPayrollDeductions),
+        MCP_TOOL_SETTLEMENT_CLOSE_MONTHLY_SETTLEMENT => Some(AuditAction::ExportPayrollSftpBatch),
+        MCP_TOOL_SETTLEMENT_LOCK_CYCLE => Some(AuditAction::LockPayrollSettlementCycle),
+        MCP_TOOL_SETTLEMENT_UNLOCK_CYCLE => Some(AuditAction::UnlockPayrollSettlementCycle),
+        MCP_TOOL_ANOMALY_EVALUATE_ALERTS => Some(AuditAction::TriggerAnomalyAlert),
+        MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS => Some(AuditAction::AdvanceAnomalyAlertStatus),
+        MCP_TOOL_ANOMALY_UPSERT_RULE => Some(AuditAction::UpsertAnomalyDetectionRule),
+        _ => None,
+    }
+}
+
+fn format_mcp_write_authorization_reason(
+    authorized: &AuthorizedMcpToolWrite,
+    request_id: &str,
+) -> String {
+    let mut reason = format!(
+        "mcp-write-authz tool={} model={} bridgeKeyId={} bridgeReason={} requestId={}",
+        authorized.tool_name(),
+        mcp_authentication_model_label(authorized.authentication_model()),
+        authorized.bridge_key_id().unwrap_or("none"),
+        authorized.bridge_audit_reason().unwrap_or("none"),
+        request_id,
+    );
+    if reason.chars().count() > MAX_AUDIT_REASON_CHARS {
+        reason = reason.chars().take(MAX_AUDIT_REASON_CHARS).collect();
+    }
+    reason
+}
+
+fn mcp_authentication_model_label(model: McpAuthenticationModel) -> &'static str {
+    match model {
+        McpAuthenticationModel::OAuthServiceAccount => "OAUTH_SERVICE_ACCOUNT",
+        McpAuthenticationModel::OAuthServiceAccountWithBridgeKey => {
+            "OAUTH_SERVICE_ACCOUNT_WITH_BRIDGE_KEY"
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn invoke_mcp_write_tool(
+    state: &AppState,
+    auth_gateway: &McpAuthorizationGateway,
+    grant: &McpServiceAccountGrant,
+    tool_name: &str,
+    args: serde_json::Value,
+    bridge: Option<&McpShortLivedKeyBridge>,
+    now_epoch_seconds: i64,
+    request_id: &str,
+) -> Result<serde_json::Value, (StatusCode, ErrorPayload)> {
+    match tool_name {
+        MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER => {
+            let request = decode_mcp_args::<EmployeeOrderCreateRequestPayload>(args, tool_name)?;
+            let target_plant = PlantId::parse(request.plant_id.clone()).map_err(|error| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_MCP_TOOL_ARGUMENTS",
+                    format!("arguments.plantId is invalid: {error}"),
+                )
+            })?;
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                Some(&target_plant),
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload = handle_create_employee_order_for_actor(
+                state,
+                authorized.actor(),
+                authorized
+                    .authorized_write()
+                    .audit_identity()
+                    .operation_id(),
+                request,
+            )?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp ordering create payload serialization should succeed"))
+        }
+        MCP_TOOL_ORDERING_UPDATE_EMPLOYEE_ORDER => {
+            let args = decode_mcp_args::<McpOrderingUpdateArgs>(args, tool_name)?;
+            let parsed_order_id = parse_contract_order_id(&args.order_id).map_err(|error| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_MCP_TOOL_ARGUMENTS",
+                    format!("arguments.orderId is invalid: {error}"),
+                )
+            })?;
+            let snapshot = load_order_snapshot_or_not_found(state, &parsed_order_id)?;
+            let target_plant = snapshot.plant_id().clone();
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                Some(&target_plant),
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload = handle_update_employee_order_for_actor(
+                state,
+                authorized.actor(),
+                authorized
+                    .authorized_write()
+                    .audit_identity()
+                    .operation_id(),
+                args.order_id,
+                args.request,
+            )?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp ordering update payload serialization should succeed"))
+        }
+        MCP_TOOL_VERIFICATION_VERIFY_PICKUP_TOTP => {
+            let args = decode_mcp_args::<McpVerifyPickupArgs>(args, tool_name)?;
+            let parsed_order_id = parse_contract_order_id(&args.order_id).map_err(|error| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_MCP_TOOL_ARGUMENTS",
+                    format!("arguments.orderId is invalid: {error}"),
+                )
+            })?;
+            let snapshot = load_order_snapshot_or_not_found(state, &parsed_order_id)?;
+            let target_plant = snapshot.plant_id().clone();
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                Some(&target_plant),
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload = handle_verify_order_pickup_for_actor(
+                state,
+                authorized.actor(),
+                args.order_id,
+                args.request,
+                request_id,
+            )?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp pickup verification payload serialization should succeed"))
+        }
+        MCP_TOOL_COMPLIANCE_REVIEW_VENDOR_APPLICATION => {
+            let args = decode_mcp_args::<McpReviewVendorApplicationArgs>(args, tool_name)?;
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                None,
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload = handle_review_vendor_application(
+                state,
+                authorized.actor(),
+                args.vendor_id,
+                VendorApplicationReviewRequest {
+                    decision: args.decision,
+                    comment: args.comment,
+                    decided_on_epoch_day: args.decided_on_epoch_day,
+                },
+            )?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp compliance review payload serialization should succeed"))
+        }
+        MCP_TOOL_COMPLIANCE_RUN_VENDOR_LIFECYCLE => {
+            let args = decode_mcp_args::<McpRunVendorLifecycleArgs>(args, tool_name)?;
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                None,
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload = handle_run_vendor_compliance_lifecycle(
+                state,
+                authorized.actor(),
+                VendorLifecycleRunRequest {
+                    run_on_epoch_day: args.run_on_epoch_day,
+                },
+            )?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp compliance lifecycle payload serialization should succeed"))
+        }
+        MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS => {
+            let query = decode_mcp_args::<PayrollExportQuery>(args, tool_name)?;
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                None,
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload = handle_export_payroll_deductions(state, authorized.actor(), query)?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp settlement export payload serialization should succeed"))
+        }
+        MCP_TOOL_SETTLEMENT_CLOSE_MONTHLY_SETTLEMENT => {
+            let request =
+                decode_optional_mcp_args::<PayrollMonthlySettlementCloseRequest>(args, tool_name)?;
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                None,
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload =
+                handle_close_payroll_monthly_settlement(state, authorized.actor(), request)?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp settlement close payload serialization should succeed"))
+        }
+        MCP_TOOL_SETTLEMENT_LOCK_CYCLE => {
+            let args = decode_mcp_args::<McpSettlementCycleArgs>(args, tool_name)?;
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                None,
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload = handle_lock_payroll_settlement_cycle(
+                state,
+                authorized.actor(),
+                args.cycle_key,
+                args.request,
+            )?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp settlement lock payload serialization should succeed"))
+        }
+        MCP_TOOL_SETTLEMENT_UNLOCK_CYCLE => {
+            let args = decode_mcp_args::<McpSettlementCycleArgs>(args, tool_name)?;
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                None,
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload = handle_unlock_payroll_settlement_cycle(
+                state,
+                authorized.actor(),
+                args.cycle_key,
+                args.request,
+            )?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp settlement unlock payload serialization should succeed"))
+        }
+        MCP_TOOL_ANOMALY_EVALUATE_ALERTS => {
+            let request = decode_mcp_args::<AnomalyAlertEvaluationRequest>(args, tool_name)?;
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                None,
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload = handle_evaluate_anomaly_alerts(state, authorized.actor(), request)?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp anomaly evaluation payload serialization should succeed"))
+        }
+        MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS => {
+            let args = decode_mcp_args::<McpUpdateAnomalyAlertArgs>(args, tool_name)?;
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                None,
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload = handle_update_admin_anomaly_alert(
+                state,
+                authorized.actor(),
+                args.alert_id,
+                args.request,
+            )?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp anomaly update payload serialization should succeed"))
+        }
+        MCP_TOOL_ANOMALY_UPSERT_RULE => {
+            let args = decode_mcp_args::<McpUpsertAnomalyRuleArgs>(args, tool_name)?;
+            let authorized = authorize_mcp_write_and_audit(
+                state,
+                auth_gateway,
+                grant,
+                tool_name,
+                None,
+                now_epoch_seconds,
+                bridge,
+                request_id,
+            )?;
+            let payload =
+                handle_upsert_anomaly_rule(state, authorized.actor(), args.rule_id, args.request)?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp anomaly upsert payload serialization should succeed"))
+        }
+        _ => Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_MCP_TOOL_NAME",
+            format!("tool `{tool_name}` is not a writable MCP tool"),
+        )),
+    }
+}
+
+fn invoke_mcp_read_tool(
+    state: &AppState,
+    grant: &McpServiceAccountGrant,
+    tool_name: &str,
+    args: serde_json::Value,
+    _request_id: &str,
+) -> Result<serde_json::Value, (StatusCode, ErrorPayload)> {
+    match tool_name {
+        MCP_TOOL_ORDERING_LIST_MENU_DISCOVERY => {
+            let query = decode_mcp_args::<EmployeeMenuDiscoveryQuery>(args, tool_name)?;
+            let payload = handle_list_employee_menus(state, query)?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp ordering discovery payload serialization should succeed"))
+        }
+        MCP_TOOL_SETTLEMENT_QUERY_ORDER_LEDGER => {
+            let args = decode_mcp_args::<McpQueryOrderLedgerArgs>(args, tool_name)?;
+            let payload = handle_get_employee_order_payroll_ledger_for_actor(
+                state,
+                grant.actor(),
+                args.order_id,
+            )?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp settlement ledger payload serialization should succeed"))
+        }
+        MCP_TOOL_ANOMALY_LIST_ALERTS => {
+            let query = decode_mcp_args::<AnomalyAlertQueryRequest>(args, tool_name)?;
+            let payload = handle_list_anomaly_alerts(state, grant.actor(), query)?;
+            Ok(serde_json::to_value(payload)
+                .expect("mcp anomaly list payload serialization should succeed"))
+        }
+        _ => Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_MCP_TOOL_NAME",
+            format!("tool `{tool_name}` is not a read-only MCP tool"),
+        )),
+    }
+}
+
+fn decode_mcp_args<T>(
+    args: serde_json::Value,
+    tool_name: &str,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    T: serde::de::DeserializeOwned,
+{
+    serde_json::from_value(args).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_MCP_TOOL_ARGUMENTS",
+            format!("arguments for `{tool_name}` are invalid: {error}"),
+        )
+    })
+}
+
+fn decode_optional_mcp_args<T>(
+    args: serde_json::Value,
+    tool_name: &str,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    T: serde::de::DeserializeOwned + Default,
+{
+    if args.is_null() {
+        return Ok(T::default());
+    }
+    decode_mcp_args::<T>(args, tool_name)
+}
+
+fn require_mcp_service_account_grant(
+    headers: &HeaderMap,
+) -> Result<McpServiceAccountGrant, (StatusCode, ErrorPayload)> {
+    let authorization = headers
+        .get(AUTHORIZATION)
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "authorization header is required".to_owned(),
+            )
+        })?
+        .to_str()
+        .map_err(|_| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "authorization header must be ASCII".to_owned(),
+            )
+        })?;
+    let token = authorization
+        .strip_prefix(AUTHORIZATION_BEARER_PREFIX)
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "authorization header must use Bearer token".to_owned(),
+            )
+        })?;
+    let claims_token = token
+        .strip_prefix(MCP_OAUTH_SERVICE_ACCOUNT_TOKEN_PREFIX)
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "MCP authorization token must use `mcp-oauth-sa:` prefix".to_owned(),
+            )
+        })?;
+    let claims_raw = BASE64_STANDARD
+        .decode(claims_token.as_bytes())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("MCP service-account token is not valid base64: {error}"),
+            )
+        })?;
+    let claims_json = String::from_utf8(claims_raw).map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("MCP service-account token is not valid UTF-8: {error}"),
+        )
+    })?;
+    let claims: McpServiceAccountTokenClaims =
+        serde_json::from_str(claims_json.as_str()).map_err(|error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("MCP service-account token payload is invalid: {error}"),
+            )
+        })?;
+
+    let role = parse_role_label(claims.role.as_str()).ok_or_else(|| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!(
+                "MCP service-account role `{}` is unsupported",
+                claims.role.trim()
+            ),
+        )
+    })?;
+    let service_account_id =
+        ActorId::parse(claims.service_account_id.as_str()).map_err(|error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("MCP service-account id is invalid: {error}"),
+            )
+        })?;
+    let plant_scope = if claims.all_plants {
+        if !claims.plant_ids.is_empty() {
+            return Err(domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "MCP service-account token cannot set both allPlants=true and plantIds".to_owned(),
+            ));
+        }
+        PlantScope::all()
+    } else {
+        let plant_ids = claims
+            .plant_ids
+            .iter()
+            .map(|value| {
+                PlantId::parse(value).map_err(|error| {
+                    domain_error(
+                        StatusCode::UNAUTHORIZED,
+                        "UNAUTHORIZED",
+                        format!("MCP service-account plant id is invalid: {error}"),
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        PlantScope::restricted(plant_ids).map_err(|error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("MCP service-account plant scope is invalid: {error}"),
+            )
+        })?
+    };
+    let actor = AuthenticatedActorContext::new(
+        service_account_id.clone(),
+        role,
+        plant_scope,
+        AuthenticationSource::OAuthServiceAccount,
+    )
+    .map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("MCP service-account actor context is invalid: {error}"),
+        )
+    })?;
+
+    McpServiceAccountGrant::new(service_account_id, actor, claims.allowed_tools)
+        .map_err(map_mcp_authorization_error)
+}
+
+fn parse_optional_mcp_short_lived_bridge(
+    headers: &HeaderMap,
+) -> Result<Option<McpShortLivedKeyBridge>, (StatusCode, ErrorPayload)> {
+    let key_id = match headers.get(MCP_BRIDGE_KEY_ID_HEADER) {
+        Some(value) => value.to_str().map_err(|_| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("{MCP_BRIDGE_KEY_ID_HEADER} must be ASCII"),
+            )
+        })?,
+        None => return Ok(None),
+    };
+
+    let issued_at_epoch_seconds =
+        parse_required_bridge_i64_header(headers, MCP_BRIDGE_ISSUED_AT_HEADER)?;
+    let expires_at_epoch_seconds =
+        parse_required_bridge_i64_header(headers, MCP_BRIDGE_EXPIRES_AT_HEADER)?;
+    let rotated_at_epoch_seconds =
+        parse_required_bridge_i64_header(headers, MCP_BRIDGE_ROTATED_AT_HEADER)?;
+    let audit_reason = headers
+        .get(MCP_BRIDGE_AUDIT_REASON_HEADER)
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!(
+                    "{MCP_BRIDGE_AUDIT_REASON_HEADER} header is required when bridge key is used"
+                ),
+            )
+        })?
+        .to_str()
+        .map_err(|_| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("{MCP_BRIDGE_AUDIT_REASON_HEADER} must be ASCII"),
+            )
+        })?;
+
+    let bridge = McpShortLivedKeyBridge::new(
+        key_id,
+        issued_at_epoch_seconds,
+        expires_at_epoch_seconds,
+        rotated_at_epoch_seconds,
+        audit_reason,
+    )
+    .map_err(map_mcp_authorization_error)?;
+    Ok(Some(bridge))
+}
+
+fn parse_required_bridge_i64_header(
+    headers: &HeaderMap,
+    header_name: &'static str,
+) -> Result<i64, (StatusCode, ErrorPayload)> {
+    let raw = headers.get(header_name).ok_or_else(|| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("{header_name} header is required when bridge key is used"),
+        )
+    })?;
+    let raw = raw.to_str().map_err(|_| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("{header_name} must be ASCII"),
+        )
+    })?;
+    raw.parse::<i64>().map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("{header_name} must be an integer timestamp: {error}"),
+        )
+    })
+}
+
+fn current_epoch_seconds_i64() -> Result<i64, (StatusCode, ErrorPayload)> {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "TIME_RESOLUTION_FAILED",
+                format!("failed to resolve unix epoch seconds: {error}"),
+            )
+        })?;
+    i64::try_from(duration.as_secs()).map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            format!("unix epoch seconds overflow: {error}"),
+        )
+    })
+}
+
+fn map_mcp_authorization_error(error: McpAuthorizationError) -> (StatusCode, ErrorPayload) {
+    match error {
+        McpAuthorizationError::Authorization(inner) => match inner {
+            corporate_catering_system::access::AuthorizationError::RoleNotPermitted { .. }
+            | corporate_catering_system::access::AuthorizationError::TargetPlantOutOfScope { .. }
+            | corporate_catering_system::access::AuthorizationError::McpOperationActionMismatch {
+                ..
+            } => domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", inner.to_string()),
+            corporate_catering_system::access::AuthorizationError::MissingAuthenticatedActorContext {
+                ..
+            } => domain_error(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", inner.to_string()),
+            _ => domain_error(StatusCode::BAD_REQUEST, "BAD_REQUEST", inner.to_string()),
+        },
+        McpAuthorizationError::UnknownMcpToolName { .. } => {
+            domain_error(StatusCode::NOT_FOUND, "MCP_TOOL_NOT_FOUND", error.to_string())
+        }
+        McpAuthorizationError::ToolNotGrantedForServiceAccount { .. }
+        | McpAuthorizationError::AuthorizedToolMismatch { .. } => {
+            domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
+        }
+        McpAuthorizationError::ToolRequiresWriteAuthorization { .. } => {
+            domain_error(StatusCode::BAD_REQUEST, "BAD_REQUEST", error.to_string())
+        }
+        McpAuthorizationError::ServiceAccountActorMismatch { .. }
+        | McpAuthorizationError::UnsupportedServiceAccountAuthenticationSource { .. }
+        | McpAuthorizationError::EmptyServiceAccountToolGrant { .. }
+        | McpAuthorizationError::InvalidToolGrantName { .. }
+        | McpAuthorizationError::InvalidBridgeKeyId
+        | McpAuthorizationError::InvalidBridgeAuditReason
+        | McpAuthorizationError::BridgeKeyWindowInvalid { .. }
+        | McpAuthorizationError::BridgeKeyIssuedInFuture { .. }
+        | McpAuthorizationError::BridgeKeyExpired { .. }
+        | McpAuthorizationError::BridgeKeyTtlTooLong { .. }
+        | McpAuthorizationError::BridgeKeyRotationStale { .. } => {
+            domain_error(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", error.to_string())
+        }
+    }
+}
+
+fn mcp_tool_risk_label(is_write: bool, is_high_risk_write: bool) -> &'static str {
+    if is_high_risk_write {
+        "HIGH_RISK_WRITE"
+    } else if is_write {
+        "WRITE"
+    } else {
+        "READ_ONLY"
+    }
+}
+
+fn parse_vendor_review_decision(value: &str) -> Option<VendorReviewDecision> {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "APPROVED" => Some(VendorReviewDecision::Approved),
+        "REJECTED" => Some(VendorReviewDecision::Rejected),
+        "REQUEST_FIX" => Some(VendorReviewDecision::RequestFix),
+        _ => None,
+    }
+}
+
+fn vendor_compliance_status_label(status: VendorComplianceStatus) -> &'static str {
+    match status {
+        VendorComplianceStatus::PendingReview => "PENDING_REVIEW",
+        VendorComplianceStatus::FixRequested => "FIX_REQUESTED",
+        VendorComplianceStatus::Active => "ACTIVE",
+        VendorComplianceStatus::Rejected => "REJECTED",
+        VendorComplianceStatus::Suspended => "SUSPENDED",
+    }
+}
+
+fn map_vendor_compliance_error(error: VendorComplianceError) -> (StatusCode, ErrorPayload) {
+    match error {
+        VendorComplianceError::UnauthorizedRole { .. } => {
+            domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
+        }
+        VendorComplianceError::VendorNotFound(_) => {
+            domain_error(StatusCode::NOT_FOUND, "NOT_FOUND", error.to_string())
+        }
+        VendorComplianceError::VendorAlreadyExists(_)
+        | VendorComplianceError::ApprovalBlockedByComplianceGap(_) => {
+            domain_error(StatusCode::CONFLICT, "CONFLICT", error.to_string())
+        }
+        VendorComplianceError::AuditTrail(_) => domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "VENDOR_COMPLIANCE_INTERNAL_ERROR",
+            error.to_string(),
+        ),
+        _ => domain_error(StatusCode::BAD_REQUEST, "BAD_REQUEST", error.to_string()),
+    }
+}
+
+fn read_compliance_lifecycle<'a>(
+    state: &'a AppState,
+) -> Result<RwLockReadGuard<'a, VendorComplianceLifecycle>, (StatusCode, ErrorPayload)> {
+    state.compliance_lifecycle.read().map_err(|_| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "COMPLIANCE_LIFECYCLE_INTERNAL_ERROR",
+            "compliance lifecycle state lock is poisoned".to_owned(),
+        )
+    })
+}
+
+fn write_compliance_lifecycle<'a>(
+    state: &'a AppState,
+) -> Result<RwLockWriteGuard<'a, VendorComplianceLifecycle>, (StatusCode, ErrorPayload)> {
+    state.compliance_lifecycle.write().map_err(|_| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "COMPLIANCE_LIFECYCLE_INTERNAL_ERROR",
+            "compliance lifecycle state lock is poisoned".to_owned(),
+        )
+    })
 }
 
 fn parse_positive_u16_env(key: &str, default_value: u16) -> Result<u16, String> {
@@ -1375,7 +2608,7 @@ fn bootstrap_runtime_state(
         payroll_export_field_encryptor,
         payroll_ledger_service,
         anomaly_alert_workflow,
-        compliance_lifecycle: Arc::new(compliance_lifecycle),
+        compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
         delivery_policy: Arc::new(delivery_policy),
         menu_supply_policy,
         pickup_totp_verifier,
@@ -1559,8 +2792,9 @@ fn handle_list_employee_menus_at(
         ));
     }
 
+    let compliance_lifecycle = read_compliance_lifecycle(state)?;
     let discovery_gateway = HttpEmployeeDiscoveryExecutionGateway::new(
-        state.compliance_lifecycle.as_ref(),
+        &compliance_lifecycle,
         state.delivery_policy.as_ref(),
         &state.menu_supply_policy,
     );
@@ -1971,6 +3205,16 @@ fn handle_create_employee_order(
     state: &AppState,
     request: EmployeeOrderCreateRequestPayload,
 ) -> Result<EmployeeOrderPayload, (StatusCode, ErrorPayload)> {
+    let employee_actor = load_gate_employee_actor_for_plant(state, &state.plant_id)?;
+    handle_create_employee_order_for_actor(state, &employee_actor, "createEmployeeOrder", request)
+}
+
+fn handle_create_employee_order_for_actor(
+    state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
+    operation_id: &str,
+    request: EmployeeOrderCreateRequestPayload,
+) -> Result<EmployeeOrderPayload, (StatusCode, ErrorPayload)> {
     if let Some(employee_note) = request.employee_note.as_deref() {
         if employee_note.chars().count() > 200 {
             return Err(domain_error(
@@ -2013,10 +3257,9 @@ fn handle_create_employee_order(
     })?;
 
     let order_id = generate_contract_order_id(state)?;
-    let employee_actor = load_gate_employee_actor_for_plant(state, &state.plant_id)?;
-
+    let compliance_lifecycle = read_compliance_lifecycle(state)?;
     let ordering_gateway = HttpOrderingExecutionGateway::new(
-        state.compliance_lifecycle.as_ref(),
+        &compliance_lifecycle,
         state.delivery_policy.as_ref(),
         &state.menu_supply_policy,
     );
@@ -2036,8 +3279,8 @@ fn handle_create_employee_order(
     let snapshot = load_order_snapshot_or_policy_error(state, &order_id)?;
     sync_payroll_ledger_from_order_snapshot(
         state,
-        &employee_actor,
-        "createEmployeeOrder",
+        employee_actor,
+        operation_id,
         &snapshot,
         requested_at,
     )?;
@@ -2094,9 +3337,33 @@ fn handle_update_employee_order(
             format!("orderId path parameter is invalid: {error}"),
         )
     })?;
-    let mutation = parse_order_mutation(request)?;
     let current_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
     let employee_actor = load_gate_employee_actor_for_plant(state, current_snapshot.plant_id())?;
+    handle_update_employee_order_for_actor(
+        state,
+        &employee_actor,
+        "updateEmployeeOrder",
+        order_id_raw,
+        request,
+    )
+}
+
+fn handle_update_employee_order_for_actor(
+    state: &AppState,
+    actor: &AuthenticatedActorContext,
+    operation_id: &str,
+    order_id_raw: String,
+    request: UpdateOrderRequest,
+) -> Result<EmployeeOrderPayload, (StatusCode, ErrorPayload)> {
+    let order_id = parse_contract_order_id(&order_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_ORDER_UPDATE_REQUEST",
+            format!("orderId path parameter is invalid: {error}"),
+        )
+    })?;
+    let mutation = parse_order_mutation(request)?;
+    let current_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
     let requested_at = current_taipei_business_moment().map_err(|error| {
         domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -2105,15 +3372,16 @@ fn handle_update_employee_order(
         )
     })?;
 
+    let compliance_lifecycle = read_compliance_lifecycle(state)?;
     let ordering_gateway = HttpOrderingExecutionGateway::new(
-        state.compliance_lifecycle.as_ref(),
+        &compliance_lifecycle,
         state.delivery_policy.as_ref(),
         &state.menu_supply_policy,
     );
 
     ordering_gateway
         .execute_update_employee_order(
-            &employee_actor,
+            actor,
             &order_id,
             current_snapshot.vendor_id(),
             &state.plant_id,
@@ -2125,8 +3393,8 @@ fn handle_update_employee_order(
     let updated_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
     sync_payroll_ledger_from_order_snapshot(
         state,
-        &employee_actor,
-        "updateEmployeeOrder",
+        actor,
+        operation_id,
         &updated_snapshot,
         requested_at,
     )?;
@@ -2183,9 +3451,24 @@ fn handle_get_employee_order_payroll_ledger(
     })?;
     let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
     let employee_actor = load_gate_employee_actor_for_plant(state, snapshot.plant_id())?;
+    handle_get_employee_order_payroll_ledger_for_actor(state, &employee_actor, order_id_raw)
+}
+
+fn handle_get_employee_order_payroll_ledger_for_actor(
+    state: &AppState,
+    actor: &AuthenticatedActorContext,
+    order_id_raw: String,
+) -> Result<EmployeeOrderPayrollLedgerResponse, (StatusCode, ErrorPayload)> {
+    let order_id = parse_contract_order_id(&order_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_ORDER_REQUEST",
+            format!("orderId path parameter is invalid: {error}"),
+        )
+    })?;
     let view = state
         .payroll_ledger_service
-        .employee_order_view(&employee_actor, &order_id)
+        .employee_order_view(actor, &order_id)
         .map_err(map_payroll_ledger_error)?;
 
     Ok(to_employee_order_payroll_ledger_response(&view))
@@ -2281,6 +3564,166 @@ fn handle_create_employee_order_dispute(
         .map_err(map_payroll_ledger_error)?;
 
     Ok(to_payroll_dispute_payload(&dispute))
+}
+
+async fn review_vendor_application(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(vendor_id): Path<String>,
+    Json(request): Json<VendorApplicationReviewRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "reviewVendorApplication",
+        None::<&str>,
+        None::<&str>,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response =
+        match handle_review_vendor_application(&state, &committee_actor, vendor_id, request) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(
+                        serde_json::to_value(payload)
+                            .expect("vendor review payload serialization should succeed"),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str()))
+                            .expect("vendor review error payload serialization should succeed"),
+                    ),
+                )
+            }
+        };
+
+    response
+}
+
+fn handle_review_vendor_application(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    vendor_id_raw: String,
+    request: VendorApplicationReviewRequest,
+) -> Result<VendorApplicationReviewResponse, (StatusCode, ErrorPayload)> {
+    let vendor_id = VendorId::parse(vendor_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("vendorId path parameter is invalid: {error}"),
+        )
+    })?;
+    let decision = parse_vendor_review_decision(request.decision.as_str()).ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("decision `{}` is unsupported", request.decision.trim()),
+        )
+    })?;
+
+    let mut lifecycle = write_compliance_lifecycle(state)?;
+    let status = lifecycle
+        .review_application(
+            committee_actor,
+            &vendor_id,
+            decision,
+            request.comment,
+            ComplianceDate::from_epoch_day(request.decided_on_epoch_day),
+        )
+        .map_err(map_vendor_compliance_error)?;
+    Ok(VendorApplicationReviewResponse {
+        vendor_id: vendor_id.as_str().to_owned(),
+        status: vendor_compliance_status_label(status).to_owned(),
+    })
+}
+
+async fn run_vendor_compliance_lifecycle(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<VendorLifecycleRunRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "runVendorComplianceLifecycle",
+        None::<&str>,
+        None::<&str>,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_run_vendor_compliance_lifecycle(&state, &committee_actor, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("vendor lifecycle payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("vendor lifecycle error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_run_vendor_compliance_lifecycle(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    request: VendorLifecycleRunRequest,
+) -> Result<VendorLifecycleRunResponse, (StatusCode, ErrorPayload)> {
+    let mut lifecycle = write_compliance_lifecycle(state)?;
+    let result = lifecycle
+        .run_lifecycle(
+            committee_actor,
+            ComplianceDate::from_epoch_day(request.run_on_epoch_day),
+        )
+        .map_err(map_vendor_compliance_error)?;
+    Ok(VendorLifecycleRunResponse {
+        reminder_count: result.reminders.len(),
+        suspension_count: result.suspensions.len(),
+        reinstatement_count: result.reinstatements.len(),
+    })
 }
 
 async fn update_admin_payroll_dispute(
@@ -5429,6 +6872,7 @@ fn authentication_source_to_api_label(source: AuthenticationSource) -> &'static 
     match source {
         AuthenticationSource::CorporateSso => "CORPORATE_SSO",
         AuthenticationSource::VendorAccountMfa => "VENDOR_ACCOUNT_MFA",
+        AuthenticationSource::OAuthServiceAccount => "OAUTH_SERVICE_ACCOUNT",
     }
 }
 
@@ -5535,6 +6979,33 @@ fn handle_verify_order_pickup(
     request: PickupVerificationRequest,
     request_id: &str,
 ) -> Result<PickupVerificationResponse, (StatusCode, ErrorPayload)> {
+    let parsed_order_id = parse_contract_order_id(&order_id_raw).map_err(|error| {
+        emit_pickup_verification_audit_event(
+            request_id,
+            Some(order_id_raw.as_str()),
+            "rejected",
+            "invalid-order-id",
+            None,
+            None,
+        );
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_PICKUP_VERIFICATION_REQUEST",
+            format!("orderId path parameter is invalid: {error}"),
+        )
+    })?;
+    let snapshot = load_order_snapshot_or_not_found(state, &parsed_order_id)?;
+    let employee_actor = load_gate_employee_actor_for_plant(state, snapshot.plant_id())?;
+    handle_verify_order_pickup_for_actor(state, &employee_actor, order_id_raw, request, request_id)
+}
+
+fn handle_verify_order_pickup_for_actor(
+    state: &AppState,
+    actor: &AuthenticatedActorContext,
+    order_id_raw: String,
+    request: PickupVerificationRequest,
+    request_id: &str,
+) -> Result<PickupVerificationResponse, (StatusCode, ErrorPayload)> {
     let verification_code = request.verification_code.trim();
     if verification_code.is_empty() {
         emit_pickup_verification_audit_event(
@@ -5633,16 +7104,10 @@ fn handle_verify_order_pickup(
             error,
         )
     })?;
-    let employee_actor = load_gate_employee_actor_for_plant(state, snapshot.plant_id())?;
 
     state
         .menu_supply_policy
-        .update_order(
-            &employee_actor,
-            &order_id,
-            OrderMutation::MarkFulfilled,
-            requested_at,
-        )
+        .update_order(actor, &order_id, OrderMutation::MarkFulfilled, requested_at)
         .map_err(|error| map_pickup_claim_update_error(&order_id, request_id, error))?;
 
     emit_pickup_verification_audit_event(
@@ -5869,6 +7334,39 @@ mod tests {
         .expect("employee actor should be valid")
     }
 
+    fn oauth_service_account_actor(
+        actor_id_value: &str,
+        role: Role,
+        plant_scope: PlantScope,
+    ) -> AuthenticatedActorContext {
+        AuthenticatedActorContext::new(
+            actor_id(actor_id_value),
+            role,
+            plant_scope,
+            AuthenticationSource::OAuthServiceAccount,
+        )
+        .expect("oauth service-account actor should be valid")
+    }
+
+    fn invoke_mcp_write_for_test(
+        state: &AppState,
+        grant: &McpServiceAccountGrant,
+        tool_name: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, (StatusCode, ErrorPayload)> {
+        let auth_gateway = McpAuthorizationGateway::new(AccessController::with_default_policy());
+        invoke_mcp_write_tool(
+            state,
+            &auth_gateway,
+            grant,
+            tool_name,
+            args,
+            None,
+            10_000,
+            "mcp-test-request",
+        )
+    }
+
     fn payroll_export_field_encryptor() -> PayrollExportFieldEncryptor {
         PayrollExportFieldEncryptor::parse_hex(
             "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
@@ -6001,7 +7499,7 @@ mod tests {
                         ),
                         Money::new("TWD", 12000).expect("money should be valid"),
                         5,
-                        now_epoch_day.saturating_add(1),
+                        now_epoch_day.saturating_add(2),
                     )
                     .expect("menu draft should be valid"),
                 ),
@@ -6047,7 +7545,7 @@ mod tests {
                         ),
                         Money::new("TWD", 11000).expect("money should be valid"),
                         9,
-                        now_epoch_day.saturating_add(1),
+                        now_epoch_day.saturating_add(2),
                     )
                     .expect("menu draft should be valid"),
                 ),
@@ -6060,7 +7558,7 @@ mod tests {
                 order_id("ord-discovery-tst-001"),
                 &vendor_visible,
                 &plant,
-                now_epoch_day.saturating_add(1),
+                now_epoch_day.saturating_add(2),
                 vec![
                     OrderLineItemRequest::new(menu_item_id("menu-discoverytsta1"), 2, vec![])
                         .expect("line item should be valid"),
@@ -6077,7 +7575,7 @@ mod tests {
             payroll_export_field_encryptor: payroll_export_field_encryptor(),
             payroll_ledger_service,
             anomaly_alert_workflow: AnomalyAlertWorkflow::with_default_rules(audit_trail.clone()),
-            compliance_lifecycle: Arc::new(compliance_lifecycle),
+            compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
             delivery_policy: Arc::new(delivery_policy),
             menu_supply_policy,
             pickup_totp_verifier: Arc::new(
@@ -6186,7 +7684,7 @@ mod tests {
         let payroll = payroll_operator();
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
-            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
             line_items: vec![OrderLineItemRequestPayload {
                 menu_item_id: "menu-discoverytsta1".to_owned(),
                 quantity: 1,
@@ -6249,7 +7747,7 @@ mod tests {
         let committee = committee_admin();
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
-            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
             line_items: vec![OrderLineItemRequestPayload {
                 menu_item_id: "menu-discoverytsta1".to_owned(),
                 quantity: 1,
@@ -6310,9 +7808,11 @@ mod tests {
                 audit_trail.clone(),
             ),
             anomaly_alert_workflow: AnomalyAlertWorkflow::with_default_rules(audit_trail.clone()),
-            compliance_lifecycle: Arc::new(VendorComplianceLifecycle::with_audit_trail(
-                HistoryRetentionPolicy::default(),
-                audit_trail.clone(),
+            compliance_lifecycle: Arc::new(RwLock::new(
+                VendorComplianceLifecycle::with_audit_trail(
+                    HistoryRetentionPolicy::default(),
+                    audit_trail.clone(),
+                ),
             )),
             delivery_policy: Arc::new(VendorPlantDeliveryPolicy::with_audit_trail(
                 audit_trail.clone(),
@@ -6376,7 +7876,7 @@ mod tests {
         let state = build_state(now_epoch_day);
         let request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
-            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
             line_items: vec![OrderLineItemRequestPayload {
                 menu_item_id: "menu-discoverytsta1".to_owned(),
                 quantity: 1,
@@ -6393,7 +7893,7 @@ mod tests {
         assert_eq!(response.plant_id, "fab-a");
         assert_eq!(
             response.delivery_date,
-            epoch_day_to_iso_date(now_epoch_day + 1)
+            epoch_day_to_iso_date(now_epoch_day + 2)
         );
         assert_eq!(response.status, "PENDING");
         assert_eq!(response.line_items.len(), 1);
@@ -6562,7 +8062,7 @@ mod tests {
         let state = build_state(now_epoch_day);
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
-            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
             line_items: vec![OrderLineItemRequestPayload {
                 menu_item_id: "menu-discoverytsta1".to_owned(),
                 quantity: 1,
@@ -6603,7 +8103,7 @@ mod tests {
         let state = build_state(now_epoch_day);
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
-            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
             line_items: vec![OrderLineItemRequestPayload {
                 menu_item_id: "menu-discoverytsta1".to_owned(),
                 quantity: 1,
@@ -6641,7 +8141,7 @@ mod tests {
         let state = build_state(now_epoch_day);
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
-            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
             line_items: vec![OrderLineItemRequestPayload {
                 menu_item_id: "menu-discoverytsta1".to_owned(),
                 quantity: 1,
@@ -6688,7 +8188,7 @@ mod tests {
         let state = build_state(now_epoch_day);
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
-            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
             line_items: vec![OrderLineItemRequestPayload {
                 menu_item_id: "menu-discoverytsta1".to_owned(),
                 quantity: 1,
@@ -6735,7 +8235,7 @@ mod tests {
         let payroll = payroll_operator();
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
-            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
             line_items: vec![OrderLineItemRequestPayload {
                 menu_item_id: "menu-discoverytsta1".to_owned(),
                 quantity: 1,
@@ -7181,7 +8681,7 @@ mod tests {
         let payroll = payroll_operator();
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
-            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
             line_items: vec![OrderLineItemRequestPayload {
                 menu_item_id: "menu-discoverytsta1".to_owned(),
                 quantity: 1,
@@ -7234,7 +8734,7 @@ mod tests {
         let payroll = payroll_operator();
         let create_request = EmployeeOrderCreateRequestPayload {
             plant_id: "fab-a".to_owned(),
-            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
             line_items: vec![OrderLineItemRequestPayload {
                 menu_item_id: "menu-discoverytsta1".to_owned(),
                 quantity: 1,
@@ -7425,5 +8925,298 @@ mod tests {
         )
         .expect("lock with reason should succeed");
         assert_eq!(locked.settlement_cycle.lock_state, "LOCKED");
+    }
+
+    #[test]
+    fn mcp_and_http_verification_paths_share_validation_error_codes() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order = handle_create_employee_order(&state, create_request)
+            .expect("create order should succeed for verification parity");
+
+        let http_error = handle_verify_order_pickup(
+            &state,
+            created_order.order_id.clone(),
+            PickupVerificationRequest {
+                verification_code: "   ".to_owned(),
+            },
+            "http-verify-parity",
+        )
+        .expect_err("http pickup verification should reject empty verificationCode");
+
+        let service_account = oauth_service_account_actor(
+            "svc-verify-parity",
+            Role::Employee,
+            PlantScope::restricted(vec![plant_id("fab-a")]).expect("scope should be valid"),
+        );
+        let grant = McpServiceAccountGrant::new(
+            service_account.actor_id().clone(),
+            service_account,
+            [MCP_TOOL_VERIFICATION_VERIFY_PICKUP_TOTP],
+        )
+        .expect("verification grant should be valid");
+        let mcp_error = invoke_mcp_write_for_test(
+            &state,
+            &grant,
+            MCP_TOOL_VERIFICATION_VERIFY_PICKUP_TOTP,
+            serde_json::json!({
+                "orderId": created_order.order_id,
+                "request": {
+                    "verificationCode": "   "
+                }
+            }),
+        )
+        .expect_err("mcp pickup verification should reject empty verificationCode");
+
+        assert_eq!(http_error.0, mcp_error.0);
+        assert_eq!(http_error.1.code, mcp_error.1.code);
+    }
+
+    #[test]
+    fn mcp_and_http_compliance_review_paths_share_validation_error_codes() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let committee = committee_admin();
+
+        let http_error = handle_review_vendor_application(
+            &state,
+            &committee,
+            "ven-discoverytst-a1".to_owned(),
+            VendorApplicationReviewRequest {
+                decision: "INVALID".to_owned(),
+                comment: "short".to_owned(),
+                decided_on_epoch_day: now_epoch_day,
+            },
+        )
+        .expect_err("http compliance review should reject unsupported decision");
+
+        let service_account = oauth_service_account_actor(
+            "svc-compliance-parity",
+            Role::CommitteeAdmin,
+            PlantScope::all(),
+        );
+        let grant = McpServiceAccountGrant::new(
+            service_account.actor_id().clone(),
+            service_account,
+            [MCP_TOOL_COMPLIANCE_REVIEW_VENDOR_APPLICATION],
+        )
+        .expect("compliance review grant should be valid");
+        let mcp_error = invoke_mcp_write_for_test(
+            &state,
+            &grant,
+            MCP_TOOL_COMPLIANCE_REVIEW_VENDOR_APPLICATION,
+            serde_json::json!({
+                "vendorId": "ven-discoverytst-a1",
+                "decision": "INVALID",
+                "comment": "short",
+                "decidedOnEpochDay": now_epoch_day
+            }),
+        )
+        .expect_err("mcp compliance review should reject unsupported decision");
+
+        assert_eq!(http_error.0, mcp_error.0);
+        assert_eq!(http_error.1.code, mcp_error.1.code);
+    }
+
+    #[test]
+    fn mcp_and_http_settlement_paths_share_validation_error_codes() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let payroll = payroll_operator();
+        let http_query = PayrollExportQuery {
+            pay_period: None,
+            cycle_key: Some("cycle-missing-pay-period".to_owned()),
+            page: Some(1),
+            page_size: Some(20),
+            sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
+            sort_order: Some(SortOrderQuery::Asc),
+        };
+
+        let http_error = handle_export_payroll_deductions(&state, &payroll, http_query)
+            .expect_err("http settlement export should require payPeriod");
+
+        let service_account = oauth_service_account_actor(
+            "svc-settlement-parity",
+            Role::PayrollOperator,
+            PlantScope::all(),
+        );
+        let grant = McpServiceAccountGrant::new(
+            service_account.actor_id().clone(),
+            service_account,
+            [MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS],
+        )
+        .expect("settlement export grant should be valid");
+        let mcp_error = invoke_mcp_write_for_test(
+            &state,
+            &grant,
+            MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS,
+            serde_json::json!({
+                "payPeriod": null,
+                "cycleKey": "cycle-missing-pay-period",
+                "page": 1,
+                "pageSize": 20,
+                "sortBy": "deliveryDate",
+                "sortOrder": "asc"
+            }),
+        )
+        .expect_err("mcp settlement export should require payPeriod");
+
+        assert_eq!(http_error.0, mcp_error.0);
+        assert_eq!(http_error.1.code, mcp_error.1.code);
+    }
+
+    #[test]
+    fn mcp_and_http_anomaly_paths_share_validation_error_codes() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let committee = committee_admin();
+        let alert_id = "alt-0000000000000001".to_owned();
+
+        let http_error = handle_update_admin_anomaly_alert(
+            &state,
+            &committee,
+            alert_id.clone(),
+            AdminAnomalyAlertPatchRequest {
+                operation: "INVALID".to_owned(),
+                owner_actor_id: None,
+                note: None,
+                closure_note: None,
+                closure_evidence_refs: None,
+                ticket_reference: None,
+            },
+        )
+        .expect_err("http anomaly patch should reject unsupported operation");
+
+        let service_account = oauth_service_account_actor(
+            "svc-anomaly-parity",
+            Role::CommitteeAdmin,
+            PlantScope::all(),
+        );
+        let grant = McpServiceAccountGrant::new(
+            service_account.actor_id().clone(),
+            service_account,
+            [MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS],
+        )
+        .expect("anomaly update grant should be valid");
+        let mcp_error = invoke_mcp_write_for_test(
+            &state,
+            &grant,
+            MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS,
+            serde_json::json!({
+                "alertId": alert_id,
+                "request": {
+                    "operation": "INVALID"
+                }
+            }),
+        )
+        .expect_err("mcp anomaly patch should reject unsupported operation");
+
+        assert_eq!(http_error.0, mcp_error.0);
+        assert_eq!(http_error.1.code, mcp_error.1.code);
+    }
+
+    #[test]
+    fn mcp_bridge_write_authorization_emits_auditable_bridge_metadata() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let service_account = oauth_service_account_actor(
+            "svc-bridge-audit-parity",
+            Role::CommitteeAdmin,
+            PlantScope::all(),
+        );
+        let grant = McpServiceAccountGrant::new(
+            service_account.actor_id().clone(),
+            service_account,
+            [MCP_TOOL_ANOMALY_UPSERT_RULE],
+        )
+        .expect("bridge audit grant should be valid");
+        let bridge = McpShortLivedKeyBridge::new(
+            "bridge-key-audit-test",
+            10_000,
+            10_300,
+            10_100,
+            "emergency governance exception",
+        )
+        .expect("bridge should be valid");
+        let auth_gateway = McpAuthorizationGateway::new(AccessController::with_default_policy());
+
+        invoke_mcp_write_tool(
+            &state,
+            &auth_gateway,
+            &grant,
+            MCP_TOOL_ANOMALY_UPSERT_RULE,
+            serde_json::json!({
+                "ruleId": "rule-bridgeaudit01",
+                "request": {
+                    "kind": "EXPIRY_RISK",
+                    "displayName": "Bridge Audit Rule",
+                    "description": "exercise bridge-key audit metadata persistence",
+                    "governanceIssueId": "issue-bridge-audit",
+                    "enabled": true,
+                    "thresholdValue": 7.5,
+                    "thresholdComparator": "LTE",
+                    "evaluationWindowDays": 7,
+                    "slaMinutes": 30,
+                    "severity": "CRITICAL"
+                }
+            }),
+            Some(&bridge),
+            10_150,
+            "mcp-bridge-audit-request",
+        )
+        .expect("mcp anomaly upsert with bridge authorization should succeed");
+
+        let audit_events = state
+            .audit_trail
+            .investigation_query(
+                &committee_admin(),
+                &AuditInvestigationFilter::default()
+                    .with_entity(
+                        AuditEntityType::AuditTrail,
+                        format!("mcp-write-authz:{MCP_TOOL_ANOMALY_UPSERT_RULE}"),
+                    )
+                    .expect("mcp authorization audit filter should be valid"),
+            )
+            .expect("mcp authorization audit events should be queryable");
+        let event = audit_events
+            .iter()
+            .find(|event| event.reason().contains("mcp-write-authz"))
+            .expect("mcp authorization audit evidence should exist");
+
+        assert_eq!(
+            event.audit_identity().authentication_source(),
+            AuthenticationSource::OAuthServiceAccount
+        );
+        assert_eq!(
+            event.audit_identity().operation_id(),
+            "manageVendorComplianceLifecycle"
+        );
+        assert!(event
+            .reason()
+            .contains("model=OAUTH_SERVICE_ACCOUNT_WITH_BRIDGE_KEY"));
+        assert!(event.reason().contains("bridgeKeyId=bridge-key-audit-test"));
+        assert!(event
+            .reason()
+            .contains("bridgeReason=emergency governance exception"));
     }
 }

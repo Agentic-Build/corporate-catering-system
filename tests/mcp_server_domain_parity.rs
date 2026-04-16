@@ -21,9 +21,11 @@ use corporate_catering_system::transport::http::{
 };
 use corporate_catering_system::transport::mcp::{
     runtime_mcp_resource_contract_issues, runtime_mcp_resources, runtime_mcp_tool_contract_issues,
-    runtime_mcp_tools, McpAnomalyExecutionGateway, McpAuthenticationModel, McpAuthorizationError,
-    McpAuthorizationGateway, McpCapabilityDomain, McpOrderingExecutionGateway,
-    McpServiceAccountGrant, McpShortLivedKeyBridge,
+    runtime_mcp_tools, runtime_mcp_write_tool_mapping_contract_issues, McpAnomalyExecutionGateway,
+    McpAuthenticationModel, McpAuthorizationError, McpAuthorizationGateway, McpCapabilityDomain,
+    McpOrderingExecutionGateway, McpServiceAccountGrant, McpShortLivedKeyBridge,
+    McpToolExecutionError, MCP_TOOL_ANOMALY_UPSERT_RULE, MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER,
+    MCP_TOOL_ORDERING_UPDATE_EMPLOYEE_ORDER,
 };
 use corporate_catering_system::vendor_compliance::{
     ComplianceDate, ComplianceDocumentTemplate, DocumentTemplateId, HistoryRetentionPolicy,
@@ -76,6 +78,20 @@ fn committee_actor(actor_id_value: &str) -> AuthenticatedActorContext {
         AuthenticationSource::CorporateSso,
     )
     .expect("committee actor should be valid")
+}
+
+fn oauth_service_account_actor(
+    actor_id_value: &str,
+    role: Role,
+    plant_scope: PlantScope,
+) -> AuthenticatedActorContext {
+    AuthenticatedActorContext::new(
+        actor_id(actor_id_value),
+        role,
+        plant_scope,
+        AuthenticationSource::OAuthServiceAccount,
+    )
+    .expect("oauth service-account actor should be valid")
 }
 
 fn vendor_id(value: &str) -> VendorId {
@@ -237,13 +253,27 @@ fn mcp_catalog_covers_required_domains_for_tools_and_resources() {
 }
 
 #[test]
+fn mcp_write_tools_have_shared_service_mapping_evidence() {
+    let issues = runtime_mcp_write_tool_mapping_contract_issues();
+    assert!(
+        issues.is_empty(),
+        "runtime MCP write-tool mappings have issues:\n{}",
+        issues.join("\n")
+    );
+}
+
+#[test]
 fn mcp_oauth_service_account_and_bridge_controls_enforce_tool_level_rbac() {
     ensure_test_otel_endpoint();
-    let service_account_actor = committee_actor("svc-mcp-domain-authz");
+    let service_account_actor = oauth_service_account_actor(
+        "svc-mcp-domain-authz",
+        Role::CommitteeAdmin,
+        PlantScope::all(),
+    );
     let service_account_grant = McpServiceAccountGrant::new(
         service_account_actor.actor_id().clone(),
         service_account_actor,
-        ["anomaly.upsert_rule"],
+        [MCP_TOOL_ANOMALY_UPSERT_RULE],
     )
     .expect("service account grant should be valid");
     let valid_bridge = McpShortLivedKeyBridge::new(
@@ -259,7 +289,7 @@ fn mcp_oauth_service_account_and_bridge_controls_enforce_tool_level_rbac() {
     let authorized = gateway
         .authorize_tool_write(
             &service_account_grant,
-            "anomaly.upsert_rule",
+            MCP_TOOL_ANOMALY_UPSERT_RULE,
             None,
             1_575,
             Some(&valid_bridge),
@@ -289,7 +319,7 @@ fn mcp_oauth_service_account_and_bridge_controls_enforce_tool_level_rbac() {
     let expired = gateway
         .authorize_tool_write(
             &service_account_grant,
-            "anomaly.upsert_rule",
+            MCP_TOOL_ANOMALY_UPSERT_RULE,
             None,
             1_700,
             Some(&valid_bridge),
@@ -306,7 +336,7 @@ fn mcp_oauth_service_account_and_bridge_controls_enforce_tool_level_rbac() {
     let ttl_error = gateway
         .authorize_tool_write(
             &service_account_grant,
-            "anomaly.upsert_rule",
+            MCP_TOOL_ANOMALY_UPSERT_RULE,
             None,
             1_575,
             Some(&long_ttl_bridge),
@@ -323,7 +353,7 @@ fn mcp_oauth_service_account_and_bridge_controls_enforce_tool_level_rbac() {
     let stale_error = gateway
         .authorize_tool_write(
             &service_account_grant,
-            "anomaly.upsert_rule",
+            MCP_TOOL_ANOMALY_UPSERT_RULE,
             None,
             1_575,
             Some(&stale_rotation_bridge),
@@ -332,6 +362,18 @@ fn mcp_oauth_service_account_and_bridge_controls_enforce_tool_level_rbac() {
     assert!(matches!(
         stale_error,
         McpAuthorizationError::BridgeKeyRotationStale { .. }
+    ));
+
+    let non_oauth_actor = committee_actor("svc-mcp-domain-authz-legacy-source");
+    let non_oauth_error = McpServiceAccountGrant::new(
+        non_oauth_actor.actor_id().clone(),
+        non_oauth_actor,
+        [MCP_TOOL_ANOMALY_UPSERT_RULE],
+    )
+    .expect_err("service-account grant must require OAuth service-account source");
+    assert!(matches!(
+        non_oauth_error,
+        McpAuthorizationError::UnsupportedServiceAccountAuthenticationSource { .. }
     ));
 }
 
@@ -378,6 +420,39 @@ fn mcp_and_http_ordering_gateways_share_validation_and_error_behavior() {
     let http_gateway =
         HttpOrderingExecutionGateway::new(&lifecycle, &delivery_policy, &menu_supply);
     let mcp_gateway = McpOrderingExecutionGateway::new(&lifecycle, &delivery_policy, &menu_supply);
+    let mcp_service_account = oauth_service_account_actor(
+        "svc-mcp-ordering-parity",
+        Role::Employee,
+        restricted_scope(&["fab-a"]),
+    );
+    let mcp_grant = McpServiceAccountGrant::new(
+        mcp_service_account.actor_id().clone(),
+        mcp_service_account,
+        [
+            MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER,
+            MCP_TOOL_ORDERING_UPDATE_EMPLOYEE_ORDER,
+        ],
+    )
+    .expect("MCP ordering grant should be valid");
+    let auth_gateway = McpAuthorizationGateway::new(AccessController::with_default_policy());
+    let create_authorized = auth_gateway
+        .authorize_tool_write(
+            &mcp_grant,
+            MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER,
+            Some(&plant_id("fab-a")),
+            2_000,
+            None,
+        )
+        .expect("mcp create write should be authorized");
+    let update_authorized = auth_gateway
+        .authorize_tool_write(
+            &mcp_grant,
+            MCP_TOOL_ORDERING_UPDATE_EMPLOYEE_ORDER,
+            Some(&plant_id("fab-a")),
+            2_001,
+            None,
+        )
+        .expect("mcp update write should be authorized");
 
     http_gateway
         .execute_create_employee_order(
@@ -395,7 +470,7 @@ fn mcp_and_http_ordering_gateways_share_validation_and_error_behavior() {
         .expect("http create should succeed");
     mcp_gateway
         .execute_create_employee_order(
-            &employee,
+            &create_authorized,
             order_id("ord-mcp-http-parity-002"),
             &vendor,
             &plant_id("fab-a"),
@@ -420,7 +495,7 @@ fn mcp_and_http_ordering_gateways_share_validation_and_error_behavior() {
         .expect_err("http should reject unsupported employee mutation");
     let mcp_unsupported = mcp_gateway
         .execute_update_employee_order(
-            &employee,
+            &update_authorized,
             &order_id("ord-mcp-http-parity-002"),
             &vendor,
             &plant_id("fab-a"),
@@ -436,9 +511,9 @@ fn mcp_and_http_ordering_gateways_share_validation_and_error_behavior() {
     ));
     assert!(matches!(
         mcp_unsupported,
-        HttpOrderExecutionError::UnsupportedEmployeeMutation {
+        McpToolExecutionError::Domain(HttpOrderExecutionError::UnsupportedEmployeeMutation {
             operation: "MARK_REFUND_PENDING"
-        }
+        })
     ));
 
     drop(http_gateway);
@@ -459,6 +534,15 @@ fn mcp_and_http_ordering_gateways_share_validation_and_error_behavior() {
     let http_gateway =
         HttpOrderingExecutionGateway::new(&lifecycle, &delivery_policy, &menu_supply);
     let mcp_gateway = McpOrderingExecutionGateway::new(&lifecycle, &delivery_policy, &menu_supply);
+    let create_authorized = auth_gateway
+        .authorize_tool_write(
+            &mcp_grant,
+            MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER,
+            Some(&plant_id("fab-a")),
+            2_002,
+            None,
+        )
+        .expect("mcp create write should remain authorized");
 
     let http_deliverability = http_gateway
         .execute_create_employee_order(
@@ -476,7 +560,7 @@ fn mcp_and_http_ordering_gateways_share_validation_and_error_behavior() {
         .expect_err("http create should fail due to deny mapping");
     let mcp_deliverability = mcp_gateway
         .execute_create_employee_order(
-            &employee,
+            &create_authorized,
             order_id("ord-mcp-http-parity-004"),
             &vendor,
             &plant_id("fab-a"),
@@ -494,7 +578,7 @@ fn mcp_and_http_ordering_gateways_share_validation_and_error_behavior() {
     ));
     assert!(matches!(
         mcp_deliverability,
-        HttpOrderExecutionError::Deliverability(_)
+        McpToolExecutionError::Domain(HttpOrderExecutionError::Deliverability(_))
     ));
 }
 
@@ -505,17 +589,21 @@ fn high_risk_mcp_writes_are_authorized_and_audited() {
         ImmutableAuditTrail::new(AuditRetentionPolicy::new(365).expect("policy should be valid"));
     let anomaly_workflow = AnomalyAlertWorkflow::with_default_rules(audit_trail.clone());
 
-    let service_account_actor = committee_actor("svc-mcp-audit-highrisk");
+    let service_account_actor = oauth_service_account_actor(
+        "svc-mcp-audit-highrisk",
+        Role::CommitteeAdmin,
+        PlantScope::all(),
+    );
     let grant = McpServiceAccountGrant::new(
         service_account_actor.actor_id().clone(),
         service_account_actor.clone(),
-        ["anomaly.upsert_rule"],
+        [MCP_TOOL_ANOMALY_UPSERT_RULE],
     )
     .expect("service account grant should be valid");
 
     let auth_gateway = McpAuthorizationGateway::new(AccessController::with_default_policy());
     let authorized = auth_gateway
-        .authorize_tool_write(&grant, "anomaly.upsert_rule", None, 2_000, None)
+        .authorize_tool_write(&grant, MCP_TOOL_ANOMALY_UPSERT_RULE, None, 2_000, None)
         .expect("high-risk MCP write should be authorized");
     assert!(authorized.risk().is_high_risk_write());
     assert_eq!(
@@ -539,11 +627,7 @@ fn high_risk_mcp_writes_are_authorized_and_audited() {
     )
     .expect("anomaly rule should be valid");
     mcp_anomaly_gateway
-        .execute_upsert_rule(
-            authorized.authorized_write().actor(),
-            rule,
-            AuditTimestamp::from_epoch_day(200),
-        )
+        .execute_upsert_rule(&authorized, rule, AuditTimestamp::from_epoch_day(200))
         .expect("anomaly rule upsert should succeed");
 
     let events = audit_trail

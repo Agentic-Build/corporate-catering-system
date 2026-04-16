@@ -93,6 +93,13 @@ fn identity_model_enforces_only_supported_authentication_sources() {
     )
     .is_ok());
     assert!(AuthenticatedActorContext::new(
+        actor_id("committee-oauth-ok"),
+        Role::CommitteeAdmin,
+        PlantScope::all(),
+        AuthenticationSource::OAuthServiceAccount,
+    )
+    .is_ok());
+    assert!(AuthenticatedActorContext::new(
         actor_id("vendor-ok"),
         Role::VendorOperator,
         restricted_scope(&["fab-a"]),
@@ -123,6 +130,19 @@ fn identity_model_enforces_only_supported_authentication_sources() {
         Err(IdentityContextError::UnsupportedIdentitySource {
             role: Role::VendorOperator,
             source: AuthenticationSource::CorporateSso,
+        })
+    ));
+
+    assert!(matches!(
+        AuthenticatedActorContext::new(
+            actor_id("employee-invalid-oauth-source"),
+            Role::Employee,
+            restricted_scope(&["fab-a"]),
+            AuthenticationSource::VendorAccountMfa,
+        ),
+        Err(IdentityContextError::UnsupportedIdentitySource {
+            role: Role::Employee,
+            source: AuthenticationSource::VendorAccountMfa,
         })
     ));
 }

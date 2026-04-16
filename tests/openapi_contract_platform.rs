@@ -10,7 +10,8 @@ use corporate_catering_system::identity::{
 };
 use corporate_catering_system::transport::http::{runtime_http_routes, HttpAuthorizationGateway};
 use corporate_catering_system::transport::mcp::{
-    runtime_mcp_tool_contract_issues, runtime_mcp_tools, McpAuthorizationGateway, McpOperation,
+    runtime_mcp_tool_contract_issues, runtime_mcp_tools,
+    runtime_mcp_write_tool_mapping_contract_issues, McpAuthorizationGateway, McpOperation,
 };
 use serde_json::Value;
 
@@ -133,7 +134,11 @@ fn contract_is_openapi_31_and_uses_only_locked_auth_model() {
         .collect::<BTreeSet<_>>();
     assert_eq!(
         auth_sources,
-        BTreeSet::from(["CORPORATE_SSO".to_owned(), "VENDOR_ACCOUNT_MFA".to_owned()])
+        BTreeSet::from([
+            "CORPORATE_SSO".to_owned(),
+            "VENDOR_ACCOUNT_MFA".to_owned(),
+            "OAUTH_SERVICE_ACCOUNT".to_owned(),
+        ])
     );
 }
 
@@ -1322,6 +1327,12 @@ fn mcp_contract_checks_are_wired_for_future_runtime_tools() {
         issues.is_empty(),
         "runtime MCP tool catalog has contract issues:\n{}",
         issues.join("\n")
+    );
+    let mapping_issues = runtime_mcp_write_tool_mapping_contract_issues();
+    assert!(
+        mapping_issues.is_empty(),
+        "runtime MCP write-tool mappings have contract issues:\n{}",
+        mapping_issues.join("\n")
     );
 
     let access_controller = AccessController::with_default_policy();

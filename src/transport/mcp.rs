@@ -9,7 +9,7 @@ use crate::anomaly_alert::{
     AnomalySignalSnapshot,
 };
 use crate::audit::AuditTimestamp;
-use crate::identity::{ActorId, AuthenticatedActorContext, PlantId};
+use crate::identity::{ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId};
 use crate::menu_supply_window::{
     EmployeeMenuDiscoveryEntry, MenuSupplyPolicy, MenuSupplyWindowError, OrderId,
     OrderLifecycleState, OrderLineItemRequest, OrderMutation,
@@ -34,6 +34,25 @@ use crate::vendor_delivery_mapping::{TaipeiBusinessMoment, VendorPlantDeliveryPo
 const MAX_BRIDGE_KEY_TTL_SECONDS: i64 = 15 * 60;
 const MAX_BRIDGE_ROTATION_STALENESS_SECONDS: i64 = 5 * 60;
 const MAX_BRIDGE_AUDIT_REASON_LENGTH: usize = 280;
+
+pub const MCP_TOOL_ORDERING_LIST_MENU_DISCOVERY: &str = "ordering.list_menu_discovery";
+pub const MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER: &str = "ordering.create_employee_order";
+pub const MCP_TOOL_ORDERING_UPDATE_EMPLOYEE_ORDER: &str = "ordering.update_employee_order";
+pub const MCP_TOOL_VERIFICATION_VERIFY_PICKUP_TOTP: &str = "verification.verify_pickup_totp";
+pub const MCP_TOOL_COMPLIANCE_REVIEW_VENDOR_APPLICATION: &str =
+    "compliance.review_vendor_application";
+pub const MCP_TOOL_COMPLIANCE_RUN_VENDOR_LIFECYCLE: &str = "compliance.run_vendor_lifecycle";
+pub const MCP_TOOL_SETTLEMENT_QUERY_ORDER_LEDGER: &str = "settlement.query_order_ledger";
+pub const MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS: &str =
+    "settlement.export_payroll_deductions";
+pub const MCP_TOOL_SETTLEMENT_CLOSE_MONTHLY_SETTLEMENT: &str =
+    "settlement.close_monthly_settlement";
+pub const MCP_TOOL_SETTLEMENT_LOCK_CYCLE: &str = "settlement.lock_cycle";
+pub const MCP_TOOL_SETTLEMENT_UNLOCK_CYCLE: &str = "settlement.unlock_cycle";
+pub const MCP_TOOL_ANOMALY_LIST_ALERTS: &str = "anomaly.list_alerts";
+pub const MCP_TOOL_ANOMALY_EVALUATE_ALERTS: &str = "anomaly.evaluate_alerts";
+pub const MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS: &str = "anomaly.update_alert_status";
+pub const MCP_TOOL_ANOMALY_UPSERT_RULE: &str = "anomaly.upsert_rule";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum McpCapabilityDomain {
@@ -189,91 +208,91 @@ impl RuntimeMcpTool {
 
 const RUNTIME_MCP_TOOLS: [RuntimeMcpTool; 15] = [
     RuntimeMcpTool::new(
-        "ordering.list_menu_discovery",
+        MCP_TOOL_ORDERING_LIST_MENU_DISCOVERY,
         McpOperation::PlaceEmployeeOrder,
         McpCapabilityDomain::Ordering,
         McpToolRisk::ReadOnly,
     ),
     RuntimeMcpTool::new(
-        "ordering.create_employee_order",
+        MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER,
         McpOperation::PlaceEmployeeOrder,
         McpCapabilityDomain::Ordering,
         McpToolRisk::HighRiskWrite,
     ),
     RuntimeMcpTool::new(
-        "ordering.update_employee_order",
+        MCP_TOOL_ORDERING_UPDATE_EMPLOYEE_ORDER,
         McpOperation::PlaceEmployeeOrder,
         McpCapabilityDomain::Ordering,
         McpToolRisk::Write,
     ),
     RuntimeMcpTool::new(
-        "verification.verify_pickup_totp",
+        MCP_TOOL_VERIFICATION_VERIFY_PICKUP_TOTP,
         McpOperation::PlaceEmployeeOrder,
         McpCapabilityDomain::Verification,
         McpToolRisk::HighRiskWrite,
     ),
     RuntimeMcpTool::new(
-        "compliance.review_vendor_application",
+        MCP_TOOL_COMPLIANCE_REVIEW_VENDOR_APPLICATION,
         McpOperation::ManageVendorComplianceLifecycle,
         McpCapabilityDomain::ComplianceReview,
         McpToolRisk::HighRiskWrite,
     ),
     RuntimeMcpTool::new(
-        "compliance.run_vendor_lifecycle",
+        MCP_TOOL_COMPLIANCE_RUN_VENDOR_LIFECYCLE,
         McpOperation::ManageVendorComplianceLifecycle,
         McpCapabilityDomain::ComplianceReview,
         McpToolRisk::Write,
     ),
     RuntimeMcpTool::new(
-        "settlement.query_order_ledger",
+        MCP_TOOL_SETTLEMENT_QUERY_ORDER_LEDGER,
         McpOperation::ExportPayrollDeductions,
         McpCapabilityDomain::Settlement,
         McpToolRisk::ReadOnly,
     ),
     RuntimeMcpTool::new(
-        "settlement.export_payroll_deductions",
+        MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS,
         McpOperation::ExportPayrollDeductions,
         McpCapabilityDomain::Settlement,
         McpToolRisk::HighRiskWrite,
     ),
     RuntimeMcpTool::new(
-        "settlement.close_monthly_settlement",
+        MCP_TOOL_SETTLEMENT_CLOSE_MONTHLY_SETTLEMENT,
         McpOperation::ExportPayrollDeductions,
         McpCapabilityDomain::Settlement,
         McpToolRisk::HighRiskWrite,
     ),
     RuntimeMcpTool::new(
-        "settlement.lock_cycle",
+        MCP_TOOL_SETTLEMENT_LOCK_CYCLE,
         McpOperation::ManageVendorComplianceLifecycle,
         McpCapabilityDomain::Settlement,
         McpToolRisk::HighRiskWrite,
     ),
     RuntimeMcpTool::new(
-        "settlement.unlock_cycle",
+        MCP_TOOL_SETTLEMENT_UNLOCK_CYCLE,
         McpOperation::ManageVendorComplianceLifecycle,
         McpCapabilityDomain::Settlement,
         McpToolRisk::HighRiskWrite,
     ),
     RuntimeMcpTool::new(
-        "anomaly.list_alerts",
+        MCP_TOOL_ANOMALY_LIST_ALERTS,
         McpOperation::ManageVendorComplianceLifecycle,
         McpCapabilityDomain::Anomaly,
         McpToolRisk::ReadOnly,
     ),
     RuntimeMcpTool::new(
-        "anomaly.evaluate_alerts",
+        MCP_TOOL_ANOMALY_EVALUATE_ALERTS,
         McpOperation::ManageVendorComplianceLifecycle,
         McpCapabilityDomain::Anomaly,
         McpToolRisk::Write,
     ),
     RuntimeMcpTool::new(
-        "anomaly.update_alert_status",
+        MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS,
         McpOperation::ManageVendorComplianceLifecycle,
         McpCapabilityDomain::Anomaly,
         McpToolRisk::HighRiskWrite,
     ),
     RuntimeMcpTool::new(
-        "anomaly.upsert_rule",
+        MCP_TOOL_ANOMALY_UPSERT_RULE,
         McpOperation::ManageVendorComplianceLifecycle,
         McpCapabilityDomain::Anomaly,
         McpToolRisk::HighRiskWrite,
@@ -333,6 +352,84 @@ pub fn runtime_mcp_tools() -> &'static [RuntimeMcpTool] {
 
 pub fn runtime_mcp_resources() -> &'static [RuntimeMcpResource] {
     &RUNTIME_MCP_RESOURCES
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RuntimeMcpWriteToolServiceBinding {
+    tool_name: &'static str,
+    shared_service: &'static str,
+}
+
+impl RuntimeMcpWriteToolServiceBinding {
+    pub const fn new(tool_name: &'static str, shared_service: &'static str) -> Self {
+        Self {
+            tool_name,
+            shared_service,
+        }
+    }
+
+    pub const fn tool_name(self) -> &'static str {
+        self.tool_name
+    }
+
+    pub const fn shared_service(self) -> &'static str {
+        self.shared_service
+    }
+}
+
+const RUNTIME_MCP_WRITE_TOOL_SERVICE_BINDINGS: [RuntimeMcpWriteToolServiceBinding; 12] = [
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER,
+        "HttpOrderingExecutionGateway::execute_create_employee_order",
+    ),
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_ORDERING_UPDATE_EMPLOYEE_ORDER,
+        "HttpOrderingExecutionGateway::execute_update_employee_order",
+    ),
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_VERIFICATION_VERIFY_PICKUP_TOTP,
+        "PickupTotpVerifier::verify + MenuSupplyPolicy::update_order",
+    ),
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_COMPLIANCE_REVIEW_VENDOR_APPLICATION,
+        "VendorComplianceLifecycle::review_application",
+    ),
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_COMPLIANCE_RUN_VENDOR_LIFECYCLE,
+        "VendorComplianceLifecycle::run_lifecycle",
+    ),
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS,
+        "PayrollLedgerService::export_sftp_batch",
+    ),
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_SETTLEMENT_CLOSE_MONTHLY_SETTLEMENT,
+        "PayrollLedgerService::close_monthly_settlement",
+    ),
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_SETTLEMENT_LOCK_CYCLE,
+        "PayrollLedgerService::lock_cycle",
+    ),
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_SETTLEMENT_UNLOCK_CYCLE,
+        "PayrollLedgerService::unlock_cycle_for_recompute",
+    ),
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_ANOMALY_EVALUATE_ALERTS,
+        "AnomalyAlertWorkflow::evaluate_rules",
+    ),
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS,
+        "AnomalyAlertWorkflow::transition_alert",
+    ),
+    RuntimeMcpWriteToolServiceBinding::new(
+        MCP_TOOL_ANOMALY_UPSERT_RULE,
+        "AnomalyAlertWorkflow::upsert_rule",
+    ),
+];
+
+pub fn runtime_mcp_write_tool_service_bindings() -> &'static [RuntimeMcpWriteToolServiceBinding] {
+    &RUNTIME_MCP_WRITE_TOOL_SERVICE_BINDINGS
 }
 
 pub fn runtime_mcp_tool_contract_issues() -> Vec<String> {
@@ -398,6 +495,56 @@ pub fn runtime_mcp_resource_contract_issues() -> Vec<String> {
     issues
 }
 
+pub fn runtime_mcp_write_tool_mapping_contract_issues() -> Vec<String> {
+    let mut issues = Vec::new();
+    let mut mapped_tool_names = HashSet::new();
+
+    for mapping in runtime_mcp_write_tool_service_bindings() {
+        if !mapped_tool_names.insert(mapping.tool_name()) {
+            issues.push(format!(
+                "duplicate MCP write-tool mapping for `{}`",
+                mapping.tool_name()
+            ));
+        }
+
+        if mapping.shared_service().trim().is_empty() {
+            issues.push(format!(
+                "MCP write-tool mapping `{}` must reference a shared domain service",
+                mapping.tool_name()
+            ));
+        }
+
+        match runtime_mcp_tool_by_name(mapping.tool_name()) {
+            Some(tool) => {
+                if !tool.risk().is_write() {
+                    issues.push(format!(
+                        "MCP write-tool mapping `{}` references a non-write MCP tool",
+                        mapping.tool_name()
+                    ));
+                }
+            }
+            None => issues.push(format!(
+                "MCP write-tool mapping `{}` does not match any runtime MCP tool",
+                mapping.tool_name()
+            )),
+        }
+    }
+
+    for tool in runtime_mcp_tools()
+        .iter()
+        .filter(|tool| tool.risk().is_write())
+    {
+        if !mapped_tool_names.contains(tool.tool_name()) {
+            issues.push(format!(
+                "MCP write tool `{}` is missing shared service mapping evidence",
+                tool.tool_name()
+            ));
+        }
+    }
+
+    issues
+}
+
 fn runtime_mcp_tool_by_name(tool_name: &str) -> Option<RuntimeMcpTool> {
     runtime_mcp_tools()
         .iter()
@@ -433,6 +580,14 @@ impl McpServiceAccountGrant {
                 service_account_id,
                 actor_id: actor.actor_id().clone(),
             });
+        }
+        if actor.authentication_source() != AuthenticationSource::OAuthServiceAccount {
+            return Err(
+                McpAuthorizationError::UnsupportedServiceAccountAuthenticationSource {
+                    service_account_id: service_account_id.clone(),
+                    source: actor.authentication_source(),
+                },
+            );
         }
 
         let mut normalized_tool_names = BTreeSet::new();
@@ -583,6 +738,10 @@ pub enum McpAuthorizationError {
         service_account_id: ActorId,
         actor_id: ActorId,
     },
+    UnsupportedServiceAccountAuthenticationSource {
+        service_account_id: ActorId,
+        source: AuthenticationSource,
+    },
     EmptyServiceAccountToolGrant {
         service_account_id: ActorId,
     },
@@ -593,6 +752,13 @@ pub enum McpAuthorizationError {
     ToolNotGrantedForServiceAccount {
         service_account_id: ActorId,
         tool_name: String,
+    },
+    ToolRequiresWriteAuthorization {
+        tool_name: String,
+    },
+    AuthorizedToolMismatch {
+        expected_tool_name: String,
+        authorized_tool_name: String,
     },
     InvalidBridgeKeyId,
     InvalidBridgeAuditReason,
@@ -637,6 +803,13 @@ impl std::fmt::Display for McpAuthorizationError {
                 f,
                 "service account id {service_account_id} must match actor id {actor_id}",
             ),
+            Self::UnsupportedServiceAccountAuthenticationSource {
+                service_account_id,
+                source,
+            } => write!(
+                f,
+                "service account {service_account_id} must authenticate via OAuth service-account source, got {source:?}",
+            ),
             Self::EmptyServiceAccountToolGrant { service_account_id } => write!(
                 f,
                 "service account {service_account_id} must grant at least one MCP tool",
@@ -654,6 +827,17 @@ impl std::fmt::Display for McpAuthorizationError {
             } => write!(
                 f,
                 "service account {service_account_id} is not allowed to execute MCP tool `{tool_name}`",
+            ),
+            Self::ToolRequiresWriteAuthorization { tool_name } => write!(
+                f,
+                "mcp tool `{tool_name}` is a write operation and requires write authorization",
+            ),
+            Self::AuthorizedToolMismatch {
+                expected_tool_name,
+                authorized_tool_name,
+            } => write!(
+                f,
+                "mcp tool authorization mismatch: expected `{expected_tool_name}`, got `{authorized_tool_name}`",
             ),
             Self::InvalidBridgeKeyId => {
                 f.write_str("short-lived MCP bridge key id must be non-empty")
@@ -725,6 +909,10 @@ impl AuthorizedMcpToolWrite {
         &self.authorized_write
     }
 
+    pub fn actor(&self) -> &AuthenticatedActorContext {
+        self.authorized_write.actor()
+    }
+
     pub fn tool_name(&self) -> &str {
         &self.tool_name
     }
@@ -751,6 +939,17 @@ impl AuthorizedMcpToolWrite {
 
     pub fn authentication_model(&self) -> McpAuthenticationModel {
         self.authentication_model
+    }
+
+    pub fn require_tool(&self, expected_tool_name: &str) -> Result<(), McpAuthorizationError> {
+        if self.tool_name == expected_tool_name {
+            return Ok(());
+        }
+
+        Err(McpAuthorizationError::AuthorizedToolMismatch {
+            expected_tool_name: expected_tool_name.to_owned(),
+            authorized_tool_name: self.tool_name.clone(),
+        })
     }
 }
 
@@ -865,6 +1064,66 @@ impl McpAuthorizationGateway {
             authentication_model,
         })
     }
+
+    pub fn authorize_tool_read(
+        &self,
+        grant: &McpServiceAccountGrant,
+        tool_name: impl Into<String>,
+    ) -> Result<RuntimeMcpTool, McpAuthorizationError> {
+        let tool_name = tool_name.into();
+        let normalized_tool_name = tool_name.trim();
+        let tool = runtime_mcp_tool_by_name(normalized_tool_name).ok_or(
+            McpAuthorizationError::UnknownMcpToolName {
+                tool_name: tool_name.clone(),
+            },
+        )?;
+
+        if !grant.allows_tool(tool.tool_name()) {
+            return Err(McpAuthorizationError::ToolNotGrantedForServiceAccount {
+                service_account_id: grant.service_account_id().clone(),
+                tool_name,
+            });
+        }
+
+        if tool.risk().is_write() {
+            return Err(McpAuthorizationError::ToolRequiresWriteAuthorization {
+                tool_name: tool.tool_name().to_owned(),
+            });
+        }
+
+        Ok(tool)
+    }
+}
+
+#[derive(Debug)]
+pub enum McpToolExecutionError<E> {
+    Authorization(McpAuthorizationError),
+    Domain(E),
+}
+
+impl<E> McpToolExecutionError<E> {
+    fn domain(error: E) -> Self {
+        Self::Domain(error)
+    }
+}
+
+impl<E: std::fmt::Display> std::fmt::Display for McpToolExecutionError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Authorization(error) => error.fmt(f),
+            Self::Domain(error) => error.fmt(f),
+        }
+    }
+}
+
+impl<E: std::error::Error + 'static> std::error::Error for McpToolExecutionError<E> {}
+
+fn authorized_actor_for_tool<'a>(
+    authorization: &'a AuthorizedMcpToolWrite,
+    expected_tool_name: &'static str,
+) -> Result<&'a AuthenticatedActorContext, McpAuthorizationError> {
+    authorization.require_tool(expected_tool_name)?;
+    Ok(authorization.actor())
 }
 
 pub struct McpOrderingExecutionGateway<'a> {
@@ -914,16 +1173,19 @@ impl<'a> McpOrderingExecutionGateway<'a> {
     #[allow(clippy::too_many_arguments)]
     pub fn execute_create_employee_order(
         &self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         order_id: OrderId,
         vendor_id: &VendorId,
         plant_id: &PlantId,
         delivery_epoch_day: i32,
         line_items: Vec<OrderLineItemRequest>,
         at: TaipeiBusinessMoment,
-    ) -> Result<(), HttpOrderExecutionError> {
+    ) -> Result<(), McpToolExecutionError<HttpOrderExecutionError>> {
+        let actor =
+            authorized_actor_for_tool(authorization, MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER)
+                .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "ordering.create_employee_order",
+            MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER,
             Some(actor.actor_id().as_str()),
             Some(plant_id.as_str()),
         );
@@ -946,20 +1208,23 @@ impl<'a> McpOrderingExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 
     pub fn execute_update_employee_order(
         &self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         order_id: &OrderId,
         vendor_id: &VendorId,
         plant_id: &PlantId,
         mutation: OrderMutation,
         at: TaipeiBusinessMoment,
-    ) -> Result<(), HttpOrderExecutionError> {
+    ) -> Result<(), McpToolExecutionError<HttpOrderExecutionError>> {
+        let actor =
+            authorized_actor_for_tool(authorization, MCP_TOOL_ORDERING_UPDATE_EMPLOYEE_ORDER)
+                .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "ordering.update_employee_order",
+            MCP_TOOL_ORDERING_UPDATE_EMPLOYEE_ORDER,
             Some(actor.actor_id().as_str()),
             Some(plant_id.as_str()),
         );
@@ -975,7 +1240,7 @@ impl<'a> McpOrderingExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 }
 
@@ -1039,17 +1304,20 @@ impl<'a> McpPickupVerificationExecutionGateway<'a> {
 
     pub fn execute_verify_pickup(
         &self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         order_id: &OrderId,
         verification_code: &str,
         at: TaipeiBusinessMoment,
-    ) -> Result<VerifiedTotp, McpPickupVerificationError> {
+    ) -> Result<VerifiedTotp, McpToolExecutionError<McpPickupVerificationError>> {
+        let actor =
+            authorized_actor_for_tool(authorization, MCP_TOOL_VERIFICATION_VERIFY_PICKUP_TOTP)
+                .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "verification.verify_pickup_totp",
+            MCP_TOOL_VERIFICATION_VERIFY_PICKUP_TOTP,
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
-        let result = (|| {
+        let result = (|| -> Result<VerifiedTotp, McpPickupVerificationError> {
             let verification_code = verification_code.trim();
             if verification_code.is_empty() {
                 return Err(McpPickupVerificationError::InvalidVerificationCodeFormat);
@@ -1093,7 +1361,7 @@ impl<'a> McpPickupVerificationExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 }
 
@@ -1110,14 +1378,17 @@ impl<'a> McpComplianceReviewExecutionGateway<'a> {
 
     pub fn execute_review_vendor_application(
         &mut self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         vendor_id: &VendorId,
         decision: VendorReviewDecision,
         comment: impl Into<String>,
         decided_on: ComplianceDate,
-    ) -> Result<VendorComplianceStatus, VendorComplianceError> {
+    ) -> Result<VendorComplianceStatus, McpToolExecutionError<VendorComplianceError>> {
+        let actor =
+            authorized_actor_for_tool(authorization, MCP_TOOL_COMPLIANCE_REVIEW_VENDOR_APPLICATION)
+                .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "compliance.review_vendor_application",
+            MCP_TOOL_COMPLIANCE_REVIEW_VENDOR_APPLICATION,
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
@@ -1129,16 +1400,19 @@ impl<'a> McpComplianceReviewExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 
     pub fn execute_run_vendor_lifecycle(
         &mut self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         run_on: ComplianceDate,
-    ) -> Result<LifecycleRunResult, VendorComplianceError> {
+    ) -> Result<LifecycleRunResult, McpToolExecutionError<VendorComplianceError>> {
+        let actor =
+            authorized_actor_for_tool(authorization, MCP_TOOL_COMPLIANCE_RUN_VENDOR_LIFECYCLE)
+                .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "compliance.run_vendor_lifecycle",
+            MCP_TOOL_COMPLIANCE_RUN_VENDOR_LIFECYCLE,
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
@@ -1148,7 +1422,7 @@ impl<'a> McpComplianceReviewExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 }
 
@@ -1187,7 +1461,7 @@ impl<'a> McpSettlementExecutionGateway<'a> {
     #[allow(clippy::too_many_arguments)]
     pub fn execute_export_payroll_deductions(
         &self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         pay_period: &str,
         cycle_key: &str,
         page: usize,
@@ -1195,9 +1469,12 @@ impl<'a> McpSettlementExecutionGateway<'a> {
         sort_by: PayrollSortField,
         sort_order: SortOrder,
         occurred_at: AuditTimestamp,
-    ) -> Result<PayrollExportPage, PayrollLedgerError> {
+    ) -> Result<PayrollExportPage, McpToolExecutionError<PayrollLedgerError>> {
+        let actor =
+            authorized_actor_for_tool(authorization, MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS)
+                .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "settlement.export_payroll_deductions",
+            MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS,
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
@@ -1216,21 +1493,24 @@ impl<'a> McpSettlementExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 
     pub fn execute_close_monthly_settlement(
         &self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         cycle_key: Option<&str>,
         page: usize,
         page_size: usize,
         sort_by: PayrollSortField,
         sort_order: SortOrder,
         occurred_at: AuditTimestamp,
-    ) -> Result<PayrollExportPage, PayrollLedgerError> {
+    ) -> Result<PayrollExportPage, McpToolExecutionError<PayrollLedgerError>> {
+        let actor =
+            authorized_actor_for_tool(authorization, MCP_TOOL_SETTLEMENT_CLOSE_MONTHLY_SETTLEMENT)
+                .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "settlement.close_monthly_settlement",
+            MCP_TOOL_SETTLEMENT_CLOSE_MONTHLY_SETTLEMENT,
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
@@ -1248,18 +1528,20 @@ impl<'a> McpSettlementExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 
     pub fn execute_lock_cycle(
         &self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         cycle_key: &str,
         reason: impl Into<String>,
         occurred_at: AuditTimestamp,
-    ) -> Result<PayrollSettlementLockReceipt, PayrollLedgerError> {
+    ) -> Result<PayrollSettlementLockReceipt, McpToolExecutionError<PayrollLedgerError>> {
+        let actor = authorized_actor_for_tool(authorization, MCP_TOOL_SETTLEMENT_LOCK_CYCLE)
+            .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "settlement.lock_cycle",
+            MCP_TOOL_SETTLEMENT_LOCK_CYCLE,
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
@@ -1271,18 +1553,20 @@ impl<'a> McpSettlementExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 
     pub fn execute_unlock_cycle(
         &self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         cycle_key: &str,
         reason: impl Into<String>,
         occurred_at: AuditTimestamp,
-    ) -> Result<PayrollSettlementLockReceipt, PayrollLedgerError> {
+    ) -> Result<PayrollSettlementLockReceipt, McpToolExecutionError<PayrollLedgerError>> {
+        let actor = authorized_actor_for_tool(authorization, MCP_TOOL_SETTLEMENT_UNLOCK_CYCLE)
+            .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "settlement.unlock_cycle",
+            MCP_TOOL_SETTLEMENT_UNLOCK_CYCLE,
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
@@ -1297,7 +1581,7 @@ impl<'a> McpSettlementExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 
     pub fn execute_sync_hr_api_adjunct(
@@ -1357,12 +1641,14 @@ impl<'a> McpAnomalyExecutionGateway<'a> {
 
     pub fn execute_upsert_rule(
         &self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         rule: AnomalyRule,
         occurred_at: AuditTimestamp,
-    ) -> Result<AnomalyRule, AnomalyAlertError> {
+    ) -> Result<AnomalyRule, McpToolExecutionError<AnomalyAlertError>> {
+        let actor = authorized_actor_for_tool(authorization, MCP_TOOL_ANOMALY_UPSERT_RULE)
+            .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "anomaly.upsert_rule",
+            MCP_TOOL_ANOMALY_UPSERT_RULE,
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
@@ -1374,17 +1660,19 @@ impl<'a> McpAnomalyExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 
     pub fn execute_evaluate_alerts(
         &self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         snapshot: AnomalySignalSnapshot,
         default_owner_actor_id: &ActorId,
-    ) -> Result<AnomalyAlertEvaluationResult, AnomalyAlertError> {
+    ) -> Result<AnomalyAlertEvaluationResult, McpToolExecutionError<AnomalyAlertError>> {
+        let actor = authorized_actor_for_tool(authorization, MCP_TOOL_ANOMALY_EVALUATE_ALERTS)
+            .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "anomaly.evaluate_alerts",
+            MCP_TOOL_ANOMALY_EVALUATE_ALERTS,
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
@@ -1396,7 +1684,7 @@ impl<'a> McpAnomalyExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 
     pub fn execute_list_alerts(
@@ -1420,14 +1708,16 @@ impl<'a> McpAnomalyExecutionGateway<'a> {
 
     pub fn execute_assign_alert_owner(
         &self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         alert_id: &AnomalyAlertId,
         owner_actor_id: &ActorId,
         occurred_at: AuditTimestamp,
         note: Option<String>,
-    ) -> Result<AnomalyAlertRecord, AnomalyAlertError> {
+    ) -> Result<AnomalyAlertRecord, McpToolExecutionError<AnomalyAlertError>> {
+        let actor = authorized_actor_for_tool(authorization, MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS)
+            .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "anomaly.assign_alert_owner",
+            MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS,
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
@@ -1443,13 +1733,13 @@ impl<'a> McpAnomalyExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 
     #[allow(clippy::too_many_arguments)]
     pub fn execute_transition_alert(
         &self,
-        actor: &AuthenticatedActorContext,
+        authorization: &AuthorizedMcpToolWrite,
         alert_id: &AnomalyAlertId,
         transition: AnomalyAlertTransition,
         occurred_at: AuditTimestamp,
@@ -1457,9 +1747,11 @@ impl<'a> McpAnomalyExecutionGateway<'a> {
         closure_note: Option<String>,
         closure_evidence_refs: Vec<String>,
         ticket_reference: Option<String>,
-    ) -> Result<AnomalyAlertRecord, AnomalyAlertError> {
+    ) -> Result<AnomalyAlertRecord, McpToolExecutionError<AnomalyAlertError>> {
+        let actor = authorized_actor_for_tool(authorization, MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS)
+            .map_err(McpToolExecutionError::Authorization)?;
         let telemetry = TelemetryService::McpGateway.begin_operation(
-            "anomaly.update_alert_status",
+            MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS,
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
@@ -1478,6 +1770,6 @@ impl<'a> McpAnomalyExecutionGateway<'a> {
         } else {
             TelemetryOutcome::Error
         });
-        result
+        result.map_err(McpToolExecutionError::domain)
     }
 }

@@ -12,6 +12,7 @@ pub enum Role {
 pub enum AuthenticationSource {
     CorporateSso,
     VendorAccountMfa,
+    OAuthServiceAccount,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -163,9 +164,13 @@ fn validate_identity_source(
 ) -> Result<(), IdentityContextError> {
     match (role, source) {
         (Role::Employee, AuthenticationSource::CorporateSso)
+        | (Role::Employee, AuthenticationSource::OAuthServiceAccount)
         | (Role::CommitteeAdmin, AuthenticationSource::CorporateSso)
+        | (Role::CommitteeAdmin, AuthenticationSource::OAuthServiceAccount)
         | (Role::PayrollOperator, AuthenticationSource::CorporateSso)
-        | (Role::VendorOperator, AuthenticationSource::VendorAccountMfa) => Ok(()),
+        | (Role::PayrollOperator, AuthenticationSource::OAuthServiceAccount)
+        | (Role::VendorOperator, AuthenticationSource::VendorAccountMfa)
+        | (Role::VendorOperator, AuthenticationSource::OAuthServiceAccount) => Ok(()),
         _ => Err(IdentityContextError::UnsupportedIdentitySource { role, source }),
     }
 }
