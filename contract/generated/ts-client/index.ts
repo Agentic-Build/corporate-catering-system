@@ -65,6 +65,8 @@ export type { Money } from './models/Money';
 export type { OrderIdPath } from './models/OrderIdPath';
 export type { OrderLineItem } from './models/OrderLineItem';
 export type { OrderLineItemRequest } from './models/OrderLineItemRequest';
+export type { OrderRetentionPurgeRequest } from './models/OrderRetentionPurgeRequest';
+export type { OrderRetentionPurgeResponse } from './models/OrderRetentionPurgeResponse';
 export type { OrderStatusFilterQuery } from './models/OrderStatusFilterQuery';
 export type { OrderTimelineEvent } from './models/OrderTimelineEvent';
 export type { OrderTimelineEventType } from './models/OrderTimelineEventType';

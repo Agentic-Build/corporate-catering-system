@@ -4,8 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use corporate_catering_system::audit::{
     AuditAction, AuditCorrelationId, AuditEntityRef, AuditEntityType, AuditEvidenceWrite,
-    AuditIdentityLink, AuditInvestigationFilter, AuditRetentionPolicy, AuditTimestamp,
-    AuditTrailError, ImmutableAuditTrail,
+    AuditIdentityLink, AuditInvestigationFilter, AuditRetentionPolicy, AuditSnapshotEncryptionKey,
+    AuditTimestamp, AuditTrailError, ImmutableAuditTrail,
 };
 use corporate_catering_system::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
@@ -93,6 +93,13 @@ fn taipei_moment(epoch_day: i32, minute_of_day: u16) -> TaipeiBusinessMoment {
 
 fn ensure_test_otel_endpoint() {
     std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4317");
+}
+
+fn audit_storage_key() -> AuditSnapshotEncryptionKey {
+    AuditSnapshotEncryptionKey::parse_hex(
+        "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+    )
+    .expect("audit storage encryption key should be valid")
 }
 
 fn append_manual_evidence(
@@ -407,6 +414,7 @@ fn json_storage_recovers_immutable_evidence_after_restart() {
     ensure_test_otel_endpoint();
     let committee = committee_admin();
     let employee = employee_actor();
+    let encryption_key = audit_storage_key();
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("system time should be monotonic")
@@ -416,8 +424,12 @@ fn json_storage_recovers_immutable_evidence_after_restart() {
 
     let retention = AuditRetentionPolicy::new(365).expect("policy should be valid");
     {
-        let audit_trail = ImmutableAuditTrail::with_json_storage(storage_path.clone(), retention)
-            .expect("audit trail should initialize");
+        let audit_trail = ImmutableAuditTrail::with_json_storage(
+            storage_path.clone(),
+            retention,
+            encryption_key.clone(),
+        )
+        .expect("audit trail should initialize");
         append_manual_evidence(
             &audit_trail,
             &employee,
@@ -433,10 +445,21 @@ fn json_storage_recovers_immutable_evidence_after_restart() {
             1
         );
     }
+    let persisted_content =
+        fs::read_to_string(&storage_path).expect("encrypted audit snapshot should be readable");
+    assert!(
+        !persisted_content.contains("ord-persisted-a"),
+        "encrypted snapshot must not leak plaintext entity ids"
+    );
+    assert!(
+        !persisted_content.contains("employee-audit-001"),
+        "encrypted snapshot must not leak plaintext actor ids"
+    );
 
     {
-        let recovered = ImmutableAuditTrail::with_json_storage(storage_path.clone(), retention)
-            .expect("audit trail should recover from storage");
+        let recovered =
+            ImmutableAuditTrail::with_json_storage(storage_path.clone(), retention, encryption_key)
+                .expect("audit trail should recover from storage");
         let gateway = HttpAuditInvestigationExecutionGateway::new(recovered);
         let events = gateway
             .execute_investigation_query(&committee, &AuditInvestigationFilter::default())
@@ -461,11 +484,59 @@ fn json_storage_rejects_empty_existing_snapshot_file() {
     fs::write(&storage_path, " \n ").expect("empty snapshot fixture should be writable");
 
     let retention = AuditRetentionPolicy::new(365).expect("policy should be valid");
-    let result = ImmutableAuditTrail::with_json_storage(storage_path.clone(), retention);
+    let result = ImmutableAuditTrail::with_json_storage(
+        storage_path.clone(),
+        retention,
+        audit_storage_key(),
+    );
     assert!(matches!(
         result,
         Err(AuditTrailError::PersistenceDataCorrupted(message)) if message.contains("empty")
     ));
 
     fs::remove_file(storage_path).expect("temporary empty snapshot should be removable");
+}
+
+#[test]
+fn json_storage_rejects_incorrect_decryption_key() {
+    ensure_test_otel_endpoint();
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be monotonic")
+        .as_nanos();
+    let storage_path = std::env::temp_dir().join(format!(
+        "corporate-catering-audit-key-mismatch-{nonce}.json"
+    ));
+    let retention = AuditRetentionPolicy::new(365).expect("policy should be valid");
+    let write_key = AuditSnapshotEncryptionKey::parse_hex(
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+    .expect("write key should be valid");
+    let read_key = AuditSnapshotEncryptionKey::parse_hex(
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    )
+    .expect("read key should be valid");
+    let committee = committee_admin();
+
+    {
+        let audit_trail =
+            ImmutableAuditTrail::with_json_storage(storage_path.clone(), retention, write_key)
+                .expect("audit trail should initialize");
+        append_manual_evidence(
+            &audit_trail,
+            &committee,
+            AuditAction::RunVendorComplianceLifecycle,
+            AuditEntityType::Vendor,
+            "ven-encryption-mismatch",
+            15,
+        );
+    }
+
+    let reopen = ImmutableAuditTrail::with_json_storage(storage_path.clone(), retention, read_key);
+    assert!(matches!(
+        reopen,
+        Err(AuditTrailError::PersistenceDecryption(_))
+    ));
+
+    fs::remove_file(storage_path).expect("temporary mismatch snapshot should be removable");
 }

@@ -5,6 +5,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use aes_gcm::aead::rand_core::{OsRng, RngCore};
+use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::{Aes256Gcm, Nonce};
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 use crate::identity::{ActorId, AuthenticatedActorContext, AuthenticationSource, PlantScope, Role};
@@ -16,6 +21,10 @@ const PURGE_AUDIT_EVIDENCE_OPERATION_ID: &str = "purgeAuditEvidence";
 const AUDIT_TRAIL_ENTITY_ID: &str = "audit-trail";
 const PURGE_AUDIT_EVIDENCE_CORRELATION_PREFIX: &str = "audit-trail-retention-purge";
 const MAX_AUDIT_REASON_LENGTH: usize = 280;
+const AUDIT_ENCRYPTION_KEY_BYTES: usize = 32;
+const AUDIT_ENCRYPTION_NONCE_BYTES: usize = 12;
+const AUDIT_ENCRYPTED_SNAPSHOT_VERSION: u8 = 1;
+const AUDIT_ENCRYPTED_SNAPSHOT_ALGORITHM: &str = "AES-256-GCM";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuditIdentityLink {
@@ -157,6 +166,7 @@ pub enum AuditAction {
     UnlockPayrollSettlementCycle,
     SyncPayrollHrApiAdjunct,
     PurgePayrollData,
+    PurgeOrderData,
 }
 
 impl AuditAction {
@@ -193,6 +203,7 @@ impl AuditAction {
             Self::UnlockPayrollSettlementCycle => "UNLOCK_PAYROLL_SETTLEMENT_CYCLE",
             Self::SyncPayrollHrApiAdjunct => "SYNC_PAYROLL_HR_API_ADJUNCT",
             Self::PurgePayrollData => "PURGE_PAYROLL_DATA",
+            Self::PurgeOrderData => "PURGE_ORDER_DATA",
         }
     }
 }
@@ -553,6 +564,39 @@ pub struct AuditPurgeReport {
     pub purged_events: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuditSnapshotEncryptionKey([u8; AUDIT_ENCRYPTION_KEY_BYTES]);
+
+impl AuditSnapshotEncryptionKey {
+    pub fn parse_hex(value: impl AsRef<str>) -> Result<Self, AuditTrailError> {
+        let raw = value.as_ref().trim();
+        if raw.len() != AUDIT_ENCRYPTION_KEY_BYTES * 2 {
+            return Err(AuditTrailError::InvalidPersistenceEncryptionKey(
+                "audit snapshot encryption key must be exactly 64 hex characters".to_owned(),
+            ));
+        }
+        if !raw.chars().all(|character| character.is_ascii_hexdigit()) {
+            return Err(AuditTrailError::InvalidPersistenceEncryptionKey(
+                "audit snapshot encryption key must be lowercase/uppercase hex".to_owned(),
+            ));
+        }
+        let mut bytes = [0u8; AUDIT_ENCRYPTION_KEY_BYTES];
+        for index in 0..AUDIT_ENCRYPTION_KEY_BYTES {
+            let hex_slice = &raw[index * 2..index * 2 + 2];
+            bytes[index] = u8::from_str_radix(hex_slice, 16).map_err(|error| {
+                AuditTrailError::InvalidPersistenceEncryptionKey(format!(
+                    "failed to decode key byte {index}: {error}"
+                ))
+            })?;
+        }
+        Ok(Self(bytes))
+    }
+
+    fn as_bytes(&self) -> &[u8; AUDIT_ENCRYPTION_KEY_BYTES] {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ImmutableAuditTrail {
     state: Arc<Mutex<AuditTrailState>>,
@@ -579,10 +623,14 @@ impl ImmutableAuditTrail {
     pub fn with_json_storage(
         path: impl Into<PathBuf>,
         retention_policy: AuditRetentionPolicy,
+        encryption_key: AuditSnapshotEncryptionKey,
     ) -> Result<Self, AuditTrailError> {
         let path = path.into();
-        let storage_backend = StorageBackend::JsonFile(path.clone());
-        let state = if let Some(snapshot) = load_snapshot_from_json_file(&path)? {
+        let storage_backend = StorageBackend::JsonFile {
+            path: path.clone(),
+            encryption_key: encryption_key.clone(),
+        };
+        let state = if let Some(snapshot) = load_snapshot_from_json_file(&path, &encryption_key)? {
             AuditTrailState::from_persisted_snapshot(snapshot, retention_policy, storage_backend)?
         } else {
             AuditTrailState {
@@ -830,7 +878,10 @@ impl AuditTrailState {
 #[derive(Debug, Clone)]
 enum StorageBackend {
     InMemory,
-    JsonFile(PathBuf),
+    JsonFile {
+        path: PathBuf,
+        encryption_key: AuditSnapshotEncryptionKey,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -847,6 +898,14 @@ struct ResponsibilityAccumulator {
 struct PersistedAuditTrailSnapshot {
     next_evidence_id: u64,
     evidences: Vec<PersistedImmutableAuditEvidence>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedEncryptedAuditTrailSnapshotEnvelope {
+    version: u8,
+    algorithm: String,
+    nonce: String,
+    ciphertext: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -929,6 +988,7 @@ enum PersistedAuditAction {
     UnlockPayrollSettlementCycle,
     SyncPayrollHrApiAdjunct,
     PurgePayrollData,
+    PurgeOrderData,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -972,6 +1032,7 @@ fn lock_state(
 
 fn load_snapshot_from_json_file(
     path: &Path,
+    encryption_key: &AuditSnapshotEncryptionKey,
 ) -> Result<Option<PersistedAuditTrailSnapshot>, AuditTrailError> {
     if !path.exists() {
         return Ok(None);
@@ -983,13 +1044,38 @@ fn load_snapshot_from_json_file(
             "persisted audit snapshot file is empty".to_owned(),
         ));
     }
-    let snapshot = serde_json::from_str(&content)
+    let envelope: PersistedEncryptedAuditTrailSnapshotEnvelope = serde_json::from_str(&content)
+        .map_err(|error| AuditTrailError::PersistenceSerde(error.to_string()))?;
+    if envelope.version != AUDIT_ENCRYPTED_SNAPSHOT_VERSION {
+        return Err(AuditTrailError::PersistenceDataCorrupted(format!(
+            "unsupported audit snapshot envelope version {}",
+            envelope.version
+        )));
+    }
+    if envelope.algorithm != AUDIT_ENCRYPTED_SNAPSHOT_ALGORITHM {
+        return Err(AuditTrailError::PersistenceDataCorrupted(format!(
+            "unsupported audit snapshot encryption algorithm `{}`",
+            envelope.algorithm
+        )));
+    }
+    let nonce = BASE64_STANDARD
+        .decode(envelope.nonce.as_bytes())
+        .map_err(|error| AuditTrailError::PersistenceDataCorrupted(error.to_string()))?;
+    let ciphertext = BASE64_STANDARD
+        .decode(envelope.ciphertext.as_bytes())
+        .map_err(|error| AuditTrailError::PersistenceDataCorrupted(error.to_string()))?;
+    let plaintext = decrypt_snapshot_payload(encryption_key, &nonce, &ciphertext)?;
+    let snapshot = serde_json::from_slice(&plaintext)
         .map_err(|error| AuditTrailError::PersistenceSerde(error.to_string()))?;
     Ok(Some(snapshot))
 }
 
 fn persist_state_if_needed(state: &AuditTrailState) -> Result<(), AuditTrailError> {
-    let StorageBackend::JsonFile(path) = &state.storage_backend else {
+    let StorageBackend::JsonFile {
+        path,
+        encryption_key,
+    } = &state.storage_backend
+    else {
         return Ok(());
     };
 
@@ -1000,7 +1086,16 @@ fn persist_state_if_needed(state: &AuditTrailState) -> Result<(), AuditTrailErro
         }
     }
     let snapshot = state.to_persisted_snapshot();
-    let serialized = serde_json::to_string_pretty(&snapshot)
+    let serialized_snapshot = serde_json::to_vec(&snapshot)
+        .map_err(|error| AuditTrailError::PersistenceSerde(error.to_string()))?;
+    let (nonce, ciphertext) = encrypt_snapshot_payload(encryption_key, &serialized_snapshot)?;
+    let envelope = PersistedEncryptedAuditTrailSnapshotEnvelope {
+        version: AUDIT_ENCRYPTED_SNAPSHOT_VERSION,
+        algorithm: AUDIT_ENCRYPTED_SNAPSHOT_ALGORITHM.to_owned(),
+        nonce: BASE64_STANDARD.encode(nonce),
+        ciphertext: BASE64_STANDARD.encode(ciphertext),
+    };
+    let serialized = serde_json::to_string_pretty(&envelope)
         .map_err(|error| AuditTrailError::PersistenceSerde(error.to_string()))?;
     let file_name = path
         .file_name()
@@ -1016,6 +1111,39 @@ fn persist_state_if_needed(state: &AuditTrailState) -> Result<(), AuditTrailErro
         return Err(AuditTrailError::PersistenceIo(error.to_string()));
     }
     Ok(())
+}
+
+fn encrypt_snapshot_payload(
+    encryption_key: &AuditSnapshotEncryptionKey,
+    payload: &[u8],
+) -> Result<([u8; AUDIT_ENCRYPTION_NONCE_BYTES], Vec<u8>), AuditTrailError> {
+    let cipher = Aes256Gcm::new_from_slice(encryption_key.as_bytes()).map_err(|error| {
+        AuditTrailError::PersistenceEncryption(format!("failed to initialize AES-256-GCM: {error}"))
+    })?;
+    let mut nonce = [0u8; AUDIT_ENCRYPTION_NONCE_BYTES];
+    OsRng.fill_bytes(&mut nonce);
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce), payload)
+        .map_err(|error| AuditTrailError::PersistenceEncryption(error.to_string()))?;
+    Ok((nonce, ciphertext))
+}
+
+fn decrypt_snapshot_payload(
+    encryption_key: &AuditSnapshotEncryptionKey,
+    nonce: &[u8],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, AuditTrailError> {
+    if nonce.len() != AUDIT_ENCRYPTION_NONCE_BYTES {
+        return Err(AuditTrailError::PersistenceDataCorrupted(format!(
+            "audit snapshot nonce must be {AUDIT_ENCRYPTION_NONCE_BYTES} bytes"
+        )));
+    }
+    let cipher = Aes256Gcm::new_from_slice(encryption_key.as_bytes()).map_err(|error| {
+        AuditTrailError::PersistenceEncryption(format!("failed to initialize AES-256-GCM: {error}"))
+    })?;
+    cipher
+        .decrypt(Nonce::from_slice(nonce), ciphertext)
+        .map_err(|error| AuditTrailError::PersistenceDecryption(error.to_string()))
 }
 
 fn persisted_evidence_from_domain(
@@ -1205,6 +1333,7 @@ fn persisted_audit_action_from_domain(action: AuditAction) -> PersistedAuditActi
         }
         AuditAction::SyncPayrollHrApiAdjunct => PersistedAuditAction::SyncPayrollHrApiAdjunct,
         AuditAction::PurgePayrollData => PersistedAuditAction::PurgePayrollData,
+        AuditAction::PurgeOrderData => PersistedAuditAction::PurgeOrderData,
     }
 }
 
@@ -1257,6 +1386,7 @@ fn domain_audit_action_from_persisted(action: PersistedAuditAction) -> AuditActi
         }
         PersistedAuditAction::SyncPayrollHrApiAdjunct => AuditAction::SyncPayrollHrApiAdjunct,
         PersistedAuditAction::PurgePayrollData => AuditAction::PurgePayrollData,
+        PersistedAuditAction::PurgeOrderData => AuditAction::PurgeOrderData,
     }
 }
 
@@ -1347,12 +1477,15 @@ pub enum AuditTrailError {
     InvalidReason(String),
     InvalidCorrelationId,
     InvalidRetentionPolicy,
+    InvalidPersistenceEncryptionKey(String),
     UnauthorizedInvestigatorRole { actual: Role },
     EvidenceSequenceOverflow,
     SystemClockUnavailable(String),
     StatePoisoned,
     PersistenceIo(String),
     PersistenceSerde(String),
+    PersistenceEncryption(String),
+    PersistenceDecryption(String),
     PersistenceDataCorrupted(String),
 }
 
@@ -1369,6 +1502,9 @@ impl fmt::Display for AuditTrailError {
             Self::InvalidRetentionPolicy => {
                 f.write_str("audit retention policy requires retention_days > 0")
             }
+            Self::InvalidPersistenceEncryptionKey(message) => {
+                write!(f, "invalid audit persistence encryption key: {message}")
+            }
             Self::UnauthorizedInvestigatorRole { actual } => write!(
                 f,
                 "committee-admin role is required for investigation queries, got {actual:?}"
@@ -1383,6 +1519,12 @@ impl fmt::Display for AuditTrailError {
             Self::PersistenceIo(message) => write!(f, "audit persistence io failed: {message}"),
             Self::PersistenceSerde(message) => {
                 write!(f, "audit persistence serialization failed: {message}")
+            }
+            Self::PersistenceEncryption(message) => {
+                write!(f, "audit persistence encryption failed: {message}")
+            }
+            Self::PersistenceDecryption(message) => {
+                write!(f, "audit persistence decryption failed: {message}")
             }
             Self::PersistenceDataCorrupted(message) => {
                 write!(f, "audit persistence data is corrupted: {message}")

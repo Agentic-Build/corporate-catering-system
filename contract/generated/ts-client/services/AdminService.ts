@@ -11,6 +11,8 @@ import type { AuditInvestigationResponse } from '../models/AuditInvestigationRes
 import type { AuditResponsibilityResponse } from '../models/AuditResponsibilityResponse';
 import type { AuditRetentionPurgeRequest } from '../models/AuditRetentionPurgeRequest';
 import type { AuditRetentionPurgeResponse } from '../models/AuditRetentionPurgeResponse';
+import type { OrderRetentionPurgeRequest } from '../models/OrderRetentionPurgeRequest';
+import type { OrderRetentionPurgeResponse } from '../models/OrderRetentionPurgeResponse';
 import type { PayrollDeductionPage } from '../models/PayrollDeductionPage';
 import type { PayrollDispute } from '../models/PayrollDispute';
 import type { PayrollMonthlySettlementCloseRequest } from '../models/PayrollMonthlySettlementCloseRequest';
@@ -213,6 +215,28 @@ export class AdminService {
                 401: `Authentication token is missing or invalid.`,
                 403: `Authenticated actor is not authorized to perform this operation.`,
                 422: `Request is syntactically valid but violates business validation rules.`,
+            },
+        });
+    }
+    /**
+     * Execute order retention purge by policy
+     * @param requestBody
+     * @returns OrderRetentionPurgeResponse Order retention purge result
+     * @throws ApiError
+     */
+    public static purgeOrderData(
+        requestBody: OrderRetentionPurgeRequest,
+    ): CancelablePromise<OrderRetentionPurgeResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/orders/retention-purge',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
             },
         });
     }

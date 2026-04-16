@@ -12,8 +12,8 @@ use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use corporate_catering_system::audit::{
     AuditAction, AuditCorrelationId, AuditEntityType, AuditInvestigationFilter,
-    AuditRetentionPolicy, AuditTimestamp, AuditTrailError, ImmutableAuditEvidence,
-    ImmutableAuditTrail, ResponsibilityAttribution,
+    AuditRetentionPolicy, AuditSnapshotEncryptionKey, AuditTimestamp, AuditTrailError,
+    ImmutableAuditEvidence, ImmutableAuditTrail, ResponsibilityAttribution,
 };
 use corporate_catering_system::health::{evaluate_probe, HealthProbeKind, HealthState};
 use corporate_catering_system::identity::{
@@ -23,7 +23,8 @@ use corporate_catering_system::identity::{
 use corporate_catering_system::menu_supply_window::{
     EmployeeMenuDiscoveryEntry, MenuHealthTag, MenuImageUrl, MenuItemId, MenuSupplyPolicy,
     MenuSupplyWindowError, Money, OrderId, OrderLifecycleState, OrderLineItemRequest,
-    OrderMutation, OrderSnapshot, SpecialRequest, VendorMenuItem, VendorMenuItemDraft,
+    OrderMutation, OrderRetentionPolicy, OrderSnapshot, SpecialRequest, VendorMenuItem,
+    VendorMenuItemDraft,
 };
 use corporate_catering_system::observability::{
     initialize_telemetry_runtime_from_env, TelemetryService,
@@ -66,13 +67,16 @@ const DEFAULT_PAYROLL_LEDGER_RETENTION_DAYS: u16 = 365 * 2;
 const DEFAULT_PAYROLL_DISPUTE_RETENTION_DAYS: u16 = 365;
 const DEFAULT_PAYROLL_EXCHANGE_RETENTION_DAYS: u16 = 365;
 const DEFAULT_PAYROLL_PURGE_INTERVAL_SECONDS: u64 = 3600;
+const DEFAULT_ORDER_RETENTION_DAYS: u16 = 365;
+const DEFAULT_ORDER_PURGE_INTERVAL_SECONDS: u64 = 3600;
 const LOAD_GATE_EMPLOYEE_ACTOR_ID: &str = "emp-load-gate";
 const LOAD_GATE_COMMITTEE_ACTOR_ID: &str = "committee-load-gate";
 const LOAD_GATE_PAYROLL_ACTOR_ID: &str = "payroll-load-gate";
 const LOAD_GATE_PAYROLL_DISPUTE_OWNER_ACTOR_ID: &str = "payroll-dispute-owner";
 const PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV: &str = "PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS";
+const PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV: &str = "PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_HEX";
 
-const ALL_AUDIT_ACTIONS: [AuditAction; 29] = [
+const ALL_AUDIT_ACTIONS: [AuditAction; 30] = [
     AuditAction::CreateEmployeeOrder,
     AuditAction::UpdateEmployeeOrder,
     AuditAction::VerifyPickupOrder,
@@ -102,6 +106,7 @@ const ALL_AUDIT_ACTIONS: [AuditAction; 29] = [
     AuditAction::UnlockPayrollSettlementCycle,
     AuditAction::SyncPayrollHrApiAdjunct,
     AuditAction::PurgePayrollData,
+    AuditAction::PurgeOrderData,
 ];
 
 const ALL_AUDIT_ENTITY_TYPES: [AuditEntityType; 13] = [
@@ -242,6 +247,12 @@ struct AuditRetentionPurgeRequest {
     as_of_epoch_day: Option<i32>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OrderRetentionPurgeRequest {
+    as_of_epoch_day: Option<i32>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AuditInvestigationResponse {
@@ -292,6 +303,13 @@ struct AuditEntityRefPayload {
 #[serde(rename_all = "camelCase")]
 struct AuditRetentionPurgeResponse {
     purged_events: usize,
+    as_of_epoch_day: i32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OrderRetentionPurgeResponse {
+    purged_orders: usize,
     as_of_epoch_day: i32,
 }
 
@@ -415,10 +433,10 @@ impl PayrollHrApiSyncOutcomePayload {
     }
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PayrollHrApiSyncRequest {
-    outcome: Option<PayrollHrApiSyncOutcomePayload>,
+    outcome: PayrollHrApiSyncOutcomePayload,
     note: Option<String>,
 }
 
@@ -705,9 +723,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         std::env::var("PRELAUNCH_AUDIT_TRAIL_PATH")
             .unwrap_or_else(|_| DEFAULT_AUDIT_TRAIL_PATH.to_owned()),
     );
-    let audit_trail =
-        ImmutableAuditTrail::with_json_storage(audit_trail_path.clone(), audit_retention_policy)
-            .map_err(|error| format!("failed to initialize audit trail storage: {error}"))?;
+    let audit_trail_encryption_key = parse_audit_trail_encryption_key_from_env()?;
+    let audit_trail = ImmutableAuditTrail::with_json_storage(
+        audit_trail_path.clone(),
+        audit_retention_policy,
+        audit_trail_encryption_key,
+    )
+    .map_err(|error| format!("failed to initialize audit trail storage: {error}"))?;
     let audit_purge_interval_seconds = parse_positive_u64_env(
         "PRELAUNCH_AUDIT_PURGE_INTERVAL_SECONDS",
         DEFAULT_AUDIT_PURGE_INTERVAL_SECONDS,
@@ -731,6 +753,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         "PRELAUNCH_PAYROLL_PURGE_INTERVAL_SECONDS",
         DEFAULT_PAYROLL_PURGE_INTERVAL_SECONDS,
     )?;
+    let order_retention_policy = OrderRetentionPolicy::new(parse_positive_u16_env(
+        "PRELAUNCH_ORDER_RETENTION_DAYS",
+        DEFAULT_ORDER_RETENTION_DAYS,
+    )?)
+    .map_err(|error| format!("order retention policy is invalid: {error}"))?;
+    let order_purge_interval_seconds = parse_positive_u64_env(
+        "PRELAUNCH_ORDER_PURGE_INTERVAL_SECONDS",
+        DEFAULT_ORDER_PURGE_INTERVAL_SECONDS,
+    )?;
     let pickup_totp_verifier = PickupTotpVerifier::from_env("PRELAUNCH_PICKUP_TOTP_SECRET")
         .map(Arc::new)
         .map_err(|error| format!("pickup TOTP verifier initialization failed: {error}"))?;
@@ -742,6 +773,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         delivery_epoch_day,
         menu_variant_count,
         payroll_retention_policy,
+        order_retention_policy,
         pickup_totp_verifier,
     )
     .map_err(|error| format!("failed to bootstrap runtime state: {error}"))?;
@@ -758,8 +790,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     );
     spawn_payroll_retention_purge_job(
         state.payroll_ledger_service.clone(),
-        committee_actor,
+        committee_actor.clone(),
         payroll_purge_interval_seconds,
+    );
+    spawn_order_retention_purge_job(
+        state.menu_supply_policy.clone(),
+        committee_actor,
+        order_purge_interval_seconds,
     );
 
     let app = Router::new()
@@ -795,6 +832,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         .route(
             "/api/v1/admin/audit/retention-purge",
             post(purge_audit_evidence),
+        )
+        .route(
+            "/api/v1/admin/orders/retention-purge",
+            post(purge_order_data),
         )
         .route(
             "/api/v1/admin/payroll/disputes/:disputeId",
@@ -858,6 +899,14 @@ fn parse_positive_u64_env(key: &str, default_value: u64) -> Result<u64, String> 
         return Err(format!("{key} must be greater than zero"));
     }
     Ok(parsed)
+}
+
+fn parse_audit_trail_encryption_key_from_env() -> Result<AuditSnapshotEncryptionKey, String> {
+    let raw = std::env::var(PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV).map_err(|_| {
+        format!("{PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV} must be set to a 64-char hex key")
+    })?;
+    AuditSnapshotEncryptionKey::parse_hex(raw)
+        .map_err(|error| format!("{PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_ENV} is invalid: {error}"))
 }
 
 fn parse_terminated_employee_actor_ids_from_env() -> Result<HashSet<ActorId>, String> {
@@ -928,6 +977,7 @@ fn bootstrap_runtime_state(
     delivery_epoch_day: i32,
     menu_variant_count: u16,
     payroll_retention_policy: PayrollRetentionPolicy,
+    order_retention_policy: OrderRetentionPolicy,
     pickup_totp_verifier: Arc<PickupTotpVerifier>,
 ) -> Result<AppState, String> {
     let committee_actor = load_gate_committee_admin_actor().map_err(|(_, error)| error.message)?;
@@ -1026,8 +1076,11 @@ fn bootstrap_runtime_state(
         )
         .map_err(|error| error.to_string())?;
 
-    let menu_supply_policy =
-        MenuSupplyPolicy::with_audit_trail(Default::default(), audit_trail.clone());
+    let menu_supply_policy = MenuSupplyPolicy::with_audit_trail_and_retention(
+        Default::default(),
+        audit_trail.clone(),
+        order_retention_policy,
+    );
     let terminated_employee_actor_ids =
         parse_terminated_employee_actor_ids_from_env().map_err(|error| {
             format!("{PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV} is invalid: {error}")
@@ -2126,6 +2179,40 @@ async fn purge_payroll_data(
     response
 }
 
+async fn purge_order_data(
+    State(state): State<AppState>,
+    Json(request): Json<OrderRetentionPurgeRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry =
+        TelemetryService::HttpApi.begin_operation("purgeOrderData", Some("load-gate"), None);
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_purge_order_data(&state, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("order purge payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("order purge error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
 fn handle_purge_payroll_data(
     state: &AppState,
     request: PayrollRetentionPurgeRequest,
@@ -2150,6 +2237,32 @@ fn handle_purge_payroll_data(
         purged_ledger_entries: report.purged_ledger_entries,
         purged_disputes: report.purged_disputes,
         purged_exchange_batches: report.purged_exchange_batches,
+        as_of_epoch_day: as_of.epoch_day(),
+    })
+}
+
+fn handle_purge_order_data(
+    state: &AppState,
+    request: OrderRetentionPurgeRequest,
+) -> Result<OrderRetentionPurgeResponse, (StatusCode, ErrorPayload)> {
+    let committee_actor = load_gate_committee_admin_actor()?;
+    let as_of = match request.as_of_epoch_day {
+        Some(epoch_day) => AuditTimestamp::from_epoch_day(epoch_day),
+        None => AuditTimestamp::now_taipei().map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ORDER_RETENTION_PURGE_INTERNAL_ERROR",
+                error.to_string(),
+            )
+        })?,
+    };
+    let report = state
+        .menu_supply_policy
+        .purge_expired_orders(&committee_actor, as_of)
+        .map_err(map_order_retention_purge_error)?;
+
+    Ok(OrderRetentionPurgeResponse {
+        purged_orders: report.purged_orders,
         as_of_epoch_day: as_of.epoch_day(),
     })
 }
@@ -2429,7 +2542,7 @@ fn handle_lock_payroll_settlement_cycle(
 async fn sync_payroll_hr_api_adjunct(
     State(state): State<AppState>,
     Path(batch_id): Path<String>,
-    request: Option<Json<PayrollHrApiSyncRequest>>,
+    Json(request): Json<PayrollHrApiSyncRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "syncPayrollHrApiAdjunct",
@@ -2438,11 +2551,7 @@ async fn sync_payroll_hr_api_adjunct(
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
 
-    let response = match handle_sync_payroll_hr_api_adjunct(
-        &state,
-        batch_id,
-        request.map_or_else(PayrollHrApiSyncRequest::default, |payload| payload.0),
-    ) {
+    let response = match handle_sync_payroll_hr_api_adjunct(&state, batch_id, request) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -2482,10 +2591,7 @@ fn handle_sync_payroll_hr_api_adjunct(
         )
     })?;
     let occurred_at = current_audit_timestamp()?;
-    let outcome = request
-        .outcome
-        .unwrap_or(PayrollHrApiSyncOutcomePayload::Succeeded)
-        .into_domain();
+    let outcome = request.outcome.into_domain();
     let batch = state
         .payroll_ledger_service
         .sync_hr_api_adjunct(
@@ -2825,6 +2931,7 @@ fn map_payroll_ledger_error(error: PayrollLedgerError) -> (StatusCode, ErrorPayl
         | PayrollLedgerError::LedgerSequenceOverflow
         | PayrollLedgerError::DisputeSequenceOverflow
         | PayrollLedgerError::ExchangeBatchSequenceOverflow
+        | PayrollLedgerError::SettlementCycleLockStateMissing { .. }
         | PayrollLedgerError::StatePoisoned
         | PayrollLedgerError::AuditTrail(_) => domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -3430,6 +3537,22 @@ fn map_http_order_execution_error(error: HttpOrderExecutionError) -> (StatusCode
     }
 }
 
+fn map_order_retention_purge_error(error: MenuSupplyWindowError) -> (StatusCode, ErrorPayload) {
+    match error {
+        MenuSupplyWindowError::UnauthorizedRole { .. } => {
+            domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
+        }
+        MenuSupplyWindowError::InvalidOrderRetentionPolicy => {
+            domain_error(StatusCode::BAD_REQUEST, "BAD_REQUEST", error.to_string())
+        }
+        _ => domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ORDER_RETENTION_PURGE_INTERNAL_ERROR",
+            error.to_string(),
+        ),
+    }
+}
+
 fn domain_error(
     status: StatusCode,
     code: &'static str,
@@ -3523,6 +3646,47 @@ fn run_payroll_retention_purge_once(
             "payroll retention purge job completed"
         ),
         Err(error) => tracing::error!(error = %error, "payroll retention purge job failed"),
+    }
+}
+
+fn spawn_order_retention_purge_job(
+    menu_supply_policy: MenuSupplyPolicy,
+    committee_actor: AuthenticatedActorContext,
+    interval_seconds: u64,
+) {
+    tokio::spawn(async move {
+        run_order_retention_purge_once(&menu_supply_policy, &committee_actor);
+        let mut interval = time::interval(std::time::Duration::from_secs(interval_seconds));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            run_order_retention_purge_once(&menu_supply_policy, &committee_actor);
+        }
+    });
+}
+
+fn run_order_retention_purge_once(
+    menu_supply_policy: &MenuSupplyPolicy,
+    committee_actor: &AuthenticatedActorContext,
+) {
+    let as_of = match AuditTimestamp::now_taipei() {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(
+                error = %error,
+                "order retention purge skipped: failed to resolve Taipei time"
+            );
+            return;
+        }
+    };
+    match menu_supply_policy.purge_expired_orders(committee_actor, as_of) {
+        Ok(report) => tracing::info!(
+            purged_orders = report.purged_orders,
+            as_of_epoch_day = as_of.epoch_day(),
+            as_of_minute_of_day = as_of.minute_of_day(),
+            "order retention purge job completed"
+        ),
+        Err(error) => tracing::error!(error = %error, "order retention purge job failed"),
     }
 }
 
@@ -4533,6 +4697,117 @@ mod tests {
     }
 
     #[test]
+    fn payroll_retention_purge_is_queryable_via_audit_investigations() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order =
+            handle_create_employee_order(&state, create_request).expect("order should be created");
+        let pay_period = created_order.delivery_date[..7].to_owned();
+
+        handle_export_payroll_deductions(
+            &state,
+            PayrollExportQuery {
+                pay_period: Some(pay_period),
+                cycle_key: Some("cycle-payroll-retention-runtime".to_owned()),
+                page: Some(1),
+                page_size: Some(20),
+                sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
+                sort_order: Some(SortOrderQuery::Asc),
+            },
+        )
+        .expect("payroll export should succeed");
+
+        let purge_report = handle_purge_payroll_data(
+            &state,
+            PayrollRetentionPurgeRequest {
+                as_of_epoch_day: Some(now_epoch_day.saturating_add(800)),
+            },
+        )
+        .expect("payroll retention purge should succeed");
+        assert!(purge_report.purged_ledger_entries > 0);
+
+        let investigations = handle_query_audit_investigations(
+            &state,
+            AuditInvestigationQuery {
+                actor_id: None,
+                action: Some("PURGE_PAYROLL_DATA".to_owned()),
+                entity_type: None,
+                entity_id: None,
+                occurred_from_epoch_day: None,
+                occurred_to_epoch_day: None,
+                correlation_id: None,
+            },
+        )
+        .expect("purge payroll event should be queryable");
+        assert_eq!(investigations.items.len(), 1);
+        assert_eq!(investigations.items[0].action, "PURGE_PAYROLL_DATA");
+    }
+
+    #[test]
+    fn order_retention_purge_removes_orders_and_emits_queryable_audit_event() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(1)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order =
+            handle_create_employee_order(&state, create_request).expect("order should be created");
+        let created_order_id = parse_contract_order_id(&created_order.order_id)
+            .expect("created order id should parse");
+
+        let purge_report = handle_purge_order_data(
+            &state,
+            OrderRetentionPurgeRequest {
+                as_of_epoch_day: Some(now_epoch_day.saturating_add(800)),
+            },
+        )
+        .expect("order retention purge should succeed");
+        assert!(purge_report.purged_orders > 0);
+        assert!(state
+            .menu_supply_policy
+            .order_snapshot(&created_order_id)
+            .expect("order snapshot should resolve")
+            .is_none());
+
+        let investigations = handle_query_audit_investigations(
+            &state,
+            AuditInvestigationQuery {
+                actor_id: None,
+                action: Some("PURGE_ORDER_DATA".to_owned()),
+                entity_type: None,
+                entity_id: None,
+                occurred_from_epoch_day: None,
+                occurred_to_epoch_day: None,
+                correlation_id: None,
+            },
+        )
+        .expect("purge order event should be queryable");
+        assert_eq!(investigations.items.len(), 1);
+        assert_eq!(investigations.items[0].action, "PURGE_ORDER_DATA");
+    }
+
+    #[test]
     fn occurred_to_epoch_day_filter_includes_same_day_events() {
         let committee = committee_admin();
         let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
@@ -5037,7 +5312,10 @@ mod tests {
         let synced = handle_sync_payroll_hr_api_adjunct(
             &state,
             export_page.exchange_batch.batch_id.clone(),
-            PayrollHrApiSyncRequest::default(),
+            PayrollHrApiSyncRequest {
+                outcome: PayrollHrApiSyncOutcomePayload::Succeeded,
+                note: None,
+            },
         )
         .expect("hr api adjunct sync should succeed");
         assert_eq!(synced.exchange_batch.hr_api_sync_status, "SUCCEEDED");

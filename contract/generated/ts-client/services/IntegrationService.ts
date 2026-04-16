@@ -58,7 +58,7 @@ export class IntegrationService {
      */
     public static syncPayrollHrApiAdjunct(
         batchId: string,
-        requestBody?: PayrollHrApiSyncRequest,
+        requestBody: PayrollHrApiSyncRequest,
     ): CancelablePromise<PayrollHrApiSyncResponse> {
         return __request(OpenAPI, {
             method: 'POST',

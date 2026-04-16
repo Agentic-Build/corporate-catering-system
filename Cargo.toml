@@ -8,7 +8,9 @@ name = "corporate_catering_system"
 path = "src/lib.rs"
 
 [dependencies]
+aes-gcm = "0.10"
 axum = { version = "0.7", features = ["json"] }
+base64 = "0.22"
 hmac = "0.12"
 opentelemetry = { version = "0.24", features = ["logs", "metrics", "trace"] }
 opentelemetry-otlp = { version = "0.17", features = ["grpc-tonic", "logs", "metrics", "trace"] }

@@ -2,13 +2,15 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Barrier};
 use std::thread;
 
+use corporate_catering_system::audit::{AuditAction, AuditInvestigationFilter, AuditTimestamp};
 use corporate_catering_system::identity::{
     ActorId, AuthenticatedActorContext, AuthenticationSource, PlantId, PlantScope, Role,
 };
 use corporate_catering_system::menu_supply_window::{
     MenuHealthTag, MenuImageUrl, MenuItemId, MenuSupplyPolicy, MenuSupplyWindowError, Money,
-    OrderId, OrderLifecycleState, OrderLineItemRequest, OrderMutation, OrderTimelineEventType,
-    SpecialRequest, VendorMenuItem, VendorMenuItemDraft, VendorOrderingPolicyOverride,
+    OrderId, OrderLifecycleState, OrderLineItemRequest, OrderMutation, OrderRetentionPolicy,
+    OrderTimelineEventType, SpecialRequest, VendorMenuItem, VendorMenuItemDraft,
+    VendorOrderingPolicyOverride,
 };
 use corporate_catering_system::vendor_compliance::VendorId;
 use corporate_catering_system::vendor_delivery_mapping::TaipeiBusinessMoment;
@@ -58,6 +60,16 @@ fn payroll_actor() -> AuthenticatedActorContext {
         AuthenticationSource::CorporateSso,
     )
     .expect("payroll actor should be valid")
+}
+
+fn committee_actor() -> AuthenticatedActorContext {
+    AuthenticatedActorContext::new(
+        actor_id("committee-menu-supply"),
+        Role::CommitteeAdmin,
+        PlantScope::all(),
+        AuthenticationSource::CorporateSso,
+    )
+    .expect("committee actor should be valid")
 }
 
 fn vendor_id(value: &str) -> VendorId {
@@ -957,4 +969,67 @@ fn employee_discovery_snapshot_is_multi_day_and_uses_exact_inventory_with_cutoff
         day_83.preorder_open(),
         "farther day should remain preorder-open"
     );
+}
+
+#[test]
+fn order_retention_purge_removes_expired_orders_and_writes_audit_evidence() {
+    let retention_policy =
+        OrderRetentionPolicy::new(1).expect("order retention policy should be valid");
+    let policy = MenuSupplyPolicy::with_audit_trail_and_retention(
+        Default::default(),
+        corporate_catering_system::audit::ImmutableAuditTrail::default(),
+        retention_policy,
+    );
+    let vendor = vendor_id("ven-menuwindow-retention-a1");
+    let committee = committee_actor();
+
+    policy
+        .upsert_menu_item(
+            &vendor_operator(),
+            menu_item("menu-retention-a1", &vendor, 10, 10),
+        )
+        .expect("menu item upsert should succeed");
+    policy
+        .create_order(
+            &employee_actor(),
+            order_id("ord-retention-a1"),
+            &vendor,
+            &plant_id("fab-a"),
+            10,
+            vec![
+                OrderLineItemRequest::new(menu_item_id("menu-retention-a1"), 2, vec![])
+                    .expect("line item should be valid"),
+            ],
+            taipei_moment(9, 600),
+        )
+        .expect("order should be created");
+
+    let report = policy
+        .purge_expired_orders(&committee, AuditTimestamp::from_epoch_day(20))
+        .expect("retention purge should succeed");
+    assert_eq!(report.purged_orders, 1);
+    assert!(
+        policy
+            .order_snapshot(&order_id("ord-retention-a1"))
+            .expect("snapshot should resolve")
+            .is_none(),
+        "expired order should be removed"
+    );
+    assert_eq!(
+        policy
+            .remaining_quantity(&menu_item_id("menu-retention-a1"))
+            .expect("remaining quantity should resolve"),
+        Some(10),
+        "purging reserved order should release inventory"
+    );
+
+    let events = policy
+        .audit_trail()
+        .investigation_query(
+            &committee,
+            &AuditInvestigationFilter::default().with_action(AuditAction::PurgeOrderData),
+        )
+        .expect("purge audit evidence should be queryable");
+    assert_eq!(events.len(), 1);
+    assert!(events[0].reason().contains("purgedOrders=1"));
 }

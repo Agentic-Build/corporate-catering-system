@@ -619,7 +619,8 @@
           "RESOLVE_PAYROLL_DISPUTE",
           "EXPORT_PAYROLL_SFTP_BATCH",
           "SYNC_PAYROLL_HR_API_ADJUNCT",
-          "PURGE_PAYROLL_DATA"
+          "PURGE_PAYROLL_DATA",
+          "PURGE_ORDER_DATA"
         ],
         "type": "string"
       },
@@ -1063,6 +1064,7 @@
           "INVALID_AUDIT_INVESTIGATION_QUERY",
           "AUDIT_INVESTIGATION_INTERNAL_ERROR",
           "AUDIT_RETENTION_PURGE_INTERNAL_ERROR",
+          "ORDER_RETENTION_PURGE_INTERNAL_ERROR",
           "PAYROLL_LEDGER_INTERNAL_ERROR",
           "VENDOR_FULFILLMENT_INVALID_REQUEST",
           "VENDOR_FULFILLMENT_STATUS_CONFLICT",
@@ -1386,6 +1388,32 @@
         "required": [
           "menuItemId",
           "quantity"
+        ],
+        "type": "object"
+      },
+      "OrderRetentionPurgeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "asOfEpochDay": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "OrderRetentionPurgeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "asOfEpochDay": {
+            "type": "integer"
+          },
+          "purgedOrders": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "purgedOrders",
+          "asOfEpochDay"
         ],
         "type": "object"
       },
@@ -1733,6 +1761,9 @@
             "$ref": "#/components/schemas/PayrollHrApiSyncOutcome"
           }
         },
+        "required": [
+          "outcome"
+        ],
         "type": "object"
       },
       "PayrollHrApiSyncResponse": {
@@ -3823,6 +3854,54 @@
         ]
       }
     },
+    "/api/v1/admin/orders/retention-purge": {
+      "post": {
+        "operationId": "purgeOrderData",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderRetentionPurgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderRetentionPurgeResponse"
+                }
+              }
+            },
+            "description": "Order retention purge result"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "corporateSsoBearer": []
+          }
+        ],
+        "summary": "Execute order retention purge by policy",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/api/v1/admin/payroll/disputes/{disputeId}": {
       "patch": {
         "operationId": "updateAdminPayrollDispute",
@@ -4904,7 +4983,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {

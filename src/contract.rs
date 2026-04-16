@@ -59,6 +59,7 @@ pub enum HttpOperation {
     QueryAuditInvestigations,
     QueryAuditResponsibilities,
     PurgeAuditEvidence,
+    PurgeOrderData,
     UpdateAdminPayrollDispute,
     PurgePayrollData,
     CloseMonthlyPayrollSettlement,
@@ -69,7 +70,7 @@ pub enum HttpOperation {
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 30] = [
+    pub const ALL: [Self; 31] = [
         Self::ListEmployeeMenus,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
@@ -93,6 +94,7 @@ impl HttpOperation {
         Self::QueryAuditInvestigations,
         Self::QueryAuditResponsibilities,
         Self::PurgeAuditEvidence,
+        Self::PurgeOrderData,
         Self::UpdateAdminPayrollDispute,
         Self::PurgePayrollData,
         Self::CloseMonthlyPayrollSettlement,
@@ -129,6 +131,7 @@ impl HttpOperation {
             Self::QueryAuditInvestigations => "queryAuditInvestigations",
             Self::QueryAuditResponsibilities => "queryAuditResponsibilities",
             Self::PurgeAuditEvidence => "purgeAuditEvidence",
+            Self::PurgeOrderData => "purgeOrderData",
             Self::UpdateAdminPayrollDispute => "updateAdminPayrollDispute",
             Self::PurgePayrollData => "purgePayrollData",
             Self::CloseMonthlyPayrollSettlement => "closePayrollMonthlySettlement",
@@ -160,6 +163,7 @@ impl HttpOperation {
             | Self::ReviewVendorApplication
             | Self::RunVendorComplianceLifecycle
             | Self::PurgeAuditEvidence
+            | Self::PurgeOrderData
             | Self::PurgePayrollData
             | Self::CloseMonthlyPayrollSettlement
             | Self::LockPayrollSettlementCycle
@@ -208,6 +212,7 @@ impl HttpOperation {
             Self::QueryAuditInvestigations => "/api/v1/admin/audit/investigations",
             Self::QueryAuditResponsibilities => "/api/v1/admin/audit/responsibilities",
             Self::PurgeAuditEvidence => "/api/v1/admin/audit/retention-purge",
+            Self::PurgeOrderData => "/api/v1/admin/orders/retention-purge",
             Self::UpdateAdminPayrollDispute => "/api/v1/admin/payroll/disputes/{disputeId}",
             Self::PurgePayrollData => "/api/v1/admin/payroll/retention-purge",
             Self::CloseMonthlyPayrollSettlement => {
@@ -251,6 +256,7 @@ impl HttpOperation {
             | Self::QueryAuditInvestigations
             | Self::QueryAuditResponsibilities
             | Self::PurgeAuditEvidence
+            | Self::PurgeOrderData
             | Self::UpdateAdminPayrollDispute
             | Self::PurgePayrollData
             | Self::CloseMonthlyPayrollSettlement
@@ -277,6 +283,7 @@ impl HttpOperation {
             | Self::ReviewVendorApplication
             | Self::RunVendorComplianceLifecycle
             | Self::PurgeAuditEvidence
+            | Self::PurgeOrderData
             | Self::PurgePayrollData
             | Self::LockPayrollSettlementCycle
             | Self::UnlockPayrollSettlementCycle => Some(Action::ManageVendorComplianceLifecycle),
@@ -328,6 +335,7 @@ impl HttpOperation {
             "queryAuditInvestigations" => Some(Self::QueryAuditInvestigations),
             "queryAuditResponsibilities" => Some(Self::QueryAuditResponsibilities),
             "purgeAuditEvidence" => Some(Self::PurgeAuditEvidence),
+            "purgeOrderData" => Some(Self::PurgeOrderData),
             "updateAdminPayrollDispute" => Some(Self::UpdateAdminPayrollDispute),
             "purgePayrollData" => Some(Self::PurgePayrollData),
             "closePayrollMonthlySettlement" => Some(Self::CloseMonthlyPayrollSettlement),
@@ -1224,6 +1232,36 @@ pub fn canonical_openapi_spec() -> Value {
             }
           }
         },
+        "/api/v1/admin/orders/retention-purge": {
+          "post": {
+            "tags": ["Admin"],
+            "summary": "Execute order retention purge by policy",
+            "operationId": HttpOperation::PurgeOrderData.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/OrderRetentionPurgeRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Order retention purge result",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/OrderRetentionPurgeResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
         "/api/v1/admin/payroll/disputes/{disputeId}": {
           "patch": {
             "tags": ["Admin"],
@@ -1441,7 +1479,7 @@ pub fn canonical_openapi_spec() -> Value {
               { "$ref": "#/components/parameters/PayrollExchangeBatchIdPath" }
             ],
             "requestBody": {
-              "required": false,
+              "required": true,
               "content": {
                 "application/json": {
                   "schema": { "$ref": "#/components/schemas/PayrollHrApiSyncRequest" }
@@ -1970,7 +2008,8 @@ pub fn canonical_openapi_spec() -> Value {
               "RESOLVE_PAYROLL_DISPUTE",
               "EXPORT_PAYROLL_SFTP_BATCH",
               "SYNC_PAYROLL_HR_API_ADJUNCT",
-              "PURGE_PAYROLL_DATA"
+              "PURGE_PAYROLL_DATA",
+              "PURGE_ORDER_DATA"
             ]
           },
           "AuditEntityType": {
@@ -2090,6 +2129,22 @@ pub fn canonical_openapi_spec() -> Value {
             "required": ["purgedEvents", "asOfEpochDay"],
             "properties": {
               "purgedEvents": { "type": "integer", "minimum": 0 },
+              "asOfEpochDay": { "type": "integer" }
+            },
+            "additionalProperties": false
+          },
+          "OrderRetentionPurgeRequest": {
+            "type": "object",
+            "properties": {
+              "asOfEpochDay": { "type": "integer" }
+            },
+            "additionalProperties": false
+          },
+          "OrderRetentionPurgeResponse": {
+            "type": "object",
+            "required": ["purgedOrders", "asOfEpochDay"],
+            "properties": {
+              "purgedOrders": { "type": "integer", "minimum": 0 },
               "asOfEpochDay": { "type": "integer" }
             },
             "additionalProperties": false
@@ -3598,6 +3653,7 @@ pub fn canonical_openapi_spec() -> Value {
           },
           "PayrollHrApiSyncRequest": {
             "type": "object",
+            "required": ["outcome"],
             "properties": {
               "outcome": { "$ref": "#/components/schemas/PayrollHrApiSyncOutcome" },
               "note": { "type": "string", "minLength": 1, "maxLength": 280 }
@@ -3702,6 +3758,7 @@ pub fn canonical_openapi_spec() -> Value {
               "INVALID_AUDIT_INVESTIGATION_QUERY",
               "AUDIT_INVESTIGATION_INTERNAL_ERROR",
               "AUDIT_RETENTION_PURGE_INTERNAL_ERROR",
+              "ORDER_RETENTION_PURGE_INTERNAL_ERROR",
               "PAYROLL_LEDGER_INTERNAL_ERROR",
               "VENDOR_FULFILLMENT_INVALID_REQUEST",
               "VENDOR_FULFILLMENT_STATUS_CONFLICT",

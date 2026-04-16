@@ -5,6 +5,6 @@
 import type { PayrollHrApiSyncOutcome } from './PayrollHrApiSyncOutcome';
 export type PayrollHrApiSyncRequest = {
     note?: string;
-    outcome?: PayrollHrApiSyncOutcome;
+    outcome: PayrollHrApiSyncOutcome;
 };
 

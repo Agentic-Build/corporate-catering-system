@@ -211,6 +211,7 @@ fn admin_contract_exposes_vendor_compliance_and_delivery_mapping_capabilities() 
     assert!(paths.contains_key("/api/v1/admin/audit/investigations"));
     assert!(paths.contains_key("/api/v1/admin/audit/responsibilities"));
     assert!(paths.contains_key("/api/v1/admin/audit/retention-purge"));
+    assert!(paths.contains_key("/api/v1/admin/orders/retention-purge"));
     assert!(paths.contains_key("/api/v1/admin/vendor-plant-delivery-mappings"));
     assert!(
         paths.contains_key("/api/v1/admin/vendors/{vendorId}/plant-delivery-mappings/{mappingId}")
@@ -313,6 +314,7 @@ fn audit_endpoints_have_tested_error_code_to_schema_refs() {
     assert!(error_codes.contains("INVALID_AUDIT_INVESTIGATION_QUERY"));
     assert!(error_codes.contains("AUDIT_INVESTIGATION_INTERNAL_ERROR"));
     assert!(error_codes.contains("AUDIT_RETENTION_PURGE_INTERNAL_ERROR"));
+    assert!(error_codes.contains("ORDER_RETENTION_PURGE_INTERNAL_ERROR"));
 }
 
 #[test]
@@ -773,6 +775,39 @@ fn payroll_endpoints_have_tested_error_code_to_schema_refs() {
         "#/components/schemas/PayrollRetentionPurgeRequest"
     );
 
+    let order_retention_purge_operation =
+        operation_by_path_and_method(&spec, "/api/v1/admin/orders/retention-purge", "post");
+    assert_error_response_ref(
+        order_retention_purge_operation,
+        "400",
+        "#/components/responses/BadRequest",
+    );
+    assert_error_response_ref(
+        order_retention_purge_operation,
+        "401",
+        "#/components/responses/Unauthorized",
+    );
+    assert_error_response_ref(
+        order_retention_purge_operation,
+        "403",
+        "#/components/responses/Forbidden",
+    );
+    assert_error_response_ref(
+        order_retention_purge_operation,
+        "500",
+        "#/components/responses/InternalServerError",
+    );
+    assert_eq!(
+        order_retention_purge_operation["requestBody"]["content"]["application/json"]["schema"]
+            ["$ref"],
+        "#/components/schemas/OrderRetentionPurgeRequest"
+    );
+    assert_eq!(
+        order_retention_purge_operation["responses"]["200"]["content"]["application/json"]
+            ["schema"]["$ref"],
+        "#/components/schemas/OrderRetentionPurgeResponse"
+    );
+
     let monthly_close_operation = operation_by_path_and_method(
         &spec,
         "/api/v1/admin/payroll/monthly-settlements/close",
@@ -997,6 +1032,23 @@ fn payroll_endpoints_have_tested_error_code_to_schema_refs() {
     assert_eq!(
         payroll_sync_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
         "#/components/schemas/PayrollHrApiSyncRequest"
+    );
+    assert_eq!(payroll_sync_operation["requestBody"]["required"], true);
+    let payroll_sync_required_fields = spec["components"]["schemas"]["PayrollHrApiSyncRequest"]
+        ["required"]
+        .as_array()
+        .expect("PayrollHrApiSyncRequest.required should be array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("required field should be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        payroll_sync_required_fields,
+        BTreeSet::from(["outcome".to_owned()])
     );
 
     let error_codes = spec["components"]["schemas"]["ErrorCode"]["enum"]

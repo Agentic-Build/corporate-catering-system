@@ -25,6 +25,7 @@ const DEFAULT_PREORDER_OPEN_DAYS_AHEAD: u16 = 7;
 const DEFAULT_MODIFY_CANCEL_CUTOFF_MINUTE_OF_DAY: u16 = 17 * 60;
 const MIN_VENDOR_OVERRIDE_CUTOFF_MINUTE_OF_DAY: u16 = 15 * 60;
 const MAX_VENDOR_OVERRIDE_CUTOFF_MINUTE_OF_DAY: u16 = 20 * 60;
+const DEFAULT_ORDER_RETENTION_DAYS: u16 = 365;
 const UPSERT_VENDOR_MENU_ITEM_OPERATION_ID: &str = "upsertVendorMenuItem";
 const UPSERT_VENDOR_ORDERING_POLICY_OPERATION_ID: &str = "upsertVendorOrderingPolicy";
 const CREATE_EMPLOYEE_ORDER_OPERATION_ID: &str = "createEmployeeOrder";
@@ -33,6 +34,8 @@ const VERIFY_PICKUP_ORDER_OPERATION_ID: &str = "verifyPickupOrder";
 const MARK_ORDER_SOLD_OUT_OPERATION_ID: &str = "markOrderSoldOut";
 const MARK_ORDER_REFUND_PENDING_OPERATION_ID: &str = "markOrderRefundPending";
 const MARK_ORDER_REFUNDED_OPERATION_ID: &str = "markOrderRefunded";
+const PURGE_ORDER_DATA_OPERATION_ID: &str = "purgeOrderData";
+const ORDER_RETENTION_CORRELATION_PREFIX: &str = "order-retention";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MenuItemId(String);
@@ -691,6 +694,37 @@ impl Default for OrderingGovernancePolicy {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OrderRetentionPolicy {
+    retention_days: u16,
+}
+
+impl OrderRetentionPolicy {
+    pub fn new(retention_days: u16) -> Result<Self, MenuSupplyWindowError> {
+        if retention_days == 0 {
+            return Err(MenuSupplyWindowError::InvalidOrderRetentionPolicy);
+        }
+        Ok(Self { retention_days })
+    }
+
+    pub const fn retention_days(self) -> u16 {
+        self.retention_days
+    }
+}
+
+impl Default for OrderRetentionPolicy {
+    fn default() -> Self {
+        Self {
+            retention_days: DEFAULT_ORDER_RETENTION_DAYS,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct OrderPurgeReport {
+    pub purged_orders: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OrderMutation {
     ReplaceLineItems {
@@ -901,6 +935,7 @@ struct MenuSupplyState {
 #[derive(Debug, Clone)]
 pub struct MenuSupplyPolicy {
     governance: OrderingGovernancePolicy,
+    retention_policy: OrderRetentionPolicy,
     state: Arc<Mutex<MenuSupplyState>>,
     audit_trail: ImmutableAuditTrail,
 }
@@ -913,15 +948,32 @@ impl Default for MenuSupplyPolicy {
 
 impl MenuSupplyPolicy {
     pub fn new(governance: OrderingGovernancePolicy) -> Self {
-        Self::with_audit_trail(governance, ImmutableAuditTrail::default())
+        Self::with_audit_trail_and_retention(
+            governance,
+            ImmutableAuditTrail::default(),
+            OrderRetentionPolicy::default(),
+        )
     }
 
     pub fn with_audit_trail(
         governance: OrderingGovernancePolicy,
         audit_trail: ImmutableAuditTrail,
     ) -> Self {
+        Self::with_audit_trail_and_retention(
+            governance,
+            audit_trail,
+            OrderRetentionPolicy::default(),
+        )
+    }
+
+    pub fn with_audit_trail_and_retention(
+        governance: OrderingGovernancePolicy,
+        audit_trail: ImmutableAuditTrail,
+        retention_policy: OrderRetentionPolicy,
+    ) -> Self {
         Self {
             governance,
+            retention_policy,
             state: Arc::new(Mutex::new(MenuSupplyState::default())),
             audit_trail,
         }
@@ -929,6 +981,10 @@ impl MenuSupplyPolicy {
 
     pub fn governance(&self) -> OrderingGovernancePolicy {
         self.governance
+    }
+
+    pub fn retention_policy(&self) -> OrderRetentionPolicy {
+        self.retention_policy
     }
 
     pub fn audit_trail(&self) -> ImmutableAuditTrail {
@@ -1176,6 +1232,87 @@ impl MenuSupplyPolicy {
         Ok(self
             .order_snapshot(order_id)?
             .map(|snapshot| snapshot.timeline))
+    }
+
+    pub fn purge_expired_orders(
+        &self,
+        actor: &AuthenticatedActorContext,
+        as_of: AuditTimestamp,
+    ) -> Result<OrderPurgeReport, MenuSupplyWindowError> {
+        ensure_role(actor, Role::CommitteeAdmin)?;
+
+        let mut state = lock_state(&self.state)?;
+        let previous_state = state.clone();
+        let retention_days = i64::from(self.retention_policy.retention_days());
+        let purge_candidates = state
+            .orders
+            .iter()
+            .filter_map(|(order_id, stored_order)| {
+                let order_age_days =
+                    i64::from(as_of.epoch_day()) - i64::from(stored_order.delivery_epoch_day);
+                if order_age_days > retention_days {
+                    Some(order_id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let mut purged_orders = 0usize;
+        for order_id in purge_candidates {
+            let Some(stored_order) = state.orders.remove(&order_id) else {
+                continue;
+            };
+            if stored_order.inventory_reserved {
+                if let Err(error) = release_order_allocation_locked(&mut state, &stored_order) {
+                    *state = previous_state;
+                    return Err(error);
+                }
+            }
+            purged_orders = purged_orders.saturating_add(1);
+        }
+
+        let entity_id = format!("{ORDER_RETENTION_CORRELATION_PREFIX}:{}", as_of.epoch_day());
+        let entity = match AuditEntityRef::new(AuditEntityType::Order, entity_id.clone()) {
+            Ok(value) => value,
+            Err(error) => {
+                *state = previous_state;
+                return Err(MenuSupplyWindowError::AuditTrail(error));
+            }
+        };
+        let correlation_id = match AuditCorrelationId::parse(entity_id) {
+            Ok(value) => value,
+            Err(error) => {
+                *state = previous_state;
+                return Err(MenuSupplyWindowError::AuditTrail(error));
+            }
+        };
+        let audit_event = match AuditEvidenceWrite::new_with_reason(
+            as_of,
+            AuditIdentityLink::from_actor(actor, PURGE_ORDER_DATA_OPERATION_ID),
+            AuditAction::PurgeOrderData,
+            entity,
+            format!(
+                "purge order data asOfEpochDay={} retentionDays={} purgedOrders={}",
+                as_of.epoch_day(),
+                self.retention_policy.retention_days(),
+                purged_orders
+            ),
+            correlation_id,
+        ) {
+            Ok(write) => write,
+            Err(error) => {
+                *state = previous_state;
+                return Err(MenuSupplyWindowError::AuditTrail(error));
+            }
+        };
+
+        if let Err(error) = self.audit_trail.append(audit_event) {
+            *state = previous_state;
+            return Err(MenuSupplyWindowError::AuditTrail(error));
+        }
+
+        Ok(OrderPurgeReport { purged_orders })
     }
 
     pub fn order_snapshots_for_vendor_delivery_day(
@@ -1955,6 +2092,35 @@ fn lock_state(
         .map_err(|_| MenuSupplyWindowError::StatePoisoned)
 }
 
+fn release_order_allocation_locked(
+    state: &mut MenuSupplyState,
+    stored_order: &StoredOrder,
+) -> Result<(), MenuSupplyWindowError> {
+    let mut remove_menu_item_ids = Vec::new();
+    for (menu_item_id, quantity) in &stored_order.line_items {
+        let allocated = state
+            .allocated_quantity_by_menu_item
+            .get_mut(menu_item_id)
+            .ok_or_else(|| MenuSupplyWindowError::InventoryLedgerCorrupted {
+                menu_item_id: Some(menu_item_id.clone()),
+                reason: "missing allocated quantity while purging reserved order",
+            })?;
+        *allocated = allocated.checked_sub(*quantity).ok_or_else(|| {
+            MenuSupplyWindowError::InventoryLedgerCorrupted {
+                menu_item_id: Some(menu_item_id.clone()),
+                reason: "allocated quantity underflow while purging reserved order",
+            }
+        })?;
+        if *allocated == 0 {
+            remove_menu_item_ids.push(menu_item_id.clone());
+        }
+    }
+    for menu_item_id in remove_menu_item_ids {
+        state.allocated_quantity_by_menu_item.remove(&menu_item_id);
+    }
+    Ok(())
+}
+
 fn is_valid_iso_currency(value: &str) -> bool {
     value.len() == 3 && value.chars().all(|ch| ch.is_ascii_uppercase())
 }
@@ -1986,6 +2152,7 @@ pub enum MenuSupplyWindowError {
         maximum: usize,
     },
     InvalidGovernanceConfiguration(String),
+    InvalidOrderRetentionPolicy,
     VendorOverrideOutOfBounds {
         field: &'static str,
         minimum: u16,
@@ -2100,6 +2267,9 @@ impl fmt::Display for MenuSupplyWindowError {
             ),
             Self::InvalidGovernanceConfiguration(message) => {
                 write!(f, "invalid ordering governance configuration: {message}")
+            }
+            Self::InvalidOrderRetentionPolicy => {
+                f.write_str("order retention policy requires retention_days > 0")
             }
             Self::VendorOverrideOutOfBounds {
                 field,

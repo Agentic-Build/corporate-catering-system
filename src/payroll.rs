@@ -1331,11 +1331,7 @@ impl PayrollLedgerService {
                     actual_pay_period: pay_period.to_owned(),
                 });
             }
-            let lock_state = state
-                .cycle_lock_state_by_cycle
-                .get(&cycle_key)
-                .copied()
-                .unwrap_or(PayrollSettlementLockState::Locked);
+            let lock_state = cycle_lock_state_for(&state, &cycle_key)?;
             if lock_state == PayrollSettlementLockState::Locked {
                 let (paged_records, total_items) = paginate_records(
                     batch.snapshot_records.clone(),
@@ -1485,11 +1481,7 @@ impl PayrollLedgerService {
             .get(&batch_id)
             .ok_or_else(|| PayrollLedgerError::ExchangeBatchNotFound(batch_id.clone()))?
             .clone();
-        let current_lock_state = state
-            .cycle_lock_state_by_cycle
-            .get(&cycle_key)
-            .copied()
-            .unwrap_or(PayrollSettlementLockState::Locked);
+        let current_lock_state = cycle_lock_state_for(&state, &cycle_key)?;
         if current_lock_state == PayrollSettlementLockState::Locked {
             return Err(PayrollLedgerError::SettlementCycleAlreadyLocked { cycle_key });
         }
@@ -1552,11 +1544,7 @@ impl PayrollLedgerService {
             .get(&batch_id)
             .ok_or_else(|| PayrollLedgerError::ExchangeBatchNotFound(batch_id.clone()))?
             .clone();
-        let current_lock_state = state
-            .cycle_lock_state_by_cycle
-            .get(&cycle_key)
-            .copied()
-            .unwrap_or(PayrollSettlementLockState::Locked);
+        let current_lock_state = cycle_lock_state_for(&state, &cycle_key)?;
         if current_lock_state == PayrollSettlementLockState::Unlocked {
             return Err(PayrollLedgerError::SettlementCycleAlreadyUnlocked { cycle_key });
         }
@@ -2328,6 +2316,19 @@ fn settlement_correlation_id(cycle_key: &str) -> Result<AuditCorrelationId, Audi
     ))
 }
 
+fn cycle_lock_state_for(
+    state: &PayrollLedgerState,
+    cycle_key: &str,
+) -> Result<PayrollSettlementLockState, PayrollLedgerError> {
+    state
+        .cycle_lock_state_by_cycle
+        .get(cycle_key)
+        .copied()
+        .ok_or_else(|| PayrollLedgerError::SettlementCycleLockStateMissing {
+            cycle_key: cycle_key.to_owned(),
+        })
+}
+
 fn format_pay_period(epoch_day: i32) -> String {
     let (year, month, _) = civil_from_days(i64::from(epoch_day));
     format!("{year:04}-{month:02}")
@@ -2422,6 +2423,9 @@ pub enum PayrollLedgerError {
         cycle_key: String,
     },
     SettlementCycleAlreadyUnlocked {
+        cycle_key: String,
+    },
+    SettlementCycleLockStateMissing {
         cycle_key: String,
     },
     InvalidDisputeTransition {
@@ -2531,6 +2535,10 @@ impl fmt::Display for PayrollLedgerError {
             Self::SettlementCycleAlreadyUnlocked { cycle_key } => {
                 write!(f, "payroll settlement cycle {cycle_key} is already unlocked")
             }
+            Self::SettlementCycleLockStateMissing { cycle_key } => write!(
+                f,
+                "payroll settlement cycle {cycle_key} is missing explicit lock state"
+            ),
             Self::InvalidDisputeTransition {
                 dispute_id,
                 status,
@@ -3147,6 +3155,66 @@ mod tests {
         assert!(matches!(
             invalid_reason,
             PayrollLedgerError::InvalidSettlementReason(_)
+        ));
+    }
+
+    #[test]
+    fn settlement_cycle_requires_explicit_lock_state() {
+        let audit_trail = ImmutableAuditTrail::default();
+        let service = PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail);
+        let employee = employee_actor();
+        let payroll = payroll_actor();
+        let order = order_id("ord-payroll-ledger-lock-state-invariant");
+
+        service
+            .reconcile_order_charge(
+                &employee,
+                "createEmployeeOrder",
+                &order,
+                employee.actor_id(),
+                EmploymentStatus::Active,
+                95,
+                "TWD",
+                6200,
+                audit_timestamp(95, 500),
+                source_ref("order:create"),
+            )
+            .expect("deduction should append");
+        service
+            .export_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-lock-state-invariant",
+                1,
+                20,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+                audit_timestamp(95, 510),
+            )
+            .expect("batch export should succeed");
+
+        {
+            let mut state = lock_state(&service.state).expect("state lock should resolve");
+            state
+                .cycle_lock_state_by_cycle
+                .remove("cycle-1970-04-lock-state-invariant");
+        }
+
+        let error = service
+            .export_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-lock-state-invariant",
+                1,
+                20,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+                audit_timestamp(95, 520),
+            )
+            .expect_err("missing lock state should fail");
+        assert!(matches!(
+            error,
+            PayrollLedgerError::SettlementCycleLockStateMissing { .. }
         ));
     }
 
