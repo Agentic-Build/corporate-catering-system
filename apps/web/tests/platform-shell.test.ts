@@ -68,6 +68,43 @@ describe("platform shell data", () => {
     assert.deepEqual(claims.vendorIds, ["ven-test"]);
     assert.deepEqual(claims.plantIds, ["plant-a"]);
   });
+
+  it("preserves scoped admin plant boundaries in API bearer claims", () => {
+    const scopedAdminActor: AuthActor = {
+      id: "adm-scoped",
+      role: "admin",
+      displayName: "Scoped Admin",
+      scope: {
+        plantIds: ["plant-a", "plant-b"],
+        vendorIds: [],
+        permissions: ["admin:portal"]
+      }
+    };
+    const shell = buildAppShellData({
+      actor: scopedAdminActor,
+      auth: createAuthContext(scopedAdminActor),
+      pathname: "/admin/settlements"
+    });
+    const claims = decodeJwtClaims(shell.auth.apiBearerToken);
+
+    assert.equal(claims.role, "COMMITTEE_ADMIN");
+    assert.equal(claims.allPlants, false);
+    assert.deepEqual(claims.plantIds, ["plant-a", "plant-b"]);
+  });
+
+  it("keeps global admin tokens on allPlants when scope:all is present", () => {
+    const globalAdminActor = createActor("admin");
+    const shell = buildAppShellData({
+      actor: globalAdminActor,
+      auth: createAuthContext(globalAdminActor),
+      pathname: "/admin/analytics"
+    });
+    const claims = decodeJwtClaims(shell.auth.apiBearerToken);
+
+    assert.equal(claims.role, "COMMITTEE_ADMIN");
+    assert.equal(claims.allPlants, true);
+    assert.deepEqual(claims.plantIds, []);
+  });
 });
 
 function configureJwtEnv() {

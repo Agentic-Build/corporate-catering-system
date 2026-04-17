@@ -67,6 +67,8 @@ export function buildApiBearerToken(auth: AuthRequestContext): string | null {
     "CORPORATE_SSO_JWT_AUDIENCE",
     "CORPORATE_SSO_JWT_HS256_SECRET_BASE64"
   );
+  const hasGlobalAdminScope =
+    session.actor.role === "admin" && session.actor.scope.permissions.includes("scope:all");
   const claims: JwtClaims = {
     iss: config.issuer,
     aud: config.audience,
@@ -75,8 +77,8 @@ export function buildApiBearerToken(auth: AuthRequestContext): string | null {
     iat: nowEpochSecond,
     nbf: nowEpochSecond,
     role: CORPORATE_ROLE[session.actor.role],
-    allPlants: session.actor.role === "admin",
-    plantIds: session.actor.role === "admin" ? [] : [...session.actor.scope.plantIds],
+    allPlants: hasGlobalAdminScope,
+    plantIds: hasGlobalAdminScope ? [] : [...session.actor.scope.plantIds],
     vendorIds: []
   };
   return signHs256Jwt(claims, config.secret);
