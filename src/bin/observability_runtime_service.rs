@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(test)]
@@ -313,6 +313,7 @@ struct AppState {
     compliance_persistence: CompliancePersistence,
     runtime_state_persistence: RuntimeStatePersistence,
     runtime_state_cache: Option<Arc<ValkeyRuntimeStateCache>>,
+    runtime_state_cache_bypass_keys: Arc<Mutex<HashSet<&'static str>>>,
     order_event_backbone: Option<Arc<OrderEventBackbone>>,
     pickup_totp_verifier: Arc<PickupTotpVerifier>,
     #[cfg(test)]
@@ -3180,6 +3181,25 @@ fn load_runtime_state_snapshot_from_cache<T>(state: &AppState, state_key: &'stat
 where
     T: DeserializeOwned,
 {
+    let bypass_guard = state.runtime_state_cache_bypass_keys.lock();
+    match bypass_guard {
+        Ok(guard) => {
+            if guard.contains(state_key) {
+                tracing::warn!(
+                    state_key = state_key,
+                    "Valkey cache bypass is active for state key; loading authoritative SQL snapshot"
+                );
+                return None;
+            }
+        }
+        Err(_poisoned) => {
+            tracing::warn!(
+                state_key = state_key,
+                "cache bypass lock is poisoned; loading authoritative SQL snapshot"
+            );
+            return None;
+        }
+    }
     let cache = state.runtime_state_cache.as_ref()?;
     let load_result = tokio::task::block_in_place(|| {
         Handle::current().block_on(cache.load_snapshot::<T>(state_key))
@@ -3207,12 +3227,41 @@ where
     let write_result = tokio::task::block_in_place(|| {
         Handle::current().block_on(cache.write_through_snapshot(state_key, snapshot))
     });
-    if let Err(error) = write_result {
-        tracing::warn!(
-            error = %error,
-            state_key = state_key,
-            "Valkey cache write-through invalidation failed"
-        );
+    match write_result {
+        Ok(()) => match state.runtime_state_cache_bypass_keys.lock() {
+            Ok(mut bypass_keys) => {
+                if bypass_keys.remove(state_key) {
+                    tracing::info!(
+                        state_key = state_key,
+                        "Valkey cache bypass cleared after successful write-through"
+                    );
+                }
+            }
+            Err(_poisoned) => {
+                tracing::warn!(
+                    state_key = state_key,
+                    "cache bypass lock is poisoned after successful write-through"
+                );
+            }
+        },
+        Err(error) => {
+            match state.runtime_state_cache_bypass_keys.lock() {
+                Ok(mut bypass_keys) => {
+                    bypass_keys.insert(state_key);
+                }
+                Err(_poisoned) => {
+                    tracing::warn!(
+                        state_key = state_key,
+                        "cache bypass lock is poisoned while recording write-through failure"
+                    );
+                }
+            }
+            tracing::warn!(
+                error = %error,
+                state_key = state_key,
+                "Valkey cache write-through invalidation failed; enabling SQL-authoritative bypass for this key"
+            );
+        }
     }
 }
 
@@ -4809,6 +4858,7 @@ fn bootstrap_runtime_state(
         compliance_persistence,
         runtime_state_persistence,
         runtime_state_cache,
+        runtime_state_cache_bypass_keys: Arc::new(Mutex::new(HashSet::new())),
         order_event_backbone,
         pickup_totp_verifier,
         #[cfg(test)]
@@ -12046,6 +12096,7 @@ mod tests {
             compliance_persistence: CompliancePersistence::InMemoryOnly,
             runtime_state_persistence: RuntimeStatePersistence::InMemoryOnly,
             runtime_state_cache: None,
+            runtime_state_cache_bypass_keys: Arc::new(Mutex::new(HashSet::new())),
             order_event_backbone: None,
             delivery_policy: Arc::new(delivery_policy),
             menu_supply_policy,
@@ -12864,6 +12915,7 @@ mod tests {
             compliance_persistence: CompliancePersistence::InMemoryOnly,
             runtime_state_persistence: RuntimeStatePersistence::InMemoryOnly,
             runtime_state_cache: None,
+            runtime_state_cache_bypass_keys: Arc::new(Mutex::new(HashSet::new())),
             order_event_backbone: None,
             delivery_policy: Arc::new(VendorPlantDeliveryPolicy::with_audit_trail(
                 audit_trail.clone(),
