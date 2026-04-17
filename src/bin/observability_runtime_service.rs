@@ -7825,7 +7825,11 @@ async fn create_admin_object_storage_access_link(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let _committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let _committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -10090,7 +10094,11 @@ async fn list_admin_vendors(
     let telemetry =
         TelemetryService::HttpApi.begin_operation("listAdminVendors", None::<&str>, None::<&str>);
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -10221,7 +10229,11 @@ async fn list_compliance_document_templates(
         None::<&str>,
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -10337,7 +10349,11 @@ async fn upsert_compliance_document_template(
         None::<&str>,
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -10429,7 +10445,11 @@ async fn list_vendor_plant_delivery_mappings(
         None::<&str>,
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -10643,7 +10663,11 @@ async fn upsert_vendor_plant_delivery_mapping(
         None::<&str>,
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -10768,7 +10792,11 @@ async fn remove_vendor_plant_delivery_mapping(
         None::<&str>,
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -10840,7 +10868,11 @@ async fn review_vendor_application(
         None::<&str>,
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -10931,7 +10963,11 @@ async fn run_vendor_compliance_lifecycle(
         None::<&str>,
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -11015,7 +11051,8 @@ async fn update_admin_payroll_dispute(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let payroll_actor = match require_corporate_actor_for_any_role(
+    let payroll_actor = match require_corporate_actor_for_any_role_in_runtime_plant(
+        &state,
         &headers,
         &[Role::PayrollOperator, Role::CommitteeAdmin],
     ) {
@@ -11152,7 +11189,11 @@ async fn list_anomaly_rules(
     let telemetry =
         TelemetryService::HttpApi.begin_operation("listAnomalyRules", None::<&str>, None::<&str>);
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -11213,7 +11254,11 @@ async fn upsert_anomaly_rule(
     let telemetry =
         TelemetryService::HttpApi.begin_operation("upsertAnomalyRule", None::<&str>, None::<&str>);
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -11325,7 +11370,11 @@ async fn evaluate_anomaly_alerts(
         None::<&str>,
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -11498,7 +11547,11 @@ async fn list_anomaly_alerts(
     let telemetry =
         TelemetryService::HttpApi.begin_operation("listAnomalyAlerts", None::<&str>, None::<&str>);
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -11633,7 +11686,11 @@ async fn get_admin_operations_analytics_dashboard(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -11920,7 +11977,11 @@ async fn update_admin_anomaly_alert(
         None::<&str>,
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -12111,7 +12172,11 @@ async fn purge_payroll_data(
     let telemetry =
         TelemetryService::HttpApi.begin_operation("purgePayrollData", None::<&str>, None::<&str>);
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -12159,7 +12224,11 @@ async fn purge_order_data(
     let telemetry =
         TelemetryService::HttpApi.begin_operation("purgeOrderData", None::<&str>, None::<&str>);
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -12265,7 +12334,8 @@ async fn export_payroll_deductions(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let payroll_actor = match require_corporate_actor_for_any_role(
+    let payroll_actor = match require_corporate_actor_for_any_role_in_runtime_plant(
+        &state,
         &headers,
         &[Role::PayrollOperator, Role::CommitteeAdmin],
     ) {
@@ -12365,7 +12435,8 @@ async fn close_payroll_monthly_settlement(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let payroll_actor = match require_corporate_actor_for_any_role(
+    let payroll_actor = match require_corporate_actor_for_any_role_in_runtime_plant(
+        &state,
         &headers,
         &[Role::PayrollOperator, Role::CommitteeAdmin],
     ) {
@@ -12475,7 +12546,11 @@ async fn unlock_payroll_settlement_cycle(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -12550,7 +12625,11 @@ async fn lock_payroll_settlement_cycle(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -12625,7 +12704,11 @@ async fn sync_payroll_hr_api_adjunct(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let payroll_actor = match require_corporate_actor_for_role(&headers, Role::PayrollOperator) {
+    let payroll_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::PayrollOperator,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -13736,6 +13819,34 @@ fn require_corporate_actor_for_role(
     Ok(authorization.actor)
 }
 
+fn ensure_actor_has_runtime_plant_scope(
+    actor: &AuthenticatedActorContext,
+    runtime_plant_id: &PlantId,
+) -> Result<(), (StatusCode, ErrorPayload)> {
+    if actor.plant_scope().contains(runtime_plant_id) {
+        return Ok(());
+    }
+    Err(domain_error(
+        StatusCode::FORBIDDEN,
+        "FORBIDDEN",
+        format!(
+            "actor `{}` is not authorized for plant `{}`",
+            actor.actor_id().as_str(),
+            runtime_plant_id.as_str()
+        ),
+    ))
+}
+
+fn require_corporate_actor_for_role_in_runtime_plant(
+    state: &AppState,
+    headers: &HeaderMap,
+    required_role: Role,
+) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+    let actor = require_corporate_actor_for_role(headers, required_role)?;
+    ensure_actor_has_runtime_plant_scope(&actor, &state.plant_id)?;
+    Ok(actor)
+}
+
 fn require_corporate_actor_for_any_role(
     headers: &HeaderMap,
     required_roles: &[Role],
@@ -13769,6 +13880,16 @@ fn require_corporate_actor_for_any_role(
             "authenticated actor role does not satisfy authorization requirements".to_owned(),
         )),
     }
+}
+
+fn require_corporate_actor_for_any_role_in_runtime_plant(
+    state: &AppState,
+    headers: &HeaderMap,
+    required_roles: &[Role],
+) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+    let actor = require_corporate_actor_for_any_role(headers, required_roles)?;
+    ensure_actor_has_runtime_plant_scope(&actor, &state.plant_id)?;
+    Ok(actor)
 }
 
 fn to_payroll_operator_actor(
@@ -15384,7 +15505,11 @@ async fn query_audit_investigations(
     let telemetry =
         TelemetryService::HttpApi.begin_operation("queryAuditInvestigations", None::<&str>, None);
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let investigator = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let investigator = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -15450,7 +15575,11 @@ async fn query_audit_responsibilities(
     let telemetry =
         TelemetryService::HttpApi.begin_operation("queryAuditResponsibilities", None::<&str>, None);
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let investigator = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let investigator = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -15517,7 +15646,11 @@ async fn purge_audit_evidence(
     let telemetry =
         TelemetryService::HttpApi.begin_operation("purgeAuditEvidence", None::<&str>, None::<&str>);
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let investigator = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+    let investigator = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -16416,6 +16549,40 @@ mod tests {
         headers
     }
 
+    fn corporate_bearer_headers_with_claims(
+        actor_id: &str,
+        role: &str,
+        all_plants: bool,
+        plant_ids: &[&str],
+    ) -> HeaderMap {
+        ensure_test_access_bearer_env();
+        let claims = serde_json::json!({
+            "iss": std::env::var(CORPORATE_SSO_JWT_ISSUER_ENV).expect("test bearer issuer env should be configured"),
+            "aud": std::env::var(CORPORATE_SSO_JWT_AUDIENCE_ENV).expect("test bearer audience env should be configured"),
+            "sub": actor_id,
+            "exp": 4_102_444_800i64,
+            "iat": 1_577_836_800i64,
+            "nbf": 1_577_836_800i64,
+            "role": role.trim().to_ascii_uppercase(),
+            "allPlants": all_plants,
+            "plantIds": plant_ids,
+            "vendorIds": Vec::<String>::new(),
+        });
+        let token = build_test_hs256_jwt_token(
+            claims,
+            load_test_hs256_secret(CORPORATE_SSO_JWT_HS256_SECRET_BASE64_ENV).as_slice(),
+        );
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AUTHORIZATION,
+            axum::http::HeaderValue::from_str(
+                format!("{AUTHORIZATION_BEARER_PREFIX}{token}").as_str(),
+            )
+            .expect("authorization header should be valid"),
+        );
+        headers
+    }
+
     fn vendor_bearer_headers_with_claims(
         actor_id: &str,
         plant_ids: &[&str],
@@ -17140,6 +17307,66 @@ mod tests {
     }
 
     #[test]
+    fn privileged_corporate_http_auth_enforces_runtime_plant_scope() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+
+        let out_of_scope_committee_headers = corporate_bearer_headers_with_claims(
+            "committee-scope-mismatch",
+            "COMMITTEE_ADMIN",
+            false,
+            &["fab-b"],
+        );
+        let committee_forbidden = require_corporate_actor_for_role_in_runtime_plant(
+            &state,
+            &out_of_scope_committee_headers,
+            Role::CommitteeAdmin,
+        )
+        .expect_err("committee actor outside runtime plant scope should be forbidden");
+        assert_eq!(committee_forbidden.0, StatusCode::FORBIDDEN);
+        assert_eq!(committee_forbidden.1.code, "FORBIDDEN");
+        assert!(
+            committee_forbidden
+                .1
+                .message
+                .contains("not authorized for plant"),
+            "expected scope mismatch error, got `{}`",
+            committee_forbidden.1.message
+        );
+
+        let out_of_scope_payroll_headers = corporate_bearer_headers_with_claims(
+            "payroll-scope-mismatch",
+            "PAYROLL_OPERATOR",
+            false,
+            &["fab-b"],
+        );
+        let payroll_forbidden = require_corporate_actor_for_any_role_in_runtime_plant(
+            &state,
+            &out_of_scope_payroll_headers,
+            &[Role::PayrollOperator, Role::CommitteeAdmin],
+        )
+        .expect_err("payroll actor outside runtime plant scope should be forbidden");
+        assert_eq!(payroll_forbidden.0, StatusCode::FORBIDDEN);
+        assert_eq!(payroll_forbidden.1.code, "FORBIDDEN");
+
+        let in_scope_headers = corporate_bearer_headers_with_claims(
+            "committee-scope-ok",
+            "COMMITTEE_ADMIN",
+            false,
+            &["fab-a"],
+        );
+        let scoped_actor = require_corporate_actor_for_role_in_runtime_plant(
+            &state,
+            &in_scope_headers,
+            Role::CommitteeAdmin,
+        )
+        .expect("committee actor scoped to runtime plant should authorize");
+        assert_eq!(scoped_actor.actor_id().as_str(), "committee-scope-ok");
+    }
+
+    #[test]
     fn admin_payroll_dispute_update_enforces_payroll_operator_role() {
         let now_epoch_day = current_taipei_business_moment()
             .expect("current time should resolve for test")
@@ -17259,6 +17486,52 @@ mod tests {
             State(state),
             headers,
             Query(VendorFulfillmentBoardQuery::default()),
+        ));
+
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(payload.0["code"].as_str(), Some("FORBIDDEN"));
+    }
+
+    #[test]
+    fn admin_vendor_api_rejects_mismatched_plant_scope_claim() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let headers = corporate_bearer_headers_with_claims(
+            "committee-plant-mismatch",
+            "COMMITTEE_ADMIN",
+            false,
+            &["fab-b"],
+        );
+
+        let (status, payload) = run_async_test(list_admin_vendors(
+            State(state),
+            headers,
+            Query(AdminVendorListQuery::default()),
+        ));
+
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(payload.0["code"].as_str(), Some("FORBIDDEN"));
+    }
+
+    #[test]
+    fn close_settlement_api_rejects_mismatched_plant_scope_claim() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let headers = corporate_bearer_headers_with_claims(
+            "payroll-plant-mismatch",
+            "PAYROLL_OPERATOR",
+            false,
+            &["fab-b"],
+        );
+
+        let (status, payload) = run_async_test(close_payroll_monthly_settlement(
+            State(state),
+            headers,
+            Json(PayrollMonthlySettlementCloseRequest::default()),
         ));
 
         assert_eq!(status, StatusCode::FORBIDDEN);
