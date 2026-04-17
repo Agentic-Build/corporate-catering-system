@@ -1464,6 +1464,65 @@ impl PayrollLedgerService {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn export_existing_sftp_batch(
+        &self,
+        actor: &AuthenticatedActorContext,
+        pay_period: &str,
+        cycle_key: &str,
+        page: usize,
+        page_size: usize,
+        sort_by: PayrollSortField,
+        sort_order: SortOrder,
+    ) -> Result<PayrollExportPage, PayrollLedgerError> {
+        ensure_role(actor, Role::PayrollOperator)?;
+        validate_pay_period(pay_period)?;
+        let cycle_key = normalize_cycle_key(cycle_key)?;
+        if page == 0 || page_size == 0 || page_size > MAX_PAYROLL_EXPORT_PAGE_SIZE {
+            return Err(PayrollLedgerError::InvalidPagination { page, page_size });
+        }
+
+        let state = lock_state(&self.state)?;
+        let batch_id = state
+            .exchange_batch_ids_by_cycle
+            .get(&cycle_key)
+            .cloned()
+            .ok_or_else(|| PayrollLedgerError::SettlementCycleNotFound {
+                cycle_key: cycle_key.clone(),
+            })?;
+        let batch = state
+            .exchange_batches
+            .get(&batch_id)
+            .ok_or_else(|| PayrollLedgerError::ExchangeBatchNotFound(batch_id.clone()))?
+            .clone();
+        if batch.pay_period() != pay_period {
+            return Err(PayrollLedgerError::CycleKeyPayPeriodConflict {
+                cycle_key,
+                expected_pay_period: batch.pay_period().to_owned(),
+                actual_pay_period: pay_period.to_owned(),
+            });
+        }
+        let lock_state = cycle_lock_state_for(&state, &cycle_key)?;
+        if lock_state != PayrollSettlementLockState::Locked {
+            return Err(PayrollLedgerError::SettlementCycleAlreadyUnlocked { cycle_key });
+        }
+
+        let (paged_records, total_items) = paginate_records(
+            batch.snapshot_records.clone(),
+            page,
+            page_size,
+            sort_by,
+            sort_order,
+        );
+        Ok(PayrollExportPage {
+            items: paged_records,
+            total_items,
+            page,
+            page_size,
+            batch,
+        })
+    }
+
     pub fn close_monthly_settlement(
         &self,
         actor: &AuthenticatedActorContext,
@@ -2994,6 +3053,88 @@ mod tests {
                 page_size: 201
             }
         ));
+    }
+
+    #[test]
+    fn export_existing_requires_preexisting_locked_cycle() {
+        let audit_trail = ImmutableAuditTrail::default();
+        let service = PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail);
+        let payroll = payroll_actor();
+
+        let error = service
+            .export_existing_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-missing",
+                1,
+                20,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+            )
+            .expect_err("existing export should reject missing cycles");
+        assert!(matches!(
+            error,
+            PayrollLedgerError::SettlementCycleNotFound { .. }
+        ));
+    }
+
+    #[test]
+    fn export_existing_replays_existing_locked_cycle_without_new_audit_event() {
+        let audit_trail = ImmutableAuditTrail::default();
+        let service =
+            PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail.clone());
+        let employee = employee_actor();
+        let payroll = payroll_actor();
+        let order = order_id("ord-payroll-ledger-export-existing");
+
+        service
+            .reconcile_order_charge(
+                &employee,
+                "createEmployeeOrder",
+                &order,
+                employee.actor_id(),
+                EmploymentStatus::Active,
+                95,
+                "TWD",
+                8800,
+                audit_timestamp(95, 500),
+                source_ref("order:create"),
+            )
+            .expect("deduction should append");
+        let created = service
+            .export_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-existing-replay",
+                1,
+                50,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+                audit_timestamp(95, 520),
+            )
+            .expect("initial export should succeed");
+        let created_evidence_count = audit_trail
+            .evidence_count()
+            .expect("audit evidence count should resolve");
+
+        let replay = service
+            .export_existing_sftp_batch(
+                &payroll,
+                "1970-04",
+                "cycle-1970-04-existing-replay",
+                1,
+                50,
+                PayrollSortField::DeliveryDate,
+                SortOrder::Asc,
+            )
+            .expect("existing export should replay locked cycle");
+        let replay_evidence_count = audit_trail
+            .evidence_count()
+            .expect("audit evidence count should resolve");
+
+        assert_eq!(replay.batch().batch_id(), created.batch().batch_id());
+        assert_eq!(replay.items(), created.items());
+        assert_eq!(replay_evidence_count, created_evidence_count);
     }
 
     #[test]

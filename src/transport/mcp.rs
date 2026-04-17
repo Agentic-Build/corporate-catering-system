@@ -1501,7 +1501,6 @@ impl<'a> McpSettlementExecutionGateway<'a> {
         page_size: usize,
         sort_by: PayrollSortField,
         sort_order: SortOrder,
-        occurred_at: AuditTimestamp,
     ) -> Result<PayrollExportPage, McpToolExecutionError<PayrollLedgerError>> {
         let actor =
             authorized_actor_for_tool(authorization, MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS)
@@ -1511,15 +1510,8 @@ impl<'a> McpSettlementExecutionGateway<'a> {
             Some(actor.actor_id().as_str()),
             None::<&str>,
         );
-        let result = self.payroll_ledger_service.export_sftp_batch(
-            actor,
-            pay_period,
-            cycle_key,
-            page,
-            page_size,
-            sort_by,
-            sort_order,
-            occurred_at,
+        let result = self.payroll_ledger_service.export_existing_sftp_batch(
+            actor, pay_period, cycle_key, page, page_size, sort_by, sort_order,
         );
         telemetry.finish(if result.is_ok() {
             TelemetryOutcome::Success

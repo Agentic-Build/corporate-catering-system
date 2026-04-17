@@ -12407,9 +12407,8 @@ fn handle_export_payroll_deductions(
         .sort_order
         .unwrap_or(SortOrderQuery::Asc)
         .into_payroll_domain();
-    let occurred_at = current_audit_timestamp()?;
     let export_page = mutate_payroll_ledger_service(state, |service| {
-        service.export_sftp_batch(
+        service.export_existing_sftp_batch(
             payroll_actor,
             &pay_period,
             &cycle_key,
@@ -12417,7 +12416,6 @@ fn handle_export_payroll_deductions(
             page_size,
             sort_by,
             sort_order,
-            occurred_at,
         )
     })?;
 
@@ -17946,20 +17944,21 @@ mod tests {
         let created_order =
             handle_create_employee_order(&state, create_request).expect("order should be created");
         let pay_period = created_order.delivery_date[..7].to_owned();
-
-        handle_export_payroll_deductions(
-            &state,
-            &payroll,
-            PayrollExportQuery {
-                pay_period: Some(pay_period),
-                cycle_key: Some("cycle-payroll-retention-runtime".to_owned()),
-                page: Some(1),
-                page_size: Some(20),
-                sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
-                sort_order: Some(SortOrderQuery::Asc),
-            },
-        )
-        .expect("payroll export should succeed");
+        let occurred_at =
+            current_audit_timestamp().expect("payroll export seeding timestamp should resolve");
+        mutate_payroll_ledger_service(&state, |service| {
+            service.export_sftp_batch(
+                &payroll,
+                &pay_period,
+                "cycle-payroll-retention-runtime",
+                1,
+                20,
+                PayrollSortFieldQuery::DeliveryDate.into_domain(),
+                SortOrderQuery::Asc.into_payroll_domain(),
+                occurred_at,
+            )
+        })
+        .expect("payroll export seed should succeed");
 
         let purge_report = handle_purge_payroll_data(
             &state,
@@ -18671,23 +18670,25 @@ mod tests {
         )
         .expect("order creation should succeed");
 
-        let payroll_export = handle_export_payroll_deductions(
-            &state,
-            &payroll,
-            PayrollExportQuery {
-                pay_period: Some(created_order.delivery_date[..7].to_owned()),
-                cycle_key: Some("cycle-analytics-dashboard".to_owned()),
-                page: Some(1),
-                page_size: Some(20),
-                sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
-                sort_order: Some(SortOrderQuery::Asc),
-            },
-        )
-        .expect("payroll export should succeed");
+        let occurred_at =
+            current_audit_timestamp().expect("payroll export seeding timestamp should resolve");
+        let payroll_export = mutate_payroll_ledger_service(&state, |service| {
+            service.export_sftp_batch(
+                &payroll,
+                &created_order.delivery_date[..7],
+                "cycle-analytics-dashboard",
+                1,
+                20,
+                PayrollSortFieldQuery::DeliveryDate.into_domain(),
+                SortOrderQuery::Asc.into_payroll_domain(),
+                occurred_at,
+            )
+        })
+        .expect("payroll export seed should succeed");
         handle_sync_payroll_hr_api_adjunct(
             &state,
             &payroll,
-            payroll_export.exchange_batch.batch_id.clone(),
+            payroll_export.batch().batch_id().as_str().to_owned(),
             PayrollHrApiSyncRequest {
                 outcome: PayrollHrApiSyncOutcomePayload::Failed,
                 note: Some("analytics sync failure drill".to_owned()),
@@ -19696,6 +19697,21 @@ mod tests {
         assert!(resolved_dispute.trace.len() >= 3);
 
         let pay_period = created_order.delivery_date[..7].to_owned();
+        let occurred_at =
+            current_audit_timestamp().expect("payroll export seeding timestamp should resolve");
+        mutate_payroll_ledger_service(&state, |service| {
+            service.export_sftp_batch(
+                &payroll,
+                &pay_period,
+                "cycle-1970-04-primary",
+                1,
+                20,
+                PayrollSortFieldQuery::DeliveryDate.into_domain(),
+                SortOrderQuery::Asc.into_payroll_domain(),
+                occurred_at,
+            )
+        })
+        .expect("payroll export seed should succeed");
         let export_page = handle_export_payroll_deductions(
             &state,
             &payroll,
@@ -20106,6 +20122,21 @@ mod tests {
         let created_order =
             handle_create_employee_order(&state, create_request).expect("order should be created");
         let pay_period = created_order.delivery_date[..7].to_owned();
+        let occurred_at =
+            current_audit_timestamp().expect("payroll export seeding timestamp should resolve");
+        mutate_payroll_ledger_service(&state, |service| {
+            service.export_sftp_batch(
+                &payroll,
+                &pay_period,
+                "cycle-terminated-runtime-drill",
+                1,
+                20,
+                PayrollSortFieldQuery::DeliveryDate.into_domain(),
+                SortOrderQuery::Asc.into_payroll_domain(),
+                occurred_at,
+            )
+        })
+        .expect("payroll export seed should succeed");
 
         let export_page = handle_export_payroll_deductions(
             &state,
@@ -20159,6 +20190,21 @@ mod tests {
         let created_order =
             handle_create_employee_order(&state, create_request).expect("order should be created");
         let pay_period = created_order.delivery_date[..7].to_owned();
+        let occurred_at =
+            current_audit_timestamp().expect("payroll export seeding timestamp should resolve");
+        mutate_payroll_ledger_service(&state, |service| {
+            service.export_sftp_batch(
+                &payroll,
+                &pay_period,
+                "cycle-encryption-evidence-runtime",
+                1,
+                20,
+                PayrollSortFieldQuery::DeliveryDate.into_domain(),
+                SortOrderQuery::Asc.into_payroll_domain(),
+                occurred_at,
+            )
+        })
+        .expect("payroll export seed should succeed");
 
         let export_page = handle_export_payroll_deductions(
             &state,
@@ -20210,6 +20256,66 @@ mod tests {
         assert_eq!(decrypted_order_id, created_order.order_id);
         assert_eq!(decrypted_amount["currency"], "TWD");
         assert_eq!(decrypted_amount["amountMinor"], 12000);
+    }
+
+    #[test]
+    fn payroll_export_handler_requires_existing_closed_cycle() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let payroll = payroll_operator();
+        seed_previous_pay_period_payroll_record(
+            &state,
+            now_epoch_day,
+            "ord-export-cycle-guard",
+            7_500,
+        );
+
+        let pay_period = previous_pay_period_for_epoch_day(now_epoch_day);
+        let cycle_key = format!("monthly-{pay_period}");
+        let pre_close_error = handle_export_payroll_deductions(
+            &state,
+            &payroll,
+            PayrollExportQuery {
+                pay_period: Some(pay_period.clone()),
+                cycle_key: Some(cycle_key.clone()),
+                page: Some(1),
+                page_size: Some(20),
+                sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
+                sort_order: Some(SortOrderQuery::Asc),
+            },
+        )
+        .expect_err("export should reject unclosed settlement cycles");
+        assert_eq!(pre_close_error.0, StatusCode::NOT_FOUND);
+
+        let closed = handle_close_payroll_monthly_settlement(
+            &state,
+            &payroll,
+            PayrollMonthlySettlementCloseRequest {
+                issue_checklist: Some(vec![SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID.to_owned()]),
+                cycle_key: Some(cycle_key.clone()),
+                ..PayrollMonthlySettlementCloseRequest::default()
+            },
+        )
+        .expect("monthly close should succeed with sign-off checklist");
+        let export_page = handle_export_payroll_deductions(
+            &state,
+            &payroll,
+            PayrollExportQuery {
+                pay_period: Some(pay_period),
+                cycle_key: Some(cycle_key),
+                page: Some(1),
+                page_size: Some(20),
+                sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
+                sort_order: Some(SortOrderQuery::Asc),
+            },
+        )
+        .expect("export should succeed after close path sign-off");
+        assert_eq!(
+            export_page.exchange_batch.batch_id,
+            closed.exchange_batch.batch_id
+        );
     }
 
     #[test]
@@ -20675,6 +20781,67 @@ mod tests {
             }),
         )
         .expect_err("mcp settlement export should require payPeriod");
+
+        assert_eq!(http_error.0, mcp_error.0);
+        assert_eq!(http_error.1.code, mcp_error.1.code);
+    }
+
+    #[test]
+    fn mcp_and_http_settlement_export_paths_require_existing_closed_cycle() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let payroll = payroll_operator();
+        seed_previous_pay_period_payroll_record(
+            &state,
+            now_epoch_day,
+            "ord-mcp-http-settlement-guard",
+            8_000,
+        );
+        let pay_period = previous_pay_period_for_epoch_day(now_epoch_day);
+        let cycle_key = format!("monthly-{pay_period}");
+
+        let http_error = handle_export_payroll_deductions(
+            &state,
+            &payroll,
+            PayrollExportQuery {
+                pay_period: Some(pay_period.clone()),
+                cycle_key: Some(cycle_key.clone()),
+                page: Some(1),
+                page_size: Some(20),
+                sort_by: Some(PayrollSortFieldQuery::DeliveryDate),
+                sort_order: Some(SortOrderQuery::Asc),
+            },
+        )
+        .expect_err("http settlement export should reject unclosed cycles");
+        assert_eq!(http_error.0, StatusCode::NOT_FOUND);
+
+        let service_account = oauth_service_account_actor(
+            "svc-settlement-export-cycle-guard",
+            Role::PayrollOperator,
+            PlantScope::all(),
+        );
+        let grant = McpServiceAccountGrant::new(
+            service_account.actor_id().clone(),
+            service_account,
+            [MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS],
+        )
+        .expect("settlement export grant should be valid");
+        let mcp_error = invoke_mcp_write_for_test(
+            &state,
+            &grant,
+            MCP_TOOL_SETTLEMENT_EXPORT_PAYROLL_DEDUCTIONS,
+            serde_json::json!({
+                "payPeriod": pay_period,
+                "cycleKey": cycle_key,
+                "page": 1,
+                "pageSize": 20,
+                "sortBy": "deliveryDate",
+                "sortOrder": "asc"
+            }),
+        )
+        .expect_err("mcp settlement export should reject unclosed cycles");
 
         assert_eq!(http_error.0, mcp_error.0);
         assert_eq!(http_error.1.code, mcp_error.1.code);
