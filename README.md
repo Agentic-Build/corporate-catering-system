@@ -89,9 +89,13 @@ Baseline artifacts are committed and release-gated under `ops/`:
   - `ops/observability/slo/alerts.yaml`
 - Pre-launch load-test thresholds:
   - `ops/observability/load/prelaunch-thresholds.yaml`
+  - `ops/observability/load/staged-capacity-policy.json` (CLAR-008 staged ramp + split + autoscaling convergence policy)
   - `ops/observability/load/k6-prelaunch.js`
   - `src/bin/observability_runtime_service.rs` (runtime service used by the hard-SLO load gate)
-  - `scripts/check-observability-slo-baseline.sh` enforces thresholds from `hard-slo-policy.yaml` and `prelaunch-thresholds.yaml` as source-of-truth.
+  - `scripts/check-observability-slo-baseline.sh` enforces thresholds from `hard-slo-policy.yaml`, staged policy from `staged-capacity-policy.json`, and emits retained evidence:
+    - `ops/observability/load/reports/prelaunch-k6-summary.json`
+    - `ops/observability/load/reports/prelaunch-slo-report.json`
+    - `ops/observability/load/reports/staged-capacity-report.json`
 - Kubernetes baseline with health/scaling signals:
   - `ops/kubernetes/base/*.yaml`
   - `ops/kubernetes/components/**` (multi-AZ topology + KEDA worker autoscaling strategy)
@@ -121,4 +125,4 @@ Release gating now includes dedicated workflows for build correctness, migration
 - `load-gate` (`.github/workflows/observability-slo-gate.yml`)
 - `deploy` (`.github/workflows/deploy.yml`)
 
-`deploy` enforces non-skippable promotion gates (`image-build`, `migration-check`, `e2e-smoke`, `load-gate`), consumes rendered production overlay artifacts, and emits machine-readable release evidence (`ISS-005`) as an artifact.
+`deploy` enforces non-skippable promotion gates (`image-build`, `migration-check`, `e2e-smoke`, `load-gate`), consumes rendered production overlay artifacts, and emits machine-readable release evidence (`ISS-005`) that also fingerprints retained load benchmark artifacts (`prelaunch-slo-report.json`, `staged-capacity-report.json`).

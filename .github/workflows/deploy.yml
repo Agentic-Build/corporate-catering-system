@@ -156,7 +156,8 @@ jobs:
             "commitSha": "${GITHUB_SHA}",
             "artifacts": [
               "ops/observability/load/reports/prelaunch-k6-summary.json",
-              "ops/observability/load/reports/prelaunch-slo-report.json"
+              "ops/observability/load/reports/prelaunch-slo-report.json",
+              "ops/observability/load/reports/staged-capacity-report.json"
             ]
           }
           JSON
@@ -169,6 +170,7 @@ jobs:
             artifacts/deploy-gates/load-gate-evidence.json
             ops/observability/load/reports/prelaunch-k6-summary.json
             ops/observability/load/reports/prelaunch-slo-report.json
+            ops/observability/load/reports/staged-capacity-report.json
 
       - name: Tear down local runtime dependencies
         if: always()
@@ -223,17 +225,27 @@ jobs:
           name: production-overlay-artifacts
           path: artifacts/production-overlay
 
+      - name: Download load-gate artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: deploy-load-gate-evidence
+          path: artifacts/load-gate
+
       - name: Verify production overlay artifact files
         run: |
           test -f artifacts/production-overlay/production-overlay.yaml
           test -f artifacts/production-overlay/production-overlay.sha256
           test -f artifacts/production-overlay/production-overlay-images.txt
+          test -f artifacts/load-gate/ops/observability/load/reports/prelaunch-slo-report.json
+          test -f artifacts/load-gate/ops/observability/load/reports/staged-capacity-report.json
 
       - name: Emit production release evidence
         run: |
           ./scripts/emit-release-evidence.sh \
             --overlay-manifest artifacts/production-overlay/production-overlay.yaml \
             --overlay-digest-file artifacts/production-overlay/production-overlay.sha256 \
+            --load-slo-report artifacts/load-gate/ops/observability/load/reports/prelaunch-slo-report.json \
+            --staged-capacity-report artifacts/load-gate/ops/observability/load/reports/staged-capacity-report.json \
             --decision-issue-id ISS-005 \
             --gates image-build,migration-check,e2e-smoke,load-gate,deploy \
             --output artifacts/release/release-evidence.json

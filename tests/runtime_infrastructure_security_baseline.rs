@@ -470,7 +470,8 @@ fn kubernetes_overlays_encode_runtime_strategy_and_environment_promotion_values(
             "{overlay_path} must include KEDA autoscaling component"
         );
         assert!(
-            overlay_raw.contains("runtime.corporate-catering.io/scaling-strategy: hpa-plus-keda-worker"),
+            overlay_raw
+                .contains("runtime.corporate-catering.io/scaling-strategy: hpa-plus-keda-worker"),
             "{overlay_path} must encode selected runtime scaling strategy"
         );
         assert!(
@@ -492,7 +493,11 @@ fn kubernetes_overlays_encode_runtime_strategy_and_environment_promotion_values(
             "{overlay_path} must label environment"
         );
         assert_eq!(
-            yaml_get(annotations, "runtime.corporate-catering.io/topology-strategy").as_str(),
+            yaml_get(
+                annotations,
+                "runtime.corporate-catering.io/topology-strategy"
+            )
+            .as_str(),
             Some("multi-az"),
             "{overlay_path} must encode topology strategy"
         );
@@ -501,7 +506,8 @@ fn kubernetes_overlays_encode_runtime_strategy_and_environment_promotion_values(
 
 #[test]
 fn multi_az_topology_component_targets_required_runtime_deployments() {
-    let component_kustomization = read_text("ops/kubernetes/components/topology-multi-az/kustomization.yaml");
+    let component_kustomization =
+        read_text("ops/kubernetes/components/topology-multi-az/kustomization.yaml");
     for required_deployment in [
         "corporate-catering-api",
         "corporate-catering-mcp",
@@ -533,20 +539,117 @@ fn multi_az_topology_component_targets_required_runtime_deployments() {
 
 #[test]
 fn keda_component_defines_worker_scaledobject_and_removes_worker_hpa() {
-    let component = read_text("ops/kubernetes/components/autoscaling-keda-worker/kustomization.yaml");
+    let component =
+        read_text("ops/kubernetes/components/autoscaling-keda-worker/kustomization.yaml");
     assert!(component.contains("scaledobject-compliance-worker.yaml"));
     assert!(component.contains("delete-hpa-compliance-worker.yaml"));
 
-    let scaledobject = read_text("ops/kubernetes/components/autoscaling-keda-worker/scaledobject-compliance-worker.yaml");
+    let scaledobject = read_text(
+        "ops/kubernetes/components/autoscaling-keda-worker/scaledobject-compliance-worker.yaml",
+    );
     assert!(scaledobject.contains("kind: ScaledObject"));
     assert!(scaledobject.contains("name: corporate-catering-compliance-worker"));
     assert!(scaledobject.contains("type: prometheus"));
     assert!(scaledobject.contains("type: cpu"));
 
-    let delete_patch = read_text("ops/kubernetes/components/autoscaling-keda-worker/delete-hpa-compliance-worker.yaml");
+    let delete_patch = read_text(
+        "ops/kubernetes/components/autoscaling-keda-worker/delete-hpa-compliance-worker.yaml",
+    );
     assert!(delete_patch.contains("$patch: delete"));
     assert!(delete_patch.contains("kind: HorizontalPodAutoscaler"));
     assert!(delete_patch.contains("name: corporate-catering-compliance-worker"));
+}
+
+#[test]
+fn staging_overlay_declares_tuned_autoscaling_for_staged_capacity_gate() {
+    let docs = read_yaml_documents("ops/kubernetes/overlays/staging/patch-autoscaling.yaml");
+
+    let find_doc = |kind: &str, name: &str| {
+        docs.iter()
+            .find(|doc| {
+                yaml_get(doc, "kind").as_str() == Some(kind)
+                    && yaml_get(yaml_get(doc, "metadata"), "name").as_str() == Some(name)
+            })
+            .unwrap_or_else(|| panic!("missing {kind} `{name}` in staging autoscaling patch"))
+    };
+
+    let api_hpa = find_doc("HorizontalPodAutoscaler", "corporate-catering-api");
+    let api_spec = yaml_get(api_hpa, "spec");
+    assert_eq!(yaml_get(api_spec, "minReplicas").as_i64(), Some(4));
+    assert_eq!(yaml_get(api_spec, "maxReplicas").as_i64(), Some(16));
+    let api_behavior = yaml_get(api_spec, "behavior");
+    assert_eq!(
+        yaml_get(
+            yaml_get(api_behavior, "scaleUp"),
+            "stabilizationWindowSeconds"
+        )
+        .as_i64(),
+        Some(15)
+    );
+    assert_eq!(
+        yaml_get(
+            yaml_get(api_behavior, "scaleDown"),
+            "stabilizationWindowSeconds"
+        )
+        .as_i64(),
+        Some(240)
+    );
+
+    let api_metrics = yaml_get(api_spec, "metrics")
+        .as_sequence()
+        .expect("api metrics must be sequence");
+    let api_rps_target = api_metrics
+        .iter()
+        .find(|metric| {
+            yaml_get(metric, "type").as_str() == Some("Pods")
+                && yaml_get(yaml_get(yaml_get(metric, "pods"), "metric"), "name").as_str()
+                    == Some("http_server_requests_per_second")
+        })
+        .expect("api HPA must include http_server_requests_per_second pod metric");
+    assert_eq!(
+        yaml_get(
+            yaml_get(yaml_get(api_rps_target, "pods"), "target"),
+            "averageValue"
+        )
+        .as_str(),
+        Some("85")
+    );
+
+    let mcp_hpa = find_doc("HorizontalPodAutoscaler", "corporate-catering-mcp");
+    let mcp_spec = yaml_get(mcp_hpa, "spec");
+    assert_eq!(yaml_get(mcp_spec, "minReplicas").as_i64(), Some(3));
+    assert_eq!(yaml_get(mcp_spec, "maxReplicas").as_i64(), Some(12));
+
+    let scaledobject = find_doc("ScaledObject", "corporate-catering-compliance-worker");
+    let scaledobject_spec = yaml_get(scaledobject, "spec");
+    assert_eq!(
+        yaml_get(scaledobject_spec, "pollingInterval").as_i64(),
+        Some(15)
+    );
+    assert_eq!(
+        yaml_get(scaledobject_spec, "cooldownPeriod").as_i64(),
+        Some(240)
+    );
+    assert_eq!(
+        yaml_get(scaledobject_spec, "minReplicaCount").as_i64(),
+        Some(2)
+    );
+    assert_eq!(
+        yaml_get(scaledobject_spec, "maxReplicaCount").as_i64(),
+        Some(12)
+    );
+
+    let triggers = yaml_get(scaledobject_spec, "triggers")
+        .as_sequence()
+        .expect("scaledobject triggers must be sequence");
+    let prometheus_trigger = triggers
+        .iter()
+        .find(|trigger| yaml_get(trigger, "type").as_str() == Some("prometheus"))
+        .expect("scaledobject must include prometheus trigger");
+    assert_eq!(
+        yaml_get(yaml_get(prometheus_trigger, "metadata"), "threshold").as_str(),
+        Some("14")
+    );
 }
 
 #[test]
@@ -558,10 +661,7 @@ fn runtime_workloads_enforce_least_privilege_security_contexts() {
         "ops/kubernetes/base/deployment-web.yaml",
     ] {
         let deployment = read_yaml(deployment_file);
-        let pod_spec = yaml_get(
-            yaml_get(yaml_get(&deployment, "spec"), "template"),
-            "spec",
-        );
+        let pod_spec = yaml_get(yaml_get(yaml_get(&deployment, "spec"), "template"), "spec");
         assert_pod_least_privilege(pod_spec, deployment_file);
 
         let first_container = yaml_get(pod_spec, "containers")

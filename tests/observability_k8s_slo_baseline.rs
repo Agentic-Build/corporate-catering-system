@@ -178,6 +178,14 @@ fn hard_slo_policy_blocks_release_without_dashboard_alerts_and_load_thresholds()
         yaml_get(gate, "loadThresholdsRef").as_str(),
         Some("ops/observability/load/prelaunch-thresholds.yaml")
     );
+    assert_eq!(
+        yaml_get(gate, "stagedCapacityPolicyRef").as_str(),
+        Some("ops/observability/load/staged-capacity-policy.json")
+    );
+    assert_eq!(
+        yaml_get(gate, "stagedCapacityReportRef").as_str(),
+        Some("ops/observability/load/reports/staged-capacity-report.json")
+    );
 
     let objective_ids: BTreeSet<String> = yaml_get(spec, "objectives")
         .as_sequence()
@@ -592,6 +600,42 @@ fn prelaunch_load_assets_are_aligned_with_hard_slo_policy() {
         .collect::<BTreeSet<_>>();
     assert_eq!(threshold_scenarios, policy_scenarios);
 
+    let staged_policy = read_json("ops/observability/load/staged-capacity-policy.json");
+    assert_eq!(staged_policy["decisionIssueId"].as_str(), Some("ISS-005"));
+    let clarification_ids = staged_policy["clarificationIds"]
+        .as_array()
+        .expect("clarificationIds must be array")
+        .iter()
+        .map(|value| value.as_str().expect("clarification id must be string"))
+        .collect::<BTreeSet<_>>();
+    assert!(
+        clarification_ids.contains("CLAR-008"),
+        "staged policy must include CLAR-008"
+    );
+    let staged_phase_names = staged_policy["stagedRamp"]["phases"]
+        .as_array()
+        .expect("staged phases must be array")
+        .iter()
+        .map(|phase| {
+            phase["name"]
+                .as_str()
+                .expect("phase name must be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        staged_phase_names,
+        BTreeSet::from(["ramp".to_owned(), "burst".to_owned(), "decay".to_owned(),])
+    );
+    assert!(
+        staged_policy["forbiddenMandatoryGates"]
+            .as_array()
+            .expect("forbiddenMandatoryGates must be array")
+            .iter()
+            .any(|gate| gate["value"].as_i64() == Some(25_000)),
+        "staged policy must explicitly reject fixed 25k RPS mandatory gate"
+    );
+
     let k6_script = read_text("ops/observability/load/k6-prelaunch.js");
     for required in [
         "peak-order-placement",
@@ -602,6 +646,8 @@ fn prelaunch_load_assets_are_aligned_with_hard_slo_policy() {
         "/api/v1/employee/orders/",
         "/pickup-verifications",
         "/api/v1/employee/menus",
+        "staged_phase",
+        "load_split",
         "p(99)<",
     ] {
         assert!(
@@ -644,7 +690,9 @@ fn ci_workflow_enforces_observability_hard_slo_gate() {
         step.as_mapping()
             .and_then(|mapping| mapping.get(&YamlValue::String("run".to_owned())))
             .and_then(YamlValue::as_str)
-            .is_some_and(|command| command.contains("./scripts/check-observability-slo-baseline.sh"))
+            .is_some_and(|command| {
+                command.contains("./scripts/check-observability-slo-baseline.sh")
+            })
     });
 
     assert!(
@@ -666,6 +714,14 @@ fn ci_workflow_enforces_observability_hard_slo_gate() {
         "hard-SLO gate must retain evaluated SLO report artifacts for auditability"
     );
     assert!(
+        gate_script.contains("ops/observability/load/reports/staged-capacity-report.json"),
+        "hard-SLO gate must retain staged capacity report artifacts for auditability"
+    );
+    assert!(
+        gate_script.contains("ops/observability/load/staged-capacity-policy.json"),
+        "hard-SLO gate must evaluate staged capacity policy from declarative config"
+    );
+    assert!(
         !gate_script.contains("mock-prelaunch-server.js"),
         "hard-SLO gate must not target a mock prelaunch server"
     );
@@ -684,6 +740,10 @@ fn ci_workflow_enforces_observability_hard_slo_gate() {
     assert!(
         repo_path("ops/observability/load/reports/prelaunch-k6-summary.json").exists(),
         "retained k6 summary artifact must exist"
+    );
+    assert!(
+        repo_path("ops/observability/load/reports/staged-capacity-report.json").exists(),
+        "retained staged capacity report artifact must exist"
     );
 
     let retained_slo_report = read_text("ops/observability/load/reports/prelaunch-slo-report.json");
@@ -704,6 +764,17 @@ fn ci_workflow_enforces_observability_hard_slo_gate() {
     assert!(
         !retained_k6_summary.contains("\"generatedAt\": null"),
         "retained k6 summary must include generated timestamp from an executed gate run"
+    );
+
+    let retained_staged_report =
+        read_text("ops/observability/load/reports/staged-capacity-report.json");
+    assert!(
+        !retained_staged_report.contains("pending-prelaunch-run"),
+        "retained staged capacity report must contain completed run output, not placeholder status"
+    );
+    assert!(
+        !retained_staged_report.contains("\"generatedAt\": null"),
+        "retained staged capacity report must include generated timestamp from an executed gate run"
     );
 }
 

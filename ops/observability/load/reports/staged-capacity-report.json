@@ -1,0 +1,82 @@
+{
+  "generatedAt": "2026-04-16T00:22:30.602Z",
+  "decisionIssueId": "ISS-005",
+  "clarificationIds": [
+    "CLAR-008"
+  ],
+  "summaryPath": "ops/observability/load/reports/prelaunch-k6-summary.json",
+  "status": "pass",
+  "violations": [],
+  "stagedRamp": {
+    "phases": [
+      {
+        "name": "ramp",
+        "observedRps": 342.1,
+        "observedP95LatencyMs": 2.31,
+        "observedP99LatencyMs": 3.63,
+        "observedErrorRate": 0
+      },
+      {
+        "name": "burst",
+        "observedRps": 1173.8,
+        "observedP95LatencyMs": 2.13,
+        "observedP99LatencyMs": 2.7,
+        "observedErrorRate": 0
+      },
+      {
+        "name": "decay",
+        "observedRps": 936.2,
+        "observedP95LatencyMs": 1.94,
+        "observedP99LatencyMs": 2.54,
+        "observedErrorRate": 0
+      }
+    ]
+  },
+  "splitValidation": [
+    {
+      "name": "cache",
+      "observedRps": 135,
+      "observedP95LatencyMs": 2.13,
+      "observedP99LatencyMs": 2.54,
+      "observedErrorRate": 0
+    },
+    {
+      "name": "db",
+      "observedRps": 523.9,
+      "observedP95LatencyMs": 2.06,
+      "observedP99LatencyMs": 2.7,
+      "observedErrorRate": 0
+    },
+    {
+      "name": "queue",
+      "observedRps": 120,
+      "observedP95LatencyMs": 1.94,
+      "observedP99LatencyMs": 2.51,
+      "observedErrorRate": 0
+    }
+  ],
+  "autoscalingConvergence": {
+    "maxDirectionChanges": 1,
+    "maxEndOfPhaseReplicaGap": 3,
+    "workloads": [
+      {
+        "name": "corporate-catering-api",
+        "directionChanges": 1,
+        "endOfPhaseReplicaGap": 0
+      },
+      {
+        "name": "corporate-catering-mcp",
+        "directionChanges": 1,
+        "endOfPhaseReplicaGap": 0
+      },
+      {
+        "name": "corporate-catering-compliance-worker",
+        "directionChanges": 1,
+        "endOfPhaseReplicaGap": 0
+      }
+    ]
+  },
+  "tuning": {
+    "manifest": "ops/kubernetes/overlays/staging/patch-autoscaling.yaml"
+  }
+}

@@ -8,7 +8,9 @@ required_files=(
   "ops/observability/slo/alerts.yaml"
   "ops/observability/slo/grafana-dashboard-hard-slo.json"
   "ops/observability/load/prelaunch-thresholds.yaml"
+  "ops/observability/load/staged-capacity-policy.json"
   "ops/observability/load/k6-prelaunch.js"
+  "scripts/evaluate-prelaunch-load.py"
   "ops/kubernetes/base/deployment.yaml"
   "ops/kubernetes/base/deployment-mcp.yaml"
   "ops/kubernetes/base/deployment-compliance-worker.yaml"
@@ -50,14 +52,27 @@ rg -q "OrderApiLatencyP99Breach" ops/observability/slo/alerts.yaml
 rg -q "p99LatencyMsMax" ops/observability/slo/hard-slo-policy.yaml
 rg -q "p99LatencyMsMax" ops/observability/load/prelaunch-thresholds.yaml
 rg -q --fixed-strings "p(99)<" ops/observability/load/k6-prelaunch.js
+rg -q "staged_phase" ops/observability/load/k6-prelaunch.js
+rg -q "load_split" ops/observability/load/k6-prelaunch.js
 rg -q "peak-order-and-pickup-verification" ops/observability/load/k6-prelaunch.js
 rg -q "/api/v1/employee/orders/.*/pickup-verifications" ops/observability/load/k6-prelaunch.js
 rg -q "TOTP1:" ops/observability/load/k6-prelaunch.js
+rg -q '"clarificationIds": \[' ops/observability/load/staged-capacity-policy.json
+rg -q '"CLAR-008"' ops/observability/load/staged-capacity-policy.json
+rg -q '"decisionIssueId": "ISS-005"' ops/observability/load/staged-capacity-policy.json
+rg -q '"value": 25000' ops/observability/load/staged-capacity-policy.json
 rg -q "specialRequests" ops/observability/load/k6-prelaunch.js
 if rg -q "(parseOrderIdOrFallback|fallbackOrderId|specialRequestOption)" ops/observability/load/k6-prelaunch.js; then
   echo "legacy fallback or special-request payload shape detected in k6-prelaunch.js"
   exit 1
 fi
+rg -q "minReplicas: 4" ops/kubernetes/overlays/staging/patch-autoscaling.yaml
+rg -q "maxReplicas: 16" ops/kubernetes/overlays/staging/patch-autoscaling.yaml
+rg -q 'averageValue: "85"' ops/kubernetes/overlays/staging/patch-autoscaling.yaml
+rg -q "stabilizationWindowSeconds: 15" ops/kubernetes/overlays/staging/patch-autoscaling.yaml
+rg -q "stabilizationWindowSeconds: 240" ops/kubernetes/overlays/staging/patch-autoscaling.yaml
+rg -q "cooldownPeriod: 240" ops/kubernetes/overlays/staging/patch-autoscaling.yaml
+rg -q 'threshold: "14"' ops/kubernetes/overlays/staging/patch-autoscaling.yaml
 rg -q "special_requests" src/bin/observability_runtime_service.rs
 if rg -q "special_request_option" src/bin/observability_runtime_service.rs; then
   echo "legacy special_request_option field detected in observability runtime service"
@@ -156,6 +171,10 @@ if ! command -v node >/dev/null 2>&1; then
   echo "node is required to evaluate policy-driven load thresholds"
   exit 1
 fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required to evaluate staged capacity policy"
+  exit 1
+fi
 if ! command -v k6 >/dev/null 2>&1; then
   echo "k6 is required to enforce prelaunch load thresholds"
   exit 1
@@ -202,6 +221,7 @@ service_pid=""
 
 retained_summary="ops/observability/load/reports/prelaunch-k6-summary.json"
 retained_report="ops/observability/load/reports/prelaunch-slo-report.json"
+retained_staged_report="ops/observability/load/reports/staged-capacity-report.json"
 reports_dir="$(dirname "${retained_summary}")"
 mkdir -p "${reports_dir}"
 
@@ -265,209 +285,16 @@ BASE_URL="http://127.0.0.1:${PORT}" \
 
 cp "${summary_file}" "${retained_summary}"
 
-node - "${summary_file}" "ops/observability/slo/hard-slo-policy.yaml" "ops/observability/load/prelaunch-thresholds.yaml" "ops/observability/load/k6-prelaunch.js" "${retained_report}" "${retained_summary}" <<'NODE'
-const fs = require("node:fs");
-
-const summaryPath = process.argv[2];
-const policyPath = process.argv[3];
-const thresholdPath = process.argv[4];
-const k6ScriptPath = process.argv[5];
-const reportPath = process.argv[6];
-const retainedSummaryPath = process.argv[7];
-
-const summary = JSON.parse(fs.readFileSync(summaryPath, "utf8"));
-const policyRaw = fs.readFileSync(policyPath, "utf8");
-const thresholdRaw = fs.readFileSync(thresholdPath, "utf8");
-const k6Script = fs.readFileSync(k6ScriptPath, "utf8");
-const metrics = summary.metrics || {};
-
-const policyScenarioPattern =
-  /-\s+name:\s*([a-z0-9-]+)\s*\n\s*minRps:\s*([0-9.]+)\s*\n\s*p95LatencyMsMax:\s*([0-9.]+)\s*\n\s*p99LatencyMsMax:\s*([0-9.]+)\s*\n\s*errorRateMax:\s*([0-9.]+)\s*\n\s*readinessSuccessRateMin:\s*([0-9.]+)/g;
-const thresholdScenarioPattern =
-  /^  ([a-z0-9-]+):\s*\n    minRps:\s*([0-9.]+)\s*\n    thresholds:\s*\n      p95LatencyMsMax:\s*([0-9.]+)\s*\n      p99LatencyMsMax:\s*([0-9.]+)\s*\n      errorRateMax:\s*([0-9.]+)\s*\n      readinessSuccessRateMin:\s*([0-9.]+)/gm;
-
-const policyScenarios = [];
-for (const match of policyRaw.matchAll(policyScenarioPattern)) {
-  policyScenarios.push({
-    name: match[1],
-    minRps: Number(match[2]),
-    p95LatencyMsMax: Number(match[3]),
-    p99LatencyMsMax: Number(match[4]),
-    errorRateMax: Number(match[5]),
-    readinessSuccessRateMin: Number(match[6])
-  });
-}
-
-const thresholdScenarios = new Map();
-for (const match of thresholdRaw.matchAll(thresholdScenarioPattern)) {
-  thresholdScenarios.set(match[1], {
-    minRps: Number(match[2]),
-    p95LatencyMsMax: Number(match[3]),
-    p99LatencyMsMax: Number(match[4]),
-    errorRateMax: Number(match[5]),
-    readinessSuccessRateMin: Number(match[6])
-  });
-}
-
-const report = {
-  generatedAt: new Date().toISOString(),
-  summaryPath: retainedSummaryPath,
-  scenarios: [],
-  readiness: null,
-  violations: [],
-  status: "pass"
-};
-
-const addViolation = (message) => {
-  report.violations.push(message);
-  console.error(message);
-};
-
-if (policyScenarios.length === 0) {
-  addViolation("failed to parse preLaunchLoadAcceptance.requiredScenarios from hard-slo-policy.yaml");
-}
-if (thresholdScenarios.size === 0) {
-  addViolation("failed to parse scenarios from prelaunch-thresholds.yaml");
-}
-
-for (const scenario of policyScenarios) {
-  const threshold = thresholdScenarios.get(scenario.name);
-  if (!threshold) {
-    addViolation(`policy scenario ${scenario.name} is missing from prelaunch-thresholds.yaml`);
-    continue;
-  }
-
-  for (const key of ["minRps", "p95LatencyMsMax", "p99LatencyMsMax", "errorRateMax", "readinessSuccessRateMin"]) {
-    if (Math.abs(Number(scenario[key]) - Number(threshold[key])) > 1e-9) {
-      addViolation(`policy/threshold mismatch for scenario ${scenario.name} on ${key}`);
-    }
-  }
-
-  const keyPattern = new RegExp(`["']${scenario.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']\\s*:\\s*\\{`);
-  if (!keyPattern.test(k6Script)) {
-    addViolation(`k6 scenario key ${scenario.name} is missing in k6-prelaunch.js`);
-  }
-}
-
-const findScenarioMetric = (prefix, scenario) => {
-  for (const [name, metric] of Object.entries(metrics)) {
-    if (name.startsWith(prefix) && name.includes(`scenario:${scenario}`)) {
-      return { name, metric };
-    }
-  }
-  return null;
-};
-
-for (const scenarioSpec of policyScenarios) {
-  const scenario = scenarioSpec.name;
-  const requestMetric = findScenarioMetric("http_reqs", scenario);
-  const durationMetric = findScenarioMetric("http_req_duration", scenario);
-  const failedMetric = findScenarioMetric("http_req_failed", scenario);
-
-  if (!requestMetric) {
-    addViolation(`missing request metric for scenario ${scenario}`);
-    continue;
-  }
-  if (!durationMetric) {
-    addViolation(`missing duration metric for scenario ${scenario}`);
-    continue;
-  }
-  if (!failedMetric) {
-    addViolation(`missing error-rate metric for scenario ${scenario}`);
-    continue;
-  }
-
-  const observedRate = Number(
-    requestMetric.metric?.rate ?? requestMetric.metric?.values?.rate ?? 0
-  );
-  const observedP95Raw =
-    durationMetric.metric?.values?.["p(95)"] ??
-    durationMetric.metric?.["p(95)"] ??
-    durationMetric.metric?.p95;
-  const observedP99Raw =
-    durationMetric.metric?.values?.["p(99)"] ??
-    durationMetric.metric?.["p(99)"] ??
-    durationMetric.metric?.p99;
-  if (observedP95Raw === undefined || observedP95Raw === null) {
-    addViolation(`missing p95 latency quantile in summary metrics for scenario ${scenario}`);
-    continue;
-  }
-  if (observedP99Raw === undefined || observedP99Raw === null) {
-    addViolation(`missing p99 latency quantile in summary metrics for scenario ${scenario}`);
-    continue;
-  }
-  const observedP95 = Number(observedP95Raw);
-  const observedP99 = Number(observedP99Raw);
-  const observedErrorRate = Number(
-    failedMetric.metric?.rate ?? failedMetric.metric?.values?.rate ?? 0
-  );
-
-  report.scenarios.push({
-    name: scenario,
-    observed: {
-      requestRate: observedRate,
-      p95LatencyMs: observedP95,
-      p99LatencyMs: observedP99,
-      errorRate: observedErrorRate
-    },
-    thresholds: scenarioSpec
-  });
-
-  if (observedRate < scenarioSpec.minRps * 0.95) {
-    addViolation(
-      `scenario ${scenario} observed rate ${observedRate.toFixed(2)} rps is below required floor ${scenarioSpec.minRps}`
-    );
-  }
-  if (observedP95 > scenarioSpec.p95LatencyMsMax) {
-    addViolation(
-      `scenario ${scenario} observed p95 latency ${observedP95.toFixed(2)}ms exceeds max ${scenarioSpec.p95LatencyMsMax}ms`
-    );
-  }
-  if (observedP99 > scenarioSpec.p99LatencyMsMax) {
-    addViolation(
-      `scenario ${scenario} observed p99 latency ${observedP99.toFixed(2)}ms exceeds max ${scenarioSpec.p99LatencyMsMax}ms`
-    );
-  }
-  if (observedErrorRate > scenarioSpec.errorRateMax) {
-    addViolation(
-      `scenario ${scenario} observed error rate ${observedErrorRate.toFixed(6)} exceeds max ${scenarioSpec.errorRateMax}`
-    );
-  }
-}
-
-const readinessCheckMetric = Object.entries(metrics).find(([name]) =>
-  name.startsWith("checks") && name.includes("check_type:readiness")
-);
-if (!readinessCheckMetric) {
-  addViolation("missing readiness check metric output");
-} else {
-  const readinessMetric = readinessCheckMetric[1] || {};
-  let readinessRate = Number(readinessMetric.rate ?? readinessMetric.values?.rate ?? 0);
-  if (!Number.isFinite(readinessRate) || readinessRate <= 0) {
-    const passes = Number(readinessMetric.passes ?? readinessMetric.values?.passes ?? 0);
-    const fails = Number(readinessMetric.fails ?? readinessMetric.values?.fails ?? 0);
-    const total = passes + fails;
-    readinessRate = total > 0 ? passes / total : 0;
-  }
-
-  const readinessMin = Math.min(
-    ...policyScenarios.map((scenario) => scenario.readinessSuccessRateMin)
-  );
-  report.readiness = { observedRate: readinessRate, minimumRequired: readinessMin };
-  if (readinessRate < readinessMin) {
-    addViolation(
-      `readiness success rate ${readinessRate.toFixed(5)} is below ${readinessMin}`
-    );
-  }
-}
-
-report.status = report.violations.length === 0 ? "pass" : "fail";
-fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
-
-if (report.violations.length > 0) {
-  process.exit(1);
-}
-NODE
+python3 scripts/evaluate-prelaunch-load.py \
+  --summary "${summary_file}" \
+  --hard-slo-policy "ops/observability/slo/hard-slo-policy.yaml" \
+  --thresholds "ops/observability/load/prelaunch-thresholds.yaml" \
+  --staged-policy "ops/observability/load/staged-capacity-policy.json" \
+  --k6-script "ops/observability/load/k6-prelaunch.js" \
+  --autoscaling-manifest "ops/kubernetes/overlays/staging/patch-autoscaling.yaml" \
+  --slo-report "${retained_report}" \
+  --staged-report "${retained_staged_report}" \
+  --retained-summary-path "${retained_summary}"
 
 if [[ ! -s "${retained_summary}" ]]; then
   echo "retained k6 summary artifact is missing: ${retained_summary}"
@@ -475,6 +302,10 @@ if [[ ! -s "${retained_summary}" ]]; then
 fi
 if [[ ! -s "${retained_report}" ]]; then
   echo "retained SLO evaluation artifact is missing: ${retained_report}"
+  exit 1
+fi
+if [[ ! -s "${retained_staged_report}" ]]; then
+  echo "retained staged capacity evaluation artifact is missing: ${retained_staged_report}"
   exit 1
 fi
 
@@ -485,3 +316,4 @@ echo "observability hard-SLO baseline checks passed"
 echo "retained artifacts:"
 echo "  - ${retained_summary}"
 echo "  - ${retained_report}"
+echo "  - ${retained_staged_report}"

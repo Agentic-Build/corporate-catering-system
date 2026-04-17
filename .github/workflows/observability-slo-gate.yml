@@ -57,11 +57,13 @@ jobs:
             "checks": [
               "scripts/check-observability-slo-baseline.sh",
               "k6 scenario thresholds from hard-slo-policy.yaml",
-              "kustomize production/staging/dev overlay rendering"
+              "kustomize production/staging/dev overlay rendering",
+              "staged-capacity-policy CLAR-008 validation"
             ],
             "artifacts": [
               "ops/observability/load/reports/prelaunch-k6-summary.json",
-              "ops/observability/load/reports/prelaunch-slo-report.json"
+              "ops/observability/load/reports/prelaunch-slo-report.json",
+              "ops/observability/load/reports/staged-capacity-report.json"
             ]
           }
           JSON
@@ -74,6 +76,7 @@ jobs:
             artifacts/load-gate
             ops/observability/load/reports/prelaunch-k6-summary.json
             ops/observability/load/reports/prelaunch-slo-report.json
+            ops/observability/load/reports/staged-capacity-report.json
 
       - name: Tear down local runtime dependencies
         if: always()

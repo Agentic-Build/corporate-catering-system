@@ -3,21 +3,28 @@ kind: HorizontalPodAutoscaler
 metadata:
   name: corporate-catering-api
 spec:
-  minReplicas: 3
-  maxReplicas: 12
+  minReplicas: 4
+  maxReplicas: 16
   behavior:
     scaleUp:
+      stabilizationWindowSeconds: 15
+      selectPolicy: Max
       policies:
         - type: Percent
-          value: 100
+          value: 80
           periodSeconds: 60
         - type: Pods
-          value: 3
+          value: 4
           periodSeconds: 60
     scaleDown:
+      stabilizationWindowSeconds: 240
+      selectPolicy: Min
       policies:
         - type: Percent
-          value: 20
+          value: 12
+          periodSeconds: 60
+        - type: Pods
+          value: 2
           periodSeconds: 60
   metrics:
     - type: Resource
@@ -32,35 +39,42 @@ spec:
           name: http_server_requests_per_second
         target:
           type: AverageValue
-          averageValue: "80"
+          averageValue: "85"
     - type: Pods
       pods:
         metric:
           name: in_flight_requests
         target:
           type: AverageValue
-          averageValue: "30"
+          averageValue: "32"
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: corporate-catering-mcp
 spec:
-  minReplicas: 2
-  maxReplicas: 10
+  minReplicas: 3
+  maxReplicas: 12
   behavior:
     scaleUp:
+      stabilizationWindowSeconds: 15
+      selectPolicy: Max
       policies:
         - type: Percent
-          value: 100
+          value: 80
           periodSeconds: 60
         - type: Pods
           value: 2
           periodSeconds: 60
     scaleDown:
+      stabilizationWindowSeconds: 240
+      selectPolicy: Min
       policies:
         - type: Percent
-          value: 20
+          value: 12
+          periodSeconds: 60
+        - type: Pods
+          value: 1
           periodSeconds: 60
   metrics:
     - type: Resource
@@ -75,14 +89,14 @@ spec:
           name: mcp_tool_requests_per_second
         target:
           type: AverageValue
-          averageValue: "55"
+          averageValue: "60"
     - type: Pods
       pods:
         metric:
           name: mcp_tool_in_flight_requests
         target:
           type: AverageValue
-          averageValue: "20"
+          averageValue: "22"
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -90,20 +104,27 @@ metadata:
   name: corporate-catering-web
 spec:
   minReplicas: 2
-  maxReplicas: 10
+  maxReplicas: 12
   behavior:
     scaleUp:
+      stabilizationWindowSeconds: 30
+      selectPolicy: Max
       policies:
         - type: Percent
-          value: 100
+          value: 80
           periodSeconds: 60
         - type: Pods
           value: 2
           periodSeconds: 60
     scaleDown:
+      stabilizationWindowSeconds: 240
+      selectPolicy: Min
       policies:
         - type: Percent
-          value: 25
+          value: 15
+          periodSeconds: 60
+        - type: Pods
+          value: 1
           periodSeconds: 60
 ---
 apiVersion: keda.sh/v1alpha1
@@ -111,32 +132,41 @@ kind: ScaledObject
 metadata:
   name: corporate-catering-compliance-worker
 spec:
+  pollingInterval: 15
+  cooldownPeriod: 240
   minReplicaCount: 2
-  maxReplicaCount: 10
+  maxReplicaCount: 12
   advanced:
     horizontalPodAutoscalerConfig:
       behavior:
         scaleUp:
+          stabilizationWindowSeconds: 15
+          selectPolicy: Max
           policies:
             - type: Percent
-              value: 100
+              value: 80
               periodSeconds: 60
             - type: Pods
               value: 2
               periodSeconds: 60
         scaleDown:
+          stabilizationWindowSeconds: 240
+          selectPolicy: Min
           policies:
             - type: Percent
-              value: 20
+              value: 15
+              periodSeconds: 60
+            - type: Pods
+              value: 1
               periodSeconds: 60
   triggers:
     - type: prometheus
       metadata:
         serverAddress: http://victoria-metrics-vmsingle.observability.svc.cluster.local:8429
         metricName: compliance_lifecycle_jobs_in_flight
-        threshold: "12"
+        threshold: "14"
         query: avg(compliance_lifecycle_jobs_in_flight)
     - type: cpu
       metricType: Utilization
       metadata:
-        value: "60"
+        value: "62"

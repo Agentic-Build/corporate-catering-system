@@ -9,6 +9,8 @@ spec:
     dashboardRef: ops/observability/slo/grafana-dashboard-hard-slo.json
     alertsRef: ops/observability/slo/alerts.yaml
     loadThresholdsRef: ops/observability/load/prelaunch-thresholds.yaml
+    stagedCapacityPolicyRef: ops/observability/load/staged-capacity-policy.json
+    stagedCapacityReportRef: ops/observability/load/reports/staged-capacity-report.json
     requiredForEnvironments:
       - staging
       - production

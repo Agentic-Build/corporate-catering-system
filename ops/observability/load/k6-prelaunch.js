@@ -3,6 +3,13 @@ import { check, sleep } from "k6";
 import crypto from "k6/crypto";
 import exec from "k6/execution";
 
+const STAGED_PHASE_WINDOWS = [
+  { name: "ramp", startSeconds: 0, endSeconds: 20 },
+  { name: "burst", startSeconds: 20, endSeconds: 60 },
+  { name: "decay", startSeconds: 60, endSeconds: 80 }
+];
+const TEST_STARTED_AT_MS = Date.now();
+
 export const options = {
   scenarios: {
     "peak-order-placement": {
@@ -62,6 +69,24 @@ export const options = {
     "http_req_failed{scenario:peak-order-lifecycle-mutations}": ["rate<0.002"],
     "http_req_duration{scenario:peak-order-and-pickup-verification}": ["p(95)<300", "p(99)<450"],
     "http_req_failed{scenario:peak-order-and-pickup-verification}": ["rate<0.002"],
+    "http_reqs{staged_phase:ramp}": ["count>0"],
+    "http_reqs{staged_phase:burst}": ["count>0"],
+    "http_reqs{staged_phase:decay}": ["count>0"],
+    "http_req_duration{staged_phase:ramp}": ["p(95)<360", "p(99)<520"],
+    "http_req_duration{staged_phase:burst}": ["p(95)<340", "p(99)<500"],
+    "http_req_duration{staged_phase:decay}": ["p(95)<360", "p(99)<520"],
+    "http_req_failed{staged_phase:ramp}": ["rate<0.003"],
+    "http_req_failed{staged_phase:burst}": ["rate<0.002"],
+    "http_req_failed{staged_phase:decay}": ["rate<0.003"],
+    "http_reqs{load_split:cache}": ["count>0"],
+    "http_reqs{load_split:db}": ["count>0"],
+    "http_reqs{load_split:queue}": ["count>0"],
+    "http_req_duration{load_split:cache}": ["p(95)<280", "p(99)<420"],
+    "http_req_duration{load_split:db}": ["p(95)<340", "p(99)<500"],
+    "http_req_duration{load_split:queue}": ["p(95)<320", "p(99)<470"],
+    "http_req_failed{load_split:cache}": ["rate<0.0025"],
+    "http_req_failed{load_split:db}": ["rate<0.0025"],
+    "http_req_failed{load_split:queue}": ["rate<0.0025"],
     "checks{check_type:readiness}": ["rate>0.999"]
   }
 };
@@ -146,9 +171,35 @@ if (ELIGIBLE_MENU_INDICES.length === 0) {
   throw new Error("no menu variants are eligible for current preorder policy window");
 }
 
-function checkReadiness() {
+function currentTestElapsedSeconds() {
+  const elapsed = Number(exec.instance && exec.instance.currentTestRunDuration);
+  if (Number.isFinite(elapsed) && elapsed >= 0) {
+    return elapsed / 1000;
+  }
+  return Math.max(0, (Date.now() - TEST_STARTED_AT_MS) / 1000);
+}
+
+function resolveStagedPhase() {
+  const elapsedSeconds = currentTestElapsedSeconds();
+  for (const phase of STAGED_PHASE_WINDOWS) {
+    if (elapsedSeconds >= phase.startSeconds && elapsedSeconds < phase.endSeconds) {
+      return phase.name;
+    }
+  }
+  return STAGED_PHASE_WINDOWS[STAGED_PHASE_WINDOWS.length - 1].name;
+}
+
+function withLoadTags(baseTags = {}, loadSplit = "control") {
+  return {
+    ...baseTags,
+    staged_phase: resolveStagedPhase(),
+    load_split: loadSplit
+  };
+}
+
+function checkReadiness(loadSplit = "control") {
   const readiness = http.get(`${BASE_URL}/health/ready`, {
-    tags: { endpoint: "health_ready" }
+    tags: withLoadTags({ endpoint: "health_ready" }, loadSplit)
   });
   check(
     readiness,
@@ -207,14 +258,14 @@ export function peakOrderPlacement() {
     buildOrderPayload(),
     {
       headers: { "Content-Type": "application/json" },
-      tags: { operation: "createEmployeeOrder" }
+      tags: withLoadTags({ operation: "createEmployeeOrder" }, "db")
     }
   );
   check(orderResponse, {
     "create order endpoint accepted request": (res) => res.status === 201
   });
 
-  checkReadiness();
+  checkReadiness("db");
   sleep(0.05);
 }
 
@@ -240,7 +291,7 @@ export function mixedOrderAndMenuReads() {
       DELIVERY_DATE
     )}`,
     {
-      tags: { operation: "listEmployeeMenus" }
+      tags: withLoadTags({ operation: "listEmployeeMenus" }, "cache")
     }
   );
   check(menuResponse, {
@@ -250,7 +301,7 @@ export function mixedOrderAndMenuReads() {
   if (__ITER % 3 === 0) {
     peakOrderPlacement();
   } else {
-    checkReadiness();
+    checkReadiness("cache");
   }
 
   sleep(0.03);
@@ -283,7 +334,7 @@ export function peakOrderLifecycleMutations() {
     buildOrderPayload(),
     {
       headers: { "Content-Type": "application/json" },
-      tags: { operation: "createEmployeeOrder" }
+      tags: withLoadTags({ operation: "createEmployeeOrder" }, "db")
     }
   );
   check(createResponse, {
@@ -298,7 +349,8 @@ export function peakOrderLifecycleMutations() {
       headers: { "Content-Type": "application/json" },
       tags: {
         operation: "updateEmployeeOrder",
-        name: "PATCH /api/v1/employee/orders/{orderId}"
+        name: "PATCH /api/v1/employee/orders/{orderId}",
+        ...withLoadTags({}, "db")
       }
     }
   );
@@ -307,7 +359,7 @@ export function peakOrderLifecycleMutations() {
       res.status === 200 || res.status === 202
   });
 
-  checkReadiness();
+  checkReadiness("db");
   sleep(0.03);
 }
 
@@ -346,7 +398,7 @@ export function peakOrderAndPickupVerification() {
     buildOrderPayload(),
     {
       headers: { "Content-Type": "application/json" },
-      tags: { operation: "createEmployeeOrder" }
+      tags: withLoadTags({ operation: "createEmployeeOrder" }, "db")
     }
   );
   check(createResponse, {
@@ -361,7 +413,8 @@ export function peakOrderAndPickupVerification() {
       headers: { "Content-Type": "application/json" },
       tags: {
         operation: "verifyPickupOrder",
-        name: "POST /api/v1/employee/orders/{orderId}/pickup-verifications"
+        name: "POST /api/v1/employee/orders/{orderId}/pickup-verifications",
+        ...withLoadTags({}, "queue")
       }
     }
   );
@@ -370,6 +423,6 @@ export function peakOrderAndPickupVerification() {
       res.status === 200 || res.status === 202
   });
 
-  checkReadiness();
+  checkReadiness("queue");
   sleep(0.03);
 }

@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "name": "staged-capacity-validation-policy",
+  "decisionIssueId": "ISS-005",
+  "clarificationIds": [
+    "CLAR-008"
+  ],
+  "forbiddenMandatoryGates": [
+    {
+      "phase": "OPTIONAL_PHASE_2",
+      "metric": "throughput_rps",
+      "value": 25000,
+      "reason": "Phase-2 release readiness must be evidence-based by staged profile quality, not a fixed absolute RPS target."
+    }
+  ],
+  "stagedRamp": {
+    "phases": [
+      {
+        "name": "ramp",
+        "startSeconds": 0,
+        "endSeconds": 20,
+        "minRps": 240,
+        "maxRps": 650,
+        "p95LatencyMsMax": 360,
+        "p99LatencyMsMax": 520,
+        "errorRateMax": 0.003
+      },
+      {
+        "name": "burst",
+        "startSeconds": 20,
+        "endSeconds": 60,
+        "minRps": 900,
+        "maxRps": 1500,
+        "p95LatencyMsMax": 340,
+        "p99LatencyMsMax": 500,
+        "errorRateMax": 0.002
+      },
+      {
+        "name": "decay",
+        "startSeconds": 60,
+        "endSeconds": 80,
+        "minRps": 500,
+        "maxRps": 1200,
+        "p95LatencyMsMax": 360,
+        "p99LatencyMsMax": 520,
+        "errorRateMax": 0.003
+      }
+    ]
+  },
+  "splitValidation": [
+    {
+      "name": "cache",
+      "loadSplit": "cache",
+      "minRps": 120,
+      "p95LatencyMsMax": 280,
+      "p99LatencyMsMax": 420,
+      "errorRateMax": 0.0025
+    },
+    {
+      "name": "db",
+      "loadSplit": "db",
+      "minRps": 420,
+      "p95LatencyMsMax": 340,
+      "p99LatencyMsMax": 500,
+      "errorRateMax": 0.0025
+    },
+    {
+      "name": "queue",
+      "loadSplit": "queue",
+      "minRps": 110,
+      "p95LatencyMsMax": 320,
+      "p99LatencyMsMax": 470,
+      "errorRateMax": 0.0025
+    }
+  ],
+  "autoscalingConvergence": {
+    "timeStepSeconds": 20,
+    "maxDirectionChanges": 2,
+    "maxEndOfPhaseReplicaGap": 3,
+    "workloads": [
+      {
+        "name": "corporate-catering-api",
+        "kind": "hpa",
+        "targetMetricName": "http_server_requests_per_second",
+        "phaseDemand": {
+          "ramp": 280,
+          "burst": 920,
+          "decay": 420
+        }
+      },
+      {
+        "name": "corporate-catering-mcp",
+        "kind": "hpa",
+        "targetMetricName": "mcp_tool_requests_per_second",
+        "phaseDemand": {
+          "ramp": 90,
+          "burst": 240,
+          "decay": 120
+        }
+      },
+      {
+        "name": "corporate-catering-compliance-worker",
+        "kind": "keda",
+        "targetMetricName": "compliance_lifecycle_jobs_in_flight",
+        "phaseDemand": {
+          "ramp": 18,
+          "burst": 56,
+          "decay": 22
+        }
+      }
+    ]
+  },
+  "tuning": {
+    "environment": "staging",
+    "autoscalingManifest": "ops/kubernetes/overlays/staging/patch-autoscaling.yaml",
+    "reportPath": "ops/observability/load/reports/staged-capacity-report.json"
+  }
+}
