@@ -473,7 +473,7 @@
         "name": "vendorId",
         "required": false,
         "schema": {
-          "pattern": "^ven-[a-z0-9]{8,32}$",
+          "pattern": "^ven-[a-z0-9-]{8,32}$",
           "type": "string"
         }
       },
@@ -482,7 +482,7 @@
         "name": "vendorId",
         "required": true,
         "schema": {
-          "pattern": "^ven-[a-z0-9]{8,32}$",
+          "pattern": "^ven-[a-z0-9-]{8,32}$",
           "type": "string"
         }
       },
@@ -951,7 +951,7 @@
             "$ref": "#/components/schemas/TaipeiBusinessDateTime"
           },
           "vendorId": {
-            "pattern": "^ven-[a-z0-9]{8,32}$",
+            "pattern": "^ven-[a-z0-9-]{8,32}$",
             "type": "string"
           }
         },
@@ -1011,7 +1011,7 @@
             "type": "number"
           },
           "vendorId": {
-            "pattern": "^ven-[a-z0-9]{8,32}$",
+            "pattern": "^ven-[a-z0-9-]{8,32}$",
             "type": "string"
           }
         },
@@ -2132,7 +2132,7 @@
             "type": "integer"
           },
           "vendorId": {
-            "pattern": "^ven-[a-z0-9]{8,32}$",
+            "pattern": "^ven-[a-z0-9-]{8,32}$",
             "type": "string"
           }
         },
@@ -2581,7 +2581,7 @@
             "type": "array"
           },
           "vendorId": {
-            "pattern": "^ven-[a-z0-9]{8,32}$",
+            "pattern": "^ven-[a-z0-9-]{8,32}$",
             "type": "string"
           }
         },
@@ -3748,7 +3748,7 @@
             "$ref": "#/components/schemas/VendorCategory"
           },
           "vendorId": {
-            "pattern": "^ven-[a-z0-9]{8,32}$",
+            "pattern": "^ven-[a-z0-9-]{8,32}$",
             "type": "string"
           }
         },
@@ -4081,7 +4081,7 @@
             "$ref": "#/components/schemas/ActorId"
           },
           "vendorId": {
-            "pattern": "^ven-[a-z0-9]{8,32}$",
+            "pattern": "^ven-[a-z0-9-]{8,32}$",
             "type": "string"
           }
         },
@@ -4498,7 +4498,7 @@
             "$ref": "#/components/schemas/VendorMenuItemStatus"
           },
           "vendorId": {
-            "pattern": "^ven-[a-z0-9]{8,32}$",
+            "pattern": "^ven-[a-z0-9-]{8,32}$",
             "type": "string"
           }
         },
@@ -4755,7 +4755,7 @@
             "$ref": "#/components/schemas/ActorId"
           },
           "vendorId": {
-            "pattern": "^ven-[a-z0-9]{8,32}$",
+            "pattern": "^ven-[a-z0-9-]{8,32}$",
             "type": "string"
           }
         },

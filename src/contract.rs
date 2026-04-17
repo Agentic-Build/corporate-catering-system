@@ -2527,7 +2527,7 @@ pub fn canonical_openapi_spec() -> Value {
             "required": false,
             "schema": {
               "type": "string",
-              "pattern": "^ven-[a-z0-9]{8,32}$"
+              "pattern": "^ven-[a-z0-9-]{8,32}$"
             }
           },
           "PlantIdFilterQuery": {
@@ -2712,7 +2712,7 @@ pub fn canonical_openapi_spec() -> Value {
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^ven-[a-z0-9]{8,32}$"
+              "pattern": "^ven-[a-z0-9-]{8,32}$"
             }
           },
           "VendorCategoryPath": {
@@ -3298,7 +3298,7 @@ pub fn canonical_openapi_spec() -> Value {
             ],
             "properties": {
               "mappingId": { "type": "string", "pattern": "^map-[a-z0-9-]{3,64}$" },
-              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9-]{8,32}$" },
               "plantId": { "$ref": "#/components/schemas/PlantId" },
               "serviceWindow": {
                 "$ref": "#/components/schemas/VendorPlantDeliveryServiceWindow"
@@ -3393,7 +3393,7 @@ pub fn canonical_openapi_spec() -> Value {
             ],
             "properties": {
               "menuItemId": { "type": "string", "pattern": "^menu-[a-z0-9]{8,32}$" },
-              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9-]{8,32}$" },
               "name": { "type": "string", "minLength": 1, "maxLength": 80 },
               "description": { "type": "string", "maxLength": 280 },
               "menuType": { "$ref": "#/components/schemas/MenuType" },
@@ -4144,7 +4144,7 @@ pub fn canonical_openapi_spec() -> Value {
             ],
             "properties": {
               "batchId": { "type": "string", "pattern": "^fbatch-[0-9-]{3,64}$" },
-              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9-]{8,32}$" },
               "deliveryDate": { "type": "string", "format": "date" },
               "capturedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
               "generatedByActorId": { "$ref": "#/components/schemas/ActorId" },
@@ -4279,7 +4279,7 @@ pub fn canonical_openapi_spec() -> Value {
             ],
             "properties": {
               "menuItemId": { "type": "string", "pattern": "^menu-[a-z0-9]{8,32}$" },
-              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9-]{8,32}$" },
               "name": { "type": "string", "minLength": 1, "maxLength": 80 },
               "description": { "type": "string", "minLength": 1, "maxLength": 280 },
               "menuType": { "$ref": "#/components/schemas/MenuType" },
@@ -4464,7 +4464,7 @@ pub fn canonical_openapi_spec() -> Value {
               "updatedAt"
             ],
             "properties": {
-              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9-]{8,32}$" },
               "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
               "vendorCategory": { "$ref": "#/components/schemas/VendorCategory" },
               "status": { "$ref": "#/components/schemas/VendorStatus" },
@@ -4627,7 +4627,7 @@ pub fn canonical_openapi_spec() -> Value {
             "type": "object",
             "required": ["vendorId"],
             "properties": {
-              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9-]{8,32}$" },
               "observedAtEpochDay": { "type": "integer" },
               "observedAtMinuteOfDay": { "type": "integer", "minimum": 0, "maximum": 1439 },
               "daysUntilExpiry": { "type": "number", "minimum": 0 },
@@ -4680,7 +4680,7 @@ pub fn canonical_openapi_spec() -> Value {
             ],
             "properties": {
               "alertId": { "type": "string", "pattern": "^alt-[0-9a-f]{16}$" },
-              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9-]{8,32}$" },
               "ruleId": { "type": "string", "pattern": "^rule-[a-z0-9-]{3,64}$" },
               "ruleKind": { "$ref": "#/components/schemas/AnomalyRuleKind" },
               "ruleDisplayName": { "type": "string", "minLength": 1, "maxLength": 280 },
@@ -4770,7 +4770,7 @@ pub fn canonical_openapi_spec() -> Value {
             "type": "object",
             "required": ["vendorId", "metrics"],
             "properties": {
-              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9]{8,32}$" },
+              "vendorId": { "type": "string", "pattern": "^ven-[a-z0-9-]{8,32}$" },
               "metrics": {
                 "type": "array",
                 "items": { "$ref": "#/components/schemas/OperationsAnalyticsMetricValue" }

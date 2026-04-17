@@ -367,14 +367,14 @@ components:
       name: vendorId
       required: false
       schema:
-        pattern: ^ven-[a-z0-9]{8,32}$
+        pattern: ^ven-[a-z0-9-]{8,32}$
         type: string
     VendorIdPath:
       in: path
       name: vendorId
       required: true
       schema:
-        pattern: ^ven-[a-z0-9]{8,32}$
+        pattern: ^ven-[a-z0-9-]{8,32}$
         type: string
     VendorMenuItemStatusFilterQuery:
       in: query
@@ -696,7 +696,7 @@ components:
         updatedAt:
           $ref: '#/components/schemas/TaipeiBusinessDateTime'
         vendorId:
-          pattern: ^ven-[a-z0-9]{8,32}$
+          pattern: ^ven-[a-z0-9-]{8,32}$
           type: string
       required:
       - alertId
@@ -745,7 +745,7 @@ components:
           minimum: 0
           type: number
         vendorId:
-          pattern: ^ven-[a-z0-9]{8,32}$
+          pattern: ^ven-[a-z0-9-]{8,32}$
           type: string
       required:
       - vendorId
@@ -1589,7 +1589,7 @@ components:
           minimum: 0
           type: integer
         vendorId:
-          pattern: ^ven-[a-z0-9]{8,32}$
+          pattern: ^ven-[a-z0-9-]{8,32}$
           type: string
       required:
       - menuItemId
@@ -1924,7 +1924,7 @@ components:
             $ref: '#/components/schemas/OperationsAnalyticsMetricValue'
           type: array
         vendorId:
-          pattern: ^ven-[a-z0-9]{8,32}$
+          pattern: ^ven-[a-z0-9-]{8,32}$
           type: string
       required:
       - vendorId
@@ -2795,7 +2795,7 @@ components:
         vendorCategory:
           $ref: '#/components/schemas/VendorCategory'
         vendorId:
-          pattern: ^ven-[a-z0-9]{8,32}$
+          pattern: ^ven-[a-z0-9-]{8,32}$
           type: string
       required:
       - vendorId
@@ -3038,7 +3038,7 @@ components:
         generatedByActorId:
           $ref: '#/components/schemas/ActorId'
         vendorId:
-          pattern: ^ven-[a-z0-9]{8,32}$
+          pattern: ^ven-[a-z0-9-]{8,32}$
           type: string
       required:
       - batchId
@@ -3346,7 +3346,7 @@ components:
         status:
           $ref: '#/components/schemas/VendorMenuItemStatus'
         vendorId:
-          pattern: ^ven-[a-z0-9]{8,32}$
+          pattern: ^ven-[a-z0-9-]{8,32}$
           type: string
       required:
       - menuItemId
@@ -3538,7 +3538,7 @@ components:
         updatedByActorId:
           $ref: '#/components/schemas/ActorId'
         vendorId:
-          pattern: ^ven-[a-z0-9]{8,32}$
+          pattern: ^ven-[a-z0-9-]{8,32}$
           type: string
       required:
       - mappingId

@@ -9207,12 +9207,12 @@ fn parse_contract_vendor_id(value: &str) -> Result<VendorId, (StatusCode, ErrorP
     }
     if !suffix
         .chars()
-        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit())
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
     {
         return Err(domain_error(
             StatusCode::BAD_REQUEST,
             "BAD_REQUEST",
-            "vendor id suffix must contain only lowercase letters and digits".to_owned(),
+            "vendor id suffix must contain only lowercase letters, digits, or hyphen".to_owned(),
         ));
     }
     VendorId::parse(trimmed.to_owned()).map_err(|error| {
@@ -20596,6 +20596,39 @@ mod tests {
 
         assert_eq!(http_error.0, mcp_error.0);
         assert_eq!(http_error.1.code, mcp_error.1.code);
+    }
+
+    #[test]
+    fn vendor_id_contract_parser_accepts_hyphenated_suffix_used_by_seed_data() {
+        let parsed = parse_contract_vendor_id("ven-discoverytst-a1")
+            .expect("parser should accept seeded vendor ids with hyphenated suffix");
+        assert_eq!(parsed.as_str(), "ven-discoverytst-a1");
+    }
+
+    #[test]
+    fn review_vendor_application_api_accepts_hyphenated_vendor_id_path() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let headers = bearer_headers("committee-review-hyphen", "COMMITTEE_ADMIN");
+
+        let (status, payload) = run_async_test(review_vendor_application(
+            State(state),
+            headers,
+            Path("ven-discoverytst-a1".to_owned()),
+            Json(VendorApplicationReviewRequest {
+                decision: "INVALID".to_owned(),
+                comment: "short".to_owned(),
+            }),
+        ));
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(payload.0["code"].as_str(), Some("BAD_REQUEST"));
+        assert_eq!(
+            payload.0["message"].as_str(),
+            Some("decision `INVALID` is unsupported")
+        );
     }
 
     #[test]
