@@ -30,6 +30,16 @@ describe("platform navigation", () => {
     );
   });
 
+  it("activates new admin settlement section route", () => {
+    const navigation = buildRoleAwareNavigation("admin", "/admin/settlement");
+
+    assert.equal(navigation.activeSectionId, "settlement");
+    assert.equal(
+      navigation.sectionLinks.find((sectionLink) => sectionLink.id === "settlement")?.active,
+      true
+    );
+  });
+
   it("supports vendor docs section route activation", () => {
     const navigation = buildRoleAwareNavigation("vendor", "/vendor/docs");
 

@@ -63,7 +63,10 @@ export const zhTW = {
       admin: {
         overview: "總覽",
         vendors: "商家審核",
-        anomalies: "異常治理"
+        settlement: "月結作業",
+        anomalies: "異常治理",
+        audit: "稽核查詢",
+        analytics: "營運分析"
       }
     }
   },
@@ -93,7 +96,10 @@ export const zhTW = {
       sectionDescriptions: {
         overview: "掌握平台營運與稽核訊號。",
         vendors: "管理商家審核與服務範圍。",
-        anomalies: "處理文件、品質與服務異常。"
+        settlement: "執行月結關帳、鎖帳切換與例外爭議處理。",
+        anomalies: "處理文件、品質與服務異常。",
+        audit: "查詢操作留痕與責任歸屬。",
+        analytics: "檢視跨商家與廠區的營運分析指標。"
       }
     }
   },

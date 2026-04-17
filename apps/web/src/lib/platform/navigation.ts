@@ -24,7 +24,10 @@ const PORTAL_SECTIONS: Record<PortalRole, readonly PortalSectionDefinition[]> = 
   admin: [
     { id: "overview", segment: null },
     { id: "vendors", segment: "vendors" },
-    { id: "anomalies", segment: "anomalies" }
+    { id: "settlement", segment: "settlement" },
+    { id: "anomalies", segment: "anomalies" },
+    { id: "audit", segment: "audit" },
+    { id: "analytics", segment: "analytics" }
   ]
 };
 
