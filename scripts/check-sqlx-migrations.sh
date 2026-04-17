@@ -75,6 +75,8 @@ DECLARE
     utc_columns_count INTEGER;
     non_utc_timestamptz_columns INTEGER;
     non_global_pk_primary_keys INTEGER;
+    projection_pk_columns INTEGER;
+    projection_text_pk_columns INTEGER;
     role_enum_count INTEGER;
     authentication_source_enum_count INTEGER;
     vendor_status_enum_count INTEGER;
@@ -145,9 +147,47 @@ BEGIN
     WHERE tc.table_schema = 'public'
       AND tc.constraint_type = 'PRIMARY KEY'
       AND tc.table_name <> '_sqlx_migrations'
+      AND NOT (
+          tc.table_name = 'order_state_event_projection'
+          AND kcu.column_name = 'order_id'
+      )
       AND (c.domain_name <> 'global_pk' OR c.udt_name <> 'uuid');
     IF non_global_pk_primary_keys <> 0 THEN
-        RAISE EXCEPTION 'pk invariant failed: all primary keys must use global_pk/uuid';
+        RAISE EXCEPTION 'pk invariant failed: all primary keys must use global_pk/uuid except order_state_event_projection(order_id)';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO projection_pk_columns
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.key_column_usage kcu
+      ON tc.constraint_name = kcu.constraint_name
+     AND tc.table_schema = kcu.table_schema
+     AND tc.table_name = kcu.table_name
+    WHERE tc.table_schema = 'public'
+      AND tc.table_name = 'order_state_event_projection'
+      AND tc.constraint_type = 'PRIMARY KEY';
+    IF projection_pk_columns <> 1 THEN
+        RAISE EXCEPTION 'pk invariant failed: order_state_event_projection must define exactly one primary key column';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO projection_text_pk_columns
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.key_column_usage kcu
+      ON tc.constraint_name = kcu.constraint_name
+     AND tc.table_schema = kcu.table_schema
+     AND tc.table_name = kcu.table_name
+    JOIN information_schema.columns c
+      ON c.table_schema = kcu.table_schema
+     AND c.table_name = kcu.table_name
+     AND c.column_name = kcu.column_name
+    WHERE tc.table_schema = 'public'
+      AND tc.table_name = 'order_state_event_projection'
+      AND tc.constraint_type = 'PRIMARY KEY'
+      AND kcu.column_name = 'order_id'
+      AND c.udt_name = 'text';
+    IF projection_text_pk_columns <> 1 THEN
+        RAISE EXCEPTION 'pk invariant failed: order_state_event_projection primary key must be order_id TEXT';
     END IF;
 
     SELECT COUNT(*)

@@ -1,4 +1,4 @@
-name: Observability Hard SLO Gate
+name: load-gate
 
 on:
   pull_request:
@@ -6,28 +6,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
-  hard-slo-gate:
+  load-gate:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_RW_URL: postgresql://postgres:postgres@127.0.0.1:5432/catering_observability_slo
-      DATABASE_RO_URL: postgresql://postgres:postgres@127.0.0.1:5432/catering_observability_slo
-      PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_HEX: 1111111111111111111111111111111111111111111111111111111111111111
-      PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_HEX: 2222222222222222222222222222222222222222222222222222222222222222
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: catering_observability_slo
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d catering_observability_slo"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -44,5 +29,52 @@ jobs:
       - name: Setup k6
         uses: grafana/setup-k6-action@v1
 
-      - name: Hard-SLO baseline gate
-        run: ./scripts/check-observability-slo-baseline.sh
+      - name: Setup kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Start local runtime dependencies
+        run: ./scripts/setup-dev.sh up
+
+      - name: Run hard-SLO load gate
+        run: |
+          set -a
+          source ./.env.development
+          if [[ -f ./.env.local ]]; then
+            source ./.env.local
+          fi
+          set +a
+          ./scripts/check-observability-slo-baseline.sh
+
+      - name: Emit load-gate evidence
+        run: |
+          mkdir -p artifacts/load-gate
+          cat > artifacts/load-gate/load-gate-evidence.json <<JSON
+          {
+            "gate": "load-gate",
+            "status": "passed",
+            "generatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "commitSha": "${GITHUB_SHA}",
+            "checks": [
+              "scripts/check-observability-slo-baseline.sh",
+              "k6 scenario thresholds from hard-slo-policy.yaml",
+              "kustomize production/staging/dev overlay rendering"
+            ],
+            "artifacts": [
+              "ops/observability/load/reports/prelaunch-k6-summary.json",
+              "ops/observability/load/reports/prelaunch-slo-report.json"
+            ]
+          }
+          JSON
+
+      - name: Upload load-gate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-gate-artifacts
+          path: |
+            artifacts/load-gate
+            ops/observability/load/reports/prelaunch-k6-summary.json
+            ops/observability/load/reports/prelaunch-slo-report.json
+
+      - name: Tear down local runtime dependencies
+        if: always()
+        run: ./scripts/setup-dev.sh down

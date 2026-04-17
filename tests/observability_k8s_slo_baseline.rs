@@ -633,8 +633,8 @@ fn ci_workflow_enforces_observability_hard_slo_gate() {
         .as_mapping()
         .expect("workflow jobs must be mapping");
     let job = jobs
-        .get(&YamlValue::String("hard-slo-gate".to_owned()))
-        .expect("hard-slo-gate job must exist");
+        .get(&YamlValue::String("load-gate".to_owned()))
+        .expect("load-gate job must exist");
 
     let steps = yaml_get(job, "steps")
         .as_sequence()
@@ -644,7 +644,7 @@ fn ci_workflow_enforces_observability_hard_slo_gate() {
         step.as_mapping()
             .and_then(|mapping| mapping.get(&YamlValue::String("run".to_owned())))
             .and_then(YamlValue::as_str)
-            == Some("./scripts/check-observability-slo-baseline.sh")
+            .is_some_and(|command| command.contains("./scripts/check-observability-slo-baseline.sh"))
     });
 
     assert!(

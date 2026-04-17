@@ -1,4 +1,4 @@
-name: PostgreSQL Migration Foundation Gate
+name: migration-check
 
 on:
   pull_request:
@@ -6,9 +6,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
-  migration-foundation:
+  migration-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -20,5 +24,28 @@ jobs:
       - name: Install sqlx-cli
         run: cargo install sqlx-cli --no-default-features --features postgres,rustls
 
-      - name: Verify sqlx migration lifecycle and invariants
+      - name: Verify reversible sqlx migration lifecycle and invariants
         run: ./scripts/check-sqlx-migrations.sh
+
+      - name: Emit migration-check evidence
+        run: |
+          mkdir -p artifacts/migration-check
+          cat > artifacts/migration-check/migration-check-evidence.json <<JSON
+          {
+            "gate": "migration-check",
+            "status": "passed",
+            "generatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "commitSha": "${GITHUB_SHA}",
+            "checks": [
+              "sqlx migrate run --source migrations",
+              "sqlx migrate revert --target-version 0",
+              "foundation invariants + clean revert"
+            ]
+          }
+          JSON
+
+      - name: Upload migration-check evidence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-check-evidence
+          path: artifacts/migration-check

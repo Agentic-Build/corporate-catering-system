@@ -37,7 +37,7 @@ Runtime bootstrap seeds deterministic scenarios for:
 
 Database schema is managed only via `sqlx migrate` migrations under `migrations/`.
 
-- Global PK standard: `UUID` (`global_pk`) on every table primary key.
+- Global PK standard: `UUID` (`global_pk`) on application tables, with an explicit natural-key projection exception at `order_state_event_projection(order_id TEXT PRIMARY KEY)`.
 - Monetary values: `BIGINT` minor units (`money_minor` domain), never float/double.
 - State enums: PostgreSQL `ENUM` types.
 - Append-only protections: trigger-enforced guards on `audit_event` and `payroll_ledger_entry` for `UPDATE`/`DELETE`/`TRUNCATE`.
@@ -54,7 +54,7 @@ Default startup behavior:
 
 CI gate:
 
-- `.github/workflows/postgresql-migration-foundation.yml` runs the real-PostgreSQL migration up/down and invariant verifier on pull requests and `main`.
+- Workflow `migration-check` (`.github/workflows/postgresql-migration-foundation.yml`) runs the real-PostgreSQL migration up/down and invariant verifier on pull requests and `main`.
 
 ## OpenAPI Contract Platform
 
@@ -109,4 +109,16 @@ Verification commands:
 - `pnpm run observability:verify` (runs baseline gate checks + integration tests)
 - `pnpm run release:verify` (contract conformance + observability hard-SLO gates)
 
-CI (`.github/workflows/observability-slo-gate.yml`) blocks merges if hard-SLO release-gate assets are missing or weakened.
+CI (`.github/workflows/observability-slo-gate.yml`, workflow name `load-gate`) blocks merges if hard-SLO release-gate assets are missing or weakened.
+
+## CI/CD Expansion and Release Gates
+
+Release gating now includes dedicated workflows for build correctness, migration safety, smoke coverage, deploy promotion, and pre-launch load verification:
+
+- `image-build` (`.github/workflows/image-build.yml`)
+- `migration-check` (`.github/workflows/postgresql-migration-foundation.yml`)
+- `e2e-smoke` (`.github/workflows/e2e-smoke.yml`)
+- `load-gate` (`.github/workflows/observability-slo-gate.yml`)
+- `deploy` (`.github/workflows/deploy.yml`)
+
+`deploy` enforces non-skippable promotion gates (`image-build`, `migration-check`, `e2e-smoke`, `load-gate`), consumes rendered production overlay artifacts, and emits machine-readable release evidence (`ISS-005`) as an artifact.

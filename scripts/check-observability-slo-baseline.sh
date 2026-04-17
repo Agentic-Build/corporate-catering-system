@@ -117,7 +117,7 @@ rg -q '^[[:space:]]*-[[:space:]]*DELETE[[:space:]]*$' ops/kubernetes/base/gatewa
 rg -q "RateLimitPolicy" ops/kubernetes/base/gateway.yaml
 rg -q "maxRequestBodyBytes" ops/kubernetes/base/gateway.yaml
 rg -q "kind: NetworkPolicy" ops/kubernetes/base/networkpolicy-default-deny.yaml
-rg -q "podSelector: {}" ops/kubernetes/base/networkpolicy-default-deny.yaml
+rg -q --fixed-strings "podSelector: {}" ops/kubernetes/base/networkpolicy-default-deny.yaml
 rg -q "kind: NetworkPolicy" ops/kubernetes/base/networkpolicy-runtime-allow.yaml
 rg -q "corporate-catering-postgres-allow-pgbouncer-and-cluster" ops/kubernetes/base/networkpolicy-runtime-allow.yaml
 rg -q "corporate-catering-runtime-allow-egress-object-storage" ops/kubernetes/base/networkpolicy-runtime-allow.yaml
@@ -135,7 +135,7 @@ rg -q "kind: HorizontalPodAutoscaler" ops/kubernetes/base/hpa-web.yaml
 rg -q "name: memory" ops/kubernetes/base/hpa-web.yaml
 rg -q "topology.kubernetes.io/zone" ops/kubernetes/components/topology-multi-az/patch-deployment-api.yaml
 rg -q "kind: ScaledObject" ops/kubernetes/components/autoscaling-keda-worker/scaledobject-compliance-worker.yaml
-rg -q "\\$patch: delete" ops/kubernetes/components/autoscaling-keda-worker/delete-hpa-compliance-worker.yaml
+rg -q --fixed-strings '$patch: delete' ops/kubernetes/components/autoscaling-keda-worker/delete-hpa-compliance-worker.yaml
 rg -q "/api/v1/employee/orders" ops/observability/load/k6-prelaunch.js
 
 collector_endpoint="$(awk '
