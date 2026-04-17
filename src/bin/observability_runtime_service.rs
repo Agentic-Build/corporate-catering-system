@@ -337,6 +337,30 @@ struct AppState {
 }
 
 #[derive(Debug, Clone)]
+struct VendorScopedActorContext {
+    actor: AuthenticatedActorContext,
+    vendor_scope: Vec<VendorId>,
+}
+
+impl VendorScopedActorContext {
+    fn actor(&self) -> &AuthenticatedActorContext {
+        &self.actor
+    }
+
+    fn is_scoped_for_vendor(&self, vendor_id: &VendorId) -> bool {
+        self.vendor_scope
+            .iter()
+            .any(|candidate| candidate == vendor_id)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct BearerActorAuthorization {
+    actor: AuthenticatedActorContext,
+    vendor_scope: Vec<VendorId>,
+}
+
+#[derive(Debug, Clone)]
 struct PayrollExportFieldEncryptor([u8; 32]);
 
 impl PayrollExportFieldEncryptor {
@@ -1356,6 +1380,8 @@ struct AccessBearerJwtClaims {
     all_plants: bool,
     #[serde(default)]
     plant_ids: Vec<String>,
+    #[serde(default)]
+    vendor_ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -5717,17 +5743,17 @@ async fn list_vendor_orders(
 
 fn handle_list_vendor_orders(
     state: &AppState,
-    vendor_actor: &AuthenticatedActorContext,
+    vendor_actor: &VendorScopedActorContext,
     query: VendorOrderListQuery,
 ) -> Result<VendorOrderPagePayload, (StatusCode, ErrorPayload)> {
-    if vendor_actor.role() != Role::VendorOperator {
+    if vendor_actor.actor().role() != Role::VendorOperator {
         return Err(domain_error(
             StatusCode::FORBIDDEN,
             "FORBIDDEN",
             format!(
                 "operation requires role {:?}, got {:?}",
                 Role::VendorOperator,
-                vendor_actor.role()
+                vendor_actor.actor().role()
             ),
         ));
     }
@@ -5749,14 +5775,25 @@ fn handle_list_vendor_orders(
             ),
         ));
     }
-    if !vendor_actor.plant_scope().contains(&state.plant_id) {
+    if !vendor_actor.actor().plant_scope().contains(&state.plant_id) {
         return Err(domain_error(
             StatusCode::FORBIDDEN,
             "FORBIDDEN",
             format!(
                 "actor `{}` is not authorized for plant `{}`",
-                vendor_actor.actor_id().as_str(),
+                vendor_actor.actor().actor_id().as_str(),
                 state.plant_id.as_str()
+            ),
+        ));
+    }
+    if !vendor_actor.is_scoped_for_vendor(&state.vendor_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not scoped for vendor `{}`",
+                vendor_actor.actor().actor_id().as_str(),
+                state.vendor_id.as_str()
             ),
         ));
     }
@@ -5908,28 +5945,39 @@ async fn create_vendor_object_storage_upload_plan(
 
 fn handle_create_vendor_object_storage_upload_plan(
     state: &AppState,
-    vendor_actor: &AuthenticatedActorContext,
+    vendor_actor: &VendorScopedActorContext,
     request: ObjectStorageUploadRequestPayload,
 ) -> Result<ObjectStorageUploadPlanPayload, (StatusCode, ErrorPayload)> {
-    if vendor_actor.role() != Role::VendorOperator {
+    if vendor_actor.actor().role() != Role::VendorOperator {
         return Err(domain_error(
             StatusCode::FORBIDDEN,
             "FORBIDDEN",
             format!(
                 "operation requires role {:?}, got {:?}",
                 Role::VendorOperator,
-                vendor_actor.role()
+                vendor_actor.actor().role()
             ),
         ));
     }
-    if !vendor_actor.plant_scope().contains(&state.plant_id) {
+    if !vendor_actor.actor().plant_scope().contains(&state.plant_id) {
         return Err(domain_error(
             StatusCode::FORBIDDEN,
             "FORBIDDEN",
             format!(
                 "actor `{}` is not authorized for plant `{}`",
-                vendor_actor.actor_id().as_str(),
+                vendor_actor.actor().actor_id().as_str(),
                 state.plant_id.as_str()
+            ),
+        ));
+    }
+    if !vendor_actor.is_scoped_for_vendor(&state.vendor_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not scoped for vendor `{}`",
+                vendor_actor.actor().actor_id().as_str(),
+                state.vendor_id.as_str()
             ),
         ));
     }
@@ -6066,28 +6114,39 @@ async fn create_admin_object_storage_access_link(
 
 fn handle_create_vendor_object_storage_access_link(
     state: &AppState,
-    vendor_actor: &AuthenticatedActorContext,
+    vendor_actor: &VendorScopedActorContext,
     request: ObjectStorageAccessLinkRequestPayload,
 ) -> Result<ObjectStorageAccessLinkPayload, (StatusCode, ErrorPayload)> {
-    if vendor_actor.role() != Role::VendorOperator {
+    if vendor_actor.actor().role() != Role::VendorOperator {
         return Err(domain_error(
             StatusCode::FORBIDDEN,
             "FORBIDDEN",
             format!(
                 "operation requires role {:?}, got {:?}",
                 Role::VendorOperator,
-                vendor_actor.role()
+                vendor_actor.actor().role()
             ),
         ));
     }
-    if !vendor_actor.plant_scope().contains(&state.plant_id) {
+    if !vendor_actor.actor().plant_scope().contains(&state.plant_id) {
         return Err(domain_error(
             StatusCode::FORBIDDEN,
             "FORBIDDEN",
             format!(
                 "actor `{}` is not authorized for plant `{}`",
-                vendor_actor.actor_id().as_str(),
+                vendor_actor.actor().actor_id().as_str(),
                 state.plant_id.as_str()
+            ),
+        ));
+    }
+    if !vendor_actor.is_scoped_for_vendor(&state.vendor_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not scoped for vendor `{}`",
+                vendor_actor.actor().actor_id().as_str(),
+                state.vendor_id.as_str()
             ),
         ));
     }
@@ -6104,7 +6163,7 @@ fn handle_create_admin_object_storage_access_link(
 fn handle_create_object_storage_access_link(
     state: &AppState,
     request: ObjectStorageAccessLinkRequestPayload,
-    vendor_actor: Option<&AuthenticatedActorContext>,
+    vendor_actor: Option<&VendorScopedActorContext>,
 ) -> Result<ObjectStorageAccessLinkPayload, (StatusCode, ErrorPayload)> {
     let locale = StorageLocale::from_language_tag(request.locale.as_deref());
     let object_ref = ObjectStorageReference::parse(request.object_ref)
@@ -6121,9 +6180,20 @@ fn handle_create_object_storage_access_link(
 
 fn ensure_vendor_object_storage_access(
     state: &AppState,
-    _vendor_actor: &AuthenticatedActorContext,
+    vendor_actor: &VendorScopedActorContext,
     object_ref: &ObjectStorageReference,
 ) -> Result<(), (StatusCode, ErrorPayload)> {
+    if !vendor_actor.is_scoped_for_vendor(&state.vendor_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not scoped for vendor `{}`",
+                vendor_actor.actor().actor_id().as_str(),
+                state.vendor_id.as_str()
+            ),
+        ));
+    }
     let owned_by_scope =
         object_ref_matches_vendor_owner_scope(state, object_ref, state.vendor_id.as_str());
     let referenced_by_menu = vendor_has_menu_image_reference(state, &state.vendor_id, object_ref)?;
@@ -8832,9 +8902,42 @@ async fn get_vendor_operations_analytics_dashboard(
 
 fn handle_get_vendor_operations_analytics_dashboard(
     state: &AppState,
-    _vendor_actor: &AuthenticatedActorContext,
+    vendor_actor: &VendorScopedActorContext,
     query: OperationsAnalyticsDashboardQueryRequest,
 ) -> Result<OperationsAnalyticsDashboardPayload, (StatusCode, ErrorPayload)> {
+    if vendor_actor.actor().role() != Role::VendorOperator {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::VendorOperator,
+                vendor_actor.actor().role()
+            ),
+        ));
+    }
+    if !vendor_actor.actor().plant_scope().contains(&state.plant_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not authorized for plant `{}`",
+                vendor_actor.actor().actor_id().as_str(),
+                state.plant_id.as_str()
+            ),
+        ));
+    }
+    if !vendor_actor.is_scoped_for_vendor(&state.vendor_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not scoped for vendor `{}`",
+                vendor_actor.actor().actor_id().as_str(),
+                state.vendor_id.as_str()
+            ),
+        ));
+    }
     handle_get_operations_analytics_dashboard(state, query, Some(state.vendor_id.as_str()))
 }
 
@@ -10340,17 +10443,23 @@ fn require_corporate_actor_for_role(
     headers: &HeaderMap,
     required_role: Role,
 ) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
-    require_bearer_actor_for_role(headers, required_role, AuthenticationSource::CorporateSso)
+    let authorization =
+        require_bearer_actor_for_role(headers, required_role, AuthenticationSource::CorporateSso)?;
+    Ok(authorization.actor)
 }
 
 fn require_vendor_operator_actor(
     headers: &HeaderMap,
-) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
-    require_bearer_actor_for_role(
+) -> Result<VendorScopedActorContext, (StatusCode, ErrorPayload)> {
+    let authorization = require_bearer_actor_for_role(
         headers,
         Role::VendorOperator,
         AuthenticationSource::VendorAccountMfa,
-    )
+    )?;
+    Ok(VendorScopedActorContext {
+        actor: authorization.actor,
+        vendor_scope: authorization.vendor_scope,
+    })
 }
 
 fn require_employee_actor_for_plant(
@@ -10419,7 +10528,7 @@ fn require_bearer_actor_for_role(
     headers: &HeaderMap,
     required_role: Role,
     authentication_source: AuthenticationSource,
-) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+) -> Result<BearerActorAuthorization, (StatusCode, ErrorPayload)> {
     let authorization = headers
         .get(AUTHORIZATION)
         .ok_or_else(|| {
@@ -10448,11 +10557,19 @@ fn require_bearer_actor_for_role(
         })?;
     let now_epoch_seconds = current_epoch_seconds_i64()?;
     let claims = verify_access_bearer_jwt(token, authentication_source, now_epoch_seconds)?;
-    let role = parse_role_label(claims.role.as_str()).ok_or_else(|| {
+    let AccessBearerJwtClaims {
+        sub,
+        role: role_raw,
+        all_plants,
+        plant_ids,
+        vendor_ids,
+        ..
+    } = claims;
+    let role = parse_role_label(role_raw.as_str()).ok_or_else(|| {
         domain_error(
             StatusCode::UNAUTHORIZED,
             "UNAUTHORIZED",
-            format!("unsupported bearer role `{}`", claims.role.trim()),
+            format!("unsupported bearer role `{}`", role_raw.trim()),
         )
     })?;
     if role != required_role {
@@ -10462,23 +10579,27 @@ fn require_bearer_actor_for_role(
             format!("operation requires role {required_role:?}, got {role:?}"),
         ));
     }
-    let actor_id = ActorId::parse(claims.sub.trim()).map_err(|error| {
+    let actor_id = ActorId::parse(sub.trim()).map_err(|error| {
         domain_error(
             StatusCode::UNAUTHORIZED,
             "UNAUTHORIZED",
             format!("bearer actor id is invalid: {error}"),
         )
     })?;
-    let plant_scope = parse_access_bearer_plant_scope(claims.all_plants, claims.plant_ids)?;
-    AuthenticatedActorContext::new(actor_id, role, plant_scope, authentication_source).map_err(
-        |error| {
+    let plant_scope = parse_access_bearer_plant_scope(all_plants, plant_ids)?;
+    let vendor_scope = parse_access_bearer_vendor_scope(role, vendor_ids)?;
+    let actor = AuthenticatedActorContext::new(actor_id, role, plant_scope, authentication_source)
+        .map_err(|error| {
             domain_error(
                 StatusCode::UNAUTHORIZED,
                 "UNAUTHORIZED",
                 format!("bearer actor context is invalid: {error}"),
             )
-        },
-    )
+        })?;
+    Ok(BearerActorAuthorization {
+        actor,
+        vendor_scope,
+    })
 }
 
 fn verify_access_bearer_jwt(
@@ -10671,6 +10792,43 @@ fn parse_access_bearer_plant_scope(
             format!("Bearer JWT plant scope is invalid: {error}"),
         )
     })
+}
+
+fn parse_access_bearer_vendor_scope(
+    role: Role,
+    vendor_ids: Vec<String>,
+) -> Result<Vec<VendorId>, (StatusCode, ErrorPayload)> {
+    let parsed_vendor_ids = vendor_ids
+        .into_iter()
+        .map(|value| {
+            VendorId::parse(value).map_err(|error| {
+                domain_error(
+                    StatusCode::UNAUTHORIZED,
+                    "UNAUTHORIZED",
+                    format!("Bearer JWT vendor id is invalid: {error}"),
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if role == Role::VendorOperator {
+        if parsed_vendor_ids.is_empty() {
+            return Err(domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "Bearer JWT vendor scope must include at least one vendorId for vendor role"
+                    .to_owned(),
+            ));
+        }
+        return Ok(parsed_vendor_ids);
+    }
+    if !parsed_vendor_ids.is_empty() {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "Bearer JWT vendorIds are allowed only for vendor role".to_owned(),
+        ));
+    }
+    Ok(Vec::new())
 }
 
 fn decode_access_jwt_segment(
@@ -12493,6 +12651,20 @@ mod tests {
         .expect("vendor actor should be valid")
     }
 
+    fn vendor_scoped_actor(
+        actor: AuthenticatedActorContext,
+        vendor_ids: &[&str],
+    ) -> VendorScopedActorContext {
+        VendorScopedActorContext {
+            actor,
+            vendor_scope: vendor_ids.iter().copied().map(vendor_id).collect(),
+        }
+    }
+
+    fn vendor_scoped_operator() -> VendorScopedActorContext {
+        vendor_scoped_actor(vendor_operator(), &["ven-discoverytst-a1"])
+    }
+
     fn employee_actor() -> AuthenticatedActorContext {
         AuthenticatedActorContext::new(
             actor_id("employee-discovery-test"),
@@ -12595,6 +12767,11 @@ mod tests {
         } else {
             vec!["fab-a".to_owned()]
         };
+        let vendor_ids = if normalized_role == "VENDOR_OPERATOR" {
+            vec!["ven-discoverytst-a1".to_owned()]
+        } else {
+            Vec::<String>::new()
+        };
         let claims = serde_json::json!({
             "iss": std::env::var(issuer_env).expect("test bearer issuer env should be configured"),
             "aud": std::env::var(audience_env).expect("test bearer audience env should be configured"),
@@ -12605,6 +12782,7 @@ mod tests {
             "role": normalized_role,
             "allPlants": all_plants,
             "plantIds": plant_ids,
+            "vendorIds": vendor_ids,
         });
         let token =
             build_test_hs256_jwt_token(claims, load_test_hs256_secret(secret_env).as_slice());
@@ -13318,18 +13496,19 @@ mod tests {
         let vendor_headers = bearer_headers("vendor-test", "VENDOR_OPERATOR");
         let vendor =
             require_vendor_operator_actor(&vendor_headers).expect("vendor actor should authorize");
-        assert_eq!(vendor.actor_id().as_str(), "vendor-test");
-        assert_eq!(vendor.role(), Role::VendorOperator);
+        assert_eq!(vendor.actor().actor_id().as_str(), "vendor-test");
+        assert_eq!(vendor.actor().role(), Role::VendorOperator);
         assert_eq!(
-            vendor.authentication_source(),
+            vendor.actor().authentication_source(),
             AuthenticationSource::VendorAccountMfa
         );
+        assert!(vendor.is_scoped_for_vendor(&vendor_id("ven-discoverytst-a1")));
     }
 
     #[test]
     fn object_storage_vendor_upload_and_access_link_pipeline_succeeds() {
         let state = build_state(20_000);
-        let vendor_actor = vendor_operator();
+        let vendor_actor = vendor_scoped_operator();
         let upload_plan = handle_create_vendor_object_storage_upload_plan(
             &state,
             &vendor_actor,
@@ -13366,7 +13545,7 @@ mod tests {
     #[test]
     fn object_storage_vendor_access_link_rejects_unowned_reference() {
         let state = build_state(20_000);
-        let vendor_actor = vendor_operator();
+        let vendor_actor = vendor_scoped_operator();
         let (status, error) = handle_create_vendor_object_storage_access_link(
             &state,
             &vendor_actor,
@@ -13385,13 +13564,16 @@ mod tests {
     #[test]
     fn object_storage_vendor_upload_plan_rejects_out_of_scope_vendor_actor() {
         let state = build_state(20_000);
-        let out_of_scope_vendor = AuthenticatedActorContext::new(
-            actor_id("vendor-out-of-scope"),
-            Role::VendorOperator,
-            PlantScope::restricted(vec![plant_id("fab-b")]).expect("scope should be valid"),
-            AuthenticationSource::VendorAccountMfa,
-        )
-        .expect("vendor actor should be valid");
+        let out_of_scope_vendor = vendor_scoped_actor(
+            AuthenticatedActorContext::new(
+                actor_id("vendor-out-of-scope"),
+                Role::VendorOperator,
+                PlantScope::restricted(vec![plant_id("fab-b")]).expect("scope should be valid"),
+                AuthenticationSource::VendorAccountMfa,
+            )
+            .expect("vendor actor should be valid"),
+            &["ven-discoverytst-a1"],
+        );
         let (status, error) = handle_create_vendor_object_storage_upload_plan(
             &state,
             &out_of_scope_vendor,
@@ -13410,9 +13592,30 @@ mod tests {
     }
 
     #[test]
+    fn object_storage_vendor_upload_plan_rejects_vendor_scope_mismatch() {
+        let state = build_state(20_000);
+        let vendor_actor = vendor_scoped_actor(vendor_operator(), &["ven-other"]);
+        let (status, error) = handle_create_vendor_object_storage_upload_plan(
+            &state,
+            &vendor_actor,
+            ObjectStorageUploadRequestPayload {
+                artifact_class: "MENU_IMAGE".to_owned(),
+                file_name: "lunch-bento.png".to_owned(),
+                mime_type: "image/png".to_owned(),
+                size_bytes: 180_000,
+                thumbnail_size_bytes: Some(72_000),
+                locale: None,
+            },
+        )
+        .expect_err("vendor scope mismatch should be rejected");
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(error.code, "FORBIDDEN");
+    }
+
+    #[test]
     fn object_storage_upload_rejects_missing_thumbnail_size_for_menu_image() {
         let state = build_state(20_000);
-        let vendor_actor = vendor_operator();
+        let vendor_actor = vendor_scoped_operator();
         let (status, error) = handle_create_vendor_object_storage_upload_plan(
             &state,
             &vendor_actor,
@@ -13433,7 +13636,7 @@ mod tests {
     #[test]
     fn object_storage_upload_rejects_invalid_mime_with_localized_message() {
         let state = build_state(20_000);
-        let vendor_actor = vendor_operator();
+        let vendor_actor = vendor_scoped_operator();
         let (status, error) = handle_create_vendor_object_storage_upload_plan(
             &state,
             &vendor_actor,
@@ -13459,7 +13662,7 @@ mod tests {
     #[test]
     fn object_storage_upload_rejects_oversized_payload_with_localized_message() {
         let state = build_state(20_000);
-        let vendor_actor = vendor_operator();
+        let vendor_actor = vendor_scoped_operator();
         let (status, error) = handle_create_vendor_object_storage_upload_plan(
             &state,
             &vendor_actor,
@@ -14138,7 +14341,7 @@ mod tests {
             .expect("current time should resolve for test")
             .epoch_day();
         let state = build_state(now_epoch_day);
-        let vendor = vendor_operator();
+        let vendor = vendor_scoped_operator();
         let delivery_date = epoch_day_to_iso_date(now_epoch_day.saturating_add(3));
 
         let first_created = handle_create_employee_order(
@@ -14233,7 +14436,7 @@ mod tests {
             .expect("current time should resolve for test")
             .epoch_day();
         let state = build_state(now_epoch_day);
-        let employee = employee_actor();
+        let employee = vendor_scoped_actor(employee_actor(), &[]);
 
         let error = handle_list_vendor_orders(
             &state,
@@ -14559,6 +14762,51 @@ mod tests {
                 .reconciliation
                 .deduction_failed_records as f64
         );
+    }
+
+    #[test]
+    fn vendor_analytics_dashboard_enforces_role_plant_and_vendor_scope() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state_with_advanced_analytics_runtime(now_epoch_day, true);
+
+        let in_scope_vendor = vendor_scoped_operator();
+        handle_get_vendor_operations_analytics_dashboard(
+            &state,
+            &in_scope_vendor,
+            OperationsAnalyticsDashboardQueryRequest::default(),
+        )
+        .expect("in-scope vendor should access analytics dashboard");
+
+        let out_of_scope_plant = vendor_scoped_actor(
+            AuthenticatedActorContext::new(
+                actor_id("vendor-analytics-plant-mismatch"),
+                Role::VendorOperator,
+                PlantScope::restricted(vec![plant_id("fab-b")]).expect("scope should be valid"),
+                AuthenticationSource::VendorAccountMfa,
+            )
+            .expect("vendor actor should be valid"),
+            &["ven-discoverytst-a1"],
+        );
+        let plant_error = handle_get_vendor_operations_analytics_dashboard(
+            &state,
+            &out_of_scope_plant,
+            OperationsAnalyticsDashboardQueryRequest::default(),
+        )
+        .expect_err("out-of-scope plant should be rejected");
+        assert_eq!(plant_error.0, StatusCode::FORBIDDEN);
+        assert_eq!(plant_error.1.code, "FORBIDDEN");
+
+        let out_of_scope_vendor = vendor_scoped_actor(vendor_operator(), &["ven-other"]);
+        let vendor_error = handle_get_vendor_operations_analytics_dashboard(
+            &state,
+            &out_of_scope_vendor,
+            OperationsAnalyticsDashboardQueryRequest::default(),
+        )
+        .expect_err("out-of-scope vendor should be rejected");
+        assert_eq!(vendor_error.0, StatusCode::FORBIDDEN);
+        assert_eq!(vendor_error.1.code, "FORBIDDEN");
     }
 
     #[test]

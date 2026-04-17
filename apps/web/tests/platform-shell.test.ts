@@ -54,6 +54,20 @@ describe("platform shell data", () => {
     assert.equal(shell.navigation.sectionLinks.length, 0);
     assert.equal(shell.navigation.portalLinks.every((portalLink) => portalLink.locked === false), true);
   });
+
+  it("embeds vendor scope in API bearer claims for vendor sessions", () => {
+    const vendorActor = createActor("vendor");
+    const shell = buildAppShellData({
+      actor: vendorActor,
+      auth: createAuthContext(vendorActor),
+      pathname: "/vendor/menu"
+    });
+    const claims = decodeJwtClaims(shell.auth.apiBearerToken);
+
+    assert.equal(claims.role, "VENDOR_OPERATOR");
+    assert.deepEqual(claims.vendorIds, ["ven-test"]);
+    assert.deepEqual(claims.plantIds, ["plant-a"]);
+  });
 });
 
 function configureJwtEnv() {
@@ -70,6 +84,7 @@ function configureJwtEnv() {
 }
 
 function createAuthContext(actor: AuthActor): AuthRequestContext {
+  const nowEpochMs = Date.now();
   return {
     actor,
     provider: "mock",
@@ -77,11 +92,22 @@ function createAuthContext(actor: AuthActor): AuthRequestContext {
       sessionId: "session-id",
       provider: "mock",
       actor,
-      issuedAtEpochMs: 1,
-      refreshAfterEpochMs: 2,
-      expiresAtEpochMs: 3
+      issuedAtEpochMs: nowEpochMs,
+      refreshAfterEpochMs: nowEpochMs + 5 * 60 * 1000,
+      expiresAtEpochMs: nowEpochMs + 10 * 60 * 1000
     }
   };
+}
+
+function decodeJwtClaims(token: string | null): Record<string, unknown> {
+  assert.ok(token, "api bearer token should be present");
+  const segments = token.split(".");
+  assert.equal(segments.length, 3);
+  const payloadSegment = segments[1];
+  return JSON.parse(Buffer.from(payloadSegment, "base64url").toString("utf8")) as Record<
+    string,
+    unknown
+  >;
 }
 
 function createActor(role: AuthRole): AuthActor {

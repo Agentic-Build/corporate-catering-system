@@ -25,6 +25,7 @@ interface JwtClaims {
   role: string;
   allPlants: boolean;
   plantIds: string[];
+  vendorIds: string[];
 }
 
 export function buildApiBearerToken(auth: AuthRequestContext): string | null {
@@ -55,7 +56,8 @@ export function buildApiBearerToken(auth: AuthRequestContext): string | null {
       nbf: nowEpochSecond,
       role: VENDOR_ROLE,
       allPlants: false,
-      plantIds: [...session.actor.scope.plantIds]
+      plantIds: [...session.actor.scope.plantIds],
+      vendorIds: [...session.actor.scope.vendorIds]
     };
     return signHs256Jwt(claims, config.secret);
   }
@@ -74,7 +76,8 @@ export function buildApiBearerToken(auth: AuthRequestContext): string | null {
     nbf: nowEpochSecond,
     role: CORPORATE_ROLE[session.actor.role],
     allPlants: session.actor.role === "admin",
-    plantIds: session.actor.role === "admin" ? [] : [...session.actor.scope.plantIds]
+    plantIds: session.actor.role === "admin" ? [] : [...session.actor.scope.plantIds],
+    vendorIds: []
   };
   return signHs256Jwt(claims, config.secret);
 }

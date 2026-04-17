@@ -64,11 +64,11 @@ const MOCK_ACTOR_TEMPLATE: Readonly<
     }
   },
   vendor: {
-    id: "ven-mock-001",
+    id: "ven-load-gate-a",
     displayName: "Mock Vendor",
     scope: {
       plantIds: ["fab-a"],
-      vendorIds: ["ven-mock-001"],
+      vendorIds: ["ven-load-gate-a"],
       permissions: ["vendor:portal"]
     }
   },

@@ -80,7 +80,7 @@ describe("auth middleware hooks", () => {
 
   it("allows guarded route when role and scope are valid", async () => {
     const cookies = new MemoryCookies();
-    const event = createRequestEvent("/vendor/vendors/ven-mock-001", cookies, {
+    const event = createRequestEvent("/vendor/vendors/ven-load-gate-a", cookies, {
       headers: {
         "x-mock-role": "vendor"
       }
@@ -98,7 +98,7 @@ describe("auth middleware hooks", () => {
     assert.equal(response.status, 200);
     assert.equal(resolveCalls, 1);
     assert.equal(event.locals.actor?.role, "vendor");
-    assert.ok(event.locals.actor?.scope.vendorIds.includes("ven-mock-001"));
+    assert.ok(event.locals.actor?.scope.vendorIds.includes("ven-load-gate-a"));
   });
 });
 
