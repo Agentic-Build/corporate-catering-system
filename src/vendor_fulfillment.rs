@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::audit::{
@@ -25,7 +25,7 @@ const ADVANCE_DELIVERY_STATUS_OPERATION_ID: &str = "advanceVendorFulfillmentDeli
 const CREATE_EXPORT_BATCH_OPERATION_ID: &str = "createVendorFulfillmentExportBatch";
 const BASKET_CAPACITY_PORTIONS: u16 = 12;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum FulfillmentDeliveryStatus {
     PendingPrep,
     Preparing,
@@ -54,7 +54,7 @@ impl fmt::Display for FulfillmentDeliveryStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct FulfillmentBatchId(String);
 
 impl FulfillmentBatchId {
@@ -77,7 +77,7 @@ impl fmt::Display for FulfillmentBatchId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FulfillmentOrderLineItem {
     menu_item_id: MenuItemId,
     quantity: u16,
@@ -98,7 +98,7 @@ impl FulfillmentOrderLineItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VendorFulfillmentOrderEntry {
     order_id: OrderId,
     plant_id: PlantId,
@@ -136,7 +136,7 @@ impl VendorFulfillmentOrderEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VendorFulfillmentPlantEntry {
     plant_id: PlantId,
     order_count: u32,
@@ -167,7 +167,7 @@ impl VendorFulfillmentPlantEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FulfillmentStatusAuditEntry {
     order_id: OrderId,
     vendor_id: VendorId,
@@ -208,7 +208,7 @@ impl FulfillmentStatusAuditEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VendorFulfillmentBoardSnapshot {
     vendor_id: VendorId,
     delivery_epoch_day: i32,
@@ -458,7 +458,7 @@ impl FulfillmentBasketListExport {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum FulfillmentArtifactType {
     DailySummary,
     PlantPartitionSheet,
@@ -501,7 +501,7 @@ impl fmt::Display for FulfillmentArtifactType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FulfillmentArtifactReference {
     artifact_type: FulfillmentArtifactType,
     object_ref: String,
@@ -576,7 +576,7 @@ impl FulfillmentArtifactReference {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FulfillmentBatchArtifacts {
     artifacts: Vec<FulfillmentArtifactReference>,
 }
@@ -632,8 +632,8 @@ impl FulfillmentArtifactStore for ObjectStorageFulfillmentArtifactStore {
     fn store_json_artifact(
         &self,
         vendor_id: &VendorId,
-        _batch_id: &FulfillmentBatchId,
-        _delivery_epoch_day: i32,
+        batch_id: &FulfillmentBatchId,
+        delivery_epoch_day: i32,
         artifact_type: FulfillmentArtifactType,
         payload: &[u8],
     ) -> Result<FulfillmentArtifactReference, VendorFulfillmentError> {
@@ -644,7 +644,12 @@ impl FulfillmentArtifactStore for ObjectStorageFulfillmentArtifactStore {
                 ObjectUploadIntent {
                     artifact_class,
                     owner_scope: Some(vendor_id.as_str().to_owned()),
-                    file_name: format!("{}.json", artifact_type.file_stem()),
+                    file_name: format!(
+                        "{}-{}-{}.json",
+                        batch_id.as_str(),
+                        delivery_epoch_day,
+                        artifact_type.file_stem()
+                    ),
                     mime_type: "application/json".to_owned(),
                     size_bytes: u64::try_from(payload.len())
                         .expect("artifact payload length should fit"),
@@ -687,7 +692,7 @@ impl FulfillmentArtifactStore for ObjectStorageFulfillmentArtifactStore {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VendorFulfillmentBatchSnapshot {
     batch_id: FulfillmentBatchId,
     vendor_id: VendorId,
@@ -728,19 +733,24 @@ impl VendorFulfillmentBatchSnapshot {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct DeliveryStatusRecord {
     status: FulfillmentDeliveryStatus,
     vendor_id: VendorId,
     delivery_epoch_day: i32,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct VendorFulfillmentState {
     order_delivery_statuses: BTreeMap<OrderId, DeliveryStatusRecord>,
     status_audit_log: Vec<FulfillmentStatusAuditEntry>,
     batches: BTreeMap<FulfillmentBatchId, VendorFulfillmentBatchSnapshot>,
     next_batch_sequence: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VendorFulfillmentPolicySnapshot {
+    state: VendorFulfillmentState,
 }
 
 #[derive(Clone)]
@@ -764,6 +774,27 @@ impl VendorFulfillmentPolicy {
             audit_trail,
             artifact_store,
         }
+    }
+
+    pub fn from_snapshot(
+        snapshot: VendorFulfillmentPolicySnapshot,
+        audit_trail: ImmutableAuditTrail,
+        artifact_store: Arc<dyn FulfillmentArtifactStore>,
+    ) -> Result<Self, VendorFulfillmentError> {
+        let mut state = snapshot.state;
+        validate_snapshot_state(&mut state)?;
+        Ok(Self {
+            state: Arc::new(Mutex::new(state)),
+            audit_trail,
+            artifact_store,
+        })
+    }
+
+    pub fn snapshot(&self) -> Result<VendorFulfillmentPolicySnapshot, VendorFulfillmentError> {
+        let state = lock_state(&self.state)?;
+        Ok(VendorFulfillmentPolicySnapshot {
+            state: state.clone(),
+        })
     }
 
     pub fn audit_trail(&self) -> ImmutableAuditTrail {
@@ -1311,6 +1342,78 @@ fn build_basket_list(order_entries: &[VendorFulfillmentOrderEntry]) -> Fulfillme
     }
 }
 
+fn validate_snapshot_state(
+    state: &mut VendorFulfillmentState,
+) -> Result<(), VendorFulfillmentError> {
+    let mut max_sequence = 0_u64;
+    let required_artifact_types = [
+        FulfillmentArtifactType::DailySummary,
+        FulfillmentArtifactType::PlantPartitionSheet,
+        FulfillmentArtifactType::Labels,
+        FulfillmentArtifactType::BasketList,
+    ];
+
+    for (batch_key, batch) in &state.batches {
+        if batch.batch_id() != batch_key {
+            return Err(VendorFulfillmentError::SnapshotInvariantViolation(
+                "batch key does not match snapshot batch_id".to_owned(),
+            ));
+        }
+
+        let mut artifact_types = BTreeSet::new();
+        for artifact in batch.artifacts().artifacts() {
+            if !artifact_types.insert(artifact.artifact_type()) {
+                return Err(VendorFulfillmentError::SnapshotInvariantViolation(format!(
+                    "batch {} contains duplicate artifact type {}",
+                    batch.batch_id().as_str(),
+                    artifact.artifact_type()
+                )));
+            }
+
+            let _validated = FulfillmentArtifactReference::new(
+                artifact.artifact_type(),
+                artifact.object_ref().to_owned(),
+                artifact.mime_type().to_owned(),
+                artifact.size_bytes(),
+                artifact.sha256().to_owned(),
+            )?;
+        }
+
+        for artifact_type in required_artifact_types {
+            if !artifact_types.contains(&artifact_type) {
+                return Err(VendorFulfillmentError::SnapshotInvariantViolation(format!(
+                    "batch {} is missing artifact type {artifact_type}",
+                    batch.batch_id().as_str()
+                )));
+            }
+        }
+
+        let sequence = parse_batch_sequence(batch.batch_id())?;
+        max_sequence = max_sequence.max(sequence);
+    }
+
+    if state.next_batch_sequence < max_sequence {
+        state.next_batch_sequence = max_sequence;
+    }
+
+    Ok(())
+}
+
+fn parse_batch_sequence(batch_id: &FulfillmentBatchId) -> Result<u64, VendorFulfillmentError> {
+    let Some((_, raw_sequence)) = batch_id.as_str().rsplit_once('-') else {
+        return Err(VendorFulfillmentError::SnapshotInvariantViolation(format!(
+            "batch id {} is missing numeric sequence suffix",
+            batch_id.as_str()
+        )));
+    };
+    raw_sequence.parse::<u64>().map_err(|error| {
+        VendorFulfillmentError::SnapshotInvariantViolation(format!(
+            "batch id {} has invalid sequence suffix: {error}",
+            batch_id.as_str()
+        ))
+    })
+}
+
 fn default_delivery_status(order_state: OrderLifecycleState) -> FulfillmentDeliveryStatus {
     match order_state {
         OrderLifecycleState::Pending | OrderLifecycleState::Modified => {
@@ -1422,6 +1525,7 @@ pub enum VendorFulfillmentError {
         artifact_type: FulfillmentArtifactType,
         reason: String,
     },
+    SnapshotInvariantViolation(String),
     AuditTrail(AuditTrailError),
     MenuSupply(MenuSupplyWindowError),
     StatePoisoned,
@@ -1502,6 +1606,9 @@ impl fmt::Display for VendorFulfillmentError {
                 f,
                 "generated object reference for export artifact {artifact_type} is invalid: {reason}"
             ),
+            Self::SnapshotInvariantViolation(reason) => {
+                write!(f, "persisted vendor fulfillment snapshot invariant violated: {reason}")
+            }
             Self::AuditTrail(error) => write!(f, "audit trail write failed: {error}"),
             Self::MenuSupply(error) => write!(f, "menu supply read failed: {error}"),
             Self::StatePoisoned => {

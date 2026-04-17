@@ -26,7 +26,7 @@ const AUDIT_ENCRYPTION_NONCE_BYTES: usize = 12;
 const AUDIT_ENCRYPTED_SNAPSHOT_VERSION: u8 = 1;
 const AUDIT_ENCRYPTED_SNAPSHOT_ALGORITHM: &str = "AES-256-GCM";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuditIdentityLink {
     actor_id: ActorId,
     role: Role,

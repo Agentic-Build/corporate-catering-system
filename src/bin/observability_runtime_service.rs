@@ -36,7 +36,7 @@ use corporate_catering_system::audit::{
 use corporate_catering_system::cache_backbone::{
     RuntimeStateCacheTtls, ValkeyRuntimeStateCache, ANOMALY_ALERT_STATE_KEY,
     DELIVERY_POLICY_STATE_KEY, MENU_SUPPLY_STATE_KEY, OPERATIONS_ANALYTICS_STATE_KEY,
-    PAYROLL_LEDGER_STATE_KEY,
+    PAYROLL_LEDGER_STATE_KEY, VENDOR_FULFILLMENT_STATE_KEY,
 };
 use corporate_catering_system::event_backbone::{
     EventBackboneConfig, OrderEventBackbone, OrderStateChangedEvent,
@@ -111,8 +111,10 @@ use corporate_catering_system::vendor_delivery_mapping::{
     TaipeiBusinessMoment, VendorPlantDeliveryMapping, VendorPlantDeliveryPolicy,
 };
 use corporate_catering_system::vendor_fulfillment::{
-    FulfillmentBatchId, FulfillmentDeliveryStatus, ObjectStorageFulfillmentArtifactStore,
-    VendorFulfillmentBoardSnapshot, VendorFulfillmentError, VendorFulfillmentPolicy,
+    FulfillmentArtifactReference, FulfillmentArtifactStore, FulfillmentBatchId,
+    FulfillmentDeliveryStatus, ObjectStorageFulfillmentArtifactStore,
+    VendorFulfillmentBatchSnapshot, VendorFulfillmentBoardSnapshot, VendorFulfillmentError,
+    VendorFulfillmentPolicy, VendorFulfillmentPolicySnapshot,
 };
 use hmac::{Hmac, Mac};
 use serde::de::DeserializeOwned;
@@ -292,6 +294,7 @@ enum CompliancePersistence {
 #[derive(Debug, Clone)]
 struct SqlRuntimeStateRepositories {
     menu_supply: SqlJsonStateRepository,
+    vendor_fulfillment: SqlJsonStateRepository,
     payroll_ledger: SqlJsonStateRepository,
     anomaly_alert: SqlJsonStateRepository,
     delivery_policy: SqlJsonStateRepository,
@@ -321,6 +324,7 @@ struct AppState {
     terminated_employee_actor_ids: Arc<HashSet<ActorId>>,
     audit_trail: ImmutableAuditTrail,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
+    #[cfg(test)]
     vendor_fulfillment_policy: VendorFulfillmentPolicy,
     #[cfg(test)]
     compliance_lifecycle: Arc<RwLock<VendorComplianceLifecycle>>,
@@ -710,89 +714,20 @@ struct VendorFulfillmentBoardPayload {
     status_transitions: Vec<VendorFulfillmentStatusTransitionAuditEntryPayload>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct VendorFulfillmentDailySummaryPlantRowPayload {
-    plant_id: String,
-    order_count: u32,
-    portion_count: u32,
+struct VendorFulfillmentArtifactReferencePayload {
+    artifact_type: String,
+    object_ref: String,
+    mime_type: String,
+    size_bytes: u64,
+    sha256: String,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VendorFulfillmentDailySummaryExportPayload {
-    delivery_date: String,
-    total_orders: u32,
-    total_portions: u32,
-    total_special_requests: u32,
-    per_plant: Vec<VendorFulfillmentDailySummaryPlantRowPayload>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VendorFulfillmentPlantPartitionOrderRowPayload {
-    order_id: String,
-    delivery_status: String,
-    portion_count: u32,
-    special_requests: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VendorFulfillmentPlantPartitionRowPayload {
-    plant_id: String,
-    total_orders: u32,
-    total_portions: u32,
-    special_request_counts: Vec<SpecialRequestCountPayload>,
-    orders: Vec<VendorFulfillmentPlantPartitionOrderRowPayload>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VendorFulfillmentPlantPartitionSheetExportPayload {
-    rows: Vec<VendorFulfillmentPlantPartitionRowPayload>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VendorFulfillmentLabelEntryPayload {
-    order_id: String,
-    plant_id: String,
-    delivery_status: String,
-    menu_item_id: String,
-    quantity: u16,
-    special_requests: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VendorFulfillmentLabelSheetExportPayload {
-    labels: Vec<VendorFulfillmentLabelEntryPayload>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VendorFulfillmentBasketEntryPayload {
-    basket_code: String,
-    plant_id: String,
-    order_ids: Vec<String>,
-    portion_count: u32,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VendorFulfillmentBasketListExportPayload {
-    basket_capacity_portions: u16,
-    baskets: Vec<VendorFulfillmentBasketEntryPayload>,
-}
-
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct VendorFulfillmentBatchArtifactsPayload {
-    daily_summary: VendorFulfillmentDailySummaryExportPayload,
-    plant_partition_sheet: VendorFulfillmentPlantPartitionSheetExportPayload,
-    labels: VendorFulfillmentLabelSheetExportPayload,
-    basket_list: VendorFulfillmentBasketListExportPayload,
+    references: Vec<VendorFulfillmentArtifactReferencePayload>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1931,6 +1866,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         Arc::new(VendorComplianceSqlRepository::new(operational_pool.clone()));
     let runtime_state_repositories = SqlRuntimeStateRepositories {
         menu_supply: SqlJsonStateRepository::for_menu_supply(operational_pool.clone()),
+        vendor_fulfillment: SqlJsonStateRepository::for_vendor_fulfillment(
+            operational_pool.clone(),
+        ),
         payroll_ledger: SqlJsonStateRepository::for_payroll_ledger(operational_pool.clone()),
         anomaly_alert: SqlJsonStateRepository::for_anomaly_alert(operational_pool.clone()),
         delivery_policy: SqlJsonStateRepository::for_delivery_policy(operational_pool.clone()),
@@ -3780,6 +3718,137 @@ where
     }
 }
 
+fn build_vendor_fulfillment_artifact_store(
+    state: &AppState,
+) -> Result<Arc<dyn FulfillmentArtifactStore>, (StatusCode, ErrorPayload)> {
+    ObjectStorageFulfillmentArtifactStore::new(state.object_storage_upload_pipeline.clone())
+        .map(|store| Arc::new(store) as Arc<dyn FulfillmentArtifactStore>)
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ORDER_POLICY_VIOLATION",
+                format!("failed to initialize vendor fulfillment artifact store: {error}"),
+            )
+        })
+}
+
+fn with_vendor_fulfillment_policy<T, F>(
+    state: &AppState,
+    reader: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&VendorFulfillmentPolicy) -> Result<T, VendorFulfillmentError>,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let snapshot = match load_runtime_state_snapshot_from_cache::<
+                VendorFulfillmentPolicySnapshot,
+            >(state, VENDOR_FULFILLMENT_STATE_KEY)
+            {
+                Some(snapshot) => snapshot,
+                None => {
+                    let snapshot = tokio::task::block_in_place(|| {
+                        Handle::current().block_on(
+                            repositories
+                                .vendor_fulfillment
+                                .load_snapshot::<VendorFulfillmentPolicySnapshot>(),
+                        )
+                    })
+                    .map_err(|error| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ORDER_POLICY_VIOLATION",
+                            format!("failed to load vendor fulfillment state from SQL: {error}"),
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        domain_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "ORDER_POLICY_VIOLATION",
+                            "vendor fulfillment state is uninitialized".to_owned(),
+                        )
+                    })?;
+                    write_runtime_state_snapshot_to_cache(
+                        state,
+                        VENDOR_FULFILLMENT_STATE_KEY,
+                        &snapshot,
+                    );
+                    snapshot
+                }
+            };
+            let artifact_store = build_vendor_fulfillment_artifact_store(state)?;
+            let fulfillment_policy = VendorFulfillmentPolicy::from_snapshot(
+                snapshot,
+                state.audit_trail.clone(),
+                artifact_store,
+            )
+            .map_err(map_vendor_fulfillment_error)?;
+            reader(&fulfillment_policy).map_err(map_vendor_fulfillment_error)
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            reader(&state.vendor_fulfillment_policy).map_err(map_vendor_fulfillment_error)
+        }
+    }
+}
+
+fn mutate_vendor_fulfillment_policy<T, F>(
+    state: &AppState,
+    mutator: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&VendorFulfillmentPolicy) -> Result<T, VendorFulfillmentError>,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let audit_trail = state.audit_trail.clone();
+            let artifact_store = build_vendor_fulfillment_artifact_store(state)?;
+            let persistence_result = tokio::task::block_in_place(|| {
+                Handle::current().block_on(repositories.vendor_fulfillment.mutate_snapshot::<
+                    VendorFulfillmentPolicySnapshot,
+                    T,
+                    VendorFulfillmentError,
+                    _,
+                >(move |snapshot| {
+                    let snapshot = snapshot.ok_or(VendorFulfillmentError::StatePoisoned)?;
+                    let fulfillment_policy =
+                        VendorFulfillmentPolicy::from_snapshot(snapshot, audit_trail, artifact_store)?;
+                    let value = mutator(&fulfillment_policy)?;
+                    let snapshot = fulfillment_policy.snapshot()?;
+                    Ok((snapshot, value))
+                }))
+            });
+            match persistence_result {
+                Ok((snapshot, value)) => {
+                    write_runtime_state_snapshot_to_cache(
+                        state,
+                        VENDOR_FULFILLMENT_STATE_KEY,
+                        &snapshot,
+                    );
+                    Ok(value)
+                }
+                Err(JsonStatePersistenceError::Domain(error)) => {
+                    Err(map_vendor_fulfillment_error(error))
+                }
+                Err(JsonStatePersistenceError::Sqlx(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!("failed to persist vendor fulfillment state: {error}"),
+                )),
+                Err(JsonStatePersistenceError::Serialize(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!("failed to serialize vendor fulfillment state: {error}"),
+                )),
+            }
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            mutator(&state.vendor_fulfillment_policy).map_err(map_vendor_fulfillment_error)
+        }
+    }
+}
+
 fn mutate_menu_supply_policy<T, F, M>(
     state: &AppState,
     mutator: F,
@@ -4932,6 +5001,7 @@ fn bootstrap_runtime_state(
     let mut should_seed_runtime_baseline = true;
     let mut delivery_policy;
     let menu_supply_policy;
+    let vendor_fulfillment_policy;
     let payroll_ledger_service;
     let anomaly_alert_workflow;
     let operations_analytics_warehouse;
@@ -4942,6 +5012,7 @@ fn bootstrap_runtime_state(
             let (
                 delivery_snapshot,
                 menu_snapshot,
+                vendor_fulfillment_snapshot,
                 payroll_snapshot,
                 anomaly_snapshot,
                 analytics_snapshot,
@@ -4954,6 +5025,10 @@ fn bootstrap_runtime_state(
                     let menu_snapshot = repositories
                         .menu_supply
                         .load_snapshot::<MenuSupplyPolicySnapshot>()
+                        .await?;
+                    let vendor_fulfillment_snapshot = repositories
+                        .vendor_fulfillment
+                        .load_snapshot::<VendorFulfillmentPolicySnapshot>()
                         .await?;
                     let payroll_snapshot = repositories
                         .payroll_ledger
@@ -4970,6 +5045,7 @@ fn bootstrap_runtime_state(
                     Ok::<_, JsonStatePersistenceError>((
                         delivery_snapshot,
                         menu_snapshot,
+                        vendor_fulfillment_snapshot,
                         payroll_snapshot,
                         anomaly_snapshot,
                         analytics_snapshot,
@@ -4981,6 +5057,7 @@ fn bootstrap_runtime_state(
             match (
                 delivery_snapshot,
                 menu_snapshot,
+                vendor_fulfillment_snapshot,
                 payroll_snapshot,
                 anomaly_snapshot,
                 analytics_snapshot,
@@ -4988,6 +5065,7 @@ fn bootstrap_runtime_state(
                 (
                     Some(delivery_snapshot),
                     Some(menu_snapshot),
+                    Some(vendor_fulfillment_snapshot),
                     Some(payroll_snapshot),
                     Some(anomaly_snapshot),
                     Some(analytics_snapshot),
@@ -5006,6 +5084,22 @@ fn bootstrap_runtime_state(
                     .map_err(|error| {
                         format!("failed to restore menu supply policy from SQL snapshot: {error}")
                     })?;
+                    let artifact_store = ObjectStorageFulfillmentArtifactStore::new(
+                        object_storage_upload_pipeline.clone(),
+                    )
+                    .map_err(|error| {
+                        format!("failed to initialize vendor fulfillment artifact store: {error}")
+                    })?;
+                    vendor_fulfillment_policy = VendorFulfillmentPolicy::from_snapshot(
+                        vendor_fulfillment_snapshot,
+                        audit_trail.clone(),
+                        Arc::new(artifact_store),
+                    )
+                    .map_err(|error| {
+                        format!(
+                            "failed to restore vendor fulfillment policy from SQL snapshot: {error}"
+                        )
+                    })?;
                     payroll_ledger_service =
                         PayrollLedgerService::from_snapshot(payroll_snapshot, audit_trail.clone());
                     anomaly_alert_workflow =
@@ -5019,13 +5113,23 @@ fn bootstrap_runtime_state(
                             })?;
                     should_seed_runtime_baseline = false;
                 }
-                (None, None, None, None, None) => {
+                (None, None, None, None, None, None) => {
                     delivery_policy =
                         VendorPlantDeliveryPolicy::with_audit_trail(audit_trail.clone());
                     menu_supply_policy = MenuSupplyPolicy::with_audit_trail_and_retention(
                         Default::default(),
                         audit_trail.clone(),
                         order_retention_policy,
+                    );
+                    let artifact_store = ObjectStorageFulfillmentArtifactStore::new(
+                        object_storage_upload_pipeline.clone(),
+                    )
+                    .map_err(|error| {
+                        format!("failed to initialize vendor fulfillment artifact store: {error}")
+                    })?;
+                    vendor_fulfillment_policy = VendorFulfillmentPolicy::with_audit_trail(
+                        audit_trail.clone(),
+                        Arc::new(artifact_store),
                     );
                     payroll_ledger_service =
                         PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
@@ -5048,6 +5152,15 @@ fn bootstrap_runtime_state(
                 Default::default(),
                 audit_trail.clone(),
                 order_retention_policy,
+            );
+            let artifact_store =
+                ObjectStorageFulfillmentArtifactStore::new(object_storage_upload_pipeline.clone())
+                    .map_err(|error| {
+                        format!("failed to initialize vendor fulfillment artifact store: {error}")
+                    })?;
+            vendor_fulfillment_policy = VendorFulfillmentPolicy::with_audit_trail(
+                audit_trail.clone(),
+                Arc::new(artifact_store),
             );
             payroll_ledger_service =
                 PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
@@ -5137,6 +5250,9 @@ fn bootstrap_runtime_state(
             let menu_snapshot = menu_supply_policy
                 .snapshot()
                 .map_err(|error| format!("failed to snapshot menu supply state: {error}"))?;
+            let vendor_fulfillment_snapshot = vendor_fulfillment_policy
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot vendor fulfillment state: {error}"))?;
             let payroll_snapshot = payroll_ledger_service
                 .snapshot()
                 .map_err(|error| format!("failed to snapshot payroll ledger state: {error}"))?;
@@ -5153,6 +5269,10 @@ fn bootstrap_runtime_state(
                     repositories
                         .menu_supply
                         .save_snapshot(&menu_snapshot)
+                        .await?;
+                    repositories
+                        .vendor_fulfillment
+                        .save_snapshot(&vendor_fulfillment_snapshot)
                         .await?;
                     repositories
                         .payroll_ledger
@@ -5178,6 +5298,9 @@ fn bootstrap_runtime_state(
             let menu_snapshot = menu_supply_policy
                 .snapshot()
                 .map_err(|error| format!("failed to snapshot menu supply state: {error}"))?;
+            let vendor_fulfillment_snapshot = vendor_fulfillment_policy
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot vendor fulfillment state: {error}"))?;
             let payroll_snapshot = payroll_ledger_service
                 .snapshot()
                 .map_err(|error| format!("failed to snapshot payroll ledger state: {error}"))?;
@@ -5194,6 +5317,10 @@ fn bootstrap_runtime_state(
                     repositories
                         .menu_supply
                         .save_snapshot(&menu_snapshot)
+                        .await?;
+                    repositories
+                        .vendor_fulfillment
+                        .save_snapshot(&vendor_fulfillment_snapshot)
                         .await?;
                     repositories
                         .payroll_ledger
@@ -5234,6 +5361,10 @@ fn bootstrap_runtime_state(
         let menu_snapshot = menu_supply_policy.snapshot().map_err(|error| {
             format!("failed to snapshot menu supply state for cache warmup: {error}")
         })?;
+        let vendor_fulfillment_snapshot =
+            vendor_fulfillment_policy.snapshot().map_err(|error| {
+                format!("failed to snapshot vendor fulfillment state for cache warmup: {error}")
+            })?;
         let payroll_snapshot = payroll_ledger_service.snapshot().map_err(|error| {
             format!("failed to snapshot payroll ledger state for cache warmup: {error}")
         })?;
@@ -5250,6 +5381,12 @@ fn bootstrap_runtime_state(
                     .write_through_snapshot(MENU_SUPPLY_STATE_KEY, &menu_snapshot)
                     .await?;
                 cache
+                    .write_through_snapshot(
+                        VENDOR_FULFILLMENT_STATE_KEY,
+                        &vendor_fulfillment_snapshot,
+                    )
+                    .await?;
+                cache
                     .write_through_snapshot(PAYROLL_LEDGER_STATE_KEY, &payroll_snapshot)
                     .await?;
                 cache
@@ -5263,16 +5400,6 @@ fn bootstrap_runtime_state(
         })
         .map_err(|error| format!("failed to warm Valkey runtime state cache: {error}"))?;
     }
-
-    let vendor_fulfillment_policy = VendorFulfillmentPolicy::with_audit_trail(
-        audit_trail.clone(),
-        Arc::new(
-            ObjectStorageFulfillmentArtifactStore::new(object_storage_upload_pipeline.clone())
-                .map_err(|error| {
-                    format!("failed to initialize vendor fulfillment artifact store: {error}")
-                })?,
-        ),
-    );
 
     Ok(AppState {
         #[cfg(test)]
@@ -5289,6 +5416,7 @@ fn bootstrap_runtime_state(
         terminated_employee_actor_ids: Arc::new(terminated_employee_actor_ids),
         audit_trail,
         payroll_export_field_encryptor,
+        #[cfg(test)]
         vendor_fulfillment_policy,
         #[cfg(test)]
         compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
@@ -6480,12 +6608,8 @@ fn handle_upsert_vendor_menu_item(
         .map_err(map_vendor_menu_error)?;
     let price = Money::new(request.price.currency, request.price.amount_minor)
         .map_err(map_vendor_menu_error)?;
-    let existing_status = with_menu_supply_policy(state, |menu_supply_policy| {
-        menu_supply_policy
-            .menu_item(&menu_item_id)
-            .map(|menu_item| menu_item.map(|item| item.status()))
-            .map_err(map_vendor_menu_error)
-    })?;
+    let existing_status =
+        load_runtime_vendor_menu_item(state, &menu_item_id)?.map(|item| item.status());
 
     let mut draft = VendorMenuItemDraft::new(
         request.name,
@@ -6596,14 +6720,17 @@ fn handle_update_vendor_menu_item_status(
     })?;
     let status = parse_vendor_menu_status_filter(request.status.as_str())?;
 
+    let existing_menu_item =
+        load_runtime_vendor_menu_item(state, &menu_item_id)?.ok_or_else(|| {
+            domain_error(
+                StatusCode::NOT_FOUND,
+                "NOT_FOUND",
+                format!("menu item `{}` does not exist", menu_item_id.as_str()),
+            )
+        })?;
     let menu_item_state = mutate_menu_supply_policy(
         state,
         |menu_supply_policy| {
-            let existing_menu_item = menu_supply_policy.menu_item(&menu_item_id)?.ok_or(
-                MenuSupplyWindowError::MenuItemNotFound {
-                    menu_item_id: menu_item_id.clone(),
-                },
-            )?;
             menu_supply_policy
                 .upsert_menu_item(vendor_actor.actor(), existing_menu_item.with_status(status))?;
             menu_supply_policy.menu_item_state(&menu_item_id)?.ok_or(
@@ -6616,6 +6743,26 @@ fn handle_update_vendor_menu_item_status(
         "ORDER_POLICY_VIOLATION",
     )?;
     Ok(to_vendor_menu_item_payload(&menu_item_state))
+}
+
+fn load_runtime_vendor_menu_item(
+    state: &AppState,
+    menu_item_id: &MenuItemId,
+) -> Result<Option<VendorMenuItem>, (StatusCode, ErrorPayload)> {
+    let existing_menu_item = with_menu_supply_policy(state, |menu_supply_policy| {
+        menu_supply_policy
+            .menu_item(menu_item_id)
+            .map_err(map_vendor_menu_error)
+    })?;
+    match existing_menu_item {
+        Some(menu_item) if menu_item.vendor_id() != &state.vendor_id => Err(domain_error(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            format!("menu item `{}` does not exist", menu_item_id.as_str()),
+        )),
+        Some(menu_item) => Ok(Some(menu_item)),
+        None => Ok(None),
+    }
 }
 
 async fn get_vendor_ordering_policy(
@@ -6870,13 +7017,11 @@ fn handle_list_vendor_fulfillment_board(
         )
     })?;
     let menu_supply_policy = with_menu_supply_policy(state, |policy| Ok(policy.clone()))?;
-    let gateway = HttpVendorFulfillmentExecutionGateway::new(
-        &state.vendor_fulfillment_policy,
-        &menu_supply_policy,
-    );
-    let board = gateway
-        .execute_vendor_operations_board(&state.vendor_id, delivery_epoch_day, now)
-        .map_err(map_vendor_fulfillment_error)?;
+    let board = with_vendor_fulfillment_policy(state, |fulfillment_policy| {
+        let gateway =
+            HttpVendorFulfillmentExecutionGateway::new(fulfillment_policy, &menu_supply_policy);
+        gateway.execute_vendor_operations_board(&state.vendor_id, delivery_epoch_day, now)
+    })?;
     Ok(to_vendor_fulfillment_board_payload(
         &board,
         include_audit_transitions,
@@ -6965,13 +7110,16 @@ fn handle_advance_vendor_fulfillment_delivery_status(
         })?;
     let to_status = parse_vendor_fulfillment_delivery_status(request.to_status.as_str())?;
     let menu_supply_policy = with_menu_supply_policy(state, |policy| Ok(policy.clone()))?;
-    let gateway = HttpVendorFulfillmentExecutionGateway::new(
-        &state.vendor_fulfillment_policy,
-        &menu_supply_policy,
-    );
-    let audit_entry = gateway
-        .execute_transition_delivery_status(vendor_actor.actor(), &order_id, to_status, occurred_at)
-        .map_err(map_vendor_fulfillment_error)?;
+    let audit_entry = mutate_vendor_fulfillment_policy(state, |fulfillment_policy| {
+        let gateway =
+            HttpVendorFulfillmentExecutionGateway::new(fulfillment_policy, &menu_supply_policy);
+        gateway.execute_transition_delivery_status(
+            vendor_actor.actor(),
+            &order_id,
+            to_status,
+            occurred_at,
+        )
+    })?;
 
     Ok(VendorFulfillmentDeliveryStatusTransitionResultPayload {
         order_id: audit_entry.order_id().as_str().to_owned(),
@@ -7057,18 +7205,16 @@ fn handle_create_vendor_fulfillment_export_batch(
         )
     })?;
     let menu_supply_policy = with_menu_supply_policy(state, |policy| Ok(policy.clone()))?;
-    let gateway = HttpVendorFulfillmentExecutionGateway::new(
-        &state.vendor_fulfillment_policy,
-        &menu_supply_policy,
-    );
-    let batch = gateway
-        .execute_create_export_batch(
+    let batch = mutate_vendor_fulfillment_policy(state, |fulfillment_policy| {
+        let gateway =
+            HttpVendorFulfillmentExecutionGateway::new(fulfillment_policy, &menu_supply_policy);
+        gateway.execute_create_export_batch(
             vendor_actor.actor(),
             &state.vendor_id,
             delivery_epoch_day,
             captured_at,
         )
-        .map_err(map_vendor_fulfillment_error)?;
+    })?;
     Ok(to_vendor_fulfillment_export_batch_payload(&batch))
 }
 
@@ -7139,10 +7285,9 @@ fn handle_get_vendor_fulfillment_export_batch(
             format!("batchId is invalid: {error}"),
         )
     })?;
-    let batch = state
-        .vendor_fulfillment_policy
-        .batch_snapshot(&batch_id)
-        .map_err(map_vendor_fulfillment_error)?;
+    let batch = with_vendor_fulfillment_policy(state, |fulfillment_policy| {
+        fulfillment_policy.batch_snapshot(&batch_id)
+    })?;
     Ok(to_vendor_fulfillment_export_batch_payload(&batch))
 }
 
@@ -12782,10 +12927,10 @@ fn to_vendor_fulfillment_board_payload(
 }
 
 fn to_vendor_fulfillment_export_batch_payload(
-    batch: &corporate_catering_system::vendor_fulfillment::VendorFulfillmentBatchSnapshot,
+    batch: &VendorFulfillmentBatchSnapshot,
 ) -> VendorFulfillmentExportBatchPayload {
     let board = to_vendor_fulfillment_board_payload(batch.board(), true, None);
-    let artifacts = build_vendor_fulfillment_batch_artifacts_payload(batch.board());
+    let artifacts = to_vendor_fulfillment_batch_artifacts_payload(batch.artifacts().artifacts());
     VendorFulfillmentExportBatchPayload {
         batch_id: batch.batch_id().as_str().to_owned(),
         vendor_id: batch.vendor_id().as_str().to_owned(),
@@ -12797,198 +12942,21 @@ fn to_vendor_fulfillment_export_batch_payload(
     }
 }
 
-fn build_vendor_fulfillment_batch_artifacts_payload(
-    board: &VendorFulfillmentBoardSnapshot,
+fn to_vendor_fulfillment_batch_artifacts_payload(
+    artifacts: &[FulfillmentArtifactReference],
 ) -> VendorFulfillmentBatchArtifactsPayload {
-    let delivery_date = epoch_day_to_iso_date(board.delivery_epoch_day());
-    let mut per_plant_summary = BTreeMap::<String, (u32, u32)>::new();
-    let mut plant_partition_totals = BTreeMap::<String, (u32, u32)>::new();
-    let mut plant_partition_special_requests = BTreeMap::<String, BTreeMap<String, u32>>::new();
-    let mut plant_partition_orders =
-        BTreeMap::<String, Vec<VendorFulfillmentPlantPartitionOrderRowPayload>>::new();
-    let mut labels = Vec::<VendorFulfillmentLabelEntryPayload>::new();
-    let mut total_orders = 0_u32;
-    let mut total_portions = 0_u32;
-    let mut total_special_requests = 0_u32;
-
-    for order in board.order_entries() {
-        let plant_id = order.plant_id().as_str().to_owned();
-        let order_portions = order.total_portions();
-        total_orders = total_orders.saturating_add(1);
-        total_portions = total_portions.saturating_add(order_portions);
-
-        let summary = per_plant_summary.entry(plant_id.clone()).or_insert((0, 0));
-        summary.0 = summary.0.saturating_add(1);
-        summary.1 = summary.1.saturating_add(order_portions);
-
-        let partition_total = plant_partition_totals
-            .entry(plant_id.clone())
-            .or_insert((0, 0));
-        partition_total.0 = partition_total.0.saturating_add(1);
-        partition_total.1 = partition_total.1.saturating_add(order_portions);
-
-        let special_request_counts = plant_partition_special_requests
-            .entry(plant_id.clone())
-            .or_default();
-        let mut order_special_requests = Vec::<String>::new();
-
-        for line_item in order.line_items() {
-            labels.push(VendorFulfillmentLabelEntryPayload {
-                order_id: order.order_id().as_str().to_owned(),
-                plant_id: plant_id.clone(),
-                delivery_status: fulfillment_delivery_status_label(order.delivery_status())
-                    .to_owned(),
-                menu_item_id: line_item.menu_item_id().as_str().to_owned(),
-                quantity: line_item.quantity(),
-                special_requests: line_item
-                    .special_requests()
-                    .iter()
-                    .map(|request| request.as_str().to_owned())
-                    .collect(),
-            });
-
-            let quantity = u32::from(line_item.quantity());
-            for special_request in line_item.special_requests() {
-                let special_request_label = special_request.as_str().to_owned();
-                if !order_special_requests.contains(&special_request_label) {
-                    order_special_requests.push(special_request_label.clone());
-                }
-                *special_request_counts
-                    .entry(special_request_label)
-                    .or_insert(0) += quantity;
-                total_special_requests = total_special_requests.saturating_add(quantity);
-            }
-        }
-
-        order_special_requests.sort();
-        plant_partition_orders
-            .entry(plant_id.clone())
-            .or_default()
-            .push(VendorFulfillmentPlantPartitionOrderRowPayload {
-                order_id: order.order_id().as_str().to_owned(),
-                delivery_status: fulfillment_delivery_status_label(order.delivery_status())
-                    .to_owned(),
-                portion_count: order.total_portions(),
-                special_requests: order_special_requests,
-            });
-    }
-
-    labels.sort_by(|left, right| {
-        left.plant_id
-            .cmp(&right.plant_id)
-            .then_with(|| left.order_id.cmp(&right.order_id))
-            .then_with(|| left.menu_item_id.cmp(&right.menu_item_id))
-    });
-
-    let daily_summary = VendorFulfillmentDailySummaryExportPayload {
-        delivery_date: delivery_date.clone(),
-        total_orders,
-        total_portions,
-        total_special_requests,
-        per_plant: per_plant_summary
-            .into_iter()
-            .map(|(plant_id, (order_count, portion_count))| {
-                VendorFulfillmentDailySummaryPlantRowPayload {
-                    plant_id,
-                    order_count,
-                    portion_count,
-                }
-            })
-            .collect(),
-    };
-
-    let plant_partition_sheet = VendorFulfillmentPlantPartitionSheetExportPayload {
-        rows: plant_partition_totals
-            .into_iter()
-            .map(|(plant_id, (total_orders, total_portions))| {
-                let mut orders = plant_partition_orders.remove(&plant_id).unwrap_or_default();
-                orders.sort_by(|left, right| left.order_id.cmp(&right.order_id));
-                VendorFulfillmentPlantPartitionRowPayload {
-                    special_request_counts: plant_partition_special_requests
-                        .remove(&plant_id)
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|(special_request, count)| SpecialRequestCountPayload {
-                            special_request,
-                            count,
-                        })
-                        .collect(),
-                    orders,
-                    plant_id,
-                    total_orders,
-                    total_portions,
-                }
-            })
-            .collect(),
-    };
-
-    let label_sheet = VendorFulfillmentLabelSheetExportPayload { labels };
-
-    let basket_list = build_vendor_fulfillment_basket_list_payload(board);
-
-    VendorFulfillmentBatchArtifactsPayload {
-        daily_summary,
-        plant_partition_sheet,
-        labels: label_sheet,
-        basket_list,
-    }
-}
-
-const VENDOR_FULFILLMENT_BASKET_CAPACITY_PORTIONS: u16 = 12;
-
-fn build_vendor_fulfillment_basket_list_payload(
-    board: &VendorFulfillmentBoardSnapshot,
-) -> VendorFulfillmentBasketListExportPayload {
-    let mut per_plant_orders = BTreeMap::<String, Vec<(String, u32)>>::new();
-    for order in board.order_entries() {
-        per_plant_orders
-            .entry(order.plant_id().as_str().to_owned())
-            .or_default()
-            .push((order.order_id().as_str().to_owned(), order.total_portions()));
-    }
-
-    let mut baskets = Vec::new();
-    for (plant_id, mut plant_orders) in per_plant_orders {
-        plant_orders.sort_by(|left, right| left.0.cmp(&right.0));
-
-        let mut basket_index = 1_u32;
-        let mut current_order_ids = Vec::new();
-        let mut current_portions = 0_u32;
-
-        for (order_id, order_portions) in plant_orders {
-            let next_portions = current_portions.saturating_add(order_portions);
-            if !current_order_ids.is_empty()
-                && next_portions > u32::from(VENDOR_FULFILLMENT_BASKET_CAPACITY_PORTIONS)
-            {
-                baskets.push(VendorFulfillmentBasketEntryPayload {
-                    basket_code: format!("{plant_id}-{basket_index:02}"),
-                    plant_id: plant_id.clone(),
-                    order_ids: current_order_ids,
-                    portion_count: current_portions,
-                });
-                basket_index = basket_index.saturating_add(1);
-                current_order_ids = Vec::new();
-                current_portions = 0;
-            }
-
-            current_order_ids.push(order_id);
-            current_portions = current_portions.saturating_add(order_portions);
-        }
-
-        if !current_order_ids.is_empty() {
-            baskets.push(VendorFulfillmentBasketEntryPayload {
-                basket_code: format!("{plant_id}-{basket_index:02}"),
-                plant_id,
-                order_ids: current_order_ids,
-                portion_count: current_portions,
-            });
-        }
-    }
-
-    VendorFulfillmentBasketListExportPayload {
-        basket_capacity_portions: VENDOR_FULFILLMENT_BASKET_CAPACITY_PORTIONS,
-        baskets,
-    }
+    let mut references = artifacts
+        .iter()
+        .map(|artifact| VendorFulfillmentArtifactReferencePayload {
+            artifact_type: artifact.artifact_type().as_str().to_owned(),
+            object_ref: artifact.object_ref().to_owned(),
+            mime_type: artifact.mime_type().to_owned(),
+            size_bytes: artifact.size_bytes(),
+            sha256: artifact.sha256().to_owned(),
+        })
+        .collect::<Vec<_>>();
+    references.sort_by(|left, right| left.artifact_type.cmp(&right.artifact_type));
+    VendorFulfillmentBatchArtifactsPayload { references }
 }
 
 fn compute_order_total_for_payroll(
@@ -13316,7 +13284,8 @@ fn map_http_order_execution_error(error: HttpOrderExecutionError) -> (StatusCode
 fn map_vendor_menu_error(error: MenuSupplyWindowError) -> (StatusCode, ErrorPayload) {
     match error {
         MenuSupplyWindowError::UnauthorizedRole { .. }
-        | MenuSupplyWindowError::TargetPlantOutOfScope { .. } => {
+        | MenuSupplyWindowError::TargetPlantOutOfScope { .. }
+        | MenuSupplyWindowError::MenuItemVendorMismatch { .. } => {
             domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
         }
         MenuSupplyWindowError::MenuItemNotFound { .. } => {
@@ -13388,6 +13357,7 @@ fn map_vendor_fulfillment_error(error: VendorFulfillmentError) -> (StatusCode, E
         | VendorFulfillmentError::ArtifactStorageConfiguration(_)
         | VendorFulfillmentError::ArtifactStorageWrite { .. }
         | VendorFulfillmentError::InvalidArtifactObjectReference { .. }
+        | VendorFulfillmentError::SnapshotInvariantViolation(_)
         | VendorFulfillmentError::AuditTrail(_)
         | VendorFulfillmentError::StatePoisoned => domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -15061,6 +15031,34 @@ mod tests {
             Err(RushReminderDeliveryError::new(
                 "simulated reminder delivery outage",
             ))
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestFulfillmentArtifactStore;
+
+    impl FulfillmentArtifactStore for TestFulfillmentArtifactStore {
+        fn store_json_artifact(
+            &self,
+            vendor_id: &VendorId,
+            batch_id: &FulfillmentBatchId,
+            delivery_epoch_day: i32,
+            artifact_type: corporate_catering_system::vendor_fulfillment::FulfillmentArtifactType,
+            payload: &[u8],
+        ) -> Result<FulfillmentArtifactReference, VendorFulfillmentError> {
+            FulfillmentArtifactReference::new(
+                artifact_type,
+                format!(
+                    "s3://unit-test-fulfillment/{}/{}/{}/{}.json",
+                    vendor_id.as_str(),
+                    batch_id.as_str(),
+                    delivery_epoch_day,
+                    artifact_type.as_str().to_ascii_lowercase()
+                ),
+                "application/json",
+                u64::try_from(payload.len()).expect("payload length should fit in u64"),
+                "0".repeat(64),
+            )
         }
     }
 
@@ -18499,5 +18497,103 @@ mod tests {
         assert!(event
             .reason()
             .contains("bridgeReason=emergency governance exception"));
+    }
+
+    #[test]
+    fn vendor_menu_upsert_rejects_cross_vendor_menu_item_id() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+
+        let result = handle_upsert_vendor_menu_item(
+            &state,
+            &vendor_scoped_operator(),
+            "menu-discoverytstb1".to_owned(),
+            VendorMenuItemUpsertRequestPayload {
+                delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
+                name: "Cross Vendor Attempt".to_owned(),
+                description: "should be rejected".to_owned(),
+                menu_type: "BENTO".to_owned(),
+                health_tags: Some(vec!["HIGH_PROTEIN".to_owned()]),
+                image_url: None,
+                price: MenuPricePayload {
+                    currency: "TWD".to_owned(),
+                    amount_minor: 12000,
+                },
+                max_daily_quantity: 20,
+                preorder_open_days_ahead_override: None,
+                modify_cancel_cutoff_minute_of_day_override: None,
+            },
+        )
+        .expect_err("vendor must not upsert another vendor's menu item id");
+
+        assert_eq!(result.0, StatusCode::NOT_FOUND);
+        assert_eq!(result.1.code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn vendor_menu_status_patch_rejects_cross_vendor_menu_item_id() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+
+        let result = handle_update_vendor_menu_item_status(
+            &state,
+            &vendor_scoped_operator(),
+            "menu-discoverytstb1".to_owned(),
+            VendorMenuItemStatusPatchRequest {
+                status: "PAUSED".to_owned(),
+            },
+        )
+        .expect_err("vendor must not patch another vendor's menu item id");
+
+        assert_eq!(result.0, StatusCode::NOT_FOUND);
+        assert_eq!(result.1.code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn vendor_fulfillment_batch_payload_returns_tracked_artifact_references() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let mut state = build_state(now_epoch_day);
+        state.vendor_fulfillment_policy = VendorFulfillmentPolicy::with_audit_trail(
+            state.audit_trail.clone(),
+            Arc::new(TestFulfillmentArtifactStore),
+        );
+        let vendor_actor = vendor_scoped_operator();
+
+        let created = handle_create_vendor_fulfillment_export_batch(
+            &state,
+            &vendor_actor,
+            VendorFulfillmentBatchCreateRequestPayload {
+                delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
+            },
+        )
+        .expect("batch creation should succeed");
+
+        assert_eq!(created.artifacts.references.len(), 4);
+        for artifact in &created.artifacts.references {
+            assert!(artifact.object_ref.starts_with("s3://"));
+            assert!(artifact.object_ref.contains(created.batch_id.as_str()));
+            assert!(artifact.size_bytes > 0);
+            assert_eq!(artifact.sha256.len(), 64);
+        }
+
+        let serialized = serde_json::to_value(&created)
+            .expect("vendor fulfillment batch payload should serialize");
+        assert!(serialized.get("artifacts").is_some());
+        assert!(serialized.pointer("/artifacts/references").is_some());
+        assert!(serialized.pointer("/artifacts/dailySummary").is_none());
+
+        let fetched = handle_get_vendor_fulfillment_export_batch(
+            &state,
+            &vendor_actor,
+            created.batch_id.clone(),
+        )
+        .expect("batch lookup should succeed");
+        assert_eq!(fetched.artifacts.references, created.artifacts.references);
     }
 }

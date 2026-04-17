@@ -24,6 +24,7 @@ const DEFAULT_DB_POOL_ACQUIRE_TIMEOUT_MS: u64 = 5_000;
 const DEFAULT_DB_POOL_IDLE_TIMEOUT_SECONDS: u64 = 300;
 const DEFAULT_DB_POOL_MAX_LIFETIME_SECONDS: u64 = 1_800;
 const MENU_SUPPLY_STATE_KEY: &str = "menu_supply_policy";
+const VENDOR_FULFILLMENT_STATE_KEY: &str = "vendor_fulfillment_policy";
 const PAYROLL_LEDGER_STATE_KEY: &str = "payroll_ledger_service";
 const ANOMALY_ALERT_STATE_KEY: &str = "anomaly_alert_workflow";
 const DELIVERY_POLICY_STATE_KEY: &str = "vendor_delivery_policy";
@@ -183,6 +184,13 @@ impl SqlJsonStateRepository {
         Self {
             pool,
             state_key: PAYROLL_LEDGER_STATE_KEY,
+        }
+    }
+
+    pub fn for_vendor_fulfillment(pool: PgPool) -> Self {
+        Self {
+            pool,
+            state_key: VENDOR_FULFILLMENT_STATE_KEY,
         }
     }
 

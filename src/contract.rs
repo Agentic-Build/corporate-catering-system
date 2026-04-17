@@ -4099,16 +4099,35 @@ pub fn canonical_openapi_spec() -> Value {
           },
           "VendorFulfillmentBatchArtifacts": {
             "type": "object",
-            "required": ["dailySummary", "plantPartitionSheet", "labels", "basketList"],
+            "required": ["references"],
             "properties": {
-              "dailySummary": {
-                "$ref": "#/components/schemas/VendorFulfillmentDailySummaryExport"
+              "references": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/components/schemas/VendorFulfillmentArtifactReference"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorFulfillmentArtifactReference": {
+            "type": "object",
+            "required": ["artifactType", "objectRef", "mimeType", "sizeBytes", "sha256"],
+            "properties": {
+              "artifactType": {
+                "type": "string",
+                "enum": [
+                  "DAILY_SUMMARY",
+                  "PLANT_PARTITION_SHEET",
+                  "LABELS",
+                  "BASKET_LIST"
+                ]
               },
-              "plantPartitionSheet": {
-                "$ref": "#/components/schemas/VendorFulfillmentPlantPartitionSheetExport"
-              },
-              "labels": { "$ref": "#/components/schemas/VendorFulfillmentLabelSheetExport" },
-              "basketList": { "$ref": "#/components/schemas/VendorFulfillmentBasketListExport" }
+              "objectRef": { "type": "string", "pattern": "^s3://[a-z0-9.-]+/.+$" },
+              "mimeType": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "sizeBytes": { "type": "integer", "minimum": 1 },
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
             },
             "additionalProperties": false
           },

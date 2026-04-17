@@ -2798,6 +2798,36 @@ components:
       - items
       - page
       type: object
+    VendorFulfillmentArtifactReference:
+      additionalProperties: false
+      properties:
+        artifactType:
+          enum:
+          - DAILY_SUMMARY
+          - PLANT_PARTITION_SHEET
+          - LABELS
+          - BASKET_LIST
+          type: string
+        mimeType:
+          maxLength: 64
+          minLength: 1
+          type: string
+        objectRef:
+          pattern: ^s3://[a-z0-9.-]+/.+$
+          type: string
+        sha256:
+          pattern: ^[a-f0-9]{64}$
+          type: string
+        sizeBytes:
+          minimum: 1
+          type: integer
+      required:
+      - artifactType
+      - objectRef
+      - mimeType
+      - sizeBytes
+      - sha256
+      type: object
     VendorFulfillmentBasketEntry:
       additionalProperties: false
       properties:
@@ -2840,19 +2870,13 @@ components:
     VendorFulfillmentBatchArtifacts:
       additionalProperties: false
       properties:
-        basketList:
-          $ref: '#/components/schemas/VendorFulfillmentBasketListExport'
-        dailySummary:
-          $ref: '#/components/schemas/VendorFulfillmentDailySummaryExport'
-        labels:
-          $ref: '#/components/schemas/VendorFulfillmentLabelSheetExport'
-        plantPartitionSheet:
-          $ref: '#/components/schemas/VendorFulfillmentPlantPartitionSheetExport'
+        references:
+          items:
+            $ref: '#/components/schemas/VendorFulfillmentArtifactReference'
+          minItems: 1
+          type: array
       required:
-      - dailySummary
-      - plantPartitionSheet
-      - labels
-      - basketList
+      - references
       type: object
     VendorFulfillmentBatchCreateRequest:
       additionalProperties: false

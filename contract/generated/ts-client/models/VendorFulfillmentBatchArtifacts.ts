@@ -2,14 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { VendorFulfillmentBasketListExport } from './VendorFulfillmentBasketListExport';
-import type { VendorFulfillmentDailySummaryExport } from './VendorFulfillmentDailySummaryExport';
-import type { VendorFulfillmentLabelSheetExport } from './VendorFulfillmentLabelSheetExport';
-import type { VendorFulfillmentPlantPartitionSheetExport } from './VendorFulfillmentPlantPartitionSheetExport';
+import type { VendorFulfillmentArtifactReference } from './VendorFulfillmentArtifactReference';
 export type VendorFulfillmentBatchArtifacts = {
-    basketList: VendorFulfillmentBasketListExport;
-    dailySummary: VendorFulfillmentDailySummaryExport;
-    labels: VendorFulfillmentLabelSheetExport;
-    plantPartitionSheet: VendorFulfillmentPlantPartitionSheetExport;
+    references: Array<VendorFulfillmentArtifactReference>;
 };
 

@@ -4,12 +4,15 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 pub const MENU_SUPPLY_STATE_KEY: &str = "menu_supply_policy";
+pub const VENDOR_FULFILLMENT_STATE_KEY: &str = "vendor_fulfillment_policy";
 pub const PAYROLL_LEDGER_STATE_KEY: &str = "payroll_ledger_service";
 pub const ANOMALY_ALERT_STATE_KEY: &str = "anomaly_alert_workflow";
 pub const DELIVERY_POLICY_STATE_KEY: &str = "vendor_delivery_policy";
 pub const OPERATIONS_ANALYTICS_STATE_KEY: &str = "operations_analytics_warehouse";
 
 const CACHE_TTL_MENU_SUPPLY_SECONDS_ENV: &str = "PRELAUNCH_CACHE_TTL_MENU_SUPPLY_SECONDS";
+const CACHE_TTL_VENDOR_FULFILLMENT_SECONDS_ENV: &str =
+    "PRELAUNCH_CACHE_TTL_VENDOR_FULFILLMENT_SECONDS";
 const CACHE_TTL_PAYROLL_LEDGER_SECONDS_ENV: &str = "PRELAUNCH_CACHE_TTL_PAYROLL_LEDGER_SECONDS";
 const CACHE_TTL_ANOMALY_ALERT_SECONDS_ENV: &str = "PRELAUNCH_CACHE_TTL_ANOMALY_ALERT_SECONDS";
 const CACHE_TTL_DELIVERY_POLICY_SECONDS_ENV: &str = "PRELAUNCH_CACHE_TTL_DELIVERY_POLICY_SECONDS";
@@ -17,6 +20,7 @@ const CACHE_TTL_OPERATIONS_ANALYTICS_SECONDS_ENV: &str =
     "PRELAUNCH_CACHE_TTL_OPERATIONS_ANALYTICS_SECONDS";
 
 const DEFAULT_TTL_MENU_SUPPLY_SECONDS: u64 = 30;
+const DEFAULT_TTL_VENDOR_FULFILLMENT_SECONDS: u64 = 30;
 const DEFAULT_TTL_PAYROLL_LEDGER_SECONDS: u64 = 30;
 const DEFAULT_TTL_ANOMALY_ALERT_SECONDS: u64 = 15;
 const DEFAULT_TTL_DELIVERY_POLICY_SECONDS: u64 = 60;
@@ -25,6 +29,7 @@ const DEFAULT_TTL_OPERATIONS_ANALYTICS_SECONDS: u64 = 30;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RuntimeStateCacheTtls {
     pub menu_supply_seconds: u64,
+    pub vendor_fulfillment_seconds: u64,
     pub payroll_ledger_seconds: u64,
     pub anomaly_alert_seconds: u64,
     pub delivery_policy_seconds: u64,
@@ -35,6 +40,7 @@ impl Default for RuntimeStateCacheTtls {
     fn default() -> Self {
         Self {
             menu_supply_seconds: DEFAULT_TTL_MENU_SUPPLY_SECONDS,
+            vendor_fulfillment_seconds: DEFAULT_TTL_VENDOR_FULFILLMENT_SECONDS,
             payroll_ledger_seconds: DEFAULT_TTL_PAYROLL_LEDGER_SECONDS,
             anomaly_alert_seconds: DEFAULT_TTL_ANOMALY_ALERT_SECONDS,
             delivery_policy_seconds: DEFAULT_TTL_DELIVERY_POLICY_SECONDS,
@@ -49,6 +55,10 @@ impl RuntimeStateCacheTtls {
             menu_supply_seconds: parse_positive_u64_env(
                 CACHE_TTL_MENU_SUPPLY_SECONDS_ENV,
                 DEFAULT_TTL_MENU_SUPPLY_SECONDS,
+            )?,
+            vendor_fulfillment_seconds: parse_positive_u64_env(
+                CACHE_TTL_VENDOR_FULFILLMENT_SECONDS_ENV,
+                DEFAULT_TTL_VENDOR_FULFILLMENT_SECONDS,
             )?,
             payroll_ledger_seconds: parse_positive_u64_env(
                 CACHE_TTL_PAYROLL_LEDGER_SECONDS_ENV,
@@ -132,6 +142,7 @@ impl ValkeyRuntimeStateCache {
     pub fn ttl_seconds_for_state(&self, state_key: &str) -> Result<u64, String> {
         match state_key {
             MENU_SUPPLY_STATE_KEY => Ok(self.ttls.menu_supply_seconds),
+            VENDOR_FULFILLMENT_STATE_KEY => Ok(self.ttls.vendor_fulfillment_seconds),
             PAYROLL_LEDGER_STATE_KEY => Ok(self.ttls.payroll_ledger_seconds),
             ANOMALY_ALERT_STATE_KEY => Ok(self.ttls.anomaly_alert_seconds),
             DELIVERY_POLICY_STATE_KEY => Ok(self.ttls.delivery_policy_seconds),

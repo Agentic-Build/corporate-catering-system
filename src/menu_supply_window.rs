@@ -1215,6 +1215,15 @@ impl MenuSupplyPolicy {
 
         let mut state = lock_state(&self.state)?;
         let previous_state = state.clone();
+        if let Some(existing_menu_item) = state.menu_items.get(menu_item.menu_item_id()) {
+            if existing_menu_item.vendor_id() != menu_item.vendor_id() {
+                return Err(MenuSupplyWindowError::MenuItemVendorMismatch {
+                    menu_item_id: menu_item.menu_item_id().clone(),
+                    expected_vendor_id: menu_item.vendor_id().clone(),
+                    actual_vendor_id: existing_menu_item.vendor_id().clone(),
+                });
+            }
+        }
         let currently_allocated = state
             .allocated_quantity_by_menu_item
             .get(menu_item.menu_item_id())

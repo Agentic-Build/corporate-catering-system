@@ -3,7 +3,7 @@ use std::time::Duration;
 use corporate_catering_system::cache_backbone::{
     RuntimeStateCacheTtls, ValkeyRuntimeStateCache, ANOMALY_ALERT_STATE_KEY,
     DELIVERY_POLICY_STATE_KEY, MENU_SUPPLY_STATE_KEY, OPERATIONS_ANALYTICS_STATE_KEY,
-    PAYROLL_LEDGER_STATE_KEY,
+    PAYROLL_LEDGER_STATE_KEY, VENDOR_FULFILLMENT_STATE_KEY,
 };
 use serde::{Deserialize, Serialize};
 use testcontainers_modules::testcontainers::core::WaitFor;
@@ -37,6 +37,7 @@ async fn valkey_cache_keys_ttls_and_invalidation_are_observable() {
         "integration:test:runtime-state",
         RuntimeStateCacheTtls {
             menu_supply_seconds: 3,
+            vendor_fulfillment_seconds: 3,
             payroll_ledger_seconds: 3,
             anomaly_alert_seconds: 3,
             delivery_policy_seconds: 3,
@@ -119,6 +120,7 @@ async fn valkey_cache_keys_ttls_and_invalidation_are_observable() {
     );
 
     for state_key in [
+        VENDOR_FULFILLMENT_STATE_KEY,
         PAYROLL_LEDGER_STATE_KEY,
         ANOMALY_ALERT_STATE_KEY,
         DELIVERY_POLICY_STATE_KEY,

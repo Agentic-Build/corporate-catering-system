@@ -500,7 +500,7 @@
     try {
       const result = await apiClient.vendor.advanceVendorFulfillmentDeliveryStatus(order.orderId, {
         toStatus,
-        occurredAt: new Date().toISOString()
+        occurredAt: currentTaipeiContractDateTime()
       });
       pushNotification(
         "success",
@@ -761,6 +761,18 @@
     return date.toLocaleString("zh-TW", { hour12: false, timeZone: "Asia/Taipei" });
   }
 
+  function currentTaipeiContractDateTime(): string {
+    const taipeiOffsetMinutes = 8 * 60;
+    const taipeiDate = new Date(Date.now() + taipeiOffsetMinutes * 60_000);
+    const year = taipeiDate.getUTCFullYear();
+    const month = String(taipeiDate.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(taipeiDate.getUTCDate()).padStart(2, "0");
+    const hour = String(taipeiDate.getUTCHours()).padStart(2, "0");
+    const minute = String(taipeiDate.getUTCMinutes()).padStart(2, "0");
+    const second = String(taipeiDate.getUTCSeconds()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}+08:00`;
+  }
+
   function normalizeOptional(value: string): string | null {
     const trimmed = value.trim();
     return trimmed.length === 0 ? null : trimmed;
@@ -878,7 +890,7 @@
             onclick={() => refreshMenuItems(true)}
             disabled={menuLoading}
           >
-            重新載入菜單
+            {menuLoading ? "載入菜單中..." : "重新載入菜單"}
           </button>
           <button
             type="button"
@@ -886,7 +898,7 @@
             onclick={() => refreshOrderingPolicy(true)}
             disabled={orderingPolicyLoading}
           >
-            重新載入視窗設定
+            {orderingPolicyLoading ? "載入視窗設定中..." : "重新載入視窗設定"}
           </button>
         </div>
       </div>
@@ -931,7 +943,7 @@
             onclick={() => refreshMenuItems(true)}
             disabled={menuLoading}
           >
-            套用篩選
+            {menuLoading ? "套用篩選中..." : "套用篩選"}
           </button>
         </div>
         <div class="grid items-end text-xs text-slate-600">
@@ -1189,7 +1201,7 @@
             onclick={() => refreshFulfillmentBoard(true)}
             disabled={fulfillmentLoading}
           >
-            重新載入看板
+            {fulfillmentLoading ? "載入看板中..." : "重新載入看板"}
           </button>
           <button
             type="button"
@@ -1229,7 +1241,7 @@
           onclick={() => refreshFulfillmentBoard(true)}
           disabled={fulfillmentLoading}
         >
-          套用篩選
+          {fulfillmentLoading ? "套用篩選中..." : "套用篩選"}
         </button>
       </div>
 
@@ -1355,7 +1367,9 @@
                         onclick={() => advanceDeliveryStatus(order)}
                         disabled={fulfillmentStatusSubmittingByOrderId[order.orderId] === true}
                       >
-                        送出狀態更新
+                        {fulfillmentStatusSubmittingByOrderId[order.orderId] === true
+                          ? "更新中..."
+                          : "送出狀態更新"}
                       </button>
                     </div>
                   </td>
@@ -1416,7 +1430,7 @@
               onclick={loadBatchById}
               disabled={batchLookupLoading}
             >
-              讀取批次
+              {batchLookupLoading ? "讀取中..." : "讀取批次"}
             </button>
             <button
               type="button"
@@ -1505,7 +1519,7 @@
             onclick={() => refreshOperationsOrders(true)}
             disabled={operationsLoading}
           >
-            套用營運篩選
+            {operationsLoading ? "套用篩選中..." : "套用營運篩選"}
           </button>
           {#if operationsError}
             <p class="rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-800">

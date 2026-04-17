@@ -191,6 +191,7 @@ export type { VendorComplianceRetentionPolicy } from './models/VendorComplianceR
 export type { VendorComplianceSummary } from './models/VendorComplianceSummary';
 export type { VendorEnrollment } from './models/VendorEnrollment';
 export type { VendorEnrollmentPage } from './models/VendorEnrollmentPage';
+export type { VendorFulfillmentArtifactReference } from './models/VendorFulfillmentArtifactReference';
 export type { VendorFulfillmentBasketEntry } from './models/VendorFulfillmentBasketEntry';
 export type { VendorFulfillmentBasketListExport } from './models/VendorFulfillmentBasketListExport';
 export type { VendorFulfillmentBatchArtifacts } from './models/VendorFulfillmentBatchArtifacts';
