@@ -1591,7 +1591,7 @@ impl MenuSupplyPolicy {
             .get(order_id)
             .cloned()
             .ok_or_else(|| MenuSupplyWindowError::OrderNotFound(order_id.clone()))?;
-        ensure_order_mutation_authorized(actor, &stored_order, &mutation)?;
+        ensure_order_mutation_authorized(actor, order_id, &stored_order, &mutation)?;
         let (operation_id, action) = audit_identity_for_order_mutation(&mutation);
         let audit_event = AuditEvidenceWrite::new(
             AuditTimestamp::from_taipei_business_moment(
@@ -2182,6 +2182,7 @@ fn ensure_target_plant_in_scope(
 
 fn ensure_order_mutation_authorized(
     actor: &AuthenticatedActorContext,
+    order_id: &OrderId,
     stored_order: &StoredOrder,
     mutation: &OrderMutation,
 ) -> Result<(), MenuSupplyWindowError> {
@@ -2192,7 +2193,32 @@ fn ensure_order_mutation_authorized(
         OrderMutation::MarkFulfilled => Role::Employee,
     };
     ensure_role(actor, required_role)?;
-    ensure_target_plant_in_scope(actor, &stored_order.plant_id)
+    ensure_target_plant_in_scope(actor, &stored_order.plant_id)?;
+    match mutation {
+        OrderMutation::ReplaceLineItems { .. }
+        | OrderMutation::Cancel
+        | OrderMutation::MarkFulfilled => {
+            ensure_employee_order_owner(actor, order_id, stored_order)
+        }
+        OrderMutation::MarkSoldOut
+        | OrderMutation::MarkRefundPending
+        | OrderMutation::MarkRefunded => Ok(()),
+    }
+}
+
+fn ensure_employee_order_owner(
+    actor: &AuthenticatedActorContext,
+    order_id: &OrderId,
+    stored_order: &StoredOrder,
+) -> Result<(), MenuSupplyWindowError> {
+    if actor.actor_id() != &stored_order.employee_actor_id {
+        return Err(MenuSupplyWindowError::OrderMutationActorMismatch {
+            actor_id: actor.actor_id().clone(),
+            order_id: order_id.clone(),
+            owner_actor_id: stored_order.employee_actor_id.clone(),
+        });
+    }
+    Ok(())
 }
 
 fn audit_identity_for_order_mutation(mutation: &OrderMutation) -> (&'static str, AuditAction) {
@@ -2407,6 +2433,11 @@ pub enum MenuSupplyWindowError {
         actor_id: crate::identity::ActorId,
         target_plant: PlantId,
     },
+    OrderMutationActorMismatch {
+        actor_id: crate::identity::ActorId,
+        order_id: OrderId,
+        owner_actor_id: crate::identity::ActorId,
+    },
     AuditTrail(AuditTrailError),
     StatePoisoned,
     EmptyOrderLineItems,
@@ -2533,6 +2564,14 @@ impl fmt::Display for MenuSupplyWindowError {
                 f,
                 "actor {actor_id} is not authorized for plant {}",
                 target_plant.as_str()
+            ),
+            Self::OrderMutationActorMismatch {
+                actor_id,
+                order_id,
+                owner_actor_id,
+            } => write!(
+                f,
+                "actor {actor_id} is not the owner of order {order_id}; expected owner {owner_actor_id}"
             ),
             Self::AuditTrail(error) => write!(f, "audit trail write failed: {error}"),
             Self::StatePoisoned => {

@@ -197,7 +197,7 @@
   }
 
   async function refreshMenus(notifyOnError: boolean) {
-    if (!plantId) {
+    if (!plantId || menusLoading) {
       return;
     }
 
@@ -229,7 +229,7 @@
   }
 
   async function refreshOrders(notifyOnError: boolean) {
-    if (!plantId) {
+    if (!plantId || ordersLoading) {
       return;
     }
 
@@ -426,6 +426,10 @@
   }
 
   async function loadPayrollLedger(orderId: string, notifyOnError: boolean) {
+    if (payrollLoadingByOrderId[orderId] === true) {
+      return;
+    }
+
     payrollLoadingByOrderId = {
       ...payrollLoadingByOrderId,
       [orderId]: true
@@ -717,6 +721,9 @@
   }
 
   function onMenuFilterSubmit() {
+    if (menusLoading) {
+      return;
+    }
     void refreshMenus(true);
   }
 
@@ -783,13 +790,14 @@
             日曆檢視
           </button>
           <button
-            class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+            class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
             type="button"
+            disabled={menusLoading}
             onclick={() => {
               void refreshMenus(true);
             }}
           >
-            重新載入
+            {menusLoading ? "載入中..." : "重新載入"}
           </button>
         </div>
       </header>
@@ -821,8 +829,12 @@
           <input class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" type="text" maxlength={200} placeholder="例如：午休晚 10 分鐘取餐" bind:value={orderNote} />
         </label>
         <div class="md:col-span-4">
-          <button class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white" type="submit">
-            套用條件
+          <button
+            class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            type="submit"
+            disabled={menusLoading}
+          >
+            {menusLoading ? "套用中..." : "套用條件"}
           </button>
         </div>
       </form>
@@ -911,13 +923,14 @@
           <p class="text-sm text-slate-600">可在截單前修改或取消，並查看 30 秒更新的取餐 QR。</p>
         </div>
         <button
-          class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+          class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
           type="button"
+          disabled={ordersLoading}
           onclick={() => {
             void refreshOrders(true);
           }}
         >
-          重新載入訂單
+          {ordersLoading ? "載入中..." : "重新載入訂單"}
         </button>
       </header>
 
@@ -1093,15 +1106,20 @@
           {:else}
             {#each orders as order (order.orderId)}
               <button
-                class={`rounded-lg border px-3 py-2 text-left text-sm ${selectedPayrollOrderId === order.orderId ? "border-cyan-700 bg-cyan-700 text-white" : "border-slate-300 bg-white text-slate-700"}`}
+                class={`rounded-lg border px-3 py-2 text-left text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 ${selectedPayrollOrderId === order.orderId ? "border-cyan-700 bg-cyan-700 text-white" : "border-slate-300 bg-white text-slate-700"}`}
                 type="button"
+                disabled={payrollLoadingByOrderId[order.orderId] === true}
                 onclick={() => {
                   selectedPayrollOrderId = order.orderId;
                   void loadPayrollLedger(order.orderId, true);
                 }}
               >
                 <div class="font-semibold">{order.orderId}</div>
-                <div class={`text-xs ${selectedPayrollOrderId === order.orderId ? "text-cyan-100" : "text-slate-500"}`}>{friendlyStatus(order.status)} | {order.deliveryDate}</div>
+                <div class={`text-xs ${selectedPayrollOrderId === order.orderId ? "text-cyan-100" : "text-slate-500"}`}>
+                  {payrollLoadingByOrderId[order.orderId] === true
+                    ? "薪資明細載入中..."
+                    : `${friendlyStatus(order.status)} | ${order.deliveryDate}`}
+                </div>
               </button>
             {/each}
           {/if}

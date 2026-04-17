@@ -7499,6 +7499,18 @@ fn handle_update_employee_order(
     let current_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
     let employee_actor =
         with_employee_employment_status(state, employee_actor, current_snapshot.plant_id())?;
+    if current_snapshot.employee_actor_id() != employee_actor.actor_id() {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` cannot update order `{}` owned by `{}`",
+                employee_actor.actor_id().as_str(),
+                order_id.as_str(),
+                current_snapshot.employee_actor_id().as_str()
+            ),
+        ));
+    }
     handle_update_employee_order_for_actor(
         state,
         &employee_actor,
@@ -7524,6 +7536,18 @@ fn handle_update_employee_order_for_actor(
     })?;
     let mutation = parse_order_mutation(request)?;
     let current_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
+    if actor.role() == Role::Employee && actor.actor_id() != current_snapshot.employee_actor_id() {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` cannot update order `{}` owned by `{}`",
+                actor.actor_id().as_str(),
+                order_id.as_str(),
+                current_snapshot.employee_actor_id().as_str()
+            ),
+        ));
+    }
     let requested_at = current_taipei_business_moment().map_err(|error| {
         domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -8070,48 +8094,64 @@ fn handle_run_vendor_compliance_lifecycle(
 
 async fn update_admin_payroll_dispute(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(dispute_id): Path<String>,
     Json(request): Json<AdminPayrollDisputePatchRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "updateAdminPayrollDispute",
-        Some("load-gate"),
-        None,
+        None::<&str>,
+        Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-
-    let response = match handle_update_admin_payroll_dispute(&state, dispute_id, request) {
-        Ok(payload) => {
-            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
-            (
-                StatusCode::OK,
-                Json(
-                    serde_json::to_value(payload)
-                        .expect("admin payroll dispute payload serialization should succeed"),
-                ),
-            )
-        }
+    let payroll_actor = match require_corporate_actor_for_role(&headers, Role::PayrollOperator) {
+        Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
-            (
+            return (
                 status,
                 Json(
                     serde_json::to_value(error.with_request_id(request_id.as_str()))
-                        .expect("admin payroll dispute error payload serialization should succeed"),
+                        .expect("authorization error payload serialization should succeed"),
                 ),
-            )
+            );
         }
     };
+
+    let response =
+        match handle_update_admin_payroll_dispute(&state, &payroll_actor, dispute_id, request) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(
+                        serde_json::to_value(payload)
+                            .expect("admin payroll dispute payload serialization should succeed"),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                            "admin payroll dispute error payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+        };
 
     response
 }
 
 fn handle_update_admin_payroll_dispute(
     state: &AppState,
+    payroll_actor: &AuthenticatedActorContext,
     dispute_id_raw: String,
     request: AdminPayrollDisputePatchRequest,
 ) -> Result<PayrollDisputePayload, (StatusCode, ErrorPayload)> {
-    let payroll_actor = load_gate_payroll_actor()?;
     let dispute_id = parse_contract_payroll_dispute_id(&dispute_id_raw).map_err(|error| {
         domain_error(
             StatusCode::BAD_REQUEST,
@@ -8140,7 +8180,7 @@ fn handle_update_admin_payroll_dispute(
             let note = normalize_optional_patch_note(request.note)?;
             mutate_payroll_ledger_service(state, |service| {
                 service.assign_dispute_owner(
-                    &payroll_actor,
+                    payroll_actor,
                     &dispute_id,
                     &owner_actor_id,
                     occurred_at,
@@ -8152,7 +8192,7 @@ fn handle_update_admin_payroll_dispute(
             let note = parse_required_patch_note(request.note, "note")?;
             mutate_payroll_ledger_service(state, |service| {
                 service.resolve_dispute_refund(
-                    &payroll_actor,
+                    payroll_actor,
                     &dispute_id,
                     occurred_at,
                     note,
@@ -8163,7 +8203,7 @@ fn handle_update_admin_payroll_dispute(
         "RESOLVE_REJECTED" => {
             let note = parse_required_patch_note(request.note, "note")?;
             mutate_payroll_ledger_service(state, |service| {
-                service.resolve_dispute_rejected(&payroll_actor, &dispute_id, occurred_at, note)
+                service.resolve_dispute_rejected(payroll_actor, &dispute_id, occurred_at, note)
             })?
         }
         other => {
@@ -11356,11 +11396,18 @@ fn map_http_order_execution_error(error: HttpOrderExecutionError) -> (StatusCode
             "ORDER_VENDOR_DELIVERY_REJECTED",
             error.to_string(),
         ),
-        HttpOrderExecutionError::MenuSupply(error) => domain_error(
-            StatusCode::CONFLICT,
-            "ORDER_POLICY_VIOLATION",
-            error.to_string(),
-        ),
+        HttpOrderExecutionError::MenuSupply(error) => match error {
+            MenuSupplyWindowError::UnauthorizedRole { .. }
+            | MenuSupplyWindowError::TargetPlantOutOfScope { .. }
+            | MenuSupplyWindowError::OrderMutationActorMismatch { .. } => {
+                domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
+            }
+            _ => domain_error(
+                StatusCode::CONFLICT,
+                "ORDER_POLICY_VIOLATION",
+                error.to_string(),
+            ),
+        },
         HttpOrderExecutionError::UnsupportedEmployeeMutation { operation } => domain_error(
             StatusCode::BAD_REQUEST,
             "ORDER_MUTATION_NOT_ALLOWED",
@@ -13160,6 +13207,50 @@ mod tests {
     }
 
     #[test]
+    fn admin_payroll_dispute_update_enforces_payroll_operator_role() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order = handle_create_employee_order(&state, create_request)
+            .expect("order should be created for dispute workflow");
+        let opened_dispute = handle_create_employee_order_dispute(
+            &state,
+            &load_gate_employee_actor(),
+            created_order.order_id,
+            EmployeePayrollDisputeCreateRequest {
+                reason: "charged despite inventory issue".to_owned(),
+            },
+        )
+        .expect("dispute should be opened");
+
+        let forbidden = handle_update_admin_payroll_dispute(
+            &state,
+            &committee_admin(),
+            opened_dispute.dispute_id,
+            AdminPayrollDisputePatchRequest {
+                operation: "ASSIGN_OWNER".to_owned(),
+                owner_actor_id: Some("payroll-owner-alpha".to_owned()),
+                note: Some("triaged".to_owned()),
+                refund_amount_minor: None,
+            },
+        )
+        .expect_err("non-payroll role should be rejected for dispute mutation");
+        assert_eq!(forbidden.0, StatusCode::FORBIDDEN);
+        assert_eq!(forbidden.1.code, "FORBIDDEN");
+    }
+
+    #[test]
     fn vendor_operator_authorization_uses_vendor_mfa_authentication_source() {
         let missing = require_vendor_operator_actor(&HeaderMap::new())
             .expect_err("missing authorization header should fail");
@@ -13830,6 +13921,42 @@ mod tests {
         let serialized =
             serde_json::to_value(&updated_order).expect("employee order payload should serialize");
         assert!(serialized.get("accepted").is_none());
+    }
+
+    #[test]
+    fn update_order_rejects_non_owner_employee_actor() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let created_order = handle_create_employee_order(
+            &state,
+            EmployeeOrderCreateRequestPayload {
+                plant_id: "fab-a".to_owned(),
+                delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(3)),
+                line_items: vec![OrderLineItemRequestPayload {
+                    menu_item_id: "menu-discoverytsta2".to_owned(),
+                    quantity: 1,
+                    special_requests: vec![],
+                }],
+                employee_note: None,
+            },
+        )
+        .expect("create order should succeed");
+
+        let forbidden = handle_update_employee_order(
+            &state,
+            &employee_actor(),
+            created_order.order_id,
+            UpdateOrderRequest {
+                operation: "CANCEL".to_owned(),
+                line_items: None,
+                cancel_reason: Some("schedule changed".to_owned()),
+            },
+        )
+        .expect_err("employee actor must not update another employee's order");
+        assert_eq!(forbidden.0, StatusCode::FORBIDDEN);
+        assert_eq!(forbidden.1.code, "FORBIDDEN");
     }
 
     #[test]
@@ -15109,6 +15236,7 @@ mod tests {
 
         let assigned_dispute = handle_update_admin_payroll_dispute(
             &state,
+            &payroll,
             opened_dispute.dispute_id.clone(),
             AdminPayrollDisputePatchRequest {
                 operation: "ASSIGN_OWNER".to_owned(),
@@ -15123,6 +15251,7 @@ mod tests {
 
         let resolved_dispute = handle_update_admin_payroll_dispute(
             &state,
+            &payroll,
             opened_dispute.dispute_id.clone(),
             AdminPayrollDisputePatchRequest {
                 operation: "RESOLVE_REFUND".to_owned(),
