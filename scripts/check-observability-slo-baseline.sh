@@ -23,6 +23,15 @@ required_files=(
   "ops/kubernetes/base/hpa.yaml"
   "ops/kubernetes/base/hpa-mcp.yaml"
   "ops/kubernetes/base/hpa-compliance-worker.yaml"
+  "ops/kubernetes/base/hpa-web.yaml"
+  "ops/kubernetes/components/topology-multi-az/kustomization.yaml"
+  "ops/kubernetes/components/topology-multi-az/patch-deployment-api.yaml"
+  "ops/kubernetes/components/autoscaling-keda-worker/kustomization.yaml"
+  "ops/kubernetes/components/autoscaling-keda-worker/scaledobject-compliance-worker.yaml"
+  "ops/kubernetes/components/autoscaling-keda-worker/delete-hpa-compliance-worker.yaml"
+  "ops/kubernetes/overlays/dev/kustomization.yaml"
+  "ops/kubernetes/overlays/staging/kustomization.yaml"
+  "ops/kubernetes/overlays/production/kustomization.yaml"
   "src/bin/observability_runtime_service.rs"
   "apps/web/src/hooks.server.ts"
 )
@@ -105,6 +114,11 @@ rg -q "kind: HorizontalPodAutoscaler" ops/kubernetes/base/hpa.yaml
 rg -q "http_server_requests_per_second" ops/kubernetes/base/hpa.yaml
 rg -q "mcp_tool_requests_per_second" ops/kubernetes/base/hpa-mcp.yaml
 rg -q "compliance_lifecycle_jobs_in_flight" ops/kubernetes/base/hpa-compliance-worker.yaml
+rg -q "kind: HorizontalPodAutoscaler" ops/kubernetes/base/hpa-web.yaml
+rg -q "name: memory" ops/kubernetes/base/hpa-web.yaml
+rg -q "topology.kubernetes.io/zone" ops/kubernetes/components/topology-multi-az/patch-deployment-api.yaml
+rg -q "kind: ScaledObject" ops/kubernetes/components/autoscaling-keda-worker/scaledobject-compliance-worker.yaml
+rg -q "\\$patch: delete" ops/kubernetes/components/autoscaling-keda-worker/delete-hpa-compliance-worker.yaml
 rg -q "/api/v1/employee/orders" ops/observability/load/k6-prelaunch.js
 
 collector_endpoint="$(awk '
@@ -129,6 +143,10 @@ if ! command -v k6 >/dev/null 2>&1; then
   echo "k6 is required to enforce prelaunch load thresholds"
   exit 1
 fi
+if ! command -v kustomize >/dev/null 2>&1; then
+  echo "kustomize is required to validate dev/staging/production overlays"
+  exit 1
+fi
 if [[ -z "${DATABASE_RW_URL:-}" ]]; then
   echo "DATABASE_RW_URL must be configured for hard-SLO baseline verification"
   exit 1
@@ -139,6 +157,27 @@ if [[ -z "${DATABASE_RO_URL:-}" ]]; then
 fi
 
 SQLX_OFFLINE="true" cargo run --quiet --bin apply_sql_migrations >/dev/null
+
+for overlay in dev staging production; do
+  overlay_manifest="$(mktemp -t kustomize-${overlay}.XXXXXX.yaml)"
+  kustomize build "ops/kubernetes/overlays/${overlay}" >"${overlay_manifest}"
+  rg -q "kind: ScaledObject" "${overlay_manifest}"
+  rg -q "topologySpreadConstraints" "${overlay_manifest}"
+  rg -q "name: corporate-catering-compliance-worker" "${overlay_manifest}"
+  rg -q "runtime.corporate-catering.io/scaling-strategy: hpa-plus-keda-worker" "${overlay_manifest}"
+  case "${overlay}" in
+    dev)
+      rg -q "key: dev/corporate-catering/runtime" "${overlay_manifest}"
+      ;;
+    staging)
+      rg -q "key: staging/corporate-catering/runtime" "${overlay_manifest}"
+      ;;
+    production)
+      rg -q "key: prod/corporate-catering/runtime" "${overlay_manifest}"
+      ;;
+  esac
+  rm -f "${overlay_manifest}"
+done
 
 summary_file="$(mktemp -t prelaunch-k6-summary.XXXXXX.json)"
 service_log_file="$(mktemp -t prelaunch-k6-service.XXXXXX.log)"

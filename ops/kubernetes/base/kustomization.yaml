@@ -19,4 +19,5 @@ resources:
   - hpa.yaml
   - hpa-mcp.yaml
   - hpa-compliance-worker.yaml
+  - hpa-web.yaml
   - poddisruptionbudget.yaml

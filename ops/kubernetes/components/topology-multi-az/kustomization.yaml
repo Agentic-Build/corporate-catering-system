@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - path: patch-deployment-api.yaml
+    target:
+      kind: Deployment
+      name: corporate-catering-api
+  - path: patch-deployment-mcp.yaml
+    target:
+      kind: Deployment
+      name: corporate-catering-mcp
+  - path: patch-deployment-compliance-worker.yaml
+    target:
+      kind: Deployment
+      name: corporate-catering-compliance-worker
+  - path: patch-deployment-web.yaml
+    target:
+      kind: Deployment
+      name: corporate-catering-web
+  - path: patch-pgbouncer-rw.yaml
+    target:
+      kind: Deployment
+      name: corporate-catering-pgbouncer-rw
+  - path: patch-pgbouncer-ro.yaml
+    target:
+      kind: Deployment
+      name: corporate-catering-pgbouncer-ro

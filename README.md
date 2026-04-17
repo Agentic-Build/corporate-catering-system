@@ -94,11 +94,14 @@ Baseline artifacts are committed and release-gated under `ops/`:
   - `scripts/check-observability-slo-baseline.sh` enforces thresholds from `hard-slo-policy.yaml` and `prelaunch-thresholds.yaml` as source-of-truth.
 - Kubernetes baseline with health/scaling signals:
   - `ops/kubernetes/base/*.yaml`
+  - `ops/kubernetes/components/**` (multi-AZ topology + KEDA worker autoscaling strategy)
+  - `ops/kubernetes/overlays/{dev,staging,production}` (environment-promotion overlays)
   - runtime infrastructure security and access baseline:
     - PostgreSQL topology + PgBouncer transaction pools (`ops/kubernetes/base/postgres-topology.yaml`, `ops/kubernetes/base/pgbouncer.yaml`)
     - pooled runtime DB endpoints (`DATABASE_RW_URL` / `DATABASE_RO_URL`) in all runtime deployments
     - edge + network isolation + secret externalization controls (`ops/kubernetes/base/gateway.yaml`, `ops/kubernetes/base/networkpolicy-*.yaml`, `ops/kubernetes/base/external-secrets.yaml`)
     - SvelteKit adapter-node frontend runtime deployment/service (`ops/kubernetes/base/deployment-web.yaml`, `ops/kubernetes/base/service-web.yaml`)
+    - environment-specific autoscaling/topology policy rendered through overlays (`kustomize build ops/kubernetes/overlays/<env>`)
 
 Verification commands:
 

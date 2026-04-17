@@ -69,6 +69,7 @@ fn kustomization_includes_runtime_infrastructure_security_resources() {
         "gateway.yaml",
         "networkpolicy-default-deny.yaml",
         "networkpolicy-runtime-allow.yaml",
+        "hpa-web.yaml",
     ] {
         assert!(
             resources.contains(required),
@@ -375,4 +376,119 @@ fn frontend_sveltekit_runtime_deployment_and_cache_control_contract_are_declared
     assert!(hooks.contains("cache-control"));
     assert!(hooks.contains("/_app/immutable/"));
     assert!(hooks.contains("FRONTEND_CACHE_CONTROL_ASSET_IMMUTABLE"));
+}
+
+#[test]
+fn kubernetes_overlays_encode_runtime_strategy_and_environment_promotion_values() {
+    for (overlay_path, expected_namespace, expected_environment, expected_secret_prefix) in [
+        (
+            "ops/kubernetes/overlays/dev/kustomization.yaml",
+            "catering-dev",
+            "development",
+            "secretPathPrefix=dev",
+        ),
+        (
+            "ops/kubernetes/overlays/staging/kustomization.yaml",
+            "catering-staging",
+            "staging",
+            "secretPathPrefix=staging",
+        ),
+        (
+            "ops/kubernetes/overlays/production/kustomization.yaml",
+            "catering-prod",
+            "production",
+            "secretPathPrefix=prod",
+        ),
+    ] {
+        let overlay_raw = read_text(overlay_path);
+        assert!(
+            overlay_raw.contains("resources:\n  - ../../base"),
+            "{overlay_path} must consume base manifests"
+        );
+        assert!(
+            overlay_raw.contains("../../components/topology-multi-az"),
+            "{overlay_path} must include multi-AZ topology component"
+        );
+        assert!(
+            overlay_raw.contains("../../components/autoscaling-keda-worker"),
+            "{overlay_path} must include KEDA autoscaling component"
+        );
+        assert!(
+            overlay_raw.contains("runtime.corporate-catering.io/scaling-strategy: hpa-plus-keda-worker"),
+            "{overlay_path} must encode selected runtime scaling strategy"
+        );
+        assert!(
+            overlay_raw.contains(expected_secret_prefix),
+            "{overlay_path} must encode environment-specific secret prefix"
+        );
+
+        let overlay = read_yaml(overlay_path);
+        assert_eq!(
+            yaml_get(&overlay, "namespace").as_str(),
+            Some(expected_namespace),
+            "{overlay_path} must set expected namespace"
+        );
+
+        let annotations = yaml_get(&overlay, "commonAnnotations");
+        assert_eq!(
+            yaml_get(annotations, "runtime.corporate-catering.io/environment").as_str(),
+            Some(expected_environment),
+            "{overlay_path} must label environment"
+        );
+        assert_eq!(
+            yaml_get(annotations, "runtime.corporate-catering.io/topology-strategy").as_str(),
+            Some("multi-az"),
+            "{overlay_path} must encode topology strategy"
+        );
+    }
+}
+
+#[test]
+fn multi_az_topology_component_targets_required_runtime_deployments() {
+    let component_kustomization = read_text("ops/kubernetes/components/topology-multi-az/kustomization.yaml");
+    for required_deployment in [
+        "corporate-catering-api",
+        "corporate-catering-mcp",
+        "corporate-catering-compliance-worker",
+        "corporate-catering-web",
+        "corporate-catering-pgbouncer-rw",
+        "corporate-catering-pgbouncer-ro",
+    ] {
+        assert!(
+            component_kustomization.contains(required_deployment),
+            "topology component must patch `{required_deployment}`"
+        );
+    }
+
+    for patch_file in [
+        "ops/kubernetes/components/topology-multi-az/patch-deployment-api.yaml",
+        "ops/kubernetes/components/topology-multi-az/patch-deployment-mcp.yaml",
+        "ops/kubernetes/components/topology-multi-az/patch-deployment-compliance-worker.yaml",
+        "ops/kubernetes/components/topology-multi-az/patch-deployment-web.yaml",
+        "ops/kubernetes/components/topology-multi-az/patch-pgbouncer-rw.yaml",
+        "ops/kubernetes/components/topology-multi-az/patch-pgbouncer-ro.yaml",
+    ] {
+        let patch = read_text(patch_file);
+        assert!(patch.contains("topologySpreadConstraints"));
+        assert!(patch.contains("topology.kubernetes.io/zone"));
+        assert!(patch.contains("kubernetes.io/hostname"));
+    }
+}
+
+#[test]
+fn keda_component_defines_worker_scaledobject_and_removes_worker_hpa() {
+    let component = read_text("ops/kubernetes/components/autoscaling-keda-worker/kustomization.yaml");
+    assert!(component.contains("scaledobject-compliance-worker.yaml"));
+    assert!(component.contains("delete-hpa-compliance-worker.yaml"));
+
+    let scaledobject = read_text("ops/kubernetes/components/autoscaling-keda-worker/scaledobject-compliance-worker.yaml");
+    assert!(scaledobject.contains("kind: ScaledObject"));
+    assert!(scaledobject.contains("name: corporate-catering-compliance-worker"));
+    assert!(scaledobject.contains("type: prometheus"));
+    assert!(scaledobject.contains("type: cpu"));
+
+    let delete_patch = read_text("ops/kubernetes/components/autoscaling-keda-worker/delete-hpa-compliance-worker.yaml");
+    assert!(delete_patch.contains("$patch: delete"));
+    assert!(delete_patch.contains("kind: HorizontalPodAutoscaler"));
+    assert!(delete_patch.contains("name: corporate-catering-compliance-worker"));
 }

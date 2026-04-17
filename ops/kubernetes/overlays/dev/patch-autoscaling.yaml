@@ -1,0 +1,155 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: corporate-catering-api
+spec:
+  minReplicas: 1
+  maxReplicas: 4
+  behavior:
+    scaleUp:
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleDown:
+      policies:
+        - type: Percent
+          value: 25
+          periodSeconds: 60
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    - type: Pods
+      pods:
+        metric:
+          name: http_server_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "35"
+    - type: Pods
+      pods:
+        metric:
+          name: in_flight_requests
+        target:
+          type: AverageValue
+          averageValue: "15"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: corporate-catering-mcp
+spec:
+  minReplicas: 1
+  maxReplicas: 4
+  behavior:
+    scaleUp:
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleDown:
+      policies:
+        - type: Percent
+          value: 25
+          periodSeconds: 60
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    - type: Pods
+      pods:
+        metric:
+          name: mcp_tool_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "25"
+    - type: Pods
+      pods:
+        metric:
+          name: mcp_tool_in_flight_requests
+        target:
+          type: AverageValue
+          averageValue: "10"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: corporate-catering-web
+spec:
+  minReplicas: 1
+  maxReplicas: 3
+  behavior:
+    scaleUp:
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleDown:
+      policies:
+        - type: Percent
+          value: 30
+          periodSeconds: 60
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: corporate-catering-compliance-worker
+spec:
+  minReplicaCount: 1
+  maxReplicaCount: 4
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 60
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          policies:
+            - type: Percent
+              value: 25
+              periodSeconds: 60
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://victoria-metrics-vmsingle.observability.svc.cluster.local:8429
+        metricName: compliance_lifecycle_jobs_in_flight
+        threshold: "6"
+        query: avg(compliance_lifecycle_jobs_in_flight)
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "55"

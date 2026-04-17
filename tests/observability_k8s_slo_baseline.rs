@@ -369,6 +369,7 @@ fn kubernetes_manifests_define_health_checks_and_load_scaling_signals() {
         "hpa.yaml",
         "hpa-mcp.yaml",
         "hpa-compliance-worker.yaml",
+        "hpa-web.yaml",
     ] {
         assert!(
             resources.contains(required),
@@ -492,6 +493,7 @@ fn kubernetes_manifests_define_health_checks_and_load_scaling_signals() {
             "ops/kubernetes/base/hpa-compliance-worker.yaml",
             BTreeSet::from(["compliance_lifecycle_jobs_in_flight".to_owned()]),
         ),
+        ("ops/kubernetes/base/hpa-web.yaml", BTreeSet::new()),
     ];
 
     for (hpa_file, required_pod_metrics) in hpa_expectations {
@@ -535,6 +537,19 @@ fn kubernetes_manifests_define_health_checks_and_load_scaling_signals() {
             );
         }
     }
+
+    let web_hpa = read_yaml("ops/kubernetes/base/hpa-web.yaml");
+    let web_metrics = yaml_get(yaml_get(&web_hpa, "spec"), "metrics")
+        .as_sequence()
+        .expect("web HPA metrics must be sequence");
+    let has_memory_metric = web_metrics.iter().any(|metric| {
+        yaml_get(metric, "type").as_str() == Some("Resource")
+            && yaml_get(yaml_get(metric, "resource"), "name").as_str() == Some("memory")
+    });
+    assert!(
+        has_memory_metric,
+        "web HPA must include memory utilization metric"
+    );
 }
 
 #[test]
