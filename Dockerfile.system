@@ -1,0 +1,29 @@
+FROM rust:1.94.0-bookworm AS builder
+
+WORKDIR /work
+
+ARG DATABASE_URL
+ENV DATABASE_URL=${DATABASE_URL}
+
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY migrations ./migrations
+
+RUN cargo build --locked --release --bin observability_runtime_service
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 65532 --home-dir /app --create-home --shell /usr/sbin/nologin app \
+    && mkdir -p /app/ops/state \
+    && chown -R 65532:65532 /app
+
+WORKDIR /app
+
+COPY --from=builder /work/target/release/observability_runtime_service /usr/local/bin/observability_runtime_service
+
+USER 65532:65532
+
+ENTRYPOINT ["/usr/local/bin/observability_runtime_service"]

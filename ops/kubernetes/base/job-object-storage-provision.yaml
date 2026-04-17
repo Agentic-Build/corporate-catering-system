@@ -58,6 +58,10 @@ spec:
                 mc anonymous set none "runtime/${bucket}" >/dev/null
               done
           env:
+            - name: HOME
+              value: /tmp/mc
+            - name: MC_CONFIG_DIR
+              value: /tmp/mc/.mc
             - name: MINIO_ENDPOINT
               valueFrom:
                 secretKeyRef:
@@ -88,3 +92,9 @@ spec:
                 secretKeyRef:
                   name: corporate-catering-secrets
                   key: object_storage_bucket_fulfillment_exports
+          volumeMounts:
+            - name: mc-config
+              mountPath: /tmp/mc
+      volumes:
+        - name: mc-config
+          emptyDir: {}

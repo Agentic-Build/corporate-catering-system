@@ -616,8 +616,13 @@ impl ObjectStorageFulfillmentArtifactStore {
     pub fn new(
         object_storage_upload_pipeline: Arc<ObjectStorageUploadPipeline>,
     ) -> Result<Self, VendorFulfillmentError> {
-        let client = reqwest::blocking::Client::builder()
-            .build()
+        let client = std::thread::spawn(|| reqwest::blocking::Client::builder().build())
+            .join()
+            .map_err(|_| {
+                VendorFulfillmentError::ArtifactStorageConfiguration(
+                    "blocking client builder thread panicked".to_owned(),
+                )
+            })?
             .map_err(|error| {
                 VendorFulfillmentError::ArtifactStorageConfiguration(error.to_string())
             })?;

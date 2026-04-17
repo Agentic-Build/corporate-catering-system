@@ -63,6 +63,41 @@ spec:
                 secretKeyRef:
                   name: corporate-catering-secrets
                   key: web_public_api_base_url
+            - name: CORPORATE_SSO_JWT_ISSUER
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: corporate_sso_jwt_issuer
+            - name: CORPORATE_SSO_JWT_AUDIENCE
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: corporate_sso_jwt_audience
+            - name: CORPORATE_SSO_JWT_HS256_SECRET_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: corporate_sso_jwt_hs256_secret_base64_current
+            - name: VENDOR_MFA_JWT_ISSUER
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: vendor_mfa_jwt_issuer
+            - name: VENDOR_MFA_JWT_AUDIENCE
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: vendor_mfa_jwt_audience
+            - name: VENDOR_MFA_JWT_HS256_SECRET_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: vendor_mfa_jwt_hs256_secret_base64_current
+            - name: MOCK_AUTH_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: mock_auth_signing_secret
           readinessProbe:
             httpGet:
               path: /

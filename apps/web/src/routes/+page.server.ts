@@ -10,7 +10,7 @@ import { parseAuthRole } from "$lib/server/auth/contracts";
 
 export const actions: Actions = {
   session: async (event) => {
-    if (!authRuntime.isDevMode()) {
+    if (!authRuntime.canIssueMockSessions()) {
       return fail(404, {
         errorMessage: zhTW.home.actions.errorFallback
       });
@@ -38,7 +38,7 @@ export const actions: Actions = {
       });
     }
 
-    await authRuntime.issueDevSession(event, role);
+    await authRuntime.issueMockSession(event, role);
     throw redirect(303, nextPath ?? `/${role}`);
   },
   probeApi: async (event) => {

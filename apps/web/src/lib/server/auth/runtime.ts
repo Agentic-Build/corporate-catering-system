@@ -16,15 +16,17 @@ const DEFAULT_DEV_SIGNING_SECRET = "clar-002-dev-only-mock-auth-session-secret";
 
 export interface AuthRuntime {
   authenticate(event: RequestEvent): Promise<AuthRequestContext>;
-  issueDevSession(event: RequestEvent, role: AuthRole): Promise<AuthRequestContext>;
+  issueMockSession(event: RequestEvent, role: AuthRole): Promise<AuthRequestContext>;
   clearSession(event: RequestEvent): void;
   resolveRoleGuard(pathname: string): RoleGuard | null;
   isDevMode(): boolean;
+  canIssueMockSessions(): boolean;
 }
 
 export function createAuthRuntime(): AuthRuntime {
   const provider = createProviderFromEnv();
   const devMode = isDevRuntime();
+  const mockSessionsEnabled = Boolean(provider.issueSessionForRole);
 
   return {
     async authenticate(event: RequestEvent): Promise<AuthRequestContext> {
@@ -59,10 +61,7 @@ export function createAuthRuntime(): AuthRuntime {
         provider: provider.id
       };
     },
-    async issueDevSession(event: RequestEvent, role: AuthRole): Promise<AuthRequestContext> {
-      if (!devMode) {
-        throw new Error("mock auth session issuing is only allowed in development runtime");
-      }
+    async issueMockSession(event: RequestEvent, role: AuthRole): Promise<AuthRequestContext> {
       if (!provider.issueSessionForRole) {
         throw new Error(`auth provider ${provider.id} does not support mock role sessions`);
       }
@@ -81,6 +80,9 @@ export function createAuthRuntime(): AuthRuntime {
     resolveRoleGuard,
     isDevMode() {
       return devMode;
+    },
+    canIssueMockSessions() {
+      return mockSessionsEnabled;
     }
   };
 }

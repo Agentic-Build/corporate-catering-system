@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="shell-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0891b2" />
+      <stop offset="100%" stop-color="#0f766e" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#shell-gradient)" />
+  <path
+    d="M17 24.5C17 20.9101 19.9101 18 23.5 18H31.5C39.5081 18 46 24.4919 46 32.5C46 40.5081 39.5081 47 31.5 47H23.5C19.9101 47 17 44.0899 17 40.5V24.5Z"
+    fill="#ecfeff"
+    opacity="0.95"
+  />
+  <path
+    d="M46.5 24.5C46.5 20.9101 43.5899 18 40 18H30.5V26H39.5C41.9853 26 44 28.0147 44 30.5C44 32.9853 41.9853 35 39.5 35H30.5V47H40C43.5899 47 46.5 44.0899 46.5 40.5V24.5Z"
+    fill="#164e63"
+    opacity="0.9"
+  />
+</svg>

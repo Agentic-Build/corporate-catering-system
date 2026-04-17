@@ -12,7 +12,7 @@ export interface ApiFailure {
 
 export class ApiConfigurationError extends Error {
   constructor() {
-    super("PUBLIC_API_BASE_URL must be configured");
+    super("PUBLIC_API_BASE_URL must be configured to the API origin without a trailing /api segment");
     this.name = "ApiConfigurationError";
   }
 }

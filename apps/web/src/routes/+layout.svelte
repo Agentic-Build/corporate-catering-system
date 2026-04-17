@@ -94,6 +94,7 @@
 
 <svelte:head>
   <title>{zhTW.app.name}</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 </svelte:head>
 
 {#if navigating.to}

@@ -452,6 +452,12 @@ fn kubernetes_manifests_define_health_checks_and_load_scaling_signals() {
             "OTEL_TRACES_EXPORTER",
             "OTEL_METRICS_EXPORTER",
             "OTEL_LOGS_EXPORTER",
+            "PRELAUNCH_BIND_ADDR",
+            "VALKEY_URL",
+            "NATS_URL",
+            "PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_HEX",
+            "PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_HEX",
+            "PRELAUNCH_PICKUP_TOTP_SECRET",
         ] {
             assert!(
                 env_names.contains(required),

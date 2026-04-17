@@ -12,8 +12,8 @@ const DEFAULT_ROLE_ROUTE: Readonly<Record<AuthRole, string>> = {
 };
 
 export const GET: RequestHandler = async (event) => {
-  if (!authRuntime.isDevMode()) {
-    throw error(404, "mock auth endpoint is disabled outside development runtime");
+  if (!authRuntime.canIssueMockSessions()) {
+    throw error(404, "mock auth endpoint is unavailable for the configured auth provider");
   }
 
   const nextPath = normalizeNextPath(event.url.searchParams.get("next"));
@@ -32,7 +32,7 @@ export const GET: RequestHandler = async (event) => {
     });
   }
 
-  const auth = await authRuntime.issueDevSession(event, role);
+  const auth = await authRuntime.issueMockSession(event, role);
   const landingPath = nextPath ?? DEFAULT_ROLE_ROUTE[auth.actor?.role ?? role];
   throw redirect(303, landingPath);
 };

@@ -8,6 +8,7 @@ import { createAuthRuntime } from "../src/lib/server/auth/runtime";
 import { createRequestEvent, MemoryCookies } from "./helpers";
 
 const ORIGINAL_DATE_NOW = Date.now;
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
 let nowEpochMs = Date.UTC(2026, 0, 1, 0, 0, 0);
 
 describe("auth runtime", () => {
@@ -16,12 +17,18 @@ describe("auth runtime", () => {
     Date.now = () => nowEpochMs;
     delete process.env.AUTH_PROVIDER;
     delete process.env.MOCK_AUTH_SIGNING_SECRET;
+    delete process.env.NODE_ENV;
   });
 
   afterEach(() => {
     Date.now = ORIGINAL_DATE_NOW;
     delete process.env.AUTH_PROVIDER;
     delete process.env.MOCK_AUTH_SIGNING_SECRET;
+    if (ORIGINAL_NODE_ENV === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+    }
   });
 
   it("issues valid mock sessions for employee/vendor/admin", async () => {
@@ -31,7 +38,7 @@ describe("auth runtime", () => {
       const runtime = createAuthRuntime();
       const cookies = new MemoryCookies();
 
-      const context = await runtime.issueDevSession(
+      const context = await runtime.issueMockSession(
         createRequestEvent("/auth/mock", cookies),
         role
       );
@@ -96,6 +103,38 @@ describe("auth runtime", () => {
 
     assert.equal(afterTamper.actor, null);
     assert.equal(afterTamper.session, null);
+    assert.equal(cookies.get(MOCK_AUTH_SESSION_COOKIE_NAME), undefined);
+  });
+
+  it("issues explicit mock sessions in production when the mock provider is configured", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.MOCK_AUTH_SIGNING_SECRET = "clar-002-prod-mock-auth-signing-secret";
+
+    const runtime = createAuthRuntime();
+    const cookies = new MemoryCookies();
+
+    const context = await runtime.issueMockSession(
+      createRequestEvent("/auth/mock", cookies),
+      "employee"
+    );
+
+    assert.equal(context.actor?.role, "employee");
+    assert.ok(cookies.get(MOCK_AUTH_SESSION_COOKIE_NAME));
+  });
+
+  it("does not honor query-param role overrides in production", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.MOCK_AUTH_SIGNING_SECRET = "clar-002-prod-mock-auth-signing-secret";
+
+    const runtime = createAuthRuntime();
+    const cookies = new MemoryCookies();
+
+    const context = await runtime.authenticate(
+      createRequestEvent("/employee?mockRole=employee", cookies)
+    );
+
+    assert.equal(context.actor, null);
+    assert.equal(context.session, null);
     assert.equal(cookies.get(MOCK_AUTH_SESSION_COOKIE_NAME), undefined);
   });
 });

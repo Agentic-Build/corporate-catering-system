@@ -414,6 +414,13 @@ fn frontend_sveltekit_runtime_deployment_and_cache_control_contract_are_declared
         "FRONTEND_CACHE_CONTROL_DYNAMIC",
         "FRONTEND_CACHE_CONTROL_ASSET",
         "FRONTEND_CACHE_CONTROL_ASSET_IMMUTABLE",
+        "CORPORATE_SSO_JWT_ISSUER",
+        "CORPORATE_SSO_JWT_AUDIENCE",
+        "CORPORATE_SSO_JWT_HS256_SECRET_BASE64",
+        "VENDOR_MFA_JWT_ISSUER",
+        "VENDOR_MFA_JWT_AUDIENCE",
+        "VENDOR_MFA_JWT_HS256_SECRET_BASE64",
+        "MOCK_AUTH_SIGNING_SECRET",
     ] {
         assert!(
             env_names.contains(required),
@@ -502,6 +509,51 @@ fn kubernetes_overlays_encode_runtime_strategy_and_environment_promotion_values(
             "{overlay_path} must encode topology strategy"
         );
     }
+}
+
+#[test]
+fn local_kind_overlay_is_pinned_to_local_images_and_removes_platform_dependencies() {
+    let overlay_path = "ops/kubernetes/overlays/local-kind/kustomization.yaml";
+    let overlay_raw = read_text(overlay_path);
+    assert!(
+        overlay_raw.contains("resources:\n  - ../../base"),
+        "{overlay_path} must consume base manifests"
+    );
+    assert!(
+        !overlay_raw.contains("../../components/topology-multi-az"),
+        "{overlay_path} must avoid cloud topology components"
+    );
+    assert!(
+        !overlay_raw.contains("../../components/autoscaling-keda-worker"),
+        "{overlay_path} must avoid KEDA-only autoscaling components"
+    );
+    assert!(
+        overlay_raw.contains("newName: corporate-catering/system"),
+        "{overlay_path} must pin the runtime image to the locally-built tag"
+    );
+    assert!(
+        overlay_raw.contains("newName: corporate-catering/web"),
+        "{overlay_path} must pin the web image to the locally-built tag"
+    );
+
+    let overlay = read_yaml(overlay_path);
+    assert_eq!(
+        yaml_get(&overlay, "namespace").as_str(),
+        Some("catering-local-kind")
+    );
+    let annotations = yaml_get(&overlay, "commonAnnotations");
+    assert_eq!(
+        yaml_get(annotations, "runtime.corporate-catering.io/environment").as_str(),
+        Some("local-kind")
+    );
+    assert_eq!(
+        yaml_get(
+            annotations,
+            "runtime.corporate-catering.io/scaling-strategy"
+        )
+        .as_str(),
+        Some("single-replica-local-validation")
+    );
 }
 
 #[test]
@@ -713,4 +765,38 @@ fn runtime_workloads_enforce_least_privilege_security_contexts() {
         job_container,
         "ops/kubernetes/base/job-object-storage-provision.yaml",
     );
+
+    let job_env_names = yaml_get(job_container, "env")
+        .as_sequence()
+        .expect("job env must be a sequence")
+        .iter()
+        .map(|entry| {
+            yaml_get(entry, "name")
+                .as_str()
+                .expect("job env name must be a string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    for required in ["HOME", "MC_CONFIG_DIR"] {
+        assert!(
+            job_env_names.contains(required),
+            "object storage provision job must declare {required}"
+        );
+    }
+
+    let job_volume_mounts = yaml_get(job_container, "volumeMounts")
+        .as_sequence()
+        .expect("job volumeMounts must be a sequence");
+    assert!(job_volume_mounts.iter().any(|entry| {
+        yaml_get(entry, "name").as_str() == Some("mc-config")
+            && yaml_get(entry, "mountPath").as_str() == Some("/tmp/mc")
+    }));
+
+    let job_volumes = yaml_get(job_pod_spec, "volumes")
+        .as_sequence()
+        .expect("job volumes must be a sequence");
+    assert!(job_volumes.iter().any(|entry| {
+        yaml_get(entry, "name").as_str() == Some("mc-config")
+            && yaml_get(entry, "emptyDir").as_mapping().is_some()
+    }));
 }

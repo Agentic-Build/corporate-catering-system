@@ -1,0 +1,10 @@
+.git
+.github
+.playwright-cli
+artifacts
+target
+node_modules
+apps/web/node_modules
+apps/web/.svelte-kit
+apps/web/build
+ops/state

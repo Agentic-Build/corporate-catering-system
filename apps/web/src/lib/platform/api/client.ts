@@ -8,6 +8,7 @@ import {
   normalizeApiFailure,
   type ApiFailure
 } from "./failure";
+import { resolveConfiguredApiBaseUrl } from "./base-url";
 
 import {
   AdminService,
@@ -25,12 +26,8 @@ export const apiClient = {
 } as const;
 
 export function ensureApiClientConfigured(bearerToken: string | null = null): void {
-  const baseUrl = env.PUBLIC_API_BASE_URL?.trim();
-  if (!baseUrl) {
-    throw new ApiConfigurationError();
-  }
-
-  if (configuredBaseUrl !== null && configuredBaseUrl !== baseUrl) {
+  const baseUrl = resolveConfiguredApiBaseUrl(env.PUBLIC_API_BASE_URL);
+  if (baseUrl === null) {
     throw new ApiConfigurationError();
   }
 

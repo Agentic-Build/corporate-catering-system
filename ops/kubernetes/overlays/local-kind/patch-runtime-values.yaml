@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: corporate-catering-api
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: api
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://host.docker.internal:4317
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.namespace=corporate-catering,deployment.environment=local-kind,k8s.namespace.name=$(POD_NAMESPACE)
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: local-kind
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: corporate-catering-mcp
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: mcp
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://host.docker.internal:4317
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.namespace=corporate-catering,deployment.environment=local-kind,k8s.namespace.name=$(POD_NAMESPACE)
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: local-kind
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: corporate-catering-compliance-worker
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: compliance-worker
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://host.docker.internal:4317
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.namespace=corporate-catering,deployment.environment=local-kind,k8s.namespace.name=$(POD_NAMESPACE)
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: local-kind
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: corporate-catering-web
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: web
+          env:
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: local-kind

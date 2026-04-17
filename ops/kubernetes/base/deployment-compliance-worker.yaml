@@ -56,6 +56,8 @@ spec:
               value: tracecontext,baggage
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.namespace=corporate-catering,deployment.environment=production,k8s.namespace.name=$(POD_NAMESPACE)
+            - name: PRELAUNCH_BIND_ADDR
+              value: 0.0.0.0:8082
             - name: DATABASE_RW_URL
               valueFrom:
                 secretKeyRef:
@@ -66,6 +68,16 @@ spec:
                 secretKeyRef:
                   name: corporate-catering-secrets
                   key: database_ro_url
+            - name: VALKEY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: valkey_url
+            - name: NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: nats_url
             - name: CORPORATE_SSO_JWT_ISSUER
               valueFrom:
                 secretKeyRef:
@@ -131,6 +143,21 @@ spec:
                 secretKeyRef:
                   name: corporate-catering-secrets
                   key: mcp_bridge_key_registry_json
+            - name: PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_HEX
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: prelaunch_audit_trail_encryption_key_hex
+            - name: PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_HEX
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: prelaunch_payroll_export_encryption_key_hex
+            - name: PRELAUNCH_PICKUP_TOTP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: pickup_totp_secret
             - name: MINIO_ENDPOINT
               valueFrom:
                 secretKeyRef:

@@ -81,3 +81,5 @@ coverage/
 *.orig
 
 !.agents/build
+.playwright-cli
+/output

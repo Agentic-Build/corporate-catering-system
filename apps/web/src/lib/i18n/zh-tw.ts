@@ -23,7 +23,7 @@ export const zhTW = {
       "同一套前端應用提供員工、商家與福委會入口，導覽、版型與狀態呈現依角色自動調整。",
     portalPreviewLabel: "入口焦點",
     continueToPortal: "前往目前入口",
-    signInActionsLabel: "快速登入（開發環境）",
+    signInActionsLabel: "快速登入",
     signIn: {
       employee: "以員工身分登入",
       vendor: "以商家身分登入",
@@ -118,7 +118,7 @@ export const zhTW = {
       success: "後端連線檢查完成。"
     },
     failure: {
-      baseUrlMissing: "尚未設定 PUBLIC_API_BASE_URL，無法連線後端服務。",
+      baseUrlMissing: "PUBLIC_API_BASE_URL 未設定或格式錯誤，無法連線後端服務。",
       plantScopeMissing: "目前角色缺少廠區範圍設定，無法執行 API 連線檢查。",
       network: "無法連線後端服務，請確認網路或稍後再試。",
       unknown: "發生未預期的 API 錯誤，請稍後再試。",

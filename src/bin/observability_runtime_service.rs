@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[cfg(test)]
 use std::collections::BTreeSet;
@@ -14,7 +14,10 @@ use std::sync::{RwLock, RwLockReadGuard};
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use axum::extract::{Path, Query, State};
-use axum::http::{header::AUTHORIZATION, HeaderMap, StatusCode};
+use axum::http::{
+    header::{ACCEPT_LANGUAGE, AUTHORIZATION, CONTENT_TYPE},
+    HeaderMap, HeaderValue, Method, StatusCode,
+};
 use axum::routing::{get, patch, post, put};
 use axum::{Json, Router};
 use base64::engine::general_purpose::{
@@ -127,6 +130,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::runtime::Handle;
 use tokio::time::{self, MissedTickBehavior};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 const DEFAULT_VENDOR_ID: &str = "ven-load-gate-a";
 const DEFAULT_PLANT_ID: &str = "fab-a";
@@ -2185,6 +2189,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     );
     spawn_order_retention_purge_job(state.clone(), committee_actor, order_purge_interval_seconds);
 
+    let app = build_http_app(state, rush_reminder_runtime_enabled);
+
+    let listener = tokio::net::TcpListener::bind(socket_addr).await?;
+    tracing::info!(bind_addr = %socket_addr, "observability runtime service listening");
+    axum::serve(listener, app).await?;
+    Ok(())
+}
+
+fn build_http_app(state: AppState, rush_reminder_runtime_enabled: bool) -> Router {
     let app = Router::new()
         .route("/health/ready", get(ready_probe))
         .route("/health/live", get(live_probe))
@@ -2358,12 +2371,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     } else {
         app
     };
-    let app = app.with_state(state);
+    app.layer(local_development_cors_layer()).with_state(state)
+}
 
-    let listener = tokio::net::TcpListener::bind(socket_addr).await?;
-    tracing::info!(bind_addr = %socket_addr, "observability runtime service listening");
-    axum::serve(listener, app).await?;
-    Ok(())
+fn local_development_cors_layer() -> CorsLayer {
+    CorsLayer::new()
+        .allow_credentials(true)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([AUTHORIZATION, CONTENT_TYPE, ACCEPT_LANGUAGE])
+        .allow_origin(AllowOrigin::predicate(|origin, _request_parts| {
+            is_loopback_origin(origin)
+        }))
+        .max_age(Duration::from_secs(60 * 60))
+}
+
+fn is_loopback_origin(origin: &HeaderValue) -> bool {
+    let Ok(origin) = origin.to_str() else {
+        return false;
+    };
+    let Ok(uri) = origin.parse::<axum::http::Uri>() else {
+        return false;
+    };
+    let Some(authority) = uri.authority() else {
+        return false;
+    };
+
+    matches!(
+        authority.host(),
+        "localhost" | "127.0.0.1" | "::1" | "[::1]"
+    )
 }
 
 async fn list_mcp_tools(
@@ -5389,24 +5432,35 @@ fn upload_seeded_object_reference(
 
 #[cfg(not(test))]
 fn upload_seeded_payload(target: &PresignedUploadTarget, payload: &[u8]) -> Result<(), String> {
-    let client = reqwest::blocking::Client::builder()
-        .build()
-        .map_err(|error| error.to_string())?;
-    let mut request = client.put(target.upload_url.as_str());
-    for (name, value) in &target.required_headers {
-        request = request.header(name.as_str(), value.as_str());
-    }
-    let response = request
-        .body(payload.to_vec())
-        .send()
-        .map_err(|error| error.to_string())?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "object storage upload failed with status {}",
-            response.status()
-        ));
-    }
-    Ok(())
+    let url = target.upload_url.clone();
+    let headers: Vec<(String, String)> = target
+        .required_headers
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    let body = payload.to_vec();
+    std::thread::spawn(move || {
+        let client = reqwest::blocking::Client::builder()
+            .build()
+            .map_err(|error| error.to_string())?;
+        let mut request = client.put(&url);
+        for (name, value) in &headers {
+            request = request.header(name.as_str(), value.as_str());
+        }
+        let response = request
+            .body(body)
+            .send()
+            .map_err(|error| error.to_string())?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "object storage upload failed with status {}",
+                response.status()
+            ));
+        }
+        Ok(())
+    })
+    .join()
+    .map_err(|_| "seeded upload thread panicked".to_owned())?
 }
 
 fn seeded_menu_health_tags(index: u16) -> Vec<MenuHealthTag> {
@@ -16625,6 +16679,15 @@ fn emit_pickup_verification_audit_event(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Body;
+    use axum::http::{
+        header::{
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_HEADERS,
+            ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
+            ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_REQUEST_METHOD, ORIGIN,
+        },
+        HeaderValue, Request,
+    };
     use corporate_catering_system::audit::{AuditEntityRef, AuditEvidenceWrite, AuditIdentityLink};
     use corporate_catering_system::payroll::PayrollDisputeStatus;
     use corporate_catering_system::rush_reminder::{
@@ -16634,6 +16697,7 @@ mod tests {
     use corporate_catering_system::vendor_compliance::ComplianceHistoryKind;
     use corporate_catering_system::vendor_delivery_mapping::VendorPlantDeliveryError;
     use std::collections::HashMap;
+    use tower::util::ServiceExt;
 
     fn actor_id(value: &str) -> ActorId {
         ActorId::parse(value).expect("actor id should be valid")
@@ -17501,6 +17565,66 @@ mod tests {
         state.terminated_employee_actor_ids =
             Arc::new(HashSet::from([actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID)]));
         state
+    }
+
+    #[test]
+    fn loopback_origin_guard_accepts_localhost_only() {
+        assert!(is_loopback_origin(&HeaderValue::from_static(
+            "http://localhost:5173"
+        )));
+        assert!(is_loopback_origin(&HeaderValue::from_static(
+            "http://127.0.0.1:4173"
+        )));
+        assert!(is_loopback_origin(&HeaderValue::from_static(
+            "http://[::1]:5173"
+        )));
+        assert!(!is_loopback_origin(&HeaderValue::from_static(
+            "http://example.com"
+        )));
+    }
+
+    #[test]
+    fn app_router_handles_browser_preflight_for_employee_api() {
+        let response = run_async_test(async {
+            build_http_app(build_state(20_000), true)
+                .oneshot(
+                    Request::builder()
+                        .method(Method::OPTIONS)
+                        .uri("/api/v1/employee/orders?plantId=fab-a&page=1&pageSize=1")
+                        .header(ORIGIN, "http://localhost:5173")
+                        .header(ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                        .header(
+                            ACCESS_CONTROL_REQUEST_HEADERS,
+                            "authorization,accept-language",
+                        )
+                        .body(Body::empty())
+                        .expect("preflight request should build"),
+                )
+                .await
+                .expect("router should return a preflight response")
+        });
+
+        assert!(response.status().is_success());
+        assert_eq!(
+            response.headers().get(ACCESS_CONTROL_ALLOW_ORIGIN),
+            Some(&HeaderValue::from_static("http://localhost:5173"))
+        );
+        assert_eq!(
+            response.headers().get(ACCESS_CONTROL_ALLOW_CREDENTIALS),
+            Some(&HeaderValue::from_static("true"))
+        );
+        assert_eq!(
+            response.headers().get(ACCESS_CONTROL_ALLOW_METHODS),
+            Some(&HeaderValue::from_static(
+                "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+            ))
+        );
+        assert_eq!(
+            response.headers().get(ACCESS_CONTROL_ALLOW_HEADERS),
+            Some(&HeaderValue::from_static(
+                "authorization,content-type,accept-language"
+            ))
+        );
     }
 
     #[test]
