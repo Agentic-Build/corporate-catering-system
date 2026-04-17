@@ -1303,8 +1303,6 @@ components:
           type: boolean
         employeeActorId:
           $ref: '#/components/schemas/ActorId'
-        inAppEnabled:
-          type: boolean
         plantId:
           $ref: '#/components/schemas/PlantId'
         preorderOpenEnabled:
@@ -1316,7 +1314,6 @@ components:
       - plantId
       - preorderOpenEnabled
       - demandSpikeEnabled
-      - inAppEnabled
       - emailEnabled
       - webPushEnabled
       type: object
@@ -1326,8 +1323,6 @@ components:
         demandSpikeEnabled:
           type: boolean
         emailEnabled:
-          type: boolean
-        inAppEnabled:
           type: boolean
         plantId:
           $ref: '#/components/schemas/PlantId'
@@ -1339,7 +1334,6 @@ components:
       - plantId
       - preorderOpenEnabled
       - demandSpikeEnabled
-      - inAppEnabled
       - emailEnabled
       - webPushEnabled
       type: object

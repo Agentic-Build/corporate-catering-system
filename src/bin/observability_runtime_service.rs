@@ -771,7 +771,6 @@ struct EmployeeRushReminderPreferencesUpsertRequest {
     plant_id: String,
     preorder_open_enabled: bool,
     demand_spike_enabled: bool,
-    in_app_enabled: bool,
     email_enabled: bool,
     web_push_enabled: bool,
 }
@@ -783,7 +782,6 @@ struct EmployeeRushReminderPreferencesPayload {
     plant_id: String,
     preorder_open_enabled: bool,
     demand_spike_enabled: bool,
-    in_app_enabled: bool,
     email_enabled: bool,
     web_push_enabled: bool,
 }
@@ -8470,7 +8468,6 @@ fn handle_upsert_employee_rush_reminder_preferences(
                 request.preorder_open_enabled,
                 request.demand_spike_enabled,
                 RushReminderChannelPreferences::new(
-                    request.in_app_enabled,
                     request.email_enabled,
                     request.web_push_enabled,
                 ),
@@ -8500,7 +8497,6 @@ fn handle_upsert_employee_rush_reminder_preferences(
         plant_id: state.plant_id.as_str().to_owned(),
         preorder_open_enabled: saved.preorder_open_enabled(),
         demand_spike_enabled: saved.demand_spike_enabled(),
-        in_app_enabled: saved.in_app_enabled(),
         email_enabled: saved.email_enabled(),
         web_push_enabled: saved.web_push_enabled(),
     })
@@ -19270,7 +19266,6 @@ mod tests {
                 plant_id: "fab-a".to_owned(),
                 preorder_open_enabled: false,
                 demand_spike_enabled: false,
-                in_app_enabled: true,
                 email_enabled: false,
                 web_push_enabled: false,
             },
@@ -19299,7 +19294,6 @@ mod tests {
                 plant_id: "fab-a".to_owned(),
                 preorder_open_enabled: false,
                 demand_spike_enabled: true,
-                in_app_enabled: true,
                 email_enabled: true,
                 web_push_enabled: false,
             },
@@ -19309,7 +19303,6 @@ mod tests {
         assert_eq!(payload.plant_id, "fab-a");
         assert!(!payload.preorder_open_enabled);
         assert!(payload.demand_spike_enabled);
-        assert!(payload.in_app_enabled);
         assert!(payload.email_enabled);
         assert!(!payload.web_push_enabled);
 
@@ -19319,7 +19312,6 @@ mod tests {
             .expect("persisted reminder preferences should be queryable");
         assert!(!persisted.preorder_open_enabled());
         assert!(persisted.demand_spike_enabled());
-        assert!(persisted.in_app_enabled());
         assert!(persisted.email_enabled());
         assert!(!persisted.web_push_enabled());
     }
@@ -19335,7 +19327,6 @@ mod tests {
                 plant_id: "fab-b".to_owned(),
                 preorder_open_enabled: false,
                 demand_spike_enabled: false,
-                in_app_enabled: true,
                 email_enabled: false,
                 web_push_enabled: false,
             },
@@ -19531,7 +19522,7 @@ mod tests {
                 RushReminderPreferences::with_channels(
                     true,
                     true,
-                    RushReminderChannelPreferences::new(true, true, true),
+                    RushReminderChannelPreferences::new(true, true),
                 ),
             )
             .expect("email-channel reminder preference should persist");
@@ -19576,7 +19567,7 @@ mod tests {
                 RushReminderPreferences::with_channels(
                     true,
                     true,
-                    RushReminderChannelPreferences::new(true, true, true),
+                    RushReminderChannelPreferences::new(true, true),
                 ),
             )
             .expect("web-push reminder preference should persist");
@@ -19628,7 +19619,7 @@ mod tests {
                 RushReminderPreferences::with_channels(
                     true,
                     true,
-                    RushReminderChannelPreferences::new(true, true, true),
+                    RushReminderChannelPreferences::new(true, true),
                 ),
             )
             .expect("full channel preference should persist");

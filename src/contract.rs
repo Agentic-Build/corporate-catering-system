@@ -3519,7 +3519,6 @@ pub fn canonical_openapi_spec() -> Value {
               "plantId",
               "preorderOpenEnabled",
               "demandSpikeEnabled",
-              "inAppEnabled",
               "emailEnabled",
               "webPushEnabled"
             ],
@@ -3527,7 +3526,6 @@ pub fn canonical_openapi_spec() -> Value {
               "plantId": { "$ref": "#/components/schemas/PlantId" },
               "preorderOpenEnabled": { "type": "boolean" },
               "demandSpikeEnabled": { "type": "boolean" },
-              "inAppEnabled": { "type": "boolean" },
               "emailEnabled": { "type": "boolean" },
               "webPushEnabled": { "type": "boolean" }
             },
@@ -3540,7 +3538,6 @@ pub fn canonical_openapi_spec() -> Value {
               "plantId",
               "preorderOpenEnabled",
               "demandSpikeEnabled",
-              "inAppEnabled",
               "emailEnabled",
               "webPushEnabled"
             ],
@@ -3549,7 +3546,6 @@ pub fn canonical_openapi_spec() -> Value {
               "plantId": { "$ref": "#/components/schemas/PlantId" },
               "preorderOpenEnabled": { "type": "boolean" },
               "demandSpikeEnabled": { "type": "boolean" },
-              "inAppEnabled": { "type": "boolean" },
               "emailEnabled": { "type": "boolean" },
               "webPushEnabled": { "type": "boolean" }
             },

@@ -61,22 +61,16 @@ impl fmt::Display for RushReminderChannel {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RushReminderChannelPreferences {
-    in_app_enabled: bool,
     email_enabled: bool,
     web_push_enabled: bool,
 }
 
 impl RushReminderChannelPreferences {
-    pub const fn new(in_app_enabled: bool, email_enabled: bool, web_push_enabled: bool) -> Self {
+    pub const fn new(email_enabled: bool, web_push_enabled: bool) -> Self {
         Self {
-            in_app_enabled,
             email_enabled,
             web_push_enabled,
         }
-    }
-
-    pub const fn in_app_enabled(self) -> bool {
-        self.in_app_enabled
     }
 
     pub const fn email_enabled(self) -> bool {
@@ -89,7 +83,7 @@ impl RushReminderChannelPreferences {
 
     pub const fn allows(self, channel: RushReminderChannel) -> bool {
         match channel {
-            RushReminderChannel::InApp => self.in_app_enabled,
+            RushReminderChannel::InApp => true,
             RushReminderChannel::Email => self.email_enabled,
             RushReminderChannel::WebPush => self.web_push_enabled,
         }
@@ -99,7 +93,6 @@ impl RushReminderChannelPreferences {
 impl Default for RushReminderChannelPreferences {
     fn default() -> Self {
         Self {
-            in_app_enabled: true,
             email_enabled: false,
             web_push_enabled: false,
         }
@@ -119,7 +112,6 @@ impl RushReminderPreferences {
             preorder_open_enabled,
             demand_spike_enabled,
             channels: RushReminderChannelPreferences {
-                in_app_enabled: true,
                 email_enabled: false,
                 web_push_enabled: false,
             },
@@ -148,10 +140,6 @@ impl RushReminderPreferences {
 
     pub const fn channel_preferences(self) -> RushReminderChannelPreferences {
         self.channels
-    }
-
-    pub const fn in_app_enabled(self) -> bool {
-        self.channels.in_app_enabled()
     }
 
     pub const fn email_enabled(self) -> bool {

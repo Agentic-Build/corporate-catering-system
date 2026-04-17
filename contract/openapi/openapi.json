@@ -1759,9 +1759,6 @@
           "employeeActorId": {
             "$ref": "#/components/schemas/ActorId"
           },
-          "inAppEnabled": {
-            "type": "boolean"
-          },
           "plantId": {
             "$ref": "#/components/schemas/PlantId"
           },
@@ -1777,7 +1774,6 @@
           "plantId",
           "preorderOpenEnabled",
           "demandSpikeEnabled",
-          "inAppEnabled",
           "emailEnabled",
           "webPushEnabled"
         ],
@@ -1790,9 +1786,6 @@
             "type": "boolean"
           },
           "emailEnabled": {
-            "type": "boolean"
-          },
-          "inAppEnabled": {
             "type": "boolean"
           },
           "plantId": {
@@ -1809,7 +1802,6 @@
           "plantId",
           "preorderOpenEnabled",
           "demandSpikeEnabled",
-          "inAppEnabled",
           "emailEnabled",
           "webPushEnabled"
         ],
