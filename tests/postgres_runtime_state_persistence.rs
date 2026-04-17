@@ -241,10 +241,10 @@ async fn runtime_order_payroll_anomaly_flows_persist_on_real_postgres_with_trans
         .await
         .expect("migrations should apply");
 
-    let menu_repo = SqlJsonStateRepository::for_menu_supply(pool.clone());
-    let payroll_repo = SqlJsonStateRepository::for_payroll_ledger(pool.clone());
-    let anomaly_repo = SqlJsonStateRepository::for_anomaly_alert(pool.clone());
-    let delivery_repo = SqlJsonStateRepository::for_delivery_policy(pool);
+    let menu_repo = SqlJsonStateRepository::for_menu_supply(pool.clone(), pool.clone());
+    let payroll_repo = SqlJsonStateRepository::for_payroll_ledger(pool.clone(), pool.clone());
+    let anomaly_repo = SqlJsonStateRepository::for_anomaly_alert(pool.clone(), pool.clone());
+    let delivery_repo = SqlJsonStateRepository::for_delivery_policy(pool.clone(), pool);
 
     let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
     let committee = committee_admin();
@@ -597,7 +597,7 @@ async fn sql_state_mutation_with_outbox_commits_atomically_and_rolls_back_on_err
         .await
         .expect("migrations should apply");
 
-    let repository = SqlJsonStateRepository::for_menu_supply(pool.clone());
+    let repository = SqlJsonStateRepository::for_menu_supply(pool.clone(), pool.clone());
     repository
         .save_snapshot(&CounterSnapshot { value: 1 })
         .await
@@ -718,7 +718,7 @@ async fn sql_runtime_mark_fulfilled_transition_publishes_outbox_event() {
         .await
         .expect("migrations should apply");
 
-    let menu_repo = SqlJsonStateRepository::for_menu_supply(pool.clone());
+    let menu_repo = SqlJsonStateRepository::for_menu_supply(pool.clone(), pool.clone());
     let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
     let plant = plant_id("fab-a");
     let vendor_actor = vendor_operator(&plant);
@@ -884,7 +884,7 @@ async fn sql_runtime_concurrent_stock_decrement_prevents_oversell() {
         .await
         .expect("migrations should apply");
 
-    let menu_repo = SqlJsonStateRepository::for_menu_supply(pool);
+    let menu_repo = SqlJsonStateRepository::for_menu_supply(pool.clone(), pool);
     let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
     let committee = committee_admin();
     let plant = plant_id("fab-a");

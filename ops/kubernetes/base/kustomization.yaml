@@ -3,11 +3,19 @@ kind: Kustomization
 namespace: catering-prod
 resources:
   - namespace.yaml
+  - external-secrets.yaml
+  - postgres-topology.yaml
+  - pgbouncer.yaml
   - deployment.yaml
   - deployment-mcp.yaml
   - deployment-compliance-worker.yaml
+  - deployment-web.yaml
   - job-object-storage-provision.yaml
   - service.yaml
+  - service-web.yaml
+  - gateway.yaml
+  - networkpolicy-default-deny.yaml
+  - networkpolicy-runtime-allow.yaml
   - hpa.yaml
   - hpa-mcp.yaml
   - hpa-compliance-worker.yaml

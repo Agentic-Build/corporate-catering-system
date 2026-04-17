@@ -12,12 +12,22 @@ use crate::vendor_compliance::{
 };
 
 const VENDOR_COMPLIANCE_STATE_KEY: &str = "vendor_compliance_lifecycle";
-const DATABASE_URL_ENV: &str = "DATABASE_URL";
-const PRELAUNCH_DB_POOL_MAX_CONNECTIONS_ENV: &str = "PRELAUNCH_DB_POOL_MAX_CONNECTIONS";
-const PRELAUNCH_DB_POOL_MIN_CONNECTIONS_ENV: &str = "PRELAUNCH_DB_POOL_MIN_CONNECTIONS";
-const PRELAUNCH_DB_POOL_ACQUIRE_TIMEOUT_MS_ENV: &str = "PRELAUNCH_DB_POOL_ACQUIRE_TIMEOUT_MS";
-const PRELAUNCH_DB_POOL_IDLE_TIMEOUT_SECONDS_ENV: &str = "PRELAUNCH_DB_POOL_IDLE_TIMEOUT_SECONDS";
-const PRELAUNCH_DB_POOL_MAX_LIFETIME_SECONDS_ENV: &str = "PRELAUNCH_DB_POOL_MAX_LIFETIME_SECONDS";
+const DATABASE_RW_URL_ENV: &str = "DATABASE_RW_URL";
+const DATABASE_RO_URL_ENV: &str = "DATABASE_RO_URL";
+const PRELAUNCH_DB_RW_POOL_MAX_CONNECTIONS_ENV: &str = "PRELAUNCH_DB_RW_POOL_MAX_CONNECTIONS";
+const PRELAUNCH_DB_RW_POOL_MIN_CONNECTIONS_ENV: &str = "PRELAUNCH_DB_RW_POOL_MIN_CONNECTIONS";
+const PRELAUNCH_DB_RW_POOL_ACQUIRE_TIMEOUT_MS_ENV: &str = "PRELAUNCH_DB_RW_POOL_ACQUIRE_TIMEOUT_MS";
+const PRELAUNCH_DB_RW_POOL_IDLE_TIMEOUT_SECONDS_ENV: &str =
+    "PRELAUNCH_DB_RW_POOL_IDLE_TIMEOUT_SECONDS";
+const PRELAUNCH_DB_RW_POOL_MAX_LIFETIME_SECONDS_ENV: &str =
+    "PRELAUNCH_DB_RW_POOL_MAX_LIFETIME_SECONDS";
+const PRELAUNCH_DB_RO_POOL_MAX_CONNECTIONS_ENV: &str = "PRELAUNCH_DB_RO_POOL_MAX_CONNECTIONS";
+const PRELAUNCH_DB_RO_POOL_MIN_CONNECTIONS_ENV: &str = "PRELAUNCH_DB_RO_POOL_MIN_CONNECTIONS";
+const PRELAUNCH_DB_RO_POOL_ACQUIRE_TIMEOUT_MS_ENV: &str = "PRELAUNCH_DB_RO_POOL_ACQUIRE_TIMEOUT_MS";
+const PRELAUNCH_DB_RO_POOL_IDLE_TIMEOUT_SECONDS_ENV: &str =
+    "PRELAUNCH_DB_RO_POOL_IDLE_TIMEOUT_SECONDS";
+const PRELAUNCH_DB_RO_POOL_MAX_LIFETIME_SECONDS_ENV: &str =
+    "PRELAUNCH_DB_RO_POOL_MAX_LIFETIME_SECONDS";
 const DEFAULT_DB_POOL_MAX_CONNECTIONS: u32 = 32;
 const DEFAULT_DB_POOL_MIN_CONNECTIONS: u32 = 4;
 const DEFAULT_DB_POOL_ACQUIRE_TIMEOUT_MS: u64 = 5_000;
@@ -37,32 +47,92 @@ pub struct OutboxEventRecord {
     pub payload: serde_json::Value,
 }
 
-pub async fn build_operational_pg_pool_from_env() -> Result<PgPool, String> {
-    let database_url = std::env::var(DATABASE_URL_ENV)
-        .map_err(|_| format!("{DATABASE_URL_ENV} must be configured"))?;
-    let max_connections = parse_positive_u32_env(
-        PRELAUNCH_DB_POOL_MAX_CONNECTIONS_ENV,
-        DEFAULT_DB_POOL_MAX_CONNECTIONS,
-    )?;
-    let min_connections = parse_positive_u32_env(
-        PRELAUNCH_DB_POOL_MIN_CONNECTIONS_ENV,
-        DEFAULT_DB_POOL_MIN_CONNECTIONS,
-    )?;
+#[derive(Debug, Clone)]
+pub struct OperationalPgPoolTopology {
+    read_write_pool: PgPool,
+    read_only_pool: PgPool,
+}
+
+impl OperationalPgPoolTopology {
+    pub fn read_write_pool(&self) -> &PgPool {
+        &self.read_write_pool
+    }
+
+    pub fn read_only_pool(&self) -> &PgPool {
+        &self.read_only_pool
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PoolEnvConfig<'a> {
+    role_label: &'a str,
+    url_env: &'a str,
+    max_connections_env: &'a str,
+    min_connections_env: &'a str,
+    acquire_timeout_ms_env: &'a str,
+    idle_timeout_seconds_env: &'a str,
+    max_lifetime_seconds_env: &'a str,
+}
+
+pub async fn build_operational_pg_rw_pool_from_env() -> Result<PgPool, String> {
+    build_pool_from_env(PoolEnvConfig {
+        role_label: "read-write",
+        url_env: DATABASE_RW_URL_ENV,
+        max_connections_env: PRELAUNCH_DB_RW_POOL_MAX_CONNECTIONS_ENV,
+        min_connections_env: PRELAUNCH_DB_RW_POOL_MIN_CONNECTIONS_ENV,
+        acquire_timeout_ms_env: PRELAUNCH_DB_RW_POOL_ACQUIRE_TIMEOUT_MS_ENV,
+        idle_timeout_seconds_env: PRELAUNCH_DB_RW_POOL_IDLE_TIMEOUT_SECONDS_ENV,
+        max_lifetime_seconds_env: PRELAUNCH_DB_RW_POOL_MAX_LIFETIME_SECONDS_ENV,
+    })
+    .await
+}
+
+pub async fn build_operational_pg_ro_pool_from_env() -> Result<PgPool, String> {
+    build_pool_from_env(PoolEnvConfig {
+        role_label: "read-only",
+        url_env: DATABASE_RO_URL_ENV,
+        max_connections_env: PRELAUNCH_DB_RO_POOL_MAX_CONNECTIONS_ENV,
+        min_connections_env: PRELAUNCH_DB_RO_POOL_MIN_CONNECTIONS_ENV,
+        acquire_timeout_ms_env: PRELAUNCH_DB_RO_POOL_ACQUIRE_TIMEOUT_MS_ENV,
+        idle_timeout_seconds_env: PRELAUNCH_DB_RO_POOL_IDLE_TIMEOUT_SECONDS_ENV,
+        max_lifetime_seconds_env: PRELAUNCH_DB_RO_POOL_MAX_LIFETIME_SECONDS_ENV,
+    })
+    .await
+}
+
+pub async fn build_operational_pg_pool_topology_from_env(
+) -> Result<OperationalPgPoolTopology, String> {
+    let read_write_pool = build_operational_pg_rw_pool_from_env().await?;
+    let read_only_pool = build_operational_pg_ro_pool_from_env().await?;
+    Ok(OperationalPgPoolTopology {
+        read_write_pool,
+        read_only_pool,
+    })
+}
+
+async fn build_pool_from_env(config: PoolEnvConfig<'_>) -> Result<PgPool, String> {
+    let database_url = std::env::var(config.url_env)
+        .map_err(|_| format!("{} must be configured", config.url_env))?;
+    let max_connections =
+        parse_positive_u32_env(config.max_connections_env, DEFAULT_DB_POOL_MAX_CONNECTIONS)?;
+    let min_connections =
+        parse_positive_u32_env(config.min_connections_env, DEFAULT_DB_POOL_MIN_CONNECTIONS)?;
     if min_connections > max_connections {
         return Err(format!(
-            "{PRELAUNCH_DB_POOL_MIN_CONNECTIONS_ENV} ({min_connections}) cannot exceed {PRELAUNCH_DB_POOL_MAX_CONNECTIONS_ENV} ({max_connections})"
+            "{} ({min_connections}) cannot exceed {} ({max_connections})",
+            config.min_connections_env, config.max_connections_env
         ));
     }
     let acquire_timeout = Duration::from_millis(parse_positive_u64_env(
-        PRELAUNCH_DB_POOL_ACQUIRE_TIMEOUT_MS_ENV,
+        config.acquire_timeout_ms_env,
         DEFAULT_DB_POOL_ACQUIRE_TIMEOUT_MS,
     )?);
     let idle_timeout = Duration::from_secs(parse_positive_u64_env(
-        PRELAUNCH_DB_POOL_IDLE_TIMEOUT_SECONDS_ENV,
+        config.idle_timeout_seconds_env,
         DEFAULT_DB_POOL_IDLE_TIMEOUT_SECONDS,
     )?);
     let max_lifetime = Duration::from_secs(parse_positive_u64_env(
-        PRELAUNCH_DB_POOL_MAX_LIFETIME_SECONDS_ENV,
+        config.max_lifetime_seconds_env,
         DEFAULT_DB_POOL_MAX_LIFETIME_SECONDS,
     )?);
 
@@ -74,7 +144,12 @@ pub async fn build_operational_pg_pool_from_env() -> Result<PgPool, String> {
         .max_lifetime(Some(max_lifetime))
         .connect(database_url.as_str())
         .await
-        .map_err(|error| format!("failed to create PostgreSQL connection pool: {error}"))
+        .map_err(|error| {
+            format!(
+                "failed to create {} PostgreSQL connection pool: {error}",
+                config.role_label
+            )
+        })
 }
 
 pub async fn apply_sql_migrations(pool: &PgPool) -> Result<(), String> {
@@ -168,50 +243,45 @@ impl<E> From<serde_json::Error> for JsonStatePersistenceError<E> {
 
 #[derive(Debug, Clone)]
 pub struct SqlJsonStateRepository {
-    pool: PgPool,
+    write_pool: PgPool,
+    read_pool: PgPool,
     state_key: &'static str,
 }
 
 impl SqlJsonStateRepository {
-    pub fn for_menu_supply(pool: PgPool) -> Self {
-        Self {
-            pool,
-            state_key: MENU_SUPPLY_STATE_KEY,
-        }
+    pub fn for_menu_supply(write_pool: PgPool, read_pool: PgPool) -> Self {
+        Self::new(MENU_SUPPLY_STATE_KEY, write_pool, read_pool)
     }
 
-    pub fn for_payroll_ledger(pool: PgPool) -> Self {
-        Self {
-            pool,
-            state_key: PAYROLL_LEDGER_STATE_KEY,
-        }
+    pub fn for_payroll_ledger(write_pool: PgPool, read_pool: PgPool) -> Self {
+        Self::new(PAYROLL_LEDGER_STATE_KEY, write_pool, read_pool)
     }
 
-    pub fn for_vendor_fulfillment(pool: PgPool) -> Self {
-        Self {
-            pool,
-            state_key: VENDOR_FULFILLMENT_STATE_KEY,
-        }
+    pub fn for_vendor_fulfillment(write_pool: PgPool, read_pool: PgPool) -> Self {
+        Self::new(VENDOR_FULFILLMENT_STATE_KEY, write_pool, read_pool)
     }
 
-    pub fn for_anomaly_alert(pool: PgPool) -> Self {
-        Self {
-            pool,
-            state_key: ANOMALY_ALERT_STATE_KEY,
-        }
+    pub fn for_anomaly_alert(write_pool: PgPool, read_pool: PgPool) -> Self {
+        Self::new(ANOMALY_ALERT_STATE_KEY, write_pool, read_pool)
     }
 
-    pub fn for_delivery_policy(pool: PgPool) -> Self {
-        Self {
-            pool,
-            state_key: DELIVERY_POLICY_STATE_KEY,
-        }
+    pub fn for_delivery_policy(write_pool: PgPool, read_pool: PgPool) -> Self {
+        Self::new(DELIVERY_POLICY_STATE_KEY, write_pool, read_pool)
     }
 
-    pub fn for_operations_analytics(pool: PgPool) -> Self {
+    pub fn for_operations_analytics(write_pool: PgPool, read_pool: PgPool) -> Self {
         Self {
-            pool,
+            write_pool,
+            read_pool,
             state_key: OPERATIONS_ANALYTICS_STATE_KEY,
+        }
+    }
+
+    fn new(state_key: &'static str, write_pool: PgPool, read_pool: PgPool) -> Self {
+        Self {
+            write_pool,
+            read_pool,
+            state_key,
         }
     }
 
@@ -223,7 +293,7 @@ impl SqlJsonStateRepository {
     where
         T: DeserializeOwned,
     {
-        let payload = load_payload(&self.pool, self.state_key).await?;
+        let payload = load_payload(&self.read_pool, self.state_key).await?;
         payload
             .map(serde_json::from_value)
             .transpose()
@@ -235,7 +305,7 @@ impl SqlJsonStateRepository {
         T: serde::Serialize,
     {
         let payload = serde_json::to_value(snapshot)?;
-        save_payload(&self.pool, self.state_key, payload).await?;
+        save_payload(&self.write_pool, self.state_key, payload).await?;
         Ok(())
     }
 
@@ -247,7 +317,7 @@ impl SqlJsonStateRepository {
         T: serde::Serialize + DeserializeOwned,
         F: FnOnce(Option<T>) -> Result<(T, R), E>,
     {
-        let mut transaction = self.pool.begin().await?;
+        let mut transaction = self.write_pool.begin().await?;
         let payload = load_payload_for_update(&mut transaction, self.state_key).await?;
         let current = payload
             .map(serde_json::from_value)
@@ -268,7 +338,7 @@ impl SqlJsonStateRepository {
         T: serde::Serialize + DeserializeOwned,
         F: FnOnce(Option<T>) -> Result<(T, R, Vec<OutboxEventRecord>), E>,
     {
-        let mut transaction = self.pool.begin().await?;
+        let mut transaction = self.write_pool.begin().await?;
         let payload = load_payload_for_update(&mut transaction, self.state_key).await?;
         let current = payload
             .map(serde_json::from_value)
@@ -417,16 +487,20 @@ impl From<serde_json::Error> for VendorCompliancePersistenceError {
 
 #[derive(Debug, Clone)]
 pub struct VendorComplianceSqlRepository {
-    pool: PgPool,
+    write_pool: PgPool,
+    read_pool: PgPool,
 }
 
 impl VendorComplianceSqlRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(write_pool: PgPool, read_pool: PgPool) -> Self {
+        Self {
+            write_pool,
+            read_pool,
+        }
     }
 
-    pub fn pool(&self) -> &PgPool {
-        &self.pool
+    pub fn write_pool(&self) -> &PgPool {
+        &self.write_pool
     }
 
     pub async fn load_lifecycle(
@@ -442,7 +516,7 @@ WHERE state_key = $1
             "#,
             VENDOR_COMPLIANCE_STATE_KEY
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(&self.read_pool)
         .await?;
 
         row.map(|row| lifecycle_from_payload(row.payload, retention_policy, audit_trail))
@@ -466,7 +540,7 @@ SET payload = EXCLUDED.payload,
             VENDOR_COMPLIANCE_STATE_KEY,
             payload
         )
-        .execute(&self.pool)
+        .execute(&self.write_pool)
         .await?;
         Ok(())
     }
@@ -480,7 +554,7 @@ SET payload = EXCLUDED.payload,
     where
         F: FnOnce(&mut VendorComplianceLifecycle) -> Result<T, VendorComplianceError>,
     {
-        let mut transaction = self.pool.begin().await?;
+        let mut transaction = self.write_pool.begin().await?;
         let mut lifecycle = match self
             .load_lifecycle_for_update(
                 &mut transaction,

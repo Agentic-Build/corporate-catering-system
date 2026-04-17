@@ -70,13 +70,13 @@ provision_object_storage_buckets() {
 
 run_database_migrations() {
   require_command sqlx
-  if [[ -z "${DATABASE_URL:-}" ]]; then
-    echo "missing required env: DATABASE_URL" >&2
+  if [[ -z "${DATABASE_RW_URL:-}" ]]; then
+    echo "missing required env: DATABASE_RW_URL" >&2
     exit 1
   fi
   (
     cd "${ROOT_DIR}"
-    DATABASE_URL="${DATABASE_URL}" sqlx migrate run --source migrations
+    DATABASE_URL="${DATABASE_RW_URL}" sqlx migrate run --source migrations
   )
 }
 

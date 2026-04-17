@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: corporate-catering-web
+  labels:
+    app.kubernetes.io/name: corporate-catering-web
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  selector:
+    app.kubernetes.io/name: corporate-catering-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

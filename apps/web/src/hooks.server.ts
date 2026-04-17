@@ -74,5 +74,34 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
   }
 
-  return resolve(event);
+  const response = await resolve(event);
+  const method = event.request.method.toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    return response;
+  }
+
+  const pathname = event.url.pathname;
+  const dynamicCacheControl = process.env.FRONTEND_CACHE_CONTROL_DYNAMIC ?? "no-store";
+  const assetCacheControl =
+    process.env.FRONTEND_CACHE_CONTROL_ASSET ?? "public, max-age=300";
+  const immutableAssetCacheControl =
+    process.env.FRONTEND_CACHE_CONTROL_ASSET_IMMUTABLE ??
+    "public, max-age=31536000, immutable";
+
+  if (pathname.startsWith("/_app/immutable/")) {
+    if (!response.headers.has("cache-control")) {
+      response.headers.set("cache-control", immutableAssetCacheControl);
+    }
+    return response;
+  }
+
+  if (pathname.startsWith("/_app/")) {
+    if (!response.headers.has("cache-control")) {
+      response.headers.set("cache-control", assetCacheControl);
+    }
+    return response;
+  }
+
+  response.headers.set("cache-control", dynamicCacheControl);
+  return response;
 };

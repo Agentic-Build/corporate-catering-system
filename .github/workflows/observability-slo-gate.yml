@@ -10,7 +10,8 @@ jobs:
   hard-slo-gate:
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/catering_observability_slo
+      DATABASE_RW_URL: postgresql://postgres:postgres@127.0.0.1:5432/catering_observability_slo
+      DATABASE_RO_URL: postgresql://postgres:postgres@127.0.0.1:5432/catering_observability_slo
       PRELAUNCH_AUDIT_TRAIL_ENCRYPTION_KEY_HEX: 1111111111111111111111111111111111111111111111111111111111111111
       PRELAUNCH_PAYROLL_EXPORT_ENCRYPTION_KEY_HEX: 2222222222222222222222222222222222222222222222222222222222222222
     services:

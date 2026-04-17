@@ -1,0 +1,149 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: corporate-catering-edge
+  labels:
+    app.kubernetes.io/name: corporate-catering-edge
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  gatewayClassName: envoy
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: "*.corporate-catering.example"
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: "*.corporate-catering.example"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: corporate-catering-gateway-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: corporate-catering-web-route
+  labels:
+    app.kubernetes.io/name: corporate-catering-web-route
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  parentRefs:
+    - name: corporate-catering-edge
+      sectionName: https
+  hostnames:
+    - portal.corporate-catering.example
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: corporate-catering-web
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: corporate-catering-api-route
+  labels:
+    app.kubernetes.io/name: corporate-catering-api-route
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  parentRefs:
+    - name: corporate-catering-edge
+      sectionName: https
+  hostnames:
+    - api.corporate-catering.example
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: corporate-catering-api
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /mcp
+      backendRefs:
+        - name: corporate-catering-mcp
+          port: 80
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: corporate-catering-edge-security
+  labels:
+    app.kubernetes.io/name: corporate-catering-edge-security
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: corporate-catering-edge
+  tls:
+    minVersion: TLSv1_2
+  cors:
+    allowOrigins:
+      - "https://portal.corporate-catering.example"
+      - "https://admin.corporate-catering.example"
+    allowMethods:
+      - GET
+      - POST
+      - PATCH
+      - PUT
+      - OPTIONS
+    allowHeaders:
+      - Authorization
+      - Content-Type
+      - X-Request-Id
+    exposeHeaders:
+      - X-Request-Id
+    maxAge: 24h
+    allowCredentials: true
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: corporate-catering-edge-rate-limit
+  labels:
+    app.kubernetes.io/name: corporate-catering-edge-rate-limit
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: corporate-catering-edge
+  type: Local
+  local:
+    rules:
+      - clientSelectors:
+          - sourceIP: {}
+        limit:
+          requests: 300
+          unit: Minute
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: corporate-catering-edge-traffic
+  labels:
+    app.kubernetes.io/name: corporate-catering-edge-traffic
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: corporate-catering-edge
+  requestTimeout: 15s
+  maxRequestBodyBytes: 1048576

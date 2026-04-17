@@ -48,11 +48,81 @@ spec:
               value: tracecontext,baggage
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.namespace=corporate-catering,deployment.environment=production,k8s.namespace.name=$(POD_NAMESPACE)
-            - name: DATABASE_URL
+            - name: DATABASE_RW_URL
               valueFrom:
                 secretKeyRef:
                   name: corporate-catering-secrets
-                  key: database_url
+                  key: database_rw_url
+            - name: DATABASE_RO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: database_ro_url
+            - name: CORPORATE_SSO_JWT_ISSUER
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: corporate_sso_jwt_issuer
+            - name: CORPORATE_SSO_JWT_AUDIENCE
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: corporate_sso_jwt_audience
+            - name: CORPORATE_SSO_JWT_HS256_SECRET_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: corporate_sso_jwt_hs256_secret_base64_current
+            - name: CORPORATE_SSO_JWT_HS256_SECRET_BASE64_NEXT
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: corporate_sso_jwt_hs256_secret_base64_next
+            - name: VENDOR_MFA_JWT_ISSUER
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: vendor_mfa_jwt_issuer
+            - name: VENDOR_MFA_JWT_AUDIENCE
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: vendor_mfa_jwt_audience
+            - name: VENDOR_MFA_JWT_HS256_SECRET_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: vendor_mfa_jwt_hs256_secret_base64_current
+            - name: VENDOR_MFA_JWT_HS256_SECRET_BASE64_NEXT
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: vendor_mfa_jwt_hs256_secret_base64_next
+            - name: MCP_OAUTH_SERVICE_ACCOUNT_ISSUER
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: mcp_oauth_service_account_issuer
+            - name: MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: mcp_oauth_service_account_audience
+            - name: MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: mcp_oauth_service_account_hs256_secret_base64_current
+            - name: MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_NEXT
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: mcp_oauth_service_account_hs256_secret_base64_next
+            - name: MCP_BRIDGE_KEY_REGISTRY_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: corporate-catering-secrets
+                  key: mcp_bridge_key_registry_json
             - name: PRELAUNCH_PICKUP_TOTP_SECRET
               valueFrom:
                 secretKeyRef:

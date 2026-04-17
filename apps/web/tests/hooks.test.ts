@@ -100,6 +100,37 @@ describe("auth middleware hooks", () => {
     assert.equal(event.locals.actor?.role, "vendor");
     assert.ok(event.locals.actor?.scope.vendorIds.includes("ven-load-gate-a"));
   });
+
+  it("applies no-store cache policy to dynamic route responses", async () => {
+    const cookies = new MemoryCookies();
+    const event = createRequestEvent("/employee", cookies, {
+      headers: {
+        "x-mock-role": "employee"
+      }
+    });
+
+    const response = await handle({
+      event,
+      resolve: async () => new Response("ok")
+    } as never);
+
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  });
+
+  it("applies immutable cache policy to built immutable asset paths", async () => {
+    const cookies = new MemoryCookies();
+    const event = createRequestEvent("/_app/immutable/chunks/main.js", cookies);
+
+    const response = await handle({
+      event,
+      resolve: async () => new Response("asset")
+    } as never);
+
+    assert.equal(
+      response.headers.get("cache-control"),
+      "public, max-age=31536000, immutable"
+    );
+  });
 });
 
 async function expectHttpStatus(promise: Promise<unknown>, status: number) {

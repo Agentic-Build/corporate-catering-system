@@ -73,7 +73,7 @@ use corporate_catering_system::payroll::{
     PayrollSortField as PayrollSortFieldDomain, SortOrder as PayrollSortOrderDomain,
 };
 use corporate_catering_system::persistence::{
-    allocate_order_id_hex_from_postgres, build_operational_pg_pool_from_env,
+    allocate_order_id_hex_from_postgres, build_operational_pg_pool_topology_from_env,
     JsonStatePersistenceError, OutboxEventRecord, SqlJsonStateRepository,
     VendorCompliancePersistenceError, VendorComplianceSqlRepository,
 };
@@ -192,14 +192,19 @@ const AUTHORIZATION_BEARER_PREFIX: &str = "Bearer ";
 const CORPORATE_SSO_JWT_ISSUER_ENV: &str = "CORPORATE_SSO_JWT_ISSUER";
 const CORPORATE_SSO_JWT_AUDIENCE_ENV: &str = "CORPORATE_SSO_JWT_AUDIENCE";
 const CORPORATE_SSO_JWT_HS256_SECRET_BASE64_ENV: &str = "CORPORATE_SSO_JWT_HS256_SECRET_BASE64";
+const CORPORATE_SSO_JWT_HS256_SECRET_BASE64_NEXT_ENV: &str =
+    "CORPORATE_SSO_JWT_HS256_SECRET_BASE64_NEXT";
 const VENDOR_MFA_JWT_ISSUER_ENV: &str = "VENDOR_MFA_JWT_ISSUER";
 const VENDOR_MFA_JWT_AUDIENCE_ENV: &str = "VENDOR_MFA_JWT_AUDIENCE";
 const VENDOR_MFA_JWT_HS256_SECRET_BASE64_ENV: &str = "VENDOR_MFA_JWT_HS256_SECRET_BASE64";
+const VENDOR_MFA_JWT_HS256_SECRET_BASE64_NEXT_ENV: &str = "VENDOR_MFA_JWT_HS256_SECRET_BASE64_NEXT";
 const MCP_OAUTH_SERVICE_ACCOUNT_TOKEN_PREFIX: &str = "mcp-oauth-sa:";
 const MCP_OAUTH_SERVICE_ACCOUNT_ISSUER_ENV: &str = "MCP_OAUTH_SERVICE_ACCOUNT_ISSUER";
 const MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE_ENV: &str = "MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE";
 const MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV: &str =
     "MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64";
+const MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_NEXT_ENV: &str =
+    "MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_NEXT";
 const MCP_BRIDGE_KEY_REGISTRY_JSON_ENV: &str = "MCP_BRIDGE_KEY_REGISTRY_JSON";
 const MCP_BRIDGE_KEY_ID_HEADER: &str = "x-mcp-bridge-key-id";
 const MCP_BRIDGE_ISSUED_AT_HEADER: &str = "x-mcp-bridge-issued-at";
@@ -1836,14 +1841,14 @@ struct AccessJwtHeader {
 struct McpOAuthServiceAccountVerifierConfig {
     issuer: String,
     audience: String,
-    hs256_secret: Vec<u8>,
+    hs256_secrets: Vec<Vec<u8>>,
 }
 
 #[derive(Debug)]
 struct AccessBearerJwtVerifierConfig {
     issuer: String,
     audience: String,
-    hs256_secret: Vec<u8>,
+    hs256_secrets: Vec<Vec<u8>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2043,34 +2048,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     let pickup_totp_verifier = PickupTotpVerifier::from_env("PRELAUNCH_PICKUP_TOTP_SECRET")
         .map(Arc::new)
         .map_err(|error| format!("pickup TOTP verifier initialization failed: {error}"))?;
-    let operational_pool = build_operational_pg_pool_from_env()
+    let operational_pool_topology = build_operational_pg_pool_topology_from_env()
         .await
-        .map_err(|error| format!("PostgreSQL pool configuration is invalid: {error}"))?;
+        .map_err(|error| format!("PostgreSQL pool topology configuration is invalid: {error}"))?;
+    let operational_rw_pool = operational_pool_topology.read_write_pool().clone();
+    let operational_ro_pool = operational_pool_topology.read_only_pool().clone();
     let runtime_state_cache = Arc::new(
         parse_valkey_runtime_state_cache_from_env()
             .await
             .map_err(|error| format!("Valkey cache backbone configuration is invalid: {error}"))?,
     );
     let order_event_backbone = OrderEventBackbone::connect(
-        operational_pool.clone(),
+        operational_rw_pool.clone(),
         EventBackboneConfig::from_env().map_err(|error| {
             format!("JetStream event backbone configuration is invalid: {error}")
         })?,
     )
     .await
     .map_err(|error| format!("failed to initialize JetStream event backbone: {error}"))?;
-    let compliance_repository =
-        Arc::new(VendorComplianceSqlRepository::new(operational_pool.clone()));
+    let compliance_repository = Arc::new(VendorComplianceSqlRepository::new(
+        operational_rw_pool.clone(),
+        operational_ro_pool.clone(),
+    ));
     let runtime_state_repositories = SqlRuntimeStateRepositories {
-        menu_supply: SqlJsonStateRepository::for_menu_supply(operational_pool.clone()),
-        vendor_fulfillment: SqlJsonStateRepository::for_vendor_fulfillment(
-            operational_pool.clone(),
+        menu_supply: SqlJsonStateRepository::for_menu_supply(
+            operational_rw_pool.clone(),
+            operational_ro_pool.clone(),
         ),
-        payroll_ledger: SqlJsonStateRepository::for_payroll_ledger(operational_pool.clone()),
-        anomaly_alert: SqlJsonStateRepository::for_anomaly_alert(operational_pool.clone()),
-        delivery_policy: SqlJsonStateRepository::for_delivery_policy(operational_pool.clone()),
+        vendor_fulfillment: SqlJsonStateRepository::for_vendor_fulfillment(
+            operational_rw_pool.clone(),
+            operational_ro_pool.clone(),
+        ),
+        payroll_ledger: SqlJsonStateRepository::for_payroll_ledger(
+            operational_rw_pool.clone(),
+            operational_ro_pool.clone(),
+        ),
+        anomaly_alert: SqlJsonStateRepository::for_anomaly_alert(
+            operational_rw_pool.clone(),
+            operational_ro_pool.clone(),
+        ),
+        delivery_policy: SqlJsonStateRepository::for_delivery_policy(
+            operational_rw_pool.clone(),
+            operational_ro_pool.clone(),
+        ),
         operations_analytics: SqlJsonStateRepository::for_operations_analytics(
-            operational_pool.clone(),
+            operational_rw_pool.clone(),
+            operational_ro_pool.clone(),
         ),
     };
     let (compliance_lifecycle, include_lifecycle_seed_baseline) =
@@ -3219,24 +3242,14 @@ fn verify_mcp_service_account_oauth_token(
                 format!("MCP OAuth JWT signature is invalid base64url: {error}"),
             )
         })?;
-    type HmacSha256 = Hmac<Sha256>;
-    let mut mac =
-        <HmacSha256 as Mac>::new_from_slice(config.hs256_secret.as_slice()).map_err(|error| {
-            domain_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "MCP_OAUTH_CONFIGURATION_ERROR",
-                format!("MCP OAuth signing key configuration is invalid: {error}"),
-            )
-        })?;
-    mac.update(signing_input.as_bytes());
-    mac.verify_slice(provided_signature.as_slice())
-        .map_err(|_| {
-            domain_error(
-                StatusCode::UNAUTHORIZED,
-                "UNAUTHORIZED",
-                "MCP OAuth JWT signature verification failed".to_owned(),
-            )
-        })?;
+    verify_hs256_signature_any(
+        signing_input.as_str(),
+        provided_signature.as_slice(),
+        config.hs256_secrets.as_slice(),
+        "MCP_OAUTH_CONFIGURATION_ERROR",
+        "MCP OAuth signing key configuration is invalid",
+        "MCP OAuth JWT signature verification failed",
+    )?;
 
     let claims_json = decode_url_safe_base64_json(payload_segment, "payload")?;
     let claims: McpServiceAccountJwtClaims =
@@ -3321,38 +3334,55 @@ fn decode_url_safe_base64_json(
     })
 }
 
+fn verify_hs256_signature_any(
+    signing_input: &str,
+    provided_signature: &[u8],
+    signing_secrets: &[Vec<u8>],
+    configuration_error_code: &'static str,
+    configuration_error_prefix: &str,
+    signature_error_message: &str,
+) -> Result<(), (StatusCode, ErrorPayload)> {
+    type HmacSha256 = Hmac<Sha256>;
+    for signing_secret in signing_secrets {
+        let mut mac =
+            <HmacSha256 as Mac>::new_from_slice(signing_secret.as_slice()).map_err(|error| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    configuration_error_code,
+                    format!("{configuration_error_prefix}: {error}"),
+                )
+            })?;
+        mac.update(signing_input.as_bytes());
+        if mac.verify_slice(provided_signature).is_ok() {
+            return Ok(());
+        }
+    }
+    Err(domain_error(
+        StatusCode::UNAUTHORIZED,
+        "UNAUTHORIZED",
+        signature_error_message.to_owned(),
+    ))
+}
+
 fn load_mcp_oauth_service_account_verifier_config(
 ) -> Result<McpOAuthServiceAccountVerifierConfig, (StatusCode, ErrorPayload)> {
     let issuer = load_non_empty_env(MCP_OAUTH_SERVICE_ACCOUNT_ISSUER_ENV)?;
     let audience = load_non_empty_env(MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE_ENV)?;
-    let hs256_secret_base64 =
-        load_non_empty_env(MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV)?;
-    let hs256_secret = BASE64_STANDARD
-        .decode(hs256_secret_base64.as_bytes())
-        .map_err(|error| {
-            domain_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "MCP_OAUTH_CONFIGURATION_ERROR",
-                format!(
-                    "{} must be valid base64: {error}",
-                    MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV
-                ),
-            )
-        })?;
-    if hs256_secret.is_empty() {
-        return Err(domain_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "MCP_OAUTH_CONFIGURATION_ERROR",
-            format!(
-                "{} must decode to a non-empty key",
-                MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV
-            ),
-        ));
+    let mut hs256_secrets = Vec::new();
+    hs256_secrets.push(decode_required_base64_secret_with_error_code(
+        MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV,
+        "MCP_OAUTH_CONFIGURATION_ERROR",
+    )?);
+    if let Some(next_secret) = decode_optional_base64_secret_with_error_code(
+        MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_NEXT_ENV,
+        "MCP_OAUTH_CONFIGURATION_ERROR",
+    )? {
+        hs256_secrets.push(next_secret);
     }
     Ok(McpOAuthServiceAccountVerifierConfig {
         issuer,
         audience,
-        hs256_secret,
+        hs256_secrets,
     })
 }
 
@@ -3380,6 +3410,63 @@ fn load_non_empty_env_with_error_code(
         ));
     }
     Ok(trimmed.to_owned())
+}
+
+fn decode_required_base64_secret_with_error_code(
+    env_name: &str,
+    error_code: &'static str,
+) -> Result<Vec<u8>, (StatusCode, ErrorPayload)> {
+    let encoded = load_non_empty_env_with_error_code(env_name, error_code)?;
+    decode_base64_secret_with_error_code(env_name, encoded.as_str(), error_code)
+}
+
+fn decode_optional_base64_secret_with_error_code(
+    env_name: &str,
+    error_code: &'static str,
+) -> Result<Option<Vec<u8>>, (StatusCode, ErrorPayload)> {
+    match std::env::var(env_name) {
+        Ok(raw) => {
+            let trimmed = raw.trim().to_owned();
+            if trimmed.is_empty() {
+                return Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    error_code,
+                    format!("{env_name} environment variable must be non-empty when provided"),
+                ));
+            }
+            decode_base64_secret_with_error_code(env_name, trimmed.as_str(), error_code).map(Some)
+        }
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(error) => Err(domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            error_code,
+            format!("{env_name} environment variable is invalid: {error}"),
+        )),
+    }
+}
+
+fn decode_base64_secret_with_error_code(
+    env_name: &str,
+    encoded: &str,
+    error_code: &'static str,
+) -> Result<Vec<u8>, (StatusCode, ErrorPayload)> {
+    let decoded = BASE64_STANDARD
+        .decode(encoded.as_bytes())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                error_code,
+                format!("{env_name} must be valid base64: {error}"),
+            )
+        })?;
+    if decoded.is_empty() {
+        return Err(domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            error_code,
+            format!("{env_name} must decode to a non-empty key"),
+        ));
+    }
+    Ok(decoded)
 }
 
 fn parse_optional_mcp_short_lived_bridge(
@@ -14154,24 +14241,14 @@ fn verify_access_bearer_jwt(
                 format!("Bearer JWT signature is invalid base64url: {error}"),
             )
         })?;
-    type HmacSha256 = Hmac<Sha256>;
-    let mut mac =
-        <HmacSha256 as Mac>::new_from_slice(config.hs256_secret.as_slice()).map_err(|error| {
-            domain_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "AUTH_CONFIGURATION_ERROR",
-                format!("Bearer signing key configuration is invalid: {error}"),
-            )
-        })?;
-    mac.update(signing_input.as_bytes());
-    mac.verify_slice(provided_signature.as_slice())
-        .map_err(|_| {
-            domain_error(
-                StatusCode::UNAUTHORIZED,
-                "UNAUTHORIZED",
-                "Bearer JWT signature verification failed".to_owned(),
-            )
-        })?;
+    verify_hs256_signature_any(
+        signing_input.as_str(),
+        provided_signature.as_slice(),
+        config.hs256_secrets.as_slice(),
+        "AUTH_CONFIGURATION_ERROR",
+        "Bearer signing key configuration is invalid",
+        "Bearer JWT signature verification failed",
+    )?;
 
     let claims_json = decode_access_jwt_segment(payload_segment, "payload")?;
     let claims: AccessBearerJwtClaims =
@@ -14331,16 +14408,18 @@ fn decode_access_jwt_segment(
 fn load_access_bearer_jwt_verifier_config(
     authentication_source: AuthenticationSource,
 ) -> Result<AccessBearerJwtVerifierConfig, (StatusCode, ErrorPayload)> {
-    let (issuer_env, audience_env, secret_env) = match authentication_source {
+    let (issuer_env, audience_env, secret_env, next_secret_env) = match authentication_source {
         AuthenticationSource::CorporateSso => (
             CORPORATE_SSO_JWT_ISSUER_ENV,
             CORPORATE_SSO_JWT_AUDIENCE_ENV,
             CORPORATE_SSO_JWT_HS256_SECRET_BASE64_ENV,
+            CORPORATE_SSO_JWT_HS256_SECRET_BASE64_NEXT_ENV,
         ),
         AuthenticationSource::VendorAccountMfa => (
             VENDOR_MFA_JWT_ISSUER_ENV,
             VENDOR_MFA_JWT_AUDIENCE_ENV,
             VENDOR_MFA_JWT_HS256_SECRET_BASE64_ENV,
+            VENDOR_MFA_JWT_HS256_SECRET_BASE64_NEXT_ENV,
         ),
         AuthenticationSource::OAuthServiceAccount => return Err(domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -14352,29 +14431,21 @@ fn load_access_bearer_jwt_verifier_config(
 
     let issuer = load_non_empty_env_with_error_code(issuer_env, "AUTH_CONFIGURATION_ERROR")?;
     let audience = load_non_empty_env_with_error_code(audience_env, "AUTH_CONFIGURATION_ERROR")?;
-    let hs256_secret_base64 =
-        load_non_empty_env_with_error_code(secret_env, "AUTH_CONFIGURATION_ERROR")?;
-    let hs256_secret = BASE64_STANDARD
-        .decode(hs256_secret_base64.as_bytes())
-        .map_err(|error| {
-            domain_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "AUTH_CONFIGURATION_ERROR",
-                format!("{secret_env} must be valid base64: {error}"),
-            )
-        })?;
-    if hs256_secret.is_empty() {
-        return Err(domain_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "AUTH_CONFIGURATION_ERROR",
-            format!("{secret_env} must decode to a non-empty key"),
-        ));
+    let mut hs256_secrets = Vec::new();
+    hs256_secrets.push(decode_required_base64_secret_with_error_code(
+        secret_env,
+        "AUTH_CONFIGURATION_ERROR",
+    )?);
+    if let Some(next_secret) =
+        decode_optional_base64_secret_with_error_code(next_secret_env, "AUTH_CONFIGURATION_ERROR")?
+    {
+        hs256_secrets.push(next_secret);
     }
 
     Ok(AccessBearerJwtVerifierConfig {
         issuer,
         audience,
-        hs256_secret,
+        hs256_secrets,
     })
 }
 
@@ -14498,7 +14569,7 @@ fn load_gate_anomaly_alert_owner_actor_id() -> Result<ActorId, (StatusCode, Erro
 fn generate_contract_order_id(state: &AppState) -> Result<OrderId, (StatusCode, ErrorPayload)> {
     let suffix = match &state.compliance_persistence {
         CompliancePersistence::Sql(repository) => tokio::task::block_in_place(|| {
-            Handle::current().block_on(allocate_order_id_hex_from_postgres(repository.pool()))
+            Handle::current().block_on(allocate_order_id_hex_from_postgres(repository.write_pool()))
         })
         .map_err(|error| {
             domain_error(
@@ -16635,6 +16706,10 @@ mod tests {
             CORPORATE_SSO_JWT_HS256_SECRET_BASE64_ENV,
             BASE64_STANDARD.encode("corporate-sso-test-signing-secret-32".as_bytes()),
         );
+        std::env::set_var(
+            CORPORATE_SSO_JWT_HS256_SECRET_BASE64_NEXT_ENV,
+            BASE64_STANDARD.encode("corporate-sso-test-next-signing-key-32".as_bytes()),
+        );
 
         std::env::set_var(
             VENDOR_MFA_JWT_ISSUER_ENV,
@@ -16647,6 +16722,10 @@ mod tests {
         std::env::set_var(
             VENDOR_MFA_JWT_HS256_SECRET_BASE64_ENV,
             BASE64_STANDARD.encode("vendor-mfa-test-signing-secret-32-bytes".as_bytes()),
+        );
+        std::env::set_var(
+            VENDOR_MFA_JWT_HS256_SECRET_BASE64_NEXT_ENV,
+            BASE64_STANDARD.encode("vendor-mfa-test-next-signing-secret-32".as_bytes()),
         );
     }
 
@@ -16662,6 +16741,10 @@ mod tests {
         std::env::set_var(
             MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV,
             BASE64_STANDARD.encode("mcp-oauth-test-signing-secret-32-bytes".as_bytes()),
+        );
+        std::env::set_var(
+            MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_NEXT_ENV,
+            BASE64_STANDARD.encode("mcp-oauth-test-next-signing-secret-32".as_bytes()),
         );
         std::env::set_var(
             MCP_BRIDGE_KEY_REGISTRY_JSON_ENV,
@@ -17735,6 +17818,57 @@ mod tests {
             "localized size limit message should be zh-TW, got `{}`",
             error.message
         );
+    }
+
+    #[test]
+    fn bearer_jwt_accepts_next_rotated_hs256_secret() {
+        ensure_test_access_bearer_env();
+        let claims = serde_json::json!({
+            "iss": std::env::var(CORPORATE_SSO_JWT_ISSUER_ENV).expect("issuer env should be set"),
+            "aud": std::env::var(CORPORATE_SSO_JWT_AUDIENCE_ENV).expect("audience env should be set"),
+            "sub": "employee-rotated-secret",
+            "exp": 4_102_444_800i64,
+            "iat": 1_577_836_800i64,
+            "nbf": 1_577_836_800i64,
+            "role": "EMPLOYEE",
+            "allPlants": false,
+            "plantIds": ["fab-a"],
+            "vendorIds": [],
+        });
+        let next_secret = load_test_hs256_secret(CORPORATE_SSO_JWT_HS256_SECRET_BASE64_NEXT_ENV);
+        let token = build_test_hs256_jwt_token(claims, next_secret.as_slice());
+
+        let verified = verify_access_bearer_jwt(
+            token.as_str(),
+            AuthenticationSource::CorporateSso,
+            1_700_000_000,
+        )
+        .expect("bearer JWT signed by next secret should verify");
+        assert_eq!(verified.sub, "employee-rotated-secret");
+    }
+
+    #[test]
+    fn mcp_oauth_jwt_accepts_next_rotated_hs256_secret() {
+        ensure_test_mcp_oauth_env();
+        let claims = serde_json::json!({
+            "iss": std::env::var(MCP_OAUTH_SERVICE_ACCOUNT_ISSUER_ENV).expect("issuer env should be configured"),
+            "aud": std::env::var(MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE_ENV).expect("audience env should be configured"),
+            "sub": "svc-mcp-runtime-auth-test",
+            "exp": 4_102_444_800i64,
+            "iat": 1_577_836_800i64,
+            "nbf": 1_577_836_800i64,
+            "role": "COMMITTEE_ADMIN",
+            "allPlants": true,
+            "plantIds": [],
+            "allowedTools": [MCP_TOOL_ANOMALY_UPSERT_RULE],
+        });
+        let next_secret =
+            load_test_hs256_secret(MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_NEXT_ENV);
+        let token = build_test_hs256_jwt_token(claims, next_secret.as_slice());
+
+        let verified = verify_mcp_service_account_oauth_token(token.as_str(), 1_700_000_000)
+            .expect("MCP OAuth JWT signed by next secret should verify");
+        assert_eq!(verified.sub, "svc-mcp-runtime-auth-test");
     }
 
     #[test]

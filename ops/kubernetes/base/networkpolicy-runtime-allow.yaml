@@ -1,0 +1,153 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: corporate-catering-runtime-allow-ingress-from-edge
+  labels:
+    app.kubernetes.io/name: corporate-catering-runtime-allow-ingress-from-edge
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - corporate-catering-api
+          - corporate-catering-mcp
+          - corporate-catering-web
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              networking.corporate-catering.io/edge-gateway: "true"
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: corporate-catering-runtime-allow-egress-db-pool
+  labels:
+    app.kubernetes.io/name: corporate-catering-runtime-allow-egress-db-pool
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - corporate-catering-api
+          - corporate-catering-mcp
+          - corporate-catering-compliance-worker
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - corporate-catering-pgbouncer-rw
+                  - corporate-catering-pgbouncer-ro
+      ports:
+        - protocol: TCP
+          port: 6432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: corporate-catering-runtime-allow-egress-observability
+  labels:
+    app.kubernetes.io/name: corporate-catering-runtime-allow-egress-observability
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - corporate-catering-api
+          - corporate-catering-mcp
+          - corporate-catering-compliance-worker
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 4317
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: corporate-catering-runtime-allow-egress-dns
+  labels:
+    app.kubernetes.io/name: corporate-catering-runtime-allow-egress-dns
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: corporate-catering-pgbouncer-allow-runtime-and-postgres
+  labels:
+    app.kubernetes.io/name: corporate-catering-pgbouncer-allow-runtime-and-postgres
+    app.kubernetes.io/part-of: corporate-catering-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - corporate-catering-pgbouncer-rw
+          - corporate-catering-pgbouncer-ro
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - corporate-catering-api
+                  - corporate-catering-mcp
+                  - corporate-catering-compliance-worker
+      ports:
+        - protocol: TCP
+          port: 6432
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: corporate-catering-postgres
+      ports:
+        - protocol: TCP
+          port: 5432

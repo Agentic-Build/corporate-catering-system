@@ -71,7 +71,7 @@ async fn vendor_compliance_domain_flow_persists_on_real_postgres_with_transactio
         .await
         .expect("migrations should apply");
 
-    let repository = VendorComplianceSqlRepository::new(pool);
+    let repository = VendorComplianceSqlRepository::new(pool.clone(), pool);
     let retention_policy = HistoryRetentionPolicy::default();
     let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
     let committee = committee_admin();
