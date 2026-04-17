@@ -90,8 +90,8 @@ use corporate_catering_system::transport::http::{
 };
 use corporate_catering_system::transport::mcp::{
     runtime_mcp_resources, runtime_mcp_tools, AuthorizedMcpToolWrite, McpAuthenticationModel,
-    McpAuthorizationError, McpAuthorizationGateway, McpServiceAccountGrant, McpShortLivedKeyBridge,
-    MCP_TOOL_ANOMALY_EVALUATE_ALERTS, MCP_TOOL_ANOMALY_LIST_ALERTS,
+    McpAuthorizationError, McpAuthorizationGateway, McpOperation, McpServiceAccountGrant,
+    McpShortLivedKeyBridge, MCP_TOOL_ANOMALY_EVALUATE_ALERTS, MCP_TOOL_ANOMALY_LIST_ALERTS,
     MCP_TOOL_ANOMALY_UPDATE_ALERT_STATUS, MCP_TOOL_ANOMALY_UPSERT_RULE,
     MCP_TOOL_COMPLIANCE_REVIEW_VENDOR_APPLICATION, MCP_TOOL_COMPLIANCE_RUN_VENDOR_LIFECYCLE,
     MCP_TOOL_ORDERING_CREATE_EMPLOYEE_ORDER, MCP_TOOL_ORDERING_LIST_MENU_DISCOVERY,
@@ -2035,6 +2035,7 @@ async fn invoke_mcp_tool(
         match auth_gateway.authorize_tool_read(&grant, normalized_tool_name) {
             Ok(_) => invoke_mcp_read_tool(
                 &state,
+                &auth_gateway,
                 &grant,
                 normalized_tool_name,
                 request.args,
@@ -2492,6 +2493,7 @@ fn invoke_mcp_write_tool(
 
 fn invoke_mcp_read_tool(
     state: &AppState,
+    auth_gateway: &McpAuthorizationGateway,
     grant: &McpServiceAccountGrant,
     tool_name: &str,
     args: serde_json::Value,
@@ -2506,6 +2508,25 @@ fn invoke_mcp_read_tool(
         }
         MCP_TOOL_SETTLEMENT_QUERY_ORDER_LEDGER => {
             let args = decode_mcp_args::<McpQueryOrderLedgerArgs>(args, tool_name)?;
+            let order_id = parse_contract_order_id(&args.order_id).map_err(|error| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_ORDER_REQUEST",
+                    format!("orderId path parameter is invalid: {error}"),
+                )
+            })?;
+            let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
+            let operation = McpOperation::ExportPayrollDeductions;
+            auth_gateway
+                .authorize_write(
+                    Some(grant.actor()),
+                    operation.action(),
+                    Some(snapshot.plant_id()),
+                    operation.operation_id(),
+                )
+                .map_err(|error| {
+                    map_mcp_authorization_error(McpAuthorizationError::Authorization(error))
+                })?;
             let payload = handle_get_employee_order_payroll_ledger_for_actor(
                 state,
                 grant.actor(),
@@ -12129,6 +12150,26 @@ fn handle_verify_order_pickup_for_actor(
     })?;
 
     let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
+    if actor.actor_id() != snapshot.employee_actor_id() {
+        emit_pickup_verification_audit_event(
+            request_id,
+            Some(order_id.as_str()),
+            "rejected",
+            "order-owner-mismatch",
+            None,
+            None,
+        );
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` cannot pickup-verify order `{}` owned by `{}`",
+                actor.actor_id().as_str(),
+                order_id.as_str(),
+                snapshot.employee_actor_id().as_str()
+            ),
+        ));
+    }
     if snapshot.state() == OrderLifecycleState::Fulfilled {
         emit_pickup_verification_audit_event(
             request_id,
@@ -12286,6 +12327,19 @@ fn map_pickup_claim_update_error(
     error: MenuSupplyWindowError,
 ) -> (StatusCode, ErrorPayload) {
     match error {
+        MenuSupplyWindowError::UnauthorizedRole { .. }
+        | MenuSupplyWindowError::TargetPlantOutOfScope { .. }
+        | MenuSupplyWindowError::OrderMutationActorMismatch { .. } => {
+            emit_pickup_verification_audit_event(
+                request_id,
+                Some(order_id.as_str()),
+                "rejected",
+                "claim-authorization-failed",
+                None,
+                None,
+            );
+            domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
+        }
         MenuSupplyWindowError::InvalidOrderLifecycleTransition { current_state, .. }
             if current_state == OrderLifecycleState::Fulfilled =>
         {
@@ -15150,6 +15204,63 @@ mod tests {
     }
 
     #[test]
+    fn pickup_verification_rejects_non_owner_before_totp_validation() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order = handle_create_employee_order(&state, create_request)
+            .expect("create order should succeed for pickup verification");
+        let parsed_order_id = parse_contract_order_id(&created_order.order_id)
+            .expect("created order id should match contract format");
+        let current_step =
+            PickupTotpVerifier::current_taipei_step().expect("current step should resolve");
+        let valid_code = state
+            .pickup_totp_verifier
+            .generate_qr_payload(&parsed_order_id, current_step);
+
+        let invalid_attempt = handle_verify_order_pickup(
+            &state,
+            &employee_actor(),
+            created_order.order_id.clone(),
+            PickupVerificationRequest {
+                verification_code: "invalid-code".to_owned(),
+            },
+            "req-pickup-non-owner-invalid",
+        )
+        .expect_err("non-owner should be rejected before verification-code evaluation");
+        assert_eq!(invalid_attempt.0, StatusCode::FORBIDDEN);
+        assert_eq!(invalid_attempt.1.code, "FORBIDDEN");
+
+        let valid_attempt = handle_verify_order_pickup(
+            &state,
+            &employee_actor(),
+            created_order.order_id.clone(),
+            PickupVerificationRequest {
+                verification_code: valid_code,
+            },
+            "req-pickup-non-owner-valid",
+        )
+        .expect_err("non-owner should be rejected even when providing a valid verification code");
+        assert_eq!(valid_attempt.0, StatusCode::FORBIDDEN);
+        assert_eq!(valid_attempt.1.code, "FORBIDDEN");
+
+        let current_snapshot = load_order_snapshot_or_not_found(&state, &parsed_order_id)
+            .expect("order should remain queryable after forbidden pickup attempts");
+        assert_eq!(current_snapshot.state(), OrderLifecycleState::Pending);
+    }
+
+    #[test]
     fn employee_payroll_ledger_handler_reflects_append_only_adjustments() {
         let now_epoch_day = current_taipei_business_moment()
             .expect("current time should resolve for test")
@@ -16062,6 +16173,77 @@ mod tests {
     }
 
     #[test]
+    fn mcp_settlement_query_order_ledger_enforces_payroll_role_and_target_plant_scope() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order =
+            handle_create_employee_order(&state, create_request).expect("order should be created");
+        let auth_gateway = McpAuthorizationGateway::new(AccessController::with_default_policy());
+
+        let role_mismatch_actor = oauth_service_account_actor(
+            "svc-settlement-role-mismatch",
+            Role::CommitteeAdmin,
+            PlantScope::all(),
+        );
+        let role_mismatch_grant = McpServiceAccountGrant::new(
+            role_mismatch_actor.actor_id().clone(),
+            role_mismatch_actor,
+            [MCP_TOOL_SETTLEMENT_QUERY_ORDER_LEDGER],
+        )
+        .expect("role mismatch grant should be valid");
+        let role_mismatch_error = invoke_mcp_read_tool(
+            &state,
+            &auth_gateway,
+            &role_mismatch_grant,
+            MCP_TOOL_SETTLEMENT_QUERY_ORDER_LEDGER,
+            serde_json::json!({
+                "orderId": created_order.order_id
+            }),
+            "mcp-settlement-role-mismatch",
+        )
+        .expect_err("MCP settlement ledger read should reject non-payroll role");
+        assert_eq!(role_mismatch_error.0, StatusCode::FORBIDDEN);
+        assert_eq!(role_mismatch_error.1.code, "FORBIDDEN");
+
+        let scope_mismatch_actor = oauth_service_account_actor(
+            "svc-settlement-scope-mismatch",
+            Role::PayrollOperator,
+            PlantScope::restricted(vec![plant_id("fab-b")]).expect("scope should be valid"),
+        );
+        let scope_mismatch_grant = McpServiceAccountGrant::new(
+            scope_mismatch_actor.actor_id().clone(),
+            scope_mismatch_actor,
+            [MCP_TOOL_SETTLEMENT_QUERY_ORDER_LEDGER],
+        )
+        .expect("scope mismatch grant should be valid");
+        let scope_mismatch_error = invoke_mcp_read_tool(
+            &state,
+            &auth_gateway,
+            &scope_mismatch_grant,
+            MCP_TOOL_SETTLEMENT_QUERY_ORDER_LEDGER,
+            serde_json::json!({
+                "orderId": created_order.order_id
+            }),
+            "mcp-settlement-scope-mismatch",
+        )
+        .expect_err("MCP settlement ledger read should reject out-of-scope payroll actor");
+        assert_eq!(scope_mismatch_error.0, StatusCode::FORBIDDEN);
+        assert_eq!(scope_mismatch_error.1.code, "FORBIDDEN");
+    }
+
+    #[test]
     fn mcp_and_http_anomaly_paths_share_validation_error_codes() {
         let now_epoch_day = current_taipei_business_moment()
             .expect("current time should resolve for test")
@@ -16143,8 +16325,10 @@ mod tests {
             [MCP_TOOL_ANOMALY_LIST_ALERTS],
         )
         .expect("anomaly list grant should be valid");
+        let auth_gateway = McpAuthorizationGateway::new(AccessController::with_default_policy());
         let mcp_error = invoke_mcp_read_tool(
             &state,
+            &auth_gateway,
             &grant,
             MCP_TOOL_ANOMALY_LIST_ALERTS,
             serde_json::json!({
