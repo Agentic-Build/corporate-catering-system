@@ -53,6 +53,62 @@ fn yaml_sequence_strings(value: &YamlValue) -> Vec<String> {
         .collect()
 }
 
+fn assert_pod_least_privilege(pod_spec: &YamlValue, resource: &str) {
+    assert_eq!(
+        yaml_get(pod_spec, "automountServiceAccountToken").as_bool(),
+        Some(false),
+        "{resource} must disable service account token automount"
+    );
+
+    let pod_security_context = yaml_get(pod_spec, "securityContext");
+    assert_eq!(
+        yaml_get(pod_security_context, "runAsNonRoot").as_bool(),
+        Some(true),
+        "{resource} must enforce runAsNonRoot"
+    );
+    let run_as_user = yaml_get(pod_security_context, "runAsUser")
+        .as_i64()
+        .expect("runAsUser must be an integer");
+    let run_as_group = yaml_get(pod_security_context, "runAsGroup")
+        .as_i64()
+        .expect("runAsGroup must be an integer");
+    assert!(run_as_user > 0, "{resource} must use a non-root runAsUser");
+    assert!(
+        run_as_group > 0,
+        "{resource} must use a non-root runAsGroup"
+    );
+    assert_eq!(
+        yaml_get(yaml_get(pod_security_context, "seccompProfile"), "type").as_str(),
+        Some("RuntimeDefault"),
+        "{resource} must enforce RuntimeDefault seccomp profile"
+    );
+}
+
+fn assert_container_least_privilege(container: &YamlValue, resource: &str) {
+    let container_security_context = yaml_get(container, "securityContext");
+    assert_eq!(
+        yaml_get(container_security_context, "allowPrivilegeEscalation").as_bool(),
+        Some(false),
+        "{resource} must disable privilege escalation"
+    );
+
+    let dropped_caps = yaml_get(yaml_get(container_security_context, "capabilities"), "drop")
+        .as_sequence()
+        .expect("capabilities.drop must be a sequence")
+        .iter()
+        .map(|capability| {
+            capability
+                .as_str()
+                .expect("capability entry must be a string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(
+        dropped_caps.contains("ALL"),
+        "{resource} must drop all Linux capabilities"
+    );
+}
+
 #[test]
 fn kustomization_includes_runtime_infrastructure_security_resources() {
     let kustomization = read_yaml("ops/kubernetes/base/kustomization.yaml");
@@ -491,4 +547,70 @@ fn keda_component_defines_worker_scaledobject_and_removes_worker_hpa() {
     assert!(delete_patch.contains("$patch: delete"));
     assert!(delete_patch.contains("kind: HorizontalPodAutoscaler"));
     assert!(delete_patch.contains("name: corporate-catering-compliance-worker"));
+}
+
+#[test]
+fn runtime_workloads_enforce_least_privilege_security_contexts() {
+    for deployment_file in [
+        "ops/kubernetes/base/deployment.yaml",
+        "ops/kubernetes/base/deployment-mcp.yaml",
+        "ops/kubernetes/base/deployment-compliance-worker.yaml",
+        "ops/kubernetes/base/deployment-web.yaml",
+    ] {
+        let deployment = read_yaml(deployment_file);
+        let pod_spec = yaml_get(
+            yaml_get(yaml_get(&deployment, "spec"), "template"),
+            "spec",
+        );
+        assert_pod_least_privilege(pod_spec, deployment_file);
+
+        let first_container = yaml_get(pod_spec, "containers")
+            .as_sequence()
+            .expect("containers must be a sequence")
+            .first()
+            .expect("deployment must define at least one container");
+        assert_container_least_privilege(first_container, deployment_file);
+    }
+
+    let pgbouncer_docs = read_yaml_documents("ops/kubernetes/base/pgbouncer.yaml");
+    let mut hardened_pgbouncer_deployments = 0;
+    for doc in pgbouncer_docs {
+        if yaml_get(&doc, "kind").as_str() != Some("Deployment") {
+            continue;
+        }
+        let deployment_name = yaml_get(yaml_get(&doc, "metadata"), "name")
+            .as_str()
+            .expect("metadata.name must be a string");
+        let resource_label = format!("ops/kubernetes/base/pgbouncer.yaml::{deployment_name}");
+        let pod_spec = yaml_get(yaml_get(yaml_get(&doc, "spec"), "template"), "spec");
+        assert_pod_least_privilege(pod_spec, &resource_label);
+
+        let first_container = yaml_get(pod_spec, "containers")
+            .as_sequence()
+            .expect("containers must be a sequence")
+            .first()
+            .expect("pgbouncer deployment must define at least one container");
+        assert_container_least_privilege(first_container, &resource_label);
+        hardened_pgbouncer_deployments += 1;
+    }
+    assert_eq!(
+        hardened_pgbouncer_deployments, 2,
+        "both PgBouncer deployments must enforce least privilege"
+    );
+
+    let job = read_yaml("ops/kubernetes/base/job-object-storage-provision.yaml");
+    let job_pod_spec = yaml_get(yaml_get(yaml_get(&job, "spec"), "template"), "spec");
+    assert_pod_least_privilege(
+        job_pod_spec,
+        "ops/kubernetes/base/job-object-storage-provision.yaml",
+    );
+    let job_container = yaml_get(job_pod_spec, "containers")
+        .as_sequence()
+        .expect("job containers must be a sequence")
+        .first()
+        .expect("job must define one container");
+    assert_container_least_privilege(
+        job_container,
+        "ops/kubernetes/base/job-object-storage-provision.yaml",
+    );
 }

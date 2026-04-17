@@ -81,6 +81,23 @@ if rg -q "DATABASE_URL" ops/kubernetes/base/deployment.yaml ops/kubernetes/base/
   echo "legacy direct DATABASE_URL wiring detected in runtime deployments"
   exit 1
 fi
+for hardened_manifest in \
+  ops/kubernetes/base/deployment.yaml \
+  ops/kubernetes/base/deployment-mcp.yaml \
+  ops/kubernetes/base/deployment-compliance-worker.yaml \
+  ops/kubernetes/base/deployment-web.yaml \
+  ops/kubernetes/base/pgbouncer.yaml \
+  ops/kubernetes/base/job-object-storage-provision.yaml
+do
+  rg -q "automountServiceAccountToken: false" "${hardened_manifest}"
+  rg -q "runAsNonRoot: true" "${hardened_manifest}"
+  rg -q "seccompProfile:" "${hardened_manifest}"
+  rg -q "type: RuntimeDefault" "${hardened_manifest}"
+  rg -q "allowPrivilegeEscalation: false" "${hardened_manifest}"
+  rg -q "capabilities:" "${hardened_manifest}"
+  rg -q "drop:" "${hardened_manifest}"
+  rg -q "ALL" "${hardened_manifest}"
+done
 rg -q "corporate-catering-pgbouncer-rw" ops/kubernetes/base/pgbouncer.yaml
 rg -q "corporate-catering-pgbouncer-ro" ops/kubernetes/base/pgbouncer.yaml
 rg -q "PGBOUNCER_POOL_MODE" ops/kubernetes/base/pgbouncer.yaml

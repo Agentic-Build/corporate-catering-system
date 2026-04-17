@@ -16,10 +16,22 @@ spec:
         app.kubernetes.io/name: corporate-catering-pgbouncer-rw
         app.kubernetes.io/part-of: corporate-catering-system
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: pgbouncer
           image: bitnami/pgbouncer:1.23.1
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: pgbouncer
               containerPort: 6432
@@ -115,10 +127,22 @@ spec:
         app.kubernetes.io/name: corporate-catering-pgbouncer-ro
         app.kubernetes.io/part-of: corporate-catering-system
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: pgbouncer
           image: bitnami/pgbouncer:1.23.1
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: pgbouncer
               containerPort: 6432

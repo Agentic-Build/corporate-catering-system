@@ -102,6 +102,7 @@ Baseline artifacts are committed and release-gated under `ops/`:
     - edge + network isolation + secret externalization controls (`ops/kubernetes/base/gateway.yaml`, `ops/kubernetes/base/networkpolicy-*.yaml`, `ops/kubernetes/base/external-secrets.yaml`)
     - SvelteKit adapter-node frontend runtime deployment/service (`ops/kubernetes/base/deployment-web.yaml`, `ops/kubernetes/base/service-web.yaml`)
     - environment-specific autoscaling/topology policy rendered through overlays (`kustomize build ops/kubernetes/overlays/<env>`)
+    - least-privilege pod/container security controls (`runAsNonRoot`, `RuntimeDefault` seccomp, dropped Linux capabilities, `allowPrivilegeEscalation: false`, token automount disabled)
 
 Verification commands:
 
