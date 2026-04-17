@@ -5,6 +5,8 @@ import type { AuthActor, AuthRequestContext, AuthRole } from "../src/lib/server/
 import { buildAppShellData } from "../src/lib/platform/shell";
 
 describe("platform shell data", () => {
+  configureJwtEnv();
+
   it("uses mobile-first mode for employee actors and starts bootstrap probe in loading state", () => {
     const actor = createActor("employee");
     const authContext = createAuthContext(actor);
@@ -53,6 +55,19 @@ describe("platform shell data", () => {
     assert.equal(shell.navigation.portalLinks.every((portalLink) => portalLink.locked === false), true);
   });
 });
+
+function configureJwtEnv() {
+  process.env.CORPORATE_SSO_JWT_ISSUER = "https://issuer.catering-corp.test";
+  process.env.CORPORATE_SSO_JWT_AUDIENCE = "corporate-catering-http-runtime-corporate";
+  process.env.CORPORATE_SSO_JWT_HS256_SECRET_BASE64 = Buffer.from(
+    "corporate-sso-test-signing-secret-32"
+  ).toString("base64");
+  process.env.VENDOR_MFA_JWT_ISSUER = "https://issuer.catering-vendor.test";
+  process.env.VENDOR_MFA_JWT_AUDIENCE = "corporate-catering-http-runtime-vendor";
+  process.env.VENDOR_MFA_JWT_HS256_SECRET_BASE64 = Buffer.from(
+    "vendor-mfa-test-signing-secret-32-bytes"
+  ).toString("base64");
+}
 
 function createAuthContext(actor: AuthActor): AuthRequestContext {
   return {

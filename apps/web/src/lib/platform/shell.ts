@@ -1,5 +1,6 @@
 import type { AuthActor, AuthRequestContext } from "$lib/server/auth/contracts";
 import { LOCALE_CODE } from "$lib/i18n/zh-tw";
+import { buildApiBearerToken } from "$lib/server/auth/api-bearer";
 
 import {
   buildRoleAwareNavigation,
@@ -13,6 +14,7 @@ interface ShellAuthSnapshot {
   provider: string;
   refreshAfterEpochMs: number | null;
   expiresAtEpochMs: number | null;
+  apiBearerToken: string | null;
 }
 
 export interface ShellBootstrapState {
@@ -45,7 +47,8 @@ export function buildAppShellData(args: {
     auth: {
       provider: auth.provider,
       refreshAfterEpochMs: auth.session?.refreshAfterEpochMs ?? null,
-      expiresAtEpochMs: auth.session?.expiresAtEpochMs ?? null
+      expiresAtEpochMs: auth.session?.expiresAtEpochMs ?? null,
+      apiBearerToken: buildApiBearerToken(auth)
     },
     navigation,
     activePortal,

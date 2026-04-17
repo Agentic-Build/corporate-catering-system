@@ -48,7 +48,7 @@
     bootstrapState = data.bootstrapState;
 
     if (shouldProbe) {
-      void refreshBootstrapState(actor);
+      void refreshBootstrapState(actor, data.auth.apiBearerToken);
     }
   });
 
@@ -77,14 +77,17 @@
     });
   }
 
-  async function refreshBootstrapState(actor: NonNullable<LayoutData["actor"]>) {
+  async function refreshBootstrapState(
+    actor: NonNullable<LayoutData["actor"]>,
+    bearerToken: string | null
+  ) {
     if (bootstrapProbeInFlight) {
       return;
     }
 
     bootstrapProbeInFlight = true;
     bootstrapState = loadingState();
-    bootstrapState = await probeApiAccess(actor);
+    bootstrapState = await probeApiAccess(actor, bearerToken);
     bootstrapProbeInFlight = false;
   }
 </script>

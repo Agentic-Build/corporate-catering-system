@@ -130,6 +130,7 @@ const DEFAULT_PAYROLL_PURGE_INTERVAL_SECONDS: u64 = 3600;
 const DEFAULT_ORDER_RETENTION_DAYS: u16 = 365;
 const DEFAULT_ORDER_PURGE_INTERVAL_SECONDS: u64 = 3600;
 const PICKUP_QR_REFRESH_INTERVAL_SECONDS: i64 = 30;
+#[cfg(test)]
 const LOAD_GATE_EMPLOYEE_ACTOR_ID: &str = "emp-load-gate";
 const LOAD_GATE_COMMITTEE_ACTOR_ID: &str = "committee-load-gate";
 const LOAD_GATE_PAYROLL_ACTOR_ID: &str = "payroll-load-gate";
@@ -178,6 +179,12 @@ const DEFAULT_COMPLIANCE_BUCKET: &str = "compliance-evidence";
 const DEFAULT_OBJECT_STORAGE_UPLOAD_TTL_SECONDS: u16 = 900;
 const DEFAULT_OBJECT_STORAGE_DOWNLOAD_TTL_SECONDS: u16 = 600;
 const AUTHORIZATION_BEARER_PREFIX: &str = "Bearer ";
+const CORPORATE_SSO_JWT_ISSUER_ENV: &str = "CORPORATE_SSO_JWT_ISSUER";
+const CORPORATE_SSO_JWT_AUDIENCE_ENV: &str = "CORPORATE_SSO_JWT_AUDIENCE";
+const CORPORATE_SSO_JWT_HS256_SECRET_BASE64_ENV: &str = "CORPORATE_SSO_JWT_HS256_SECRET_BASE64";
+const VENDOR_MFA_JWT_ISSUER_ENV: &str = "VENDOR_MFA_JWT_ISSUER";
+const VENDOR_MFA_JWT_AUDIENCE_ENV: &str = "VENDOR_MFA_JWT_AUDIENCE";
+const VENDOR_MFA_JWT_HS256_SECRET_BASE64_ENV: &str = "VENDOR_MFA_JWT_HS256_SECRET_BASE64";
 const MCP_OAUTH_SERVICE_ACCOUNT_TOKEN_PREFIX: &str = "mcp-oauth-sa:";
 const MCP_OAUTH_SERVICE_ACCOUNT_ISSUER_ENV: &str = "MCP_OAUTH_SERVICE_ACCOUNT_ISSUER";
 const MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE_ENV: &str = "MCP_OAUTH_SERVICE_ACCOUNT_AUDIENCE";
@@ -1335,6 +1342,23 @@ struct McpServiceAccountJwtClaims {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AccessBearerJwtClaims {
+    iss: String,
+    aud: AccessJwtAudienceClaim,
+    sub: String,
+    exp: i64,
+    #[serde(default)]
+    nbf: Option<i64>,
+    #[serde(default)]
+    iat: Option<i64>,
+    role: String,
+    all_plants: bool,
+    #[serde(default)]
+    plant_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum McpJwtAudienceClaim {
     Single(String),
@@ -1351,7 +1375,30 @@ impl McpJwtAudienceClaim {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum AccessJwtAudienceClaim {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
+impl AccessJwtAudienceClaim {
+    fn contains(&self, expected_audience: &str) -> bool {
+        match self {
+            Self::Single(value) => value.trim() == expected_audience,
+            Self::Multiple(values) => values.iter().any(|value| value.trim() == expected_audience),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
 struct McpJwtHeader {
+    alg: String,
+    #[serde(default)]
+    typ: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AccessJwtHeader {
     alg: String,
     #[serde(default)]
     typ: Option<String>,
@@ -1359,6 +1406,13 @@ struct McpJwtHeader {
 
 #[derive(Debug)]
 struct McpOAuthServiceAccountVerifierConfig {
+    issuer: String,
+    audience: String,
+    hs256_secret: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct AccessBearerJwtVerifierConfig {
     issuer: String,
     audience: String,
     hs256_secret: Vec<u8>,
@@ -2446,7 +2500,7 @@ fn invoke_mcp_read_tool(
     match tool_name {
         MCP_TOOL_ORDERING_LIST_MENU_DISCOVERY => {
             let query = decode_mcp_args::<EmployeeMenuDiscoveryQuery>(args, tool_name)?;
-            let payload = handle_list_employee_menus(state, query)?;
+            let payload = handle_list_employee_menus(state, grant.actor(), query)?;
             Ok(serde_json::to_value(payload)
                 .expect("mcp ordering discovery payload serialization should succeed"))
         }
@@ -2823,10 +2877,17 @@ fn load_mcp_oauth_service_account_verifier_config(
 }
 
 fn load_non_empty_env(name: &str) -> Result<String, (StatusCode, ErrorPayload)> {
+    load_non_empty_env_with_error_code(name, "MCP_OAUTH_CONFIGURATION_ERROR")
+}
+
+fn load_non_empty_env_with_error_code(
+    name: &str,
+    error_code: &'static str,
+) -> Result<String, (StatusCode, ErrorPayload)> {
     let value = std::env::var(name).map_err(|_| {
         domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "MCP_OAUTH_CONFIGURATION_ERROR",
+            error_code,
             format!("{name} environment variable is required"),
         )
     })?;
@@ -2834,7 +2895,7 @@ fn load_non_empty_env(name: &str) -> Result<String, (StatusCode, ErrorPayload)> 
     if trimmed.is_empty() {
         return Err(domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "MCP_OAUTH_CONFIGURATION_ERROR",
+            error_code,
             format!("{name} environment variable must be non-empty"),
         ));
     }
@@ -6246,16 +6307,30 @@ fn to_object_storage_access_link_payload(
 
 async fn list_employee_menus(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<EmployeeMenuDiscoveryQuery>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "listEmployeeMenus",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let employee_actor = match require_employee_actor_for_plant(&state, &headers, &state.plant_id) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_list_employee_menus(&state, query) {
+    let response = match handle_list_employee_menus(&state, &employee_actor, query) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -6283,16 +6358,34 @@ async fn list_employee_menus(
 
 async fn upsert_employee_rush_reminder_preferences(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<EmployeeRushReminderPreferencesUpsertRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "upsertEmployeeRushReminderPreferences",
-        Some(LOAD_GATE_EMPLOYEE_ACTOR_ID),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let employee_actor = match require_employee_actor_for_plant(&state, &headers, &state.plant_id) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_upsert_employee_rush_reminder_preferences(&state, request) {
+    let response = match handle_upsert_employee_rush_reminder_preferences(
+        &state,
+        &employee_actor,
+        request,
+    ) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -6322,6 +6415,7 @@ async fn upsert_employee_rush_reminder_preferences(
 
 fn handle_upsert_employee_rush_reminder_preferences(
     state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
     request: EmployeeRushReminderPreferencesUpsertRequest,
 ) -> Result<EmployeeRushReminderPreferencesPayload, (StatusCode, ErrorPayload)> {
     if !state.rush_reminder_runtime_enabled {
@@ -6344,8 +6438,17 @@ fn handle_upsert_employee_rush_reminder_preferences(
             ),
         ));
     }
-
-    let employee_actor = load_gate_employee_actor_for_plant(state, &state.plant_id)?;
+    if !employee_actor.plant_scope().contains(&state.plant_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not authorized for plant `{}`",
+                employee_actor.actor_id().as_str(),
+                state.plant_id.as_str()
+            ),
+        ));
+    }
     state
         .rush_reminder_workflow
         .upsert_preferences(
@@ -6384,8 +6487,20 @@ fn handle_upsert_employee_rush_reminder_preferences(
 
 fn handle_list_employee_menus(
     state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
     query: EmployeeMenuDiscoveryQuery,
 ) -> Result<MenuDiscoveryResponse, (StatusCode, ErrorPayload)> {
+    if employee_actor.role() != Role::Employee {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::Employee,
+                employee_actor.role()
+            ),
+        ));
+    }
     let request_plant_id = query.plant_id.as_deref().ok_or_else(|| {
         domain_error(
             StatusCode::BAD_REQUEST,
@@ -6403,6 +6518,17 @@ fn handle_list_employee_menus(
             ),
         ));
     }
+    if !employee_actor.plant_scope().contains(&state.plant_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not authorized for plant `{}`",
+                employee_actor.actor_id().as_str(),
+                state.plant_id.as_str()
+            ),
+        ));
+    }
 
     let moment = current_taipei_business_moment().map_err(|error| {
         domain_error(
@@ -6411,11 +6537,12 @@ fn handle_list_employee_menus(
             error,
         )
     })?;
-    handle_list_employee_menus_at(state, query, moment)
+    handle_list_employee_menus_at(state, employee_actor, query, moment)
 }
 
 fn handle_list_employee_menus_at(
     state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
     query: EmployeeMenuDiscoveryQuery,
     moment: TaipeiBusinessMoment,
 ) -> Result<MenuDiscoveryResponse, (StatusCode, ErrorPayload)> {
@@ -6557,7 +6684,8 @@ fn handle_list_employee_menus_at(
         sort_by,
         sort_order,
     );
-    let reminder_subscribers = reminder_subscriber_actor_ids_for_load_gate_employee(state);
+    let reminder_subscribers =
+        reminder_subscriber_actor_ids_for_employee_actor(state, employee_actor);
     schedule_and_dispatch_rush_reminders_best_effort(
         state,
         &reminder_subscribers,
@@ -6874,9 +7002,11 @@ fn maybe_apply_menu_recommendation(
     }
 }
 
-fn reminder_subscriber_actor_ids_for_load_gate_employee(state: &AppState) -> HashSet<ActorId> {
-    let actor_id = ActorId::parse(LOAD_GATE_EMPLOYEE_ACTOR_ID)
-        .expect("load-gate employee actor id constant must remain valid");
+fn reminder_subscriber_actor_ids_for_employee_actor(
+    state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
+) -> HashSet<ActorId> {
+    let actor_id = employee_actor.actor_id().clone();
     if state.terminated_employee_actor_ids.contains(&actor_id) {
         return HashSet::new();
     }
@@ -7144,16 +7274,35 @@ fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
 
 async fn create_employee_order(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<EmployeeOrderCreateRequestPayload>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "createEmployeeOrder",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let employee_actor = match require_employee_actor_for_plant(&state, &headers, &state.plant_id) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_create_employee_order(&state, request) {
+    let response = match handle_create_employee_order_for_actor(
+        &state,
+        &employee_actor,
+        "createEmployeeOrder",
+        request,
+    ) {
         Ok(response) => {
             telemetry.finish_with_http_status(StatusCode::CREATED.as_u16());
             (
@@ -7179,6 +7328,7 @@ async fn create_employee_order(
     response
 }
 
+#[cfg(test)]
 fn handle_create_employee_order(
     state: &AppState,
     request: EmployeeOrderCreateRequestPayload,
@@ -7283,17 +7433,31 @@ fn handle_create_employee_order_for_actor(
 
 async fn update_employee_order(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(order_id): Path<String>,
     Json(request): Json<UpdateOrderRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "updateEmployeeOrder",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let employee_actor = match require_corporate_actor_for_role(&headers, Role::Employee) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_update_employee_order(&state, order_id, request) {
+    let response = match handle_update_employee_order(&state, &employee_actor, order_id, request) {
         Ok(response) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -7321,6 +7485,7 @@ async fn update_employee_order(
 
 fn handle_update_employee_order(
     state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
     order_id_raw: String,
     request: UpdateOrderRequest,
 ) -> Result<EmployeeOrderPayload, (StatusCode, ErrorPayload)> {
@@ -7332,7 +7497,8 @@ fn handle_update_employee_order(
         )
     })?;
     let current_snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
-    let employee_actor = load_gate_employee_actor_for_plant(state, current_snapshot.plant_id())?;
+    let employee_actor =
+        with_employee_employment_status(state, employee_actor, current_snapshot.plant_id())?;
     handle_update_employee_order_for_actor(
         state,
         &employee_actor,
@@ -7414,44 +7580,60 @@ fn handle_update_employee_order_for_actor(
 
 async fn get_employee_pickup_verification_qr(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(order_id): Path<String>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "getEmployeePickupVerificationQr",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-
-    let response = match handle_get_employee_pickup_verification_qr(&state, order_id) {
-        Ok(payload) => {
-            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
-            (
-                StatusCode::OK,
-                Json(
-                    serde_json::to_value(payload)
-                        .expect("pickup verification QR payload serialization should succeed"),
-                ),
-            )
-        }
+    let employee_actor = match require_corporate_actor_for_role(&headers, Role::Employee) {
+        Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
-            (
+            return (
                 status,
                 Json(
-                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
-                        "pickup verification QR error payload serialization should succeed",
-                    ),
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
                 ),
-            )
+            );
         }
     };
+
+    let response =
+        match handle_get_employee_pickup_verification_qr(&state, &employee_actor, order_id) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(
+                        serde_json::to_value(payload)
+                            .expect("pickup verification QR payload serialization should succeed"),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                            "pickup verification QR error payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+        };
 
     response
 }
 
 fn handle_get_employee_pickup_verification_qr(
     state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
     order_id_raw: String,
 ) -> Result<PickupVerificationQrResponse, (StatusCode, ErrorPayload)> {
     let order_id = parse_contract_order_id(&order_id_raw).map_err(|error| {
@@ -7462,7 +7644,7 @@ fn handle_get_employee_pickup_verification_qr(
         )
     })?;
     let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
-    let actor = load_gate_employee_actor_for_plant(state, snapshot.plant_id())?;
+    let actor = with_employee_employment_status(state, employee_actor, snapshot.plant_id())?;
     if snapshot.employee_actor_id() != actor.actor_id() {
         return Err(domain_error(
             StatusCode::FORBIDDEN,
@@ -7533,16 +7715,31 @@ fn pickup_qr_seconds_until_refresh(current_unix_epoch_second: i64) -> i64 {
 
 async fn get_employee_order_payroll_ledger(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(order_id): Path<String>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "getEmployeeOrderPayrollLedger",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let employee_actor = match require_corporate_actor_for_role(&headers, Role::Employee) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
 
-    let response = match handle_get_employee_order_payroll_ledger(&state, order_id) {
+    let response = match handle_get_employee_order_payroll_ledger(&state, &employee_actor, order_id)
+    {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -7570,6 +7767,7 @@ async fn get_employee_order_payroll_ledger(
 
 fn handle_get_employee_order_payroll_ledger(
     state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
     order_id_raw: String,
 ) -> Result<EmployeeOrderPayrollLedgerResponse, (StatusCode, ErrorPayload)> {
     let order_id = parse_contract_order_id(&order_id_raw).map_err(|error| {
@@ -7580,7 +7778,8 @@ fn handle_get_employee_order_payroll_ledger(
         )
     })?;
     let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
-    let employee_actor = load_gate_employee_actor_for_plant(state, snapshot.plant_id())?;
+    let employee_actor =
+        with_employee_employment_status(state, employee_actor, snapshot.plant_id())?;
     handle_get_employee_order_payroll_ledger_for_actor(state, &employee_actor, order_id_raw)
 }
 
@@ -7605,44 +7804,60 @@ fn handle_get_employee_order_payroll_ledger_for_actor(
 
 async fn create_employee_order_dispute(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(order_id): Path<String>,
     Json(request): Json<EmployeePayrollDisputeCreateRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "createEmployeeOrderDispute",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-
-    let response = match handle_create_employee_order_dispute(&state, order_id, request) {
-        Ok(payload) => {
-            telemetry.finish_with_http_status(StatusCode::CREATED.as_u16());
-            (
-                StatusCode::CREATED,
-                Json(
-                    serde_json::to_value(payload)
-                        .expect("payroll dispute payload serialization should succeed"),
-                ),
-            )
-        }
+    let employee_actor = match require_corporate_actor_for_role(&headers, Role::Employee) {
+        Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
-            (
+            return (
                 status,
                 Json(
                     serde_json::to_value(error.with_request_id(request_id.as_str()))
-                        .expect("payroll dispute error payload serialization should succeed"),
+                        .expect("authorization error payload serialization should succeed"),
                 ),
-            )
+            );
         }
     };
+
+    let response =
+        match handle_create_employee_order_dispute(&state, &employee_actor, order_id, request) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::CREATED.as_u16());
+                (
+                    StatusCode::CREATED,
+                    Json(
+                        serde_json::to_value(payload)
+                            .expect("payroll dispute payload serialization should succeed"),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str()))
+                            .expect("payroll dispute error payload serialization should succeed"),
+                    ),
+                )
+            }
+        };
 
     response
 }
 
 fn handle_create_employee_order_dispute(
     state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
     order_id_raw: String,
     request: EmployeePayrollDisputeCreateRequest,
 ) -> Result<PayrollDisputePayload, (StatusCode, ErrorPayload)> {
@@ -7654,7 +7869,8 @@ fn handle_create_employee_order_dispute(
         )
     })?;
     let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
-    let employee_actor = load_gate_employee_actor_for_plant(state, snapshot.plant_id())?;
+    let employee_actor =
+        with_employee_employment_status(state, employee_actor, snapshot.plant_id())?;
     let requested_at = current_taipei_business_moment().map_err(|error| {
         domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -10076,6 +10292,68 @@ fn require_vendor_operator_actor(
     )
 }
 
+fn require_employee_actor_for_plant(
+    state: &AppState,
+    headers: &HeaderMap,
+    plant_id: &PlantId,
+) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+    let employee_actor = require_corporate_actor_for_role(headers, Role::Employee)?;
+    with_employee_employment_status(state, &employee_actor, plant_id)
+}
+
+fn with_employee_employment_status(
+    state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
+    plant_id: &PlantId,
+) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+    if employee_actor.role() != Role::Employee {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::Employee,
+                employee_actor.role()
+            ),
+        ));
+    }
+    if !employee_actor.plant_scope().contains(plant_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not authorized for plant `{}`",
+                employee_actor.actor_id().as_str(),
+                plant_id.as_str()
+            ),
+        ));
+    }
+
+    let employment_status = if state
+        .terminated_employee_actor_ids
+        .contains(employee_actor.actor_id())
+    {
+        EmploymentStatus::Terminated
+    } else {
+        EmploymentStatus::Active
+    };
+
+    AuthenticatedActorContext::new_with_employment_status(
+        employee_actor.actor_id().clone(),
+        Role::Employee,
+        employee_actor.plant_scope().clone(),
+        employee_actor.authentication_source(),
+        employment_status,
+    )
+    .map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("employee actor context is invalid: {error}"),
+        )
+    })
+}
+
 fn require_bearer_actor_for_role(
     headers: &HeaderMap,
     required_role: Role,
@@ -10107,18 +10385,13 @@ fn require_bearer_actor_for_role(
                 "authorization header must use Bearer token".to_owned(),
             )
         })?;
-    let (actor_id_raw, role_raw) = token.split_once('|').ok_or_else(|| {
+    let now_epoch_seconds = current_epoch_seconds_i64()?;
+    let claims = verify_access_bearer_jwt(token, authentication_source, now_epoch_seconds)?;
+    let role = parse_role_label(claims.role.as_str()).ok_or_else(|| {
         domain_error(
             StatusCode::UNAUTHORIZED,
             "UNAUTHORIZED",
-            "bearer token must use `actorId|ROLE` format".to_owned(),
-        )
-    })?;
-    let role = parse_role_label(role_raw).ok_or_else(|| {
-        domain_error(
-            StatusCode::UNAUTHORIZED,
-            "UNAUTHORIZED",
-            format!("unsupported bearer role `{}`", role_raw.trim()),
+            format!("unsupported bearer role `{}`", claims.role.trim()),
         )
     })?;
     if role != required_role {
@@ -10128,34 +10401,14 @@ fn require_bearer_actor_for_role(
             format!("operation requires role {required_role:?}, got {role:?}"),
         ));
     }
-    let actor_id = ActorId::parse(actor_id_raw.trim()).map_err(|error| {
+    let actor_id = ActorId::parse(claims.sub.trim()).map_err(|error| {
         domain_error(
             StatusCode::UNAUTHORIZED,
             "UNAUTHORIZED",
             format!("bearer actor id is invalid: {error}"),
         )
     })?;
-    let plant_scope = if role == Role::VendorOperator {
-        let plant_id = PlantId::parse(
-            std::env::var("PRELAUNCH_PLANT_ID").unwrap_or_else(|_| DEFAULT_PLANT_ID.to_owned()),
-        )
-        .map_err(|error| {
-            domain_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "IDENTITY_MODEL_ERROR",
-                format!("failed to parse runtime plant id for vendor bearer actor: {error}"),
-            )
-        })?;
-        PlantScope::restricted(vec![plant_id]).map_err(|error| {
-            domain_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "IDENTITY_MODEL_ERROR",
-                format!("failed to build vendor bearer actor plant scope: {error}"),
-            )
-        })?
-    } else {
-        PlantScope::all()
-    };
+    let plant_scope = parse_access_bearer_plant_scope(claims.all_plants, claims.plant_ids)?;
     AuthenticatedActorContext::new(actor_id, role, plant_scope, authentication_source).map_err(
         |error| {
             domain_error(
@@ -10165,6 +10418,270 @@ fn require_bearer_actor_for_role(
             )
         },
     )
+}
+
+fn verify_access_bearer_jwt(
+    token: &str,
+    authentication_source: AuthenticationSource,
+    now_epoch_seconds: i64,
+) -> Result<AccessBearerJwtClaims, (StatusCode, ErrorPayload)> {
+    let config = load_access_bearer_jwt_verifier_config(authentication_source)?;
+    let mut segments = token.split('.');
+    let header_segment = segments.next().ok_or_else(|| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "Bearer token must be a JWT".to_owned(),
+        )
+    })?;
+    let payload_segment = segments.next().ok_or_else(|| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "Bearer token must be a JWT".to_owned(),
+        )
+    })?;
+    let signature_segment = segments.next().ok_or_else(|| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "Bearer token must be a JWT".to_owned(),
+        )
+    })?;
+    if segments.next().is_some() {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "Bearer token must be a JWT".to_owned(),
+        ));
+    }
+
+    let header_json = decode_access_jwt_segment(header_segment, "header")?;
+    let header: AccessJwtHeader = serde_json::from_str(header_json.as_str()).map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("Bearer JWT header is invalid: {error}"),
+        )
+    })?;
+    if header.alg.trim() != "HS256" {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!(
+                "Bearer JWT alg `{}` is unsupported; expected HS256",
+                header.alg.trim()
+            ),
+        ));
+    }
+    if let Some(token_type) = header.typ.as_deref() {
+        if !token_type.eq_ignore_ascii_case("JWT") {
+            return Err(domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!(
+                    "Bearer JWT typ `{}` is unsupported; expected JWT",
+                    token_type.trim()
+                ),
+            ));
+        }
+    }
+
+    let signing_input = format!("{header_segment}.{payload_segment}");
+    let provided_signature = BASE64_URL_SAFE_NO_PAD
+        .decode(signature_segment.as_bytes())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("Bearer JWT signature is invalid base64url: {error}"),
+            )
+        })?;
+    type HmacSha256 = Hmac<Sha256>;
+    let mut mac =
+        <HmacSha256 as Mac>::new_from_slice(config.hs256_secret.as_slice()).map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "AUTH_CONFIGURATION_ERROR",
+                format!("Bearer signing key configuration is invalid: {error}"),
+            )
+        })?;
+    mac.update(signing_input.as_bytes());
+    mac.verify_slice(provided_signature.as_slice())
+        .map_err(|_| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "Bearer JWT signature verification failed".to_owned(),
+            )
+        })?;
+
+    let claims_json = decode_access_jwt_segment(payload_segment, "payload")?;
+    let claims: AccessBearerJwtClaims =
+        serde_json::from_str(claims_json.as_str()).map_err(|error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("Bearer JWT payload is invalid: {error}"),
+            )
+        })?;
+    if claims.iss.trim() != config.issuer {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!(
+                "Bearer JWT issuer `{}` does not match expected issuer",
+                claims.iss.trim()
+            ),
+        ));
+    }
+    if !claims.aud.contains(config.audience.as_str()) {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "Bearer JWT audience does not include the required audience".to_owned(),
+        ));
+    }
+    if claims.exp <= now_epoch_seconds {
+        return Err(domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!(
+                "Bearer JWT is expired: exp={}, now={}",
+                claims.exp, now_epoch_seconds
+            ),
+        ));
+    }
+    if let Some(nbf) = claims.nbf {
+        if now_epoch_seconds < nbf {
+            return Err(domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("Bearer JWT is not active yet: nbf={nbf}, now={now_epoch_seconds}"),
+            ));
+        }
+    }
+    if let Some(iat) = claims.iat {
+        if iat > now_epoch_seconds {
+            return Err(domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!(
+                    "Bearer JWT issued-at is in the future: iat={iat}, now={now_epoch_seconds}"
+                ),
+            ));
+        }
+    }
+
+    Ok(claims)
+}
+
+fn parse_access_bearer_plant_scope(
+    all_plants: bool,
+    plant_ids: Vec<String>,
+) -> Result<PlantScope, (StatusCode, ErrorPayload)> {
+    if all_plants {
+        if !plant_ids.is_empty() {
+            return Err(domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "Bearer JWT cannot set both allPlants=true and plantIds".to_owned(),
+            ));
+        }
+        return Ok(PlantScope::all());
+    }
+
+    let parsed_plant_ids = plant_ids
+        .into_iter()
+        .map(|value| {
+            PlantId::parse(value).map_err(|error| {
+                domain_error(
+                    StatusCode::UNAUTHORIZED,
+                    "UNAUTHORIZED",
+                    format!("Bearer JWT plant id is invalid: {error}"),
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    PlantScope::restricted(parsed_plant_ids).map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("Bearer JWT plant scope is invalid: {error}"),
+        )
+    })
+}
+
+fn decode_access_jwt_segment(
+    encoded: &str,
+    segment_label: &str,
+) -> Result<String, (StatusCode, ErrorPayload)> {
+    let raw = BASE64_URL_SAFE_NO_PAD
+        .decode(encoded.as_bytes())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                format!("Bearer JWT {segment_label} is invalid base64url: {error}"),
+            )
+        })?;
+    String::from_utf8(raw).map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("Bearer JWT {segment_label} is not valid UTF-8: {error}"),
+        )
+    })
+}
+
+fn load_access_bearer_jwt_verifier_config(
+    authentication_source: AuthenticationSource,
+) -> Result<AccessBearerJwtVerifierConfig, (StatusCode, ErrorPayload)> {
+    let (issuer_env, audience_env, secret_env) = match authentication_source {
+        AuthenticationSource::CorporateSso => (
+            CORPORATE_SSO_JWT_ISSUER_ENV,
+            CORPORATE_SSO_JWT_AUDIENCE_ENV,
+            CORPORATE_SSO_JWT_HS256_SECRET_BASE64_ENV,
+        ),
+        AuthenticationSource::VendorAccountMfa => (
+            VENDOR_MFA_JWT_ISSUER_ENV,
+            VENDOR_MFA_JWT_AUDIENCE_ENV,
+            VENDOR_MFA_JWT_HS256_SECRET_BASE64_ENV,
+        ),
+        AuthenticationSource::OAuthServiceAccount => return Err(domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "AUTH_CONFIGURATION_ERROR",
+            "OAuth service-account authentication source is unsupported for this bearer verifier"
+                .to_owned(),
+        )),
+    };
+
+    let issuer = load_non_empty_env_with_error_code(issuer_env, "AUTH_CONFIGURATION_ERROR")?;
+    let audience = load_non_empty_env_with_error_code(audience_env, "AUTH_CONFIGURATION_ERROR")?;
+    let hs256_secret_base64 =
+        load_non_empty_env_with_error_code(secret_env, "AUTH_CONFIGURATION_ERROR")?;
+    let hs256_secret = BASE64_STANDARD
+        .decode(hs256_secret_base64.as_bytes())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "AUTH_CONFIGURATION_ERROR",
+                format!("{secret_env} must be valid base64: {error}"),
+            )
+        })?;
+    if hs256_secret.is_empty() {
+        return Err(domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "AUTH_CONFIGURATION_ERROR",
+            format!("{secret_env} must decode to a non-empty key"),
+        ));
+    }
+
+    Ok(AccessBearerJwtVerifierConfig {
+        issuer,
+        audience,
+        hs256_secret,
+    })
 }
 
 fn parse_role_label(value: &str) -> Option<Role> {
@@ -10177,6 +10694,7 @@ fn parse_role_label(value: &str) -> Option<Role> {
     }
 }
 
+#[cfg(test)]
 fn load_gate_employee_actor_for_plant(
     state: &AppState,
     plant_id: &PlantId,
@@ -11413,15 +11931,29 @@ fn map_audit_trail_error(
 
 async fn verify_order_pickup(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(order_id): Path<String>,
     Json(request): Json<PickupVerificationRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "verifyPickupOrder",
-        Some("load-gate"),
+        None::<&str>,
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
+    let employee_actor = match require_corporate_actor_for_role(&headers, Role::Employee) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
     if request.verification_code.trim().is_empty() {
         emit_pickup_verification_audit_event(
             request_id.as_str(),
@@ -11449,8 +11981,13 @@ async fn verify_order_pickup(
         );
     }
 
-    let response = match handle_verify_order_pickup(&state, order_id, request, request_id.as_str())
-    {
+    let response = match handle_verify_order_pickup(
+        &state,
+        &employee_actor,
+        order_id,
+        request,
+        request_id.as_str(),
+    ) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -11478,6 +12015,7 @@ async fn verify_order_pickup(
 
 fn handle_verify_order_pickup(
     state: &AppState,
+    employee_actor: &AuthenticatedActorContext,
     order_id_raw: String,
     request: PickupVerificationRequest,
     request_id: &str,
@@ -11498,7 +12036,8 @@ fn handle_verify_order_pickup(
         )
     })?;
     let snapshot = load_order_snapshot_or_not_found(state, &parsed_order_id)?;
-    let employee_actor = load_gate_employee_actor_for_plant(state, snapshot.plant_id())?;
+    let employee_actor =
+        with_employee_employment_status(state, employee_actor, snapshot.plant_id())?;
     handle_verify_order_pickup_for_actor(state, &employee_actor, order_id_raw, request, request_id)
 }
 
@@ -11863,6 +12402,16 @@ mod tests {
         .expect("employee actor should be valid")
     }
 
+    fn load_gate_employee_actor() -> AuthenticatedActorContext {
+        AuthenticatedActorContext::new(
+            actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID),
+            Role::Employee,
+            PlantScope::restricted(vec![plant_id("fab-a")]).expect("scope should be valid"),
+            AuthenticationSource::CorporateSso,
+        )
+        .expect("load-gate employee actor should be valid")
+    }
+
     fn oauth_service_account_actor(
         actor_id_value: &str,
         role: Role,
@@ -11924,15 +12473,77 @@ mod tests {
     }
 
     fn bearer_headers(actor_id: &str, role: &str) -> HeaderMap {
+        ensure_test_access_bearer_env();
+        let normalized_role = role.trim().to_ascii_uppercase();
+        let (issuer_env, audience_env, secret_env) = if normalized_role == "VENDOR_OPERATOR" {
+            (
+                VENDOR_MFA_JWT_ISSUER_ENV,
+                VENDOR_MFA_JWT_AUDIENCE_ENV,
+                VENDOR_MFA_JWT_HS256_SECRET_BASE64_ENV,
+            )
+        } else {
+            (
+                CORPORATE_SSO_JWT_ISSUER_ENV,
+                CORPORATE_SSO_JWT_AUDIENCE_ENV,
+                CORPORATE_SSO_JWT_HS256_SECRET_BASE64_ENV,
+            )
+        };
+        let all_plants = normalized_role != "EMPLOYEE" && normalized_role != "VENDOR_OPERATOR";
+        let plant_ids = if all_plants {
+            Vec::<String>::new()
+        } else {
+            vec!["fab-a".to_owned()]
+        };
+        let claims = serde_json::json!({
+            "iss": std::env::var(issuer_env).expect("test bearer issuer env should be configured"),
+            "aud": std::env::var(audience_env).expect("test bearer audience env should be configured"),
+            "sub": actor_id,
+            "exp": 4_102_444_800i64,
+            "iat": 1_577_836_800i64,
+            "nbf": 1_577_836_800i64,
+            "role": normalized_role,
+            "allPlants": all_plants,
+            "plantIds": plant_ids,
+        });
+        let token =
+            build_test_hs256_jwt_token(claims, load_test_hs256_secret(secret_env).as_slice());
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
             axum::http::HeaderValue::from_str(
-                format!("{AUTHORIZATION_BEARER_PREFIX}{actor_id}|{role}").as_str(),
+                format!("{AUTHORIZATION_BEARER_PREFIX}{token}").as_str(),
             )
             .expect("authorization header should be valid"),
         );
         headers
+    }
+
+    fn ensure_test_access_bearer_env() {
+        std::env::set_var(
+            CORPORATE_SSO_JWT_ISSUER_ENV,
+            "https://issuer.catering-corp.test",
+        );
+        std::env::set_var(
+            CORPORATE_SSO_JWT_AUDIENCE_ENV,
+            "corporate-catering-http-runtime-corporate",
+        );
+        std::env::set_var(
+            CORPORATE_SSO_JWT_HS256_SECRET_BASE64_ENV,
+            BASE64_STANDARD.encode("corporate-sso-test-signing-secret-32".as_bytes()),
+        );
+
+        std::env::set_var(
+            VENDOR_MFA_JWT_ISSUER_ENV,
+            "https://issuer.catering-vendor.test",
+        );
+        std::env::set_var(
+            VENDOR_MFA_JWT_AUDIENCE_ENV,
+            "corporate-catering-http-runtime-vendor",
+        );
+        std::env::set_var(
+            VENDOR_MFA_JWT_HS256_SECRET_BASE64_ENV,
+            BASE64_STANDARD.encode("vendor-mfa-test-signing-secret-32-bytes".as_bytes()),
+        );
     }
 
     fn ensure_test_mcp_oauth_env() {
@@ -11963,12 +12574,22 @@ mod tests {
     fn load_test_mcp_oauth_secret() -> Vec<u8> {
         let encoded = std::env::var(MCP_OAUTH_SERVICE_ACCOUNT_HS256_SECRET_BASE64_ENV)
             .expect("test MCP OAuth secret env should be configured");
-        BASE64_STANDARD
-            .decode(encoded.as_bytes())
-            .expect("test MCP OAuth secret should decode")
+        load_test_hs256_secret_from_encoded(encoded.as_str())
     }
 
-    fn build_test_mcp_oauth_jwt_token(claims: serde_json::Value) -> String {
+    fn load_test_hs256_secret(secret_env: &str) -> Vec<u8> {
+        let encoded =
+            std::env::var(secret_env).expect("test HS256 secret env should be configured");
+        load_test_hs256_secret_from_encoded(encoded.as_str())
+    }
+
+    fn load_test_hs256_secret_from_encoded(encoded: &str) -> Vec<u8> {
+        BASE64_STANDARD
+            .decode(encoded.as_bytes())
+            .expect("test HS256 secret should decode")
+    }
+
+    fn build_test_hs256_jwt_token(claims: serde_json::Value, signing_secret: &[u8]) -> String {
         let header_json = serde_json::json!({
             "alg": "HS256",
             "typ": "JWT",
@@ -11980,12 +12601,16 @@ mod tests {
             .encode(serde_json::to_vec(&claims).expect("jwt payload serialization should succeed"));
         let signing_input = format!("{header_segment}.{payload_segment}");
         type HmacSha256 = Hmac<Sha256>;
-        let mut mac = <HmacSha256 as Mac>::new_from_slice(load_test_mcp_oauth_secret().as_slice())
+        let mut mac = <HmacSha256 as Mac>::new_from_slice(signing_secret)
             .expect("test signing key length should be valid");
         mac.update(signing_input.as_bytes());
         let signature = mac.finalize().into_bytes();
         let signature_segment = BASE64_URL_SAFE_NO_PAD.encode(signature);
         format!("{signing_input}.{signature_segment}")
+    }
+
+    fn build_test_mcp_oauth_jwt_token(claims: serde_json::Value) -> String {
+        build_test_hs256_jwt_token(claims, load_test_mcp_oauth_secret().as_slice())
     }
 
     fn mcp_oauth_headers_for_test(
@@ -12543,7 +13168,7 @@ mod tests {
         let committee_headers = bearer_headers("committee-test", "COMMITTEE_ADMIN");
         let forbidden = require_vendor_operator_actor(&committee_headers)
             .expect_err("non-vendor role should be forbidden");
-        assert_eq!(forbidden.0, StatusCode::FORBIDDEN);
+        assert_eq!(forbidden.0, StatusCode::UNAUTHORIZED);
 
         let vendor_headers = bearer_headers("vendor-test", "VENDOR_OPERATOR");
         let vendor =
@@ -13184,9 +13809,13 @@ mod tests {
             line_items: None,
             cancel_reason: Some("schedule changed".to_owned()),
         };
-        let updated_order =
-            handle_update_employee_order(&state, created_order.order_id.clone(), update_request)
-                .expect("update order should succeed");
+        let updated_order = handle_update_employee_order(
+            &state,
+            &load_gate_employee_actor(),
+            created_order.order_id.clone(),
+            update_request,
+        )
+        .expect("update order should succeed");
 
         assert_eq!(updated_order.order_id, created_order.order_id);
         assert_eq!(updated_order.status, "CANCELLED");
@@ -13363,6 +13992,7 @@ mod tests {
 
         handle_update_employee_order(
             &state,
+            &load_gate_employee_actor(),
             second_created.order_id.clone(),
             UpdateOrderRequest {
                 operation: "CANCEL".to_owned(),
@@ -13453,9 +14083,13 @@ mod tests {
             ..EmployeeMenuDiscoveryQuery::default()
         };
 
-        let response =
-            handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
-                .expect("discovery request should succeed");
+        let response = handle_list_employee_menus_at(
+            &state,
+            &employee_actor(),
+            query,
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery request should succeed");
 
         assert_eq!(response.items.len(), 1);
         assert_eq!(response.items[0].menu_item_id, "menu-discoverytsta1");
@@ -13480,18 +14114,26 @@ mod tests {
             ..EmployeeMenuDiscoveryQuery::default()
         };
 
-        let response_a =
-            handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
-                .expect("discovery request should succeed");
+        let response_a = handle_list_employee_menus_at(
+            &state,
+            &employee_actor(),
+            query,
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery request should succeed");
         let query = EmployeeMenuDiscoveryQuery {
             plant_id: Some("fab-a".to_owned()),
             view: Some(MenuDiscoveryViewQuery::Week),
             menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
             ..EmployeeMenuDiscoveryQuery::default()
         };
-        let response_b =
-            handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
-                .expect("discovery request should succeed");
+        let response_b = handle_list_employee_menus_at(
+            &state,
+            &employee_actor(),
+            query,
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery request should succeed");
 
         assert!(!response_a.recommendation_requested);
         assert!(!response_a.recommendation_applied);
@@ -13525,8 +14167,13 @@ mod tests {
             ..EmployeeMenuDiscoveryQuery::default()
         };
 
-        handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
-            .expect("discovery should succeed when rush reminders are disabled");
+        handle_list_employee_menus_at(
+            &state,
+            &employee_actor(),
+            query,
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery should succeed when rush reminders are disabled");
         let delivered = state
             .rush_reminder_workflow
             .delivered_notifications()
@@ -13810,6 +14457,7 @@ mod tests {
 
         let error = handle_upsert_employee_rush_reminder_preferences(
             &state,
+            &employee_actor(),
             EmployeeRushReminderPreferencesUpsertRequest {
                 plant_id: "fab-a".to_owned(),
                 preorder_open_enabled: false,
@@ -13822,7 +14470,7 @@ mod tests {
 
         let persisted = state
             .rush_reminder_workflow
-            .preferences_for(&actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID))
+            .preferences_for(&actor_id("employee-discovery-test"))
             .expect("feature-disabled upsert should not mutate reminder preferences");
         assert!(persisted.preorder_open_enabled());
         assert!(persisted.demand_spike_enabled());
@@ -13835,6 +14483,7 @@ mod tests {
 
         let payload = handle_upsert_employee_rush_reminder_preferences(
             &state,
+            &employee_actor(),
             EmployeeRushReminderPreferencesUpsertRequest {
                 plant_id: "fab-a".to_owned(),
                 preorder_open_enabled: false,
@@ -13842,14 +14491,14 @@ mod tests {
             },
         )
         .expect("preference upsert should succeed");
-        assert_eq!(payload.employee_actor_id, LOAD_GATE_EMPLOYEE_ACTOR_ID);
+        assert_eq!(payload.employee_actor_id, "employee-discovery-test");
         assert_eq!(payload.plant_id, "fab-a");
         assert!(!payload.preorder_open_enabled);
         assert!(payload.demand_spike_enabled);
 
         let persisted = state
             .rush_reminder_workflow
-            .preferences_for(&actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID))
+            .preferences_for(&actor_id("employee-discovery-test"))
             .expect("persisted reminder preferences should be queryable");
         assert!(!persisted.preorder_open_enabled());
         assert!(persisted.demand_spike_enabled());
@@ -13861,6 +14510,7 @@ mod tests {
         let state = build_state_with_rush_reminder_runtime(now_epoch_day, true);
         let error = handle_upsert_employee_rush_reminder_preferences(
             &state,
+            &employee_actor(),
             EmployeeRushReminderPreferencesUpsertRequest {
                 plant_id: "fab-b".to_owned(),
                 preorder_open_enabled: false,
@@ -13885,9 +14535,13 @@ mod tests {
             ..EmployeeMenuDiscoveryQuery::default()
         };
 
-        let response_a =
-            handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
-                .expect("discovery request should succeed");
+        let response_a = handle_list_employee_menus_at(
+            &state,
+            &employee_actor(),
+            query,
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery request should succeed");
         let query = EmployeeMenuDiscoveryQuery {
             plant_id: Some("fab-a".to_owned()),
             view: Some(MenuDiscoveryViewQuery::Week),
@@ -13896,9 +14550,13 @@ mod tests {
             sort_order: Some(SortOrderQuery::Desc),
             ..EmployeeMenuDiscoveryQuery::default()
         };
-        let response_b =
-            handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
-                .expect("discovery request should succeed");
+        let response_b = handle_list_employee_menus_at(
+            &state,
+            &employee_actor(),
+            query,
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery request should succeed");
 
         assert!(response_a.recommendation_requested);
         assert!(response_a.recommendation_applied);
@@ -13933,6 +14591,7 @@ mod tests {
         };
         let discovery_response = handle_list_employee_menus_at(
             &state,
+            &employee_actor(),
             discovery_query,
             taipei_moment(now_epoch_day, 600),
         )
@@ -13971,9 +14630,13 @@ mod tests {
             ..EmployeeMenuDiscoveryQuery::default()
         };
 
-        let response =
-            handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
-                .expect("discovery should succeed with rush reminders enabled");
+        let response = handle_list_employee_menus_at(
+            &state,
+            &employee_actor(),
+            query,
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery should succeed with rush reminders enabled");
         assert!(!response.items.is_empty());
 
         let delivered = state
@@ -13999,10 +14662,11 @@ mod tests {
     fn rush_reminder_preferences_enforce_opt_out() {
         let now_epoch_day = 300;
         let state = build_state_with_rush_reminder_runtime(now_epoch_day, true);
+        let employee_actor = employee_actor();
         state
             .rush_reminder_workflow
             .upsert_preferences(
-                actor_id(LOAD_GATE_EMPLOYEE_ACTOR_ID),
+                employee_actor.actor_id().clone(),
                 RushReminderPreferences::new(false, false),
             )
             .expect("reminder preference opt-out should persist");
@@ -14013,8 +14677,13 @@ mod tests {
             ..EmployeeMenuDiscoveryQuery::default()
         };
 
-        handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
-            .expect("discovery should still succeed when reminders are opted out");
+        handle_list_employee_menus_at(
+            &state,
+            &employee_actor,
+            query,
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery should still succeed when reminders are opted out");
         let delivered = state
             .rush_reminder_workflow
             .delivered_notifications()
@@ -14091,8 +14760,13 @@ mod tests {
             ..EmployeeMenuDiscoveryQuery::default()
         };
 
-        handle_list_employee_menus_at(&state, query, taipei_moment(now_epoch_day, 600))
-            .expect("discovery should remain available when reminder delivery fails");
+        handle_list_employee_menus_at(
+            &state,
+            &employee_actor(),
+            query,
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery should remain available when reminder delivery fails");
         let failure_count = state
             .rush_reminder_workflow
             .delivery_failures()
@@ -14159,7 +14833,7 @@ mod tests {
             ..EmployeeMenuDiscoveryQuery::default()
         };
 
-        let error = handle_list_employee_menus(&state, query)
+        let error = handle_list_employee_menus(&state, &employee_actor(), query)
             .expect_err("missing plantId must fail without legacy fallback");
         assert_eq!(error.0, StatusCode::BAD_REQUEST);
         assert_eq!(error.1.code, "INVALID_MENU_DISCOVERY_QUERY");
@@ -14193,6 +14867,7 @@ mod tests {
 
         let response = handle_verify_order_pickup(
             &state,
+            &load_gate_employee_actor(),
             created_order.order_id.clone(),
             PickupVerificationRequest { verification_code },
             "req-pickup-success",
@@ -14225,9 +14900,12 @@ mod tests {
         let created_order =
             handle_create_employee_order(&state, create_request).expect("order should be created");
 
-        let pickup_qr =
-            handle_get_employee_pickup_verification_qr(&state, created_order.order_id.clone())
-                .expect("pickup QR should be issued for pending order");
+        let pickup_qr = handle_get_employee_pickup_verification_qr(
+            &state,
+            &load_gate_employee_actor(),
+            created_order.order_id.clone(),
+        )
+        .expect("pickup QR should be issued for pending order");
         assert_eq!(pickup_qr.order_id, created_order.order_id);
         assert!(pickup_qr.verification_code.starts_with("TOTP1:"));
         assert_eq!(
@@ -14245,6 +14923,7 @@ mod tests {
 
         let verification = handle_verify_order_pickup(
             &state,
+            &load_gate_employee_actor(),
             created_order.order_id.clone(),
             PickupVerificationRequest {
                 verification_code: pickup_qr.verification_code,
@@ -14284,6 +14963,7 @@ mod tests {
 
         let error = handle_verify_order_pickup(
             &state,
+            &load_gate_employee_actor(),
             created_order.order_id.clone(),
             PickupVerificationRequest { verification_code },
             "req-pickup-expired",
@@ -14321,6 +15001,7 @@ mod tests {
 
         handle_verify_order_pickup(
             &state,
+            &load_gate_employee_actor(),
             created_order.order_id.clone(),
             PickupVerificationRequest {
                 verification_code: verification_code.clone(),
@@ -14331,6 +15012,7 @@ mod tests {
 
         let replay_error = handle_verify_order_pickup(
             &state,
+            &load_gate_employee_actor(),
             created_order.order_id.clone(),
             PickupVerificationRequest { verification_code },
             "req-pickup-replay-second",
@@ -14359,9 +15041,12 @@ mod tests {
         let created_order =
             handle_create_employee_order(&state, create_request).expect("order should be created");
 
-        let first_ledger =
-            handle_get_employee_order_payroll_ledger(&state, created_order.order_id.clone())
-                .expect("initial payroll ledger should be queryable");
+        let first_ledger = handle_get_employee_order_payroll_ledger(
+            &state,
+            &load_gate_employee_actor(),
+            created_order.order_id.clone(),
+        )
+        .expect("initial payroll ledger should be queryable");
         assert_eq!(first_ledger.net_amount_minor, 12000);
         assert_eq!(first_ledger.ledger_entries.len(), 1);
         assert_eq!(first_ledger.ledger_entries[0].kind, "DEDUCTION");
@@ -14369,6 +15054,7 @@ mod tests {
 
         handle_update_employee_order(
             &state,
+            &load_gate_employee_actor(),
             created_order.order_id.clone(),
             UpdateOrderRequest {
                 operation: "CANCEL".to_owned(),
@@ -14378,9 +15064,12 @@ mod tests {
         )
         .expect("order cancel should succeed");
 
-        let updated_ledger =
-            handle_get_employee_order_payroll_ledger(&state, created_order.order_id.clone())
-                .expect("updated payroll ledger should be queryable");
+        let updated_ledger = handle_get_employee_order_payroll_ledger(
+            &state,
+            &load_gate_employee_actor(),
+            created_order.order_id.clone(),
+        )
+        .expect("updated payroll ledger should be queryable");
         assert_eq!(updated_ledger.net_amount_minor, 0);
         assert_eq!(updated_ledger.ledger_entries.len(), 2);
         assert_eq!(updated_ledger.ledger_entries[1].kind, "ADJUSTMENT_CREDIT");
@@ -14408,6 +15097,7 @@ mod tests {
 
         let opened_dispute = handle_create_employee_order_dispute(
             &state,
+            &load_gate_employee_actor(),
             created_order.order_id.clone(),
             EmployeePayrollDisputeCreateRequest {
                 reason: "charged despite inventory issue".to_owned(),
@@ -15108,6 +15798,7 @@ mod tests {
 
         let http_error = handle_verify_order_pickup(
             &state,
+            &load_gate_employee_actor(),
             created_order.order_id.clone(),
             PickupVerificationRequest {
                 verification_code: "   ".to_owned(),

@@ -24,13 +24,13 @@ export const apiClient = {
   vendor: VendorService
 } as const;
 
-export function ensureApiClientConfigured(): void {
-  if (configuredBaseUrl !== null) {
-    return;
-  }
-
+export function ensureApiClientConfigured(bearerToken: string | null = null): void {
   const baseUrl = env.PUBLIC_API_BASE_URL?.trim();
   if (!baseUrl) {
+    throw new ApiConfigurationError();
+  }
+
+  if (configuredBaseUrl !== null && configuredBaseUrl !== baseUrl) {
     throw new ApiConfigurationError();
   }
 
@@ -38,16 +38,19 @@ export function ensureApiClientConfigured(): void {
   OpenAPI.BASE = baseUrl;
   OpenAPI.WITH_CREDENTIALS = true;
   OpenAPI.CREDENTIALS = "include";
+  const normalizedBearerToken = bearerToken?.trim() ?? null;
+  OpenAPI.TOKEN = normalizedBearerToken ?? undefined;
   OpenAPI.HEADERS = {
     "Accept-Language": "zh-TW"
   };
 }
 
 export async function probeApiAccess(
-  actor: AuthActor
+  actor: AuthActor,
+  bearerToken: string | null = null
 ): Promise<AsyncState<{ message: string }, string>> {
   try {
-    ensureApiClientConfigured();
+    ensureApiClientConfigured(bearerToken);
 
     if (actor.role === "employee") {
       const plantId = requirePlantId(actor);

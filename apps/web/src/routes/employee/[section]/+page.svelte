@@ -13,5 +13,6 @@
     actorId={data.actor.id}
     provider={data.auth.provider}
     plantId={data.actor.scope.plantIds[0] ?? null}
+    apiBearerToken={data.auth.apiBearerToken}
   />
 {/if}

@@ -5,6 +5,7 @@ import { fail, redirect } from "@sveltejs/kit";
 import { zhTW } from "$lib/i18n/zh-tw";
 import { probeApiAccess } from "$lib/platform/api";
 import { authRuntime } from "$lib/server/auth";
+import { buildApiBearerToken } from "$lib/server/auth/api-bearer";
 import { parseAuthRole } from "$lib/server/auth/contracts";
 
 export const actions: Actions = {
@@ -47,7 +48,10 @@ export const actions: Actions = {
       });
     }
 
-    const probeState = await probeApiAccess(event.locals.actor);
+    const probeState = await probeApiAccess(
+      event.locals.actor,
+      buildApiBearerToken(event.locals.auth)
+    );
     if (probeState.status === "success") {
       return {
         successMessage: probeState.data.message

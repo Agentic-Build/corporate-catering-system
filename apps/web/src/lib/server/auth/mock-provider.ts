@@ -58,7 +58,7 @@ const MOCK_ACTOR_TEMPLATE: Readonly<
     id: "emp-mock-001",
     displayName: "Mock Employee",
     scope: {
-      plantIds: ["plant-tpe-a1"],
+      plantIds: ["fab-a"],
       vendorIds: [],
       permissions: ["employee:portal"]
     }
@@ -67,7 +67,7 @@ const MOCK_ACTOR_TEMPLATE: Readonly<
     id: "ven-mock-001",
     displayName: "Mock Vendor",
     scope: {
-      plantIds: ["plant-tpe-a1"],
+      plantIds: ["fab-a"],
       vendorIds: ["ven-mock-001"],
       permissions: ["vendor:portal"]
     }

@@ -20,9 +20,10 @@
     actorId: string;
     provider: string;
     plantId: string | null;
+    apiBearerToken: string | null;
   }
 
-  let { sectionId, actorDisplayName, actorId, provider, plantId }: Props = $props();
+  let { sectionId, actorDisplayName, actorId, provider, plantId, apiBearerToken }: Props = $props();
 
   type MenuPageResponse = Awaited<ReturnType<typeof apiClient.employee.listEmployeeMenus>>;
   type MenuDiscoveryItem = MenuPageResponse["items"][number];
@@ -66,8 +67,11 @@
   const notificationTimeouts = new Set<ReturnType<typeof setTimeout>>();
 
   let orderDraftQuantities = $state<Record<string, number>>({});
+  let placingOrderByMenuItemId = $state<Record<string, boolean>>({});
   let orderEditQuantities = $state<Record<string, number>>({});
   let orderCancelReasons = $state<Record<string, string>>({});
+  let updatingOrderById = $state<Record<string, boolean>>({});
+  let cancellingOrderById = $state<Record<string, boolean>>({});
 
   let selectedPayrollOrderId = $state<string | null>(null);
   let payrollLedgersByOrderId = $state<Record<string, PayrollLedgerView>>({});
@@ -81,6 +85,7 @@
   let pickupQrImageDataUrl = $state<string | null>(null);
   let pickupQrLoading = $state(false);
   let pickupQrError = $state<string | null>(null);
+  let verifyingPickupByOrderId = $state<Record<string, boolean>>({});
 
   let clockTimer: ReturnType<typeof setInterval> | null = null;
   let pickupQrRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -169,16 +174,6 @@
     }
   });
 
-  $effect(() => {
-    if (!activePickupOrderId || !pickupQr || pickupQrLoading) {
-      return;
-    }
-
-    if (pickupQrSeconds <= 0) {
-      void refreshPickupQr(activePickupOrderId, false);
-    }
-  });
-
   async function bootstrapPortal() {
     if (!plantId) {
       const message = "目前登入帳號沒有可用的廠區範圍，無法載入員工訂餐資料。";
@@ -189,7 +184,7 @@
     }
 
     try {
-      ensureApiClientConfigured();
+      ensureApiClientConfigured(apiBearerToken);
     } catch (error) {
       const failure = normalizeApiFailure(error);
       menuError = failure.localizedMessage;
@@ -252,7 +247,13 @@
       );
       orders = page.items;
       hydrateOrderDraftState(page.items);
-      if (activePickupOrderId && !page.items.some((order) => order.orderId === activePickupOrderId)) {
+      const activePickupOrder = activePickupOrderId
+        ? page.items.find((order) => order.orderId === activePickupOrderId) ?? null
+        : null;
+      if (
+        activePickupOrderId &&
+        (!activePickupOrder || !isPickupEligible(activePickupOrder.status))
+      ) {
         clearPickupQrState();
       }
     } catch (error) {
@@ -290,6 +291,9 @@
     if (!plantId) {
       return;
     }
+    if (placingOrderByMenuItemId[item.menuItemId] === true) {
+      return;
+    }
 
     const quantity = orderDraftQuantity(item);
     if (quantity < 1 || quantity > item.remainingQuantity) {
@@ -297,6 +301,10 @@
       return;
     }
 
+    placingOrderByMenuItemId = {
+      ...placingOrderByMenuItemId,
+      [item.menuItemId]: true
+    };
     try {
       await apiClient.employee.createEmployeeOrder({
         plantId: plantId,
@@ -320,12 +328,23 @@
     } catch (error) {
       const failure = normalizeApiFailure(error);
       pushNotification("error", failure.localizedMessage);
+    } finally {
+      placingOrderByMenuItemId = {
+        ...placingOrderByMenuItemId,
+        [item.menuItemId]: false
+      };
     }
   }
 
   async function replaceOrderLineItems(order: EmployeeOrderView) {
     if (!isEmployeeOrderEditable(order.status)) {
       pushNotification("error", "此訂單狀態不可修改。");
+      return;
+    }
+    if (
+      updatingOrderById[order.orderId] === true ||
+      cancellingOrderById[order.orderId] === true
+    ) {
       return;
     }
 
@@ -341,6 +360,10 @@
       return;
     }
 
+    updatingOrderById = {
+      ...updatingOrderById,
+      [order.orderId]: true
+    };
     try {
       await apiClient.employee.updateEmployeeOrder(order.orderId, {
         operation: "REPLACE_LINE_ITEMS",
@@ -351,12 +374,23 @@
     } catch (error) {
       const failure = normalizeApiFailure(error);
       pushNotification("error", failure.localizedMessage);
+    } finally {
+      updatingOrderById = {
+        ...updatingOrderById,
+        [order.orderId]: false
+      };
     }
   }
 
   async function cancelOrder(order: EmployeeOrderView) {
     if (!isEmployeeOrderEditable(order.status)) {
       pushNotification("error", "此訂單狀態不可取消。");
+      return;
+    }
+    if (
+      cancellingOrderById[order.orderId] === true ||
+      updatingOrderById[order.orderId] === true
+    ) {
       return;
     }
 
@@ -366,6 +400,10 @@
       return;
     }
 
+    cancellingOrderById = {
+      ...cancellingOrderById,
+      [order.orderId]: true
+    };
     try {
       await apiClient.employee.updateEmployeeOrder(order.orderId, {
         operation: "CANCEL",
@@ -379,6 +417,11 @@
     } catch (error) {
       const failure = normalizeApiFailure(error);
       pushNotification("error", failure.localizedMessage);
+    } finally {
+      cancellingOrderById = {
+        ...cancellingOrderById,
+        [order.orderId]: false
+      };
     }
   }
 
@@ -452,6 +495,19 @@
   }
 
   async function refreshPickupQr(orderId: string, notifyOnError: boolean) {
+    if (pickupQrLoading) {
+      return;
+    }
+    const activeOrder = orders.find((order) => order.orderId === orderId) ?? null;
+    if (activePickupOrderId !== orderId || !activeOrder || !isPickupEligible(activeOrder.status)) {
+      clearPickupQrState();
+      return;
+    }
+    if (pickupQrRefreshTimer) {
+      clearTimeout(pickupQrRefreshTimer);
+      pickupQrRefreshTimer = null;
+    }
+
     pickupQrLoading = true;
     pickupQrError = null;
     try {
@@ -474,7 +530,11 @@
       schedulePickupQrRefresh(orderId, payload.secondsUntilRefresh);
     } catch (error) {
       const failure = normalizeApiFailure(error);
-      pickupQrError = failure.localizedMessage;
+      if (activePickupOrderId === orderId) {
+        pickupQr = null;
+        pickupQrImageDataUrl = null;
+        pickupQrError = failure.localizedMessage;
+      }
       if (notifyOnError) {
         pushNotification("error", failure.localizedMessage);
       }
@@ -488,6 +548,14 @@
       return;
     }
     const orderId = activePickupOrderId;
+    if (verifyingPickupByOrderId[orderId] === true) {
+      return;
+    }
+
+    verifyingPickupByOrderId = {
+      ...verifyingPickupByOrderId,
+      [orderId]: true
+    };
 
     try {
       await apiClient.employee.verifyPickupOrder(orderId, {
@@ -499,6 +567,11 @@
     } catch (error) {
       const failure = normalizeApiFailure(error);
       pushNotification("error", failure.localizedMessage);
+    } finally {
+      verifyingPickupByOrderId = {
+        ...verifyingPickupByOrderId,
+        [orderId]: false
+      };
     }
   }
 
@@ -577,6 +650,10 @@
 
   function orderEditQuantityKey(orderId: string, menuItemId: string): string {
     return `${orderId}:${menuItemId}`;
+  }
+
+  function isOrderMutationInFlight(orderId: string): boolean {
+    return updatingOrderById[orderId] === true || cancellingOrderById[orderId] === true;
   }
 
   function menuCutoffCountdown(item: MenuDiscoveryItem) {
@@ -782,7 +859,11 @@
                   min="1"
                   max={Math.max(1, Math.min(20, item.remainingQuantity))}
                   value={orderDraftQuantity(item)}
-                  disabled={!item.preorderOpen || item.remainingQuantity === 0}
+                  disabled={
+                    !item.preorderOpen ||
+                    item.remainingQuantity === 0 ||
+                    placingOrderByMenuItemId[item.menuItemId] === true
+                  }
                   oninput={(event) =>
                     updateOrderDraftQuantity(
                       item.menuItemId,
@@ -793,12 +874,16 @@
                 <button
                   class="rounded-lg bg-cyan-700 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
                   type="button"
-                  disabled={!item.preorderOpen || item.remainingQuantity === 0}
+                  disabled={
+                    !item.preorderOpen ||
+                    item.remainingQuantity === 0 ||
+                    placingOrderByMenuItemId[item.menuItemId] === true
+                  }
                   onclick={() => {
                     void placeOrder(item);
                   }}
                 >
-                  立即下單
+                  {placingOrderByMenuItemId[item.menuItemId] ? "下單中..." : "立即下單"}
                 </button>
               </div>
             </article>
@@ -867,7 +952,7 @@
                       min="1"
                       max="20"
                       value={orderEditQuantity(order.orderId, lineItem.menuItemId, lineItem.quantity)}
-                      disabled={!isEmployeeOrderEditable(order.status)}
+                      disabled={!isEmployeeOrderEditable(order.status) || isOrderMutationInFlight(order.orderId)}
                       oninput={(event) =>
                         updateOrderLineItemQuantity(
                           order.orderId,
@@ -886,27 +971,30 @@
                     type="text"
                     value={orderCancelReasons[order.orderId] ?? ""}
                     maxlength={200}
+                    disabled={isOrderMutationInFlight(order.orderId)}
                     oninput={(event) =>
                       updateCancelReason(order.orderId, (event.currentTarget as HTMLInputElement).value)}
                     placeholder="取消原因（至少 5 字）"
                   />
                   <button
-                    class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+                    class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
                     type="button"
+                    disabled={isOrderMutationInFlight(order.orderId)}
                     onclick={() => {
                       void replaceOrderLineItems(order);
                     }}
                   >
-                    送出修改
+                    {updatingOrderById[order.orderId] ? "送出中..." : "送出修改"}
                   </button>
                   <button
-                    class="rounded-lg bg-rose-700 px-3 py-2 text-sm font-semibold text-white"
+                    class="rounded-lg bg-rose-700 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
                     type="button"
+                    disabled={isOrderMutationInFlight(order.orderId)}
                     onclick={() => {
                       void cancelOrder(order);
                     }}
                   >
-                    取消訂單
+                    {cancellingOrderById[order.orderId] ? "取消中..." : "取消訂單"}
                   </button>
                 </div>
               {/if}
@@ -915,8 +1003,9 @@
                 <div class="grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
                   <div class="flex flex-wrap items-center gap-2">
                     <button
-                      class="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white"
+                      class="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
                       type="button"
+                      disabled={pickupQrLoading && activePickupOrderId === order.orderId}
                       onclick={() => {
                         void activatePickupQr(order.orderId);
                       }}
@@ -939,8 +1028,9 @@
                         <p class="break-all rounded-md bg-slate-900 px-2 py-2 text-center text-[11px] text-white">{pickupQr.verificationCode}</p>
                         <div class="flex flex-wrap gap-2">
                           <button
-                            class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+                            class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                             type="button"
+                            disabled={pickupQrLoading}
                             onclick={() => {
                               void refreshPickupQr(order.orderId, true);
                             }}
@@ -948,13 +1038,16 @@
                             立即刷新 QR
                           </button>
                           <button
-                            class="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white"
+                            class="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
                             type="button"
+                            disabled={
+                              pickupQrLoading || verifyingPickupByOrderId[order.orderId] === true
+                            }
                             onclick={() => {
                               void verifyPickupForActiveOrder();
                             }}
                           >
-                            完成領餐核銷
+                            {verifyingPickupByOrderId[order.orderId] ? "核銷中..." : "完成領餐核銷"}
                           </button>
                         </div>
                         <p class="text-[11px] text-slate-600">此 QR 每 {pickupQr.refreshIntervalSeconds} 秒更新一次，請在手機全螢幕顯示供現場掃描。</p>
