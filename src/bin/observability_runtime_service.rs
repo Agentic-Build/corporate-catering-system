@@ -50,7 +50,7 @@ use corporate_catering_system::menu_supply_window::{
     EmployeeMenuDiscoveryEntry, MenuHealthTag, MenuImageUrl, MenuItemId, MenuSupplyPolicy,
     MenuSupplyPolicySnapshot, MenuSupplyWindowError, Money, OrderId, OrderLifecycleState,
     OrderLineItemRequest, OrderMutation, OrderRetentionPolicy, OrderSnapshot, SpecialRequest,
-    VendorMenuItem, VendorMenuItemDraft,
+    VendorMenuItem, VendorMenuItemDraft, VendorMenuItemStatus, VendorOrderingPolicyOverride,
 };
 use corporate_catering_system::object_storage::{
     ObjectStorageError, ObjectStorageReference, ObjectStorageUploadPipeline, ObjectUploadIntent,
@@ -86,7 +86,8 @@ use corporate_catering_system::rush_reminder::{
 };
 use corporate_catering_system::transport::http::{
     HttpAuditInvestigationExecutionGateway, HttpEmployeeDiscoveryExecutionGateway,
-    HttpOrderExecutionError, HttpOrderingExecutionGateway, HttpVendorMenuExecutionGateway,
+    HttpOrderExecutionError, HttpOrderingExecutionGateway, HttpVendorFulfillmentExecutionGateway,
+    HttpVendorMenuExecutionGateway,
 };
 use corporate_catering_system::transport::mcp::{
     runtime_mcp_resources, runtime_mcp_tools, AuthorizedMcpToolWrite, McpAuthenticationModel,
@@ -108,6 +109,10 @@ use corporate_catering_system::vendor_compliance::{
 use corporate_catering_system::vendor_delivery_mapping::{
     DeliveryMappingId, DeliveryRuleEffect, PersistedPolicySnapshot, ServiceWindow,
     TaipeiBusinessMoment, VendorPlantDeliveryMapping, VendorPlantDeliveryPolicy,
+};
+use corporate_catering_system::vendor_fulfillment::{
+    FulfillmentBatchId, FulfillmentDeliveryStatus, ObjectStorageFulfillmentArtifactStore,
+    VendorFulfillmentBoardSnapshot, VendorFulfillmentError, VendorFulfillmentPolicy,
 };
 use hmac::{Hmac, Mac};
 use serde::de::DeserializeOwned;
@@ -300,7 +305,7 @@ enum RuntimeStatePersistence {
     InMemoryOnly,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct AppState {
     #[cfg(test)]
     next_order_sequence: Arc<AtomicU64>,
@@ -316,6 +321,7 @@ struct AppState {
     terminated_employee_actor_ids: Arc<HashSet<ActorId>>,
     audit_trail: ImmutableAuditTrail,
     payroll_export_field_encryptor: PayrollExportFieldEncryptor,
+    vendor_fulfillment_policy: VendorFulfillmentPolicy,
     #[cfg(test)]
     compliance_lifecycle: Arc<RwLock<VendorComplianceLifecycle>>,
     compliance_persistence: CompliancePersistence,
@@ -535,6 +541,270 @@ struct VendorOrderBoardEntryPayload {
 struct VendorOrderPagePayload {
     items: Vec<VendorOrderBoardEntryPayload>,
     page: PageMetaPayload,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct VendorMenuListQuery {
+    from_date: Option<String>,
+    to_date: Option<String>,
+    status: Option<String>,
+    page: Option<usize>,
+    page_size: Option<usize>,
+    sort_order: Option<SortOrderQuery>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorMenuItemPayload {
+    menu_item_id: String,
+    vendor_id: String,
+    name: String,
+    description: String,
+    menu_type: String,
+    status: String,
+    health_tags: Vec<String>,
+    image_url: Option<String>,
+    price: MenuPricePayload,
+    max_daily_quantity: u16,
+    remaining_quantity: u16,
+    delivery_date: String,
+    preorder_open_days_ahead: u16,
+    modify_cancel_cutoff_minute_of_day: u16,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorMenuPagePayload {
+    items: Vec<VendorMenuItemPayload>,
+    page: PageMetaPayload,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VendorMenuItemUpsertRequestPayload {
+    delivery_date: String,
+    name: String,
+    description: String,
+    menu_type: String,
+    health_tags: Option<Vec<String>>,
+    image_url: Option<String>,
+    price: MenuPricePayload,
+    max_daily_quantity: u16,
+    preorder_open_days_ahead_override: Option<u16>,
+    modify_cancel_cutoff_minute_of_day_override: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VendorMenuItemStatusPatchRequest {
+    status: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorOrderingPolicyPayload {
+    preorder_open_days_ahead: u16,
+    modify_cancel_cutoff_minute_of_day: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VendorOrderingPolicyUpsertRequest {
+    preorder_open_days_ahead: Option<u16>,
+    modify_cancel_cutoff_minute_of_day: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VendorFulfillmentDeliveryStatusTransitionRequestPayload {
+    to_status: String,
+    occurred_at: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentDeliveryStatusTransitionResultPayload {
+    order_id: String,
+    from_status: String,
+    to_status: String,
+    occurred_at: String,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentBoardQuery {
+    delivery_date: Option<String>,
+    plant_id: Option<String>,
+    include_audit_transitions: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VendorFulfillmentBatchCreateRequestPayload {
+    delivery_date: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentOrderLineItemPayload {
+    menu_item_id: String,
+    quantity: u16,
+    special_requests: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentOrderEntryPayload {
+    order_id: String,
+    plant_id: String,
+    order_status: String,
+    delivery_status: String,
+    line_items: Vec<VendorFulfillmentOrderLineItemPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SpecialRequestCountPayload {
+    special_request: String,
+    count: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentStatusCountPayload {
+    status: String,
+    count: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentPlantEntryPayload {
+    plant_id: String,
+    order_count: u32,
+    portion_count: u32,
+    delivery_status_counts: Vec<VendorFulfillmentStatusCountPayload>,
+    special_request_counts: Vec<SpecialRequestCountPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentStatusTransitionAuditEntryPayload {
+    order_id: String,
+    occurred_at: String,
+    actor_id: String,
+    actor_role: String,
+    operation_id: String,
+    from_status: String,
+    to_status: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentBoardPayload {
+    timezone: &'static str,
+    delivery_date: String,
+    generated_at: String,
+    plants: Vec<VendorFulfillmentPlantEntryPayload>,
+    orders: Vec<VendorFulfillmentOrderEntryPayload>,
+    status_transitions: Vec<VendorFulfillmentStatusTransitionAuditEntryPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentDailySummaryPlantRowPayload {
+    plant_id: String,
+    order_count: u32,
+    portion_count: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentDailySummaryExportPayload {
+    delivery_date: String,
+    total_orders: u32,
+    total_portions: u32,
+    total_special_requests: u32,
+    per_plant: Vec<VendorFulfillmentDailySummaryPlantRowPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentPlantPartitionOrderRowPayload {
+    order_id: String,
+    delivery_status: String,
+    portion_count: u32,
+    special_requests: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentPlantPartitionRowPayload {
+    plant_id: String,
+    total_orders: u32,
+    total_portions: u32,
+    special_request_counts: Vec<SpecialRequestCountPayload>,
+    orders: Vec<VendorFulfillmentPlantPartitionOrderRowPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentPlantPartitionSheetExportPayload {
+    rows: Vec<VendorFulfillmentPlantPartitionRowPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentLabelEntryPayload {
+    order_id: String,
+    plant_id: String,
+    delivery_status: String,
+    menu_item_id: String,
+    quantity: u16,
+    special_requests: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentLabelSheetExportPayload {
+    labels: Vec<VendorFulfillmentLabelEntryPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentBasketEntryPayload {
+    basket_code: String,
+    plant_id: String,
+    order_ids: Vec<String>,
+    portion_count: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentBasketListExportPayload {
+    basket_capacity_portions: u16,
+    baskets: Vec<VendorFulfillmentBasketEntryPayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentBatchArtifactsPayload {
+    daily_summary: VendorFulfillmentDailySummaryExportPayload,
+    plant_partition_sheet: VendorFulfillmentPlantPartitionSheetExportPayload,
+    labels: VendorFulfillmentLabelSheetExportPayload,
+    basket_list: VendorFulfillmentBasketListExportPayload,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorFulfillmentExportBatchPayload {
+    batch_id: String,
+    vendor_id: String,
+    delivery_date: String,
+    captured_at: String,
+    generated_by_actor_id: String,
+    board: VendorFulfillmentBoardPayload,
+    artifacts: VendorFulfillmentBatchArtifactsPayload,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1109,7 +1379,7 @@ struct PayrollRetentionPurgeResponse {
     as_of_epoch_day: i32,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MenuPricePayload {
     currency: String,
@@ -1752,6 +2022,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
             post(create_employee_order_dispute),
         )
         .route("/api/v1/vendor/orders", get(list_vendor_orders))
+        .route(
+            "/api/v1/vendor/orders/:orderId/delivery-status",
+            post(advance_vendor_fulfillment_delivery_status),
+        )
+        .route("/api/v1/vendor/menu-items", get(list_vendor_menu_items))
+        .route(
+            "/api/v1/vendor/menu-items/:menuItemId",
+            put(upsert_vendor_menu_item),
+        )
+        .route(
+            "/api/v1/vendor/menu-items/:menuItemId/status",
+            patch(update_vendor_menu_item_status),
+        )
+        .route(
+            "/api/v1/vendor/ordering-policy",
+            get(get_vendor_ordering_policy).put(upsert_vendor_ordering_policy),
+        )
+        .route(
+            "/api/v1/vendor/fulfillment-board",
+            get(list_vendor_fulfillment_board),
+        )
+        .route(
+            "/api/v1/vendor/fulfillment-batches",
+            post(create_vendor_fulfillment_export_batch),
+        )
+        .route(
+            "/api/v1/vendor/fulfillment-batches/:batchId",
+            get(get_vendor_fulfillment_export_batch),
+        )
         .route(
             "/api/v1/vendor/object-storage/upload-plans",
             post(create_vendor_object_storage_upload_plan),
@@ -4965,6 +5264,16 @@ fn bootstrap_runtime_state(
         .map_err(|error| format!("failed to warm Valkey runtime state cache: {error}"))?;
     }
 
+    let vendor_fulfillment_policy = VendorFulfillmentPolicy::with_audit_trail(
+        audit_trail.clone(),
+        Arc::new(
+            ObjectStorageFulfillmentArtifactStore::new(object_storage_upload_pipeline.clone())
+                .map_err(|error| {
+                    format!("failed to initialize vendor fulfillment artifact store: {error}")
+                })?,
+        ),
+    );
+
     Ok(AppState {
         #[cfg(test)]
         next_order_sequence: Arc::new(AtomicU64::new(1)),
@@ -4980,6 +5289,7 @@ fn bootstrap_runtime_state(
         terminated_employee_actor_ids: Arc::new(terminated_employee_actor_ids),
         audit_trail,
         payroll_export_field_encryptor,
+        vendor_fulfillment_policy,
         #[cfg(test)]
         compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
         compliance_persistence,
@@ -5888,6 +6198,952 @@ fn handle_list_vendor_orders(
             total_pages,
         },
     })
+}
+
+fn ensure_vendor_actor_authorized_for_runtime(
+    state: &AppState,
+    vendor_actor: &VendorScopedActorContext,
+) -> Result<(), (StatusCode, ErrorPayload)> {
+    if vendor_actor.actor().role() != Role::VendorOperator {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::VendorOperator,
+                vendor_actor.actor().role()
+            ),
+        ));
+    }
+    if !vendor_actor.actor().plant_scope().contains(&state.plant_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not authorized for plant `{}`",
+                vendor_actor.actor().actor_id().as_str(),
+                state.plant_id.as_str()
+            ),
+        ));
+    }
+    if !vendor_actor.is_scoped_for_vendor(&state.vendor_id) {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` is not scoped for vendor `{}`",
+                vendor_actor.actor().actor_id().as_str(),
+                state.vendor_id.as_str()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+async fn list_vendor_menu_items(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<VendorMenuListQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "listVendorMenuItems",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_list_vendor_menu_items(&state, &vendor_actor, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("vendor menu page payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("vendor menu page error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_list_vendor_menu_items(
+    state: &AppState,
+    vendor_actor: &VendorScopedActorContext,
+    query: VendorMenuListQuery,
+) -> Result<VendorMenuPagePayload, (StatusCode, ErrorPayload)> {
+    ensure_vendor_actor_authorized_for_runtime(state, vendor_actor)?;
+
+    let now_epoch_day = current_taipei_business_moment()
+        .map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "TIME_RESOLUTION_FAILED",
+                error,
+            )
+        })?
+        .epoch_day();
+    let (from_epoch_day, to_epoch_day) = resolve_order_query_range(
+        query.from_date.as_deref(),
+        query.to_date.as_deref(),
+        now_epoch_day,
+    )?;
+    let status_filter = query
+        .status
+        .as_deref()
+        .map(parse_vendor_menu_status_filter)
+        .transpose()?;
+
+    let page = query.page.unwrap_or(1);
+    if page == 0 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "page must be greater than or equal to 1".to_owned(),
+        ));
+    }
+    let page_size = query.page_size.unwrap_or(20);
+    if page_size == 0 || page_size > 200 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "pageSize must be between 1 and 200".to_owned(),
+        ));
+    }
+
+    let mut states = with_menu_supply_policy(state, |menu_supply_policy| {
+        menu_supply_policy
+            .vendor_menu_item_states(&state.vendor_id)
+            .map_err(map_vendor_menu_error)
+    })?;
+    states.retain(|state| {
+        let delivery_epoch_day = state.menu_item().delivery_epoch_day();
+        let status_matches = status_filter
+            .map(|filter| state.menu_item().status() == filter)
+            .unwrap_or(true);
+        delivery_epoch_day >= from_epoch_day && delivery_epoch_day <= to_epoch_day && status_matches
+    });
+
+    let sort_order = query.sort_order.unwrap_or(SortOrderQuery::Asc);
+    if matches!(sort_order, SortOrderQuery::Desc) {
+        states.reverse();
+    }
+
+    let total_items = states.len();
+    let total_pages = if total_items == 0 {
+        0
+    } else {
+        (total_items - 1) / page_size + 1
+    };
+    let start = page.saturating_sub(1).saturating_mul(page_size);
+    let end = start.saturating_add(page_size).min(total_items);
+    let paged_states = if start >= total_items {
+        Vec::new()
+    } else {
+        states[start..end].to_vec()
+    };
+
+    let items = paged_states
+        .iter()
+        .map(to_vendor_menu_item_payload)
+        .collect::<Vec<_>>();
+
+    Ok(VendorMenuPagePayload {
+        items,
+        page: PageMetaPayload {
+            page,
+            page_size,
+            total_items,
+            total_pages,
+        },
+    })
+}
+
+async fn upsert_vendor_menu_item(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(menu_item_id_raw): Path<String>,
+    Json(request): Json<VendorMenuItemUpsertRequestPayload>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "upsertVendorMenuItem",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response =
+        match handle_upsert_vendor_menu_item(&state, &vendor_actor, menu_item_id_raw, request) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(
+                        serde_json::to_value(payload)
+                            .expect("vendor menu item payload serialization should succeed"),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str()))
+                            .expect("vendor menu item error payload serialization should succeed"),
+                    ),
+                )
+            }
+        };
+
+    response
+}
+
+fn handle_upsert_vendor_menu_item(
+    state: &AppState,
+    vendor_actor: &VendorScopedActorContext,
+    menu_item_id_raw: String,
+    request: VendorMenuItemUpsertRequestPayload,
+) -> Result<VendorMenuItemPayload, (StatusCode, ErrorPayload)> {
+    ensure_vendor_actor_authorized_for_runtime(state, vendor_actor)?;
+    let menu_item_id = parse_contract_menu_item_id(&menu_item_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("menuItemId is invalid: {error}"),
+        )
+    })?;
+    let delivery_epoch_day =
+        parse_iso_date_to_epoch_day(&request.delivery_date).map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("deliveryDate is invalid: {error}"),
+            )
+        })?;
+
+    let health_tags = request
+        .health_tags
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| {
+            MenuHealthTag::parse(value.to_ascii_uppercase()).map_err(|error| {
+                domain_error(
+                    StatusCode::BAD_REQUEST,
+                    "BAD_REQUEST",
+                    format!("healthTags entry `{value}` is invalid: {error}"),
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let image_url = request
+        .image_url
+        .map(MenuImageUrl::parse)
+        .transpose()
+        .map_err(map_vendor_menu_error)?;
+    let price = Money::new(request.price.currency, request.price.amount_minor)
+        .map_err(map_vendor_menu_error)?;
+    let existing_status = with_menu_supply_policy(state, |menu_supply_policy| {
+        menu_supply_policy
+            .menu_item(&menu_item_id)
+            .map(|menu_item| menu_item.map(|item| item.status()))
+            .map_err(map_vendor_menu_error)
+    })?;
+
+    let mut draft = VendorMenuItemDraft::new(
+        request.name,
+        request.description,
+        request.menu_type,
+        health_tags,
+        image_url,
+        price,
+        request.max_daily_quantity,
+        delivery_epoch_day,
+    )
+    .map_err(map_vendor_menu_error)?
+    .with_ordering_policy_overrides(VendorOrderingPolicyOverride {
+        preorder_open_days_ahead: request.preorder_open_days_ahead_override,
+        modify_cancel_cutoff_minute_of_day: request.modify_cancel_cutoff_minute_of_day_override,
+    });
+    if let Some(status) = existing_status {
+        draft = draft.with_status(status);
+    }
+
+    let menu_item = VendorMenuItem::new(menu_item_id.clone(), state.vendor_id.clone(), draft);
+    let menu_item_state = mutate_menu_supply_policy(
+        state,
+        |menu_supply_policy| {
+            menu_supply_policy.upsert_menu_item(vendor_actor.actor(), menu_item)?;
+            menu_supply_policy.menu_item_state(&menu_item_id)?.ok_or(
+                MenuSupplyWindowError::MenuItemNotFound {
+                    menu_item_id: menu_item_id.clone(),
+                },
+            )
+        },
+        map_vendor_menu_error,
+        "ORDER_POLICY_VIOLATION",
+    )?;
+    Ok(to_vendor_menu_item_payload(&menu_item_state))
+}
+
+async fn update_vendor_menu_item_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(menu_item_id_raw): Path<String>,
+    Json(request): Json<VendorMenuItemStatusPatchRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "updateVendorMenuItemStatus",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_update_vendor_menu_item_status(
+        &state,
+        &vendor_actor,
+        menu_item_id_raw,
+        request,
+    ) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("vendor menu status payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("vendor menu status error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_update_vendor_menu_item_status(
+    state: &AppState,
+    vendor_actor: &VendorScopedActorContext,
+    menu_item_id_raw: String,
+    request: VendorMenuItemStatusPatchRequest,
+) -> Result<VendorMenuItemPayload, (StatusCode, ErrorPayload)> {
+    ensure_vendor_actor_authorized_for_runtime(state, vendor_actor)?;
+    let menu_item_id = parse_contract_menu_item_id(&menu_item_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("menuItemId is invalid: {error}"),
+        )
+    })?;
+    let status = parse_vendor_menu_status_filter(request.status.as_str())?;
+
+    let menu_item_state = mutate_menu_supply_policy(
+        state,
+        |menu_supply_policy| {
+            let existing_menu_item = menu_supply_policy.menu_item(&menu_item_id)?.ok_or(
+                MenuSupplyWindowError::MenuItemNotFound {
+                    menu_item_id: menu_item_id.clone(),
+                },
+            )?;
+            menu_supply_policy
+                .upsert_menu_item(vendor_actor.actor(), existing_menu_item.with_status(status))?;
+            menu_supply_policy.menu_item_state(&menu_item_id)?.ok_or(
+                MenuSupplyWindowError::MenuItemNotFound {
+                    menu_item_id: menu_item_id.clone(),
+                },
+            )
+        },
+        map_vendor_menu_error,
+        "ORDER_POLICY_VIOLATION",
+    )?;
+    Ok(to_vendor_menu_item_payload(&menu_item_state))
+}
+
+async fn get_vendor_ordering_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "getVendorOrderingPolicy",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_get_vendor_ordering_policy(&state, &vendor_actor) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("vendor ordering policy payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "vendor ordering policy error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_get_vendor_ordering_policy(
+    state: &AppState,
+    vendor_actor: &VendorScopedActorContext,
+) -> Result<VendorOrderingPolicyPayload, (StatusCode, ErrorPayload)> {
+    ensure_vendor_actor_authorized_for_runtime(state, vendor_actor)?;
+    let policy = with_menu_supply_policy(state, |menu_supply_policy| {
+        menu_supply_policy
+            .effective_vendor_ordering_policy(&state.vendor_id)
+            .map_err(map_vendor_menu_error)
+    })?;
+    Ok(VendorOrderingPolicyPayload {
+        preorder_open_days_ahead: policy.preorder_open_days_ahead(),
+        modify_cancel_cutoff_minute_of_day: policy.modify_cancel_cutoff_minute_of_day(),
+    })
+}
+
+async fn upsert_vendor_ordering_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<VendorOrderingPolicyUpsertRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "upsertVendorOrderingPolicy",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_upsert_vendor_ordering_policy(&state, &vendor_actor, request) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("vendor ordering policy payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "vendor ordering policy error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_upsert_vendor_ordering_policy(
+    state: &AppState,
+    vendor_actor: &VendorScopedActorContext,
+    request: VendorOrderingPolicyUpsertRequest,
+) -> Result<VendorOrderingPolicyPayload, (StatusCode, ErrorPayload)> {
+    ensure_vendor_actor_authorized_for_runtime(state, vendor_actor)?;
+    let policy = mutate_menu_supply_policy(
+        state,
+        |menu_supply_policy| {
+            menu_supply_policy.upsert_vendor_ordering_policy(
+                vendor_actor.actor(),
+                &state.vendor_id,
+                VendorOrderingPolicyOverride {
+                    preorder_open_days_ahead: request.preorder_open_days_ahead,
+                    modify_cancel_cutoff_minute_of_day: request.modify_cancel_cutoff_minute_of_day,
+                },
+            )
+        },
+        map_vendor_menu_error,
+        "ORDER_POLICY_VIOLATION",
+    )?;
+    Ok(VendorOrderingPolicyPayload {
+        preorder_open_days_ahead: policy.preorder_open_days_ahead(),
+        modify_cancel_cutoff_minute_of_day: policy.modify_cancel_cutoff_minute_of_day(),
+    })
+}
+
+async fn list_vendor_fulfillment_board(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<VendorFulfillmentBoardQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "listVendorFulfillmentBoard",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_list_vendor_fulfillment_board(&state, &vendor_actor, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("vendor fulfillment board payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "vendor fulfillment board error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_list_vendor_fulfillment_board(
+    state: &AppState,
+    vendor_actor: &VendorScopedActorContext,
+    query: VendorFulfillmentBoardQuery,
+) -> Result<VendorFulfillmentBoardPayload, (StatusCode, ErrorPayload)> {
+    ensure_vendor_actor_authorized_for_runtime(state, vendor_actor)?;
+    let delivery_date = query.delivery_date.ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "VENDOR_FULFILLMENT_INVALID_REQUEST",
+            "deliveryDate query parameter is required".to_owned(),
+        )
+    })?;
+    let delivery_epoch_day =
+        parse_iso_date_to_epoch_day(delivery_date.as_str()).map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "VENDOR_FULFILLMENT_INVALID_REQUEST",
+                format!("deliveryDate is invalid: {error}"),
+            )
+        })?;
+    let plant_id_filter = query.plant_id.as_deref();
+    if let Some(request_plant_id) = plant_id_filter {
+        if request_plant_id != state.plant_id.as_str() {
+            return Err(domain_error(
+                StatusCode::BAD_REQUEST,
+                "UNSUPPORTED_PLANT_ID",
+                format!(
+                    "plantId `{request_plant_id}` is unsupported by this runtime, expected `{}`",
+                    state.plant_id.as_str()
+                ),
+            ));
+        }
+        if !vendor_actor.actor().plant_scope().contains(&state.plant_id) {
+            return Err(domain_error(
+                StatusCode::FORBIDDEN,
+                "FORBIDDEN",
+                format!(
+                    "actor `{}` is not authorized for plant `{}`",
+                    vendor_actor.actor().actor_id().as_str(),
+                    state.plant_id.as_str()
+                ),
+            ));
+        }
+    }
+    let include_audit_transitions = query.include_audit_transitions.unwrap_or(true);
+    let now = current_taipei_business_moment().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+    let menu_supply_policy = with_menu_supply_policy(state, |policy| Ok(policy.clone()))?;
+    let gateway = HttpVendorFulfillmentExecutionGateway::new(
+        &state.vendor_fulfillment_policy,
+        &menu_supply_policy,
+    );
+    let board = gateway
+        .execute_vendor_operations_board(&state.vendor_id, delivery_epoch_day, now)
+        .map_err(map_vendor_fulfillment_error)?;
+    Ok(to_vendor_fulfillment_board_payload(
+        &board,
+        include_audit_transitions,
+        plant_id_filter,
+    ))
+}
+
+async fn advance_vendor_fulfillment_delivery_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(order_id_raw): Path<String>,
+    Json(request): Json<VendorFulfillmentDeliveryStatusTransitionRequestPayload>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "advanceVendorFulfillmentDeliveryStatus",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_advance_vendor_fulfillment_delivery_status(
+        &state,
+        &vendor_actor,
+        order_id_raw,
+        request,
+    ) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::ACCEPTED.as_u16());
+            (
+                StatusCode::ACCEPTED,
+                Json(serde_json::to_value(payload).expect(
+                    "vendor fulfillment status transition payload serialization should succeed",
+                )),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "vendor fulfillment status transition error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_advance_vendor_fulfillment_delivery_status(
+    state: &AppState,
+    vendor_actor: &VendorScopedActorContext,
+    order_id_raw: String,
+    request: VendorFulfillmentDeliveryStatusTransitionRequestPayload,
+) -> Result<VendorFulfillmentDeliveryStatusTransitionResultPayload, (StatusCode, ErrorPayload)> {
+    ensure_vendor_actor_authorized_for_runtime(state, vendor_actor)?;
+    let order_id = parse_contract_order_id(&order_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("orderId is invalid: {error}"),
+        )
+    })?;
+    let occurred_at =
+        parse_taipei_datetime_to_moment(request.occurred_at.as_str()).map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "VENDOR_FULFILLMENT_INVALID_REQUEST",
+                format!("occurredAt is invalid: {error}"),
+            )
+        })?;
+    let to_status = parse_vendor_fulfillment_delivery_status(request.to_status.as_str())?;
+    let menu_supply_policy = with_menu_supply_policy(state, |policy| Ok(policy.clone()))?;
+    let gateway = HttpVendorFulfillmentExecutionGateway::new(
+        &state.vendor_fulfillment_policy,
+        &menu_supply_policy,
+    );
+    let audit_entry = gateway
+        .execute_transition_delivery_status(vendor_actor.actor(), &order_id, to_status, occurred_at)
+        .map_err(map_vendor_fulfillment_error)?;
+
+    Ok(VendorFulfillmentDeliveryStatusTransitionResultPayload {
+        order_id: audit_entry.order_id().as_str().to_owned(),
+        from_status: fulfillment_delivery_status_label(audit_entry.from_status()).to_owned(),
+        to_status: fulfillment_delivery_status_label(audit_entry.to_status()).to_owned(),
+        occurred_at: taipei_moment_to_iso_datetime(audit_entry.occurred_at()),
+    })
+}
+
+async fn create_vendor_fulfillment_export_batch(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<VendorFulfillmentBatchCreateRequestPayload>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "createVendorFulfillmentExportBatch",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response =
+        match handle_create_vendor_fulfillment_export_batch(&state, &vendor_actor, request) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::CREATED.as_u16());
+                (
+                    StatusCode::CREATED,
+                    Json(
+                        serde_json::to_value(payload).expect(
+                            "vendor fulfillment batch payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                            "vendor fulfillment batch error payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+        };
+
+    response
+}
+
+fn handle_create_vendor_fulfillment_export_batch(
+    state: &AppState,
+    vendor_actor: &VendorScopedActorContext,
+    request: VendorFulfillmentBatchCreateRequestPayload,
+) -> Result<VendorFulfillmentExportBatchPayload, (StatusCode, ErrorPayload)> {
+    ensure_vendor_actor_authorized_for_runtime(state, vendor_actor)?;
+    let delivery_epoch_day =
+        parse_iso_date_to_epoch_day(request.delivery_date.as_str()).map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "VENDOR_FULFILLMENT_INVALID_REQUEST",
+                format!("deliveryDate is invalid: {error}"),
+            )
+        })?;
+    let captured_at = current_taipei_business_moment().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+    let menu_supply_policy = with_menu_supply_policy(state, |policy| Ok(policy.clone()))?;
+    let gateway = HttpVendorFulfillmentExecutionGateway::new(
+        &state.vendor_fulfillment_policy,
+        &menu_supply_policy,
+    );
+    let batch = gateway
+        .execute_create_export_batch(
+            vendor_actor.actor(),
+            &state.vendor_id,
+            delivery_epoch_day,
+            captured_at,
+        )
+        .map_err(map_vendor_fulfillment_error)?;
+    Ok(to_vendor_fulfillment_export_batch_payload(&batch))
+}
+
+async fn get_vendor_fulfillment_export_batch(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(batch_id_raw): Path<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "getVendorFulfillmentExportBatch",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let vendor_actor = match require_vendor_operator_actor(&headers) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response =
+        match handle_get_vendor_fulfillment_export_batch(&state, &vendor_actor, batch_id_raw) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(
+                        serde_json::to_value(payload).expect(
+                            "vendor fulfillment batch payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                            "vendor fulfillment batch error payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+        };
+
+    response
+}
+
+fn handle_get_vendor_fulfillment_export_batch(
+    state: &AppState,
+    vendor_actor: &VendorScopedActorContext,
+    batch_id_raw: String,
+) -> Result<VendorFulfillmentExportBatchPayload, (StatusCode, ErrorPayload)> {
+    ensure_vendor_actor_authorized_for_runtime(state, vendor_actor)?;
+    let batch_id = parse_contract_fulfillment_batch_id(batch_id_raw.as_str()).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "VENDOR_FULFILLMENT_INVALID_REQUEST",
+            format!("batchId is invalid: {error}"),
+        )
+    })?;
+    let batch = state
+        .vendor_fulfillment_policy
+        .batch_snapshot(&batch_id)
+        .map_err(map_vendor_fulfillment_error)?;
+    Ok(to_vendor_fulfillment_export_batch_payload(&batch))
 }
 
 async fn create_vendor_object_storage_upload_plan(
@@ -6927,6 +8183,37 @@ fn parse_order_status_filter(
     }
 }
 
+fn parse_vendor_menu_status_filter(
+    value: &str,
+) -> Result<VendorMenuItemStatus, (StatusCode, ErrorPayload)> {
+    let normalized = value.trim().to_ascii_uppercase();
+    VendorMenuItemStatus::parse(normalized.as_str()).map_err(|_| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("status `{}` is unsupported", value.trim()),
+        )
+    })
+}
+
+fn parse_vendor_fulfillment_delivery_status(
+    value: &str,
+) -> Result<FulfillmentDeliveryStatus, (StatusCode, ErrorPayload)> {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "PENDING_PREP" => Ok(FulfillmentDeliveryStatus::PendingPrep),
+        "PREPARING" => Ok(FulfillmentDeliveryStatus::Preparing),
+        "PACKED" => Ok(FulfillmentDeliveryStatus::Packed),
+        "OUT_FOR_DELIVERY" => Ok(FulfillmentDeliveryStatus::OutForDelivery),
+        "DELIVERED" => Ok(FulfillmentDeliveryStatus::Delivered),
+        "CANCELLED" => Ok(FulfillmentDeliveryStatus::Cancelled),
+        _ => Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "VENDOR_FULFILLMENT_INVALID_REQUEST",
+            format!("toStatus `{}` is unsupported", value.trim()),
+        )),
+    }
+}
+
 fn order_created_at(snapshot: &OrderSnapshot) -> Option<TaipeiBusinessMoment> {
     snapshot.timeline().first().map(|event| event.occurred_at())
 }
@@ -7297,6 +8584,70 @@ fn epoch_day_to_iso_date(epoch_day: i32) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
+fn parse_taipei_datetime_to_moment(value: &str) -> Result<TaipeiBusinessMoment, String> {
+    let trimmed = value.trim();
+    let (date_part, time_with_offset) = trimmed
+        .split_once('T')
+        .ok_or_else(|| "must use YYYY-MM-DDTHH:MM:SS+08:00 format".to_owned())?;
+    if !time_with_offset.ends_with("+08:00") {
+        return Err("timezone offset must be +08:00".to_owned());
+    }
+    let time_part = &time_with_offset[..time_with_offset.len().saturating_sub(6)];
+    let mut time_segments = time_part.split(':');
+    let hour = time_segments
+        .next()
+        .ok_or_else(|| "hour is required".to_owned())?
+        .parse::<u16>()
+        .map_err(|_| "hour is invalid".to_owned())?;
+    let minute = time_segments
+        .next()
+        .ok_or_else(|| "minute is required".to_owned())?
+        .parse::<u16>()
+        .map_err(|_| "minute is invalid".to_owned())?;
+    let second = time_segments
+        .next()
+        .ok_or_else(|| "second is required".to_owned())?
+        .parse::<u16>()
+        .map_err(|_| "second is invalid".to_owned())?;
+    if time_segments.next().is_some() {
+        return Err("time must use HH:MM:SS format".to_owned());
+    }
+    if hour > 23 {
+        return Err("hour must be between 0 and 23".to_owned());
+    }
+    if minute > 59 {
+        return Err("minute must be between 0 and 59".to_owned());
+    }
+    if second > 59 {
+        return Err("second must be between 0 and 59".to_owned());
+    }
+
+    let epoch_day = parse_iso_date_to_epoch_day(date_part)?;
+    let minute_of_day = hour
+        .checked_mul(60)
+        .and_then(|minutes| minutes.checked_add(minute))
+        .ok_or_else(|| "minute-of-day overflowed supported range".to_owned())?;
+    TaipeiBusinessMoment::new(epoch_day, minute_of_day)
+        .map_err(|error| format!("failed to construct Taipei business moment: {error}"))
+}
+
+fn parse_contract_menu_item_id(value: &str) -> Result<MenuItemId, String> {
+    let trimmed = value.trim();
+    let Some(suffix) = trimmed.strip_prefix("menu-") else {
+        return Err("must start with `menu-`".to_owned());
+    };
+    if !(8..=32).contains(&suffix.len()) {
+        return Err("suffix length must be between 8 and 32 characters".to_owned());
+    }
+    if !suffix
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit())
+    {
+        return Err("suffix must contain only lowercase letters and digits".to_owned());
+    }
+    MenuItemId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
+}
+
 fn parse_contract_order_id(value: &str) -> Result<OrderId, String> {
     let trimmed = value.trim();
     let Some(suffix) = trimmed.strip_prefix("ord-") else {
@@ -7312,6 +8663,20 @@ fn parse_contract_order_id(value: &str) -> Result<OrderId, String> {
         return Err("suffix must contain only lowercase letters and digits".to_owned());
     }
     OrderId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
+}
+
+fn parse_contract_fulfillment_batch_id(value: &str) -> Result<FulfillmentBatchId, String> {
+    let trimmed = value.trim();
+    let Some(suffix) = trimmed.strip_prefix("fbatch-") else {
+        return Err("must start with `fbatch-`".to_owned());
+    };
+    if !(3..=64).contains(&suffix.len()) {
+        return Err("suffix length must be between 3 and 64 characters".to_owned());
+    }
+    if !suffix.chars().all(|ch| ch.is_ascii_digit() || ch == '-') {
+        return Err("suffix must contain only digits and hyphen".to_owned());
+    }
+    FulfillmentBatchId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
 }
 
 fn days_in_month(year: i32, month: u32) -> u32 {
@@ -11273,6 +12638,359 @@ fn build_vendor_order_board_entry_payload(
     })
 }
 
+fn to_vendor_menu_item_payload(
+    state: &corporate_catering_system::menu_supply_window::VendorMenuItemState,
+) -> VendorMenuItemPayload {
+    let menu_item = state.menu_item();
+    VendorMenuItemPayload {
+        menu_item_id: menu_item.menu_item_id().as_str().to_owned(),
+        vendor_id: menu_item.vendor_id().as_str().to_owned(),
+        name: menu_item.name().to_owned(),
+        description: menu_item.description().to_owned(),
+        menu_type: menu_item.menu_type().to_owned(),
+        status: menu_item.status().as_str().to_owned(),
+        health_tags: menu_item
+            .health_tags()
+            .iter()
+            .map(|tag| tag.as_str().to_owned())
+            .collect(),
+        image_url: menu_item.image_url().map(|value| value.as_str().to_owned()),
+        price: MenuPricePayload {
+            currency: menu_item.price().currency().to_owned(),
+            amount_minor: menu_item.price().amount_minor(),
+        },
+        max_daily_quantity: menu_item.max_daily_quantity(),
+        remaining_quantity: state.remaining_quantity(),
+        delivery_date: epoch_day_to_iso_date(menu_item.delivery_epoch_day()),
+        preorder_open_days_ahead: state.preorder_open_days_ahead(),
+        modify_cancel_cutoff_minute_of_day: state.modify_cancel_cutoff_minute_of_day(),
+    }
+}
+
+fn fulfillment_delivery_status_label(status: FulfillmentDeliveryStatus) -> &'static str {
+    match status {
+        FulfillmentDeliveryStatus::PendingPrep => "PENDING_PREP",
+        FulfillmentDeliveryStatus::Preparing => "PREPARING",
+        FulfillmentDeliveryStatus::Packed => "PACKED",
+        FulfillmentDeliveryStatus::OutForDelivery => "OUT_FOR_DELIVERY",
+        FulfillmentDeliveryStatus::Delivered => "DELIVERED",
+        FulfillmentDeliveryStatus::Cancelled => "CANCELLED",
+    }
+}
+
+fn to_vendor_fulfillment_board_payload(
+    board: &VendorFulfillmentBoardSnapshot,
+    include_audit_transitions: bool,
+    plant_id_filter: Option<&str>,
+) -> VendorFulfillmentBoardPayload {
+    let orders = board
+        .order_entries()
+        .iter()
+        .filter(|entry| {
+            plant_id_filter
+                .map(|filter| entry.plant_id().as_str() == filter)
+                .unwrap_or(true)
+        })
+        .map(|entry| VendorFulfillmentOrderEntryPayload {
+            order_id: entry.order_id().as_str().to_owned(),
+            plant_id: entry.plant_id().as_str().to_owned(),
+            order_status: entry.order_state().as_str().to_owned(),
+            delivery_status: fulfillment_delivery_status_label(entry.delivery_status()).to_owned(),
+            line_items: entry
+                .line_items()
+                .iter()
+                .map(|line_item| VendorFulfillmentOrderLineItemPayload {
+                    menu_item_id: line_item.menu_item_id().as_str().to_owned(),
+                    quantity: line_item.quantity(),
+                    special_requests: line_item
+                        .special_requests()
+                        .iter()
+                        .map(|request| request.as_str().to_owned())
+                        .collect(),
+                })
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+
+    let plants = board
+        .plant_entries()
+        .iter()
+        .filter(|entry| {
+            plant_id_filter
+                .map(|filter| entry.plant_id().as_str() == filter)
+                .unwrap_or(true)
+        })
+        .map(|entry| VendorFulfillmentPlantEntryPayload {
+            plant_id: entry.plant_id().as_str().to_owned(),
+            order_count: entry.order_count(),
+            portion_count: entry.portion_count(),
+            delivery_status_counts: entry
+                .delivery_status_counts()
+                .iter()
+                .map(|(status, count)| VendorFulfillmentStatusCountPayload {
+                    status: fulfillment_delivery_status_label(*status).to_owned(),
+                    count: *count,
+                })
+                .collect(),
+            special_request_counts: entry
+                .special_request_counts()
+                .iter()
+                .map(|(special_request, count)| SpecialRequestCountPayload {
+                    special_request: special_request.as_str().to_owned(),
+                    count: *count,
+                })
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+
+    let status_transitions = if include_audit_transitions {
+        board
+            .status_transitions()
+            .iter()
+            .filter(|entry| {
+                plant_id_filter
+                    .map(|filter| {
+                        board.order_entries().iter().any(|order| {
+                            order.order_id() == entry.order_id()
+                                && order.plant_id().as_str() == filter
+                        })
+                    })
+                    .unwrap_or(true)
+            })
+            .map(|entry| VendorFulfillmentStatusTransitionAuditEntryPayload {
+                order_id: entry.order_id().as_str().to_owned(),
+                occurred_at: taipei_moment_to_iso_datetime(entry.occurred_at()),
+                actor_id: entry.audit_identity().actor_id().as_str().to_owned(),
+                actor_role: format!("{:?}", entry.audit_identity().role()).to_ascii_uppercase(),
+                operation_id: entry.audit_identity().operation_id().to_owned(),
+                from_status: fulfillment_delivery_status_label(entry.from_status()).to_owned(),
+                to_status: fulfillment_delivery_status_label(entry.to_status()).to_owned(),
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+
+    VendorFulfillmentBoardPayload {
+        timezone: "Asia/Taipei",
+        delivery_date: epoch_day_to_iso_date(board.delivery_epoch_day()),
+        generated_at: taipei_moment_to_iso_datetime(board.generated_at()),
+        plants,
+        orders,
+        status_transitions,
+    }
+}
+
+fn to_vendor_fulfillment_export_batch_payload(
+    batch: &corporate_catering_system::vendor_fulfillment::VendorFulfillmentBatchSnapshot,
+) -> VendorFulfillmentExportBatchPayload {
+    let board = to_vendor_fulfillment_board_payload(batch.board(), true, None);
+    let artifacts = build_vendor_fulfillment_batch_artifacts_payload(batch.board());
+    VendorFulfillmentExportBatchPayload {
+        batch_id: batch.batch_id().as_str().to_owned(),
+        vendor_id: batch.vendor_id().as_str().to_owned(),
+        delivery_date: epoch_day_to_iso_date(batch.delivery_epoch_day()),
+        captured_at: taipei_moment_to_iso_datetime(batch.captured_at()),
+        generated_by_actor_id: batch.audit_identity().actor_id().as_str().to_owned(),
+        board,
+        artifacts,
+    }
+}
+
+fn build_vendor_fulfillment_batch_artifacts_payload(
+    board: &VendorFulfillmentBoardSnapshot,
+) -> VendorFulfillmentBatchArtifactsPayload {
+    let delivery_date = epoch_day_to_iso_date(board.delivery_epoch_day());
+    let mut per_plant_summary = BTreeMap::<String, (u32, u32)>::new();
+    let mut plant_partition_totals = BTreeMap::<String, (u32, u32)>::new();
+    let mut plant_partition_special_requests = BTreeMap::<String, BTreeMap<String, u32>>::new();
+    let mut plant_partition_orders =
+        BTreeMap::<String, Vec<VendorFulfillmentPlantPartitionOrderRowPayload>>::new();
+    let mut labels = Vec::<VendorFulfillmentLabelEntryPayload>::new();
+    let mut total_orders = 0_u32;
+    let mut total_portions = 0_u32;
+    let mut total_special_requests = 0_u32;
+
+    for order in board.order_entries() {
+        let plant_id = order.plant_id().as_str().to_owned();
+        let order_portions = order.total_portions();
+        total_orders = total_orders.saturating_add(1);
+        total_portions = total_portions.saturating_add(order_portions);
+
+        let summary = per_plant_summary.entry(plant_id.clone()).or_insert((0, 0));
+        summary.0 = summary.0.saturating_add(1);
+        summary.1 = summary.1.saturating_add(order_portions);
+
+        let partition_total = plant_partition_totals
+            .entry(plant_id.clone())
+            .or_insert((0, 0));
+        partition_total.0 = partition_total.0.saturating_add(1);
+        partition_total.1 = partition_total.1.saturating_add(order_portions);
+
+        let special_request_counts = plant_partition_special_requests
+            .entry(plant_id.clone())
+            .or_default();
+        let mut order_special_requests = Vec::<String>::new();
+
+        for line_item in order.line_items() {
+            labels.push(VendorFulfillmentLabelEntryPayload {
+                order_id: order.order_id().as_str().to_owned(),
+                plant_id: plant_id.clone(),
+                delivery_status: fulfillment_delivery_status_label(order.delivery_status())
+                    .to_owned(),
+                menu_item_id: line_item.menu_item_id().as_str().to_owned(),
+                quantity: line_item.quantity(),
+                special_requests: line_item
+                    .special_requests()
+                    .iter()
+                    .map(|request| request.as_str().to_owned())
+                    .collect(),
+            });
+
+            let quantity = u32::from(line_item.quantity());
+            for special_request in line_item.special_requests() {
+                let special_request_label = special_request.as_str().to_owned();
+                if !order_special_requests.contains(&special_request_label) {
+                    order_special_requests.push(special_request_label.clone());
+                }
+                *special_request_counts
+                    .entry(special_request_label)
+                    .or_insert(0) += quantity;
+                total_special_requests = total_special_requests.saturating_add(quantity);
+            }
+        }
+
+        order_special_requests.sort();
+        plant_partition_orders
+            .entry(plant_id.clone())
+            .or_default()
+            .push(VendorFulfillmentPlantPartitionOrderRowPayload {
+                order_id: order.order_id().as_str().to_owned(),
+                delivery_status: fulfillment_delivery_status_label(order.delivery_status())
+                    .to_owned(),
+                portion_count: order.total_portions(),
+                special_requests: order_special_requests,
+            });
+    }
+
+    labels.sort_by(|left, right| {
+        left.plant_id
+            .cmp(&right.plant_id)
+            .then_with(|| left.order_id.cmp(&right.order_id))
+            .then_with(|| left.menu_item_id.cmp(&right.menu_item_id))
+    });
+
+    let daily_summary = VendorFulfillmentDailySummaryExportPayload {
+        delivery_date: delivery_date.clone(),
+        total_orders,
+        total_portions,
+        total_special_requests,
+        per_plant: per_plant_summary
+            .into_iter()
+            .map(|(plant_id, (order_count, portion_count))| {
+                VendorFulfillmentDailySummaryPlantRowPayload {
+                    plant_id,
+                    order_count,
+                    portion_count,
+                }
+            })
+            .collect(),
+    };
+
+    let plant_partition_sheet = VendorFulfillmentPlantPartitionSheetExportPayload {
+        rows: plant_partition_totals
+            .into_iter()
+            .map(|(plant_id, (total_orders, total_portions))| {
+                let mut orders = plant_partition_orders.remove(&plant_id).unwrap_or_default();
+                orders.sort_by(|left, right| left.order_id.cmp(&right.order_id));
+                VendorFulfillmentPlantPartitionRowPayload {
+                    special_request_counts: plant_partition_special_requests
+                        .remove(&plant_id)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(special_request, count)| SpecialRequestCountPayload {
+                            special_request,
+                            count,
+                        })
+                        .collect(),
+                    orders,
+                    plant_id,
+                    total_orders,
+                    total_portions,
+                }
+            })
+            .collect(),
+    };
+
+    let label_sheet = VendorFulfillmentLabelSheetExportPayload { labels };
+
+    let basket_list = build_vendor_fulfillment_basket_list_payload(board);
+
+    VendorFulfillmentBatchArtifactsPayload {
+        daily_summary,
+        plant_partition_sheet,
+        labels: label_sheet,
+        basket_list,
+    }
+}
+
+const VENDOR_FULFILLMENT_BASKET_CAPACITY_PORTIONS: u16 = 12;
+
+fn build_vendor_fulfillment_basket_list_payload(
+    board: &VendorFulfillmentBoardSnapshot,
+) -> VendorFulfillmentBasketListExportPayload {
+    let mut per_plant_orders = BTreeMap::<String, Vec<(String, u32)>>::new();
+    for order in board.order_entries() {
+        per_plant_orders
+            .entry(order.plant_id().as_str().to_owned())
+            .or_default()
+            .push((order.order_id().as_str().to_owned(), order.total_portions()));
+    }
+
+    let mut baskets = Vec::new();
+    for (plant_id, mut plant_orders) in per_plant_orders {
+        plant_orders.sort_by(|left, right| left.0.cmp(&right.0));
+
+        let mut basket_index = 1_u32;
+        let mut current_order_ids = Vec::new();
+        let mut current_portions = 0_u32;
+
+        for (order_id, order_portions) in plant_orders {
+            let next_portions = current_portions.saturating_add(order_portions);
+            if !current_order_ids.is_empty()
+                && next_portions > u32::from(VENDOR_FULFILLMENT_BASKET_CAPACITY_PORTIONS)
+            {
+                baskets.push(VendorFulfillmentBasketEntryPayload {
+                    basket_code: format!("{plant_id}-{basket_index:02}"),
+                    plant_id: plant_id.clone(),
+                    order_ids: current_order_ids,
+                    portion_count: current_portions,
+                });
+                basket_index = basket_index.saturating_add(1);
+                current_order_ids = Vec::new();
+                current_portions = 0;
+            }
+
+            current_order_ids.push(order_id);
+            current_portions = current_portions.saturating_add(order_portions);
+        }
+
+        if !current_order_ids.is_empty() {
+            baskets.push(VendorFulfillmentBasketEntryPayload {
+                basket_code: format!("{plant_id}-{basket_index:02}"),
+                plant_id,
+                order_ids: current_order_ids,
+                portion_count: current_portions,
+            });
+        }
+    }
+
+    VendorFulfillmentBasketListExportPayload {
+        basket_capacity_portions: VENDOR_FULFILLMENT_BASKET_CAPACITY_PORTIONS,
+        baskets,
+    }
+}
+
 fn compute_order_total_for_payroll(
     state: &AppState,
     snapshot: &OrderSnapshot,
@@ -11591,6 +13309,90 @@ fn map_http_order_execution_error(error: HttpOrderExecutionError) -> (StatusCode
             StatusCode::BAD_REQUEST,
             "ORDER_MUTATION_NOT_ALLOWED",
             format!("unsupported employee order mutation `{operation}`"),
+        ),
+    }
+}
+
+fn map_vendor_menu_error(error: MenuSupplyWindowError) -> (StatusCode, ErrorPayload) {
+    match error {
+        MenuSupplyWindowError::UnauthorizedRole { .. }
+        | MenuSupplyWindowError::TargetPlantOutOfScope { .. } => {
+            domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
+        }
+        MenuSupplyWindowError::MenuItemNotFound { .. } => {
+            domain_error(StatusCode::NOT_FOUND, "NOT_FOUND", error.to_string())
+        }
+        MenuSupplyWindowError::InvalidTextField { .. }
+        | MenuSupplyWindowError::InvalidMaxDailyQuantity { .. }
+        | MenuSupplyWindowError::InvalidVendorMenuStatus
+        | MenuSupplyWindowError::InvalidMenuHealthTag
+        | MenuSupplyWindowError::DuplicateMenuHealthTag(_)
+        | MenuSupplyWindowError::InvalidCurrencyCode
+        | MenuSupplyWindowError::InvalidMenuImageUrl(_)
+        | MenuSupplyWindowError::VendorOverrideOutOfBounds { .. } => {
+            domain_error(StatusCode::BAD_REQUEST, "BAD_REQUEST", error.to_string())
+        }
+        MenuSupplyWindowError::QuotaReductionBelowAllocated { .. }
+        | MenuSupplyWindowError::MenuItemUnavailableStatus { .. } => {
+            domain_error(StatusCode::CONFLICT, "CONFLICT", error.to_string())
+        }
+        MenuSupplyWindowError::AuditTrail(_) | MenuSupplyWindowError::StatePoisoned => {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ORDER_POLICY_VIOLATION",
+                error.to_string(),
+            )
+        }
+        _ => domain_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "VALIDATION_FAILED",
+            error.to_string(),
+        ),
+    }
+}
+
+fn map_vendor_fulfillment_error(error: VendorFulfillmentError) -> (StatusCode, ErrorPayload) {
+    match error {
+        VendorFulfillmentError::UnauthorizedRole { .. }
+        | VendorFulfillmentError::TargetPlantOutOfScope { .. } => {
+            domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
+        }
+        VendorFulfillmentError::OrderNotFound(_)
+        | VendorFulfillmentError::MenuSupply(MenuSupplyWindowError::OrderNotFound(_)) => {
+            domain_error(StatusCode::NOT_FOUND, "ORDER_NOT_FOUND", error.to_string())
+        }
+        VendorFulfillmentError::BatchNotFound(_) => domain_error(
+            StatusCode::NOT_FOUND,
+            "VENDOR_FULFILLMENT_BATCH_NOT_FOUND",
+            error.to_string(),
+        ),
+        VendorFulfillmentError::InvalidDeliveryStatusTransition { .. }
+        | VendorFulfillmentError::DeliveryStatusUnchanged { .. } => domain_error(
+            StatusCode::CONFLICT,
+            "VENDOR_FULFILLMENT_STATUS_CONFLICT",
+            error.to_string(),
+        ),
+        VendorFulfillmentError::InvalidBatchId => domain_error(
+            StatusCode::BAD_REQUEST,
+            "VENDOR_FULFILLMENT_INVALID_REQUEST",
+            error.to_string(),
+        ),
+        VendorFulfillmentError::MenuSupply(inner) => domain_error(
+            StatusCode::CONFLICT,
+            "ORDER_POLICY_VIOLATION",
+            format!("vendor fulfillment failed due to menu supply state: {inner}"),
+        ),
+        VendorFulfillmentError::BatchSequenceOverflow
+        | VendorFulfillmentError::MissingSpecialRequestSnapshot { .. }
+        | VendorFulfillmentError::ArtifactSerialization { .. }
+        | VendorFulfillmentError::ArtifactStorageConfiguration(_)
+        | VendorFulfillmentError::ArtifactStorageWrite { .. }
+        | VendorFulfillmentError::InvalidArtifactObjectReference { .. }
+        | VendorFulfillmentError::AuditTrail(_)
+        | VendorFulfillmentError::StatePoisoned => domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ORDER_POLICY_VIOLATION",
+            error.to_string(),
         ),
     }
 }
@@ -13020,6 +14822,15 @@ mod tests {
             MenuSupplyPolicy::with_audit_trail(Default::default(), audit_trail.clone());
         let payroll_ledger_service =
             PayrollLedgerService::new(PayrollRetentionPolicy::default(), audit_trail.clone());
+        let object_storage_upload_pipeline = test_object_storage_upload_pipeline();
+        let fulfillment_artifact_store = Arc::new(
+            ObjectStorageFulfillmentArtifactStore::new(object_storage_upload_pipeline.clone())
+                .expect("test fulfillment artifact store should initialize"),
+        );
+        let vendor_fulfillment_policy = VendorFulfillmentPolicy::with_audit_trail(
+            audit_trail.clone(),
+            fulfillment_artifact_store,
+        );
         menu_supply_policy
             .upsert_menu_item(
                 &vendor_actor,
@@ -13125,13 +14936,14 @@ mod tests {
             menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
             rush_reminder_workflow: RushReminderWorkflow::new(RushReminderPolicy::default()),
             rush_reminder_delivery_gateway: Arc::new(NoopRushReminderDeliveryGateway),
-            object_storage_upload_pipeline: test_object_storage_upload_pipeline(),
+            object_storage_upload_pipeline,
             operations_analytics_warehouse: Arc::new(RwLock::new(
                 OperationsAnalyticsWarehouse::default(),
             )),
             terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail: audit_trail.clone(),
             payroll_export_field_encryptor: payroll_export_field_encryptor(),
+            vendor_fulfillment_policy,
             payroll_ledger_service,
             anomaly_alert_workflow: AnomalyAlertWorkflow::with_default_rules(audit_trail.clone()),
             compliance_lifecycle: Arc::new(RwLock::new(compliance_lifecycle)),
@@ -13994,6 +15806,11 @@ mod tests {
     fn occurred_to_epoch_day_filter_includes_same_day_events() {
         let committee = committee_admin();
         let audit_trail = ImmutableAuditTrail::new(AuditRetentionPolicy::default());
+        let object_storage_upload_pipeline = test_object_storage_upload_pipeline();
+        let fulfillment_artifact_store = Arc::new(
+            ObjectStorageFulfillmentArtifactStore::new(object_storage_upload_pipeline.clone())
+                .expect("test fulfillment artifact store should initialize"),
+        );
         let state = AppState {
             #[cfg(test)]
             next_order_sequence: Arc::new(AtomicU64::new(1)),
@@ -14005,13 +15822,17 @@ mod tests {
             menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
             rush_reminder_workflow: RushReminderWorkflow::new(RushReminderPolicy::default()),
             rush_reminder_delivery_gateway: Arc::new(NoopRushReminderDeliveryGateway),
-            object_storage_upload_pipeline: test_object_storage_upload_pipeline(),
+            object_storage_upload_pipeline: object_storage_upload_pipeline.clone(),
             operations_analytics_warehouse: Arc::new(RwLock::new(
                 OperationsAnalyticsWarehouse::default(),
             )),
             terminated_employee_actor_ids: Arc::new(HashSet::new()),
             audit_trail: audit_trail.clone(),
             payroll_export_field_encryptor: payroll_export_field_encryptor(),
+            vendor_fulfillment_policy: VendorFulfillmentPolicy::with_audit_trail(
+                audit_trail.clone(),
+                fulfillment_artifact_store,
+            ),
             payroll_ledger_service: PayrollLedgerService::new(
                 PayrollRetentionPolicy::default(),
                 audit_trail.clone(),

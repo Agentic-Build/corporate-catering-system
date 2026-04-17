@@ -444,6 +444,116 @@ fn vendor_fulfillment_board_and_export_batch_contracts_are_declared_with_control
 }
 
 #[test]
+fn vendor_menu_and_ordering_policy_contracts_are_declared() {
+    let spec = canonical_openapi_spec();
+    let paths = spec["paths"].as_object().expect("paths must be object");
+    assert!(paths.contains_key("/api/v1/vendor/menu-items"));
+    assert!(paths.contains_key("/api/v1/vendor/menu-items/{menuItemId}/status"));
+    assert!(paths.contains_key("/api/v1/vendor/ordering-policy"));
+
+    let list_menu_operation =
+        operation_by_path_and_method(&spec, "/api/v1/vendor/menu-items", "get");
+    assert_eq!(
+        list_menu_operation["operationId"],
+        HttpOperation::ListVendorMenuItems.operation_id()
+    );
+    let list_menu_parameter_refs = operation_parameter_refs(list_menu_operation);
+    assert_eq!(
+        list_menu_parameter_refs,
+        BTreeSet::from([
+            "#/components/parameters/FromDateQuery".to_owned(),
+            "#/components/parameters/ToDateQuery".to_owned(),
+            "#/components/parameters/VendorMenuItemStatusFilterQuery".to_owned(),
+            "#/components/parameters/PageQuery".to_owned(),
+            "#/components/parameters/PageSizeQuery".to_owned(),
+            "#/components/parameters/SortOrderQuery".to_owned(),
+        ])
+    );
+    assert_eq!(
+        list_menu_operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/VendorMenuPage"
+    );
+
+    let status_patch_operation = operation_by_path_and_method(
+        &spec,
+        "/api/v1/vendor/menu-items/{menuItemId}/status",
+        "patch",
+    );
+    assert_eq!(
+        status_patch_operation["operationId"],
+        HttpOperation::UpdateVendorMenuItemStatus.operation_id()
+    );
+    assert_eq!(
+        status_patch_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/VendorMenuItemStatusPatchRequest"
+    );
+    assert_eq!(
+        status_patch_operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/VendorMenuItem"
+    );
+    assert_error_response_ref(
+        status_patch_operation,
+        "409",
+        "#/components/responses/Conflict",
+    );
+
+    let get_ordering_policy_operation =
+        operation_by_path_and_method(&spec, "/api/v1/vendor/ordering-policy", "get");
+    assert_eq!(
+        get_ordering_policy_operation["operationId"],
+        HttpOperation::GetVendorOrderingPolicy.operation_id()
+    );
+    assert_eq!(
+        get_ordering_policy_operation["responses"]["200"]["content"]["application/json"]["schema"]
+            ["$ref"],
+        "#/components/schemas/VendorOrderingPolicy"
+    );
+
+    let upsert_ordering_policy_operation =
+        operation_by_path_and_method(&spec, "/api/v1/vendor/ordering-policy", "put");
+    assert_eq!(
+        upsert_ordering_policy_operation["operationId"],
+        HttpOperation::UpsertVendorOrderingPolicy.operation_id()
+    );
+    assert_eq!(
+        upsert_ordering_policy_operation["requestBody"]["content"]["application/json"]["schema"]
+            ["$ref"],
+        "#/components/schemas/VendorOrderingPolicyUpsertRequest"
+    );
+    assert_eq!(
+        upsert_ordering_policy_operation["responses"]["200"]["content"]["application/json"]
+            ["schema"]["$ref"],
+        "#/components/schemas/VendorOrderingPolicy"
+    );
+
+    let menu_status_ref = spec["components"]["schemas"]["VendorMenuItem"]["properties"]["status"]
+        ["$ref"]
+        .as_str()
+        .expect("vendor menu item status should reference enum schema");
+    assert_eq!(menu_status_ref, "#/components/schemas/VendorMenuItemStatus");
+
+    let menu_status_enum = spec["components"]["schemas"]["VendorMenuItemStatus"]["enum"]
+        .as_array()
+        .expect("vendor menu status enum must be array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("vendor menu status enum value must be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        menu_status_enum,
+        BTreeSet::from([
+            "LISTED".to_owned(),
+            "PAUSED".to_owned(),
+            "DELISTED".to_owned(),
+        ])
+    );
+}
+
+#[test]
 fn advanced_operations_analytics_dashboard_contracts_are_flagged_and_documented() {
     let spec = canonical_openapi_spec();
 

@@ -486,6 +486,14 @@
           "type": "string"
         }
       },
+      "VendorMenuItemStatusFilterQuery": {
+        "in": "query",
+        "name": "status",
+        "required": false,
+        "schema": {
+          "$ref": "#/components/schemas/VendorMenuItemStatus"
+        }
+      },
       "VendorOrderSortByQuery": {
         "in": "query",
         "name": "sortBy",
@@ -4429,6 +4437,9 @@
             "minimum": 0,
             "type": "integer"
           },
+          "status": {
+            "$ref": "#/components/schemas/VendorMenuItemStatus"
+          },
           "vendorId": {
             "pattern": "^ven-[a-z0-9]{8,32}$",
             "type": "string"
@@ -4440,6 +4451,7 @@
           "name",
           "description",
           "menuType",
+          "status",
           "price",
           "maxDailyQuantity",
           "remainingQuantity",
@@ -4447,6 +4459,26 @@
           "modifyCancelCutoffMinuteOfDay",
           "deliveryDate",
           "healthTags"
+        ],
+        "type": "object"
+      },
+      "VendorMenuItemStatus": {
+        "enum": [
+          "LISTED",
+          "PAUSED",
+          "DELISTED"
+        ],
+        "type": "string"
+      },
+      "VendorMenuItemStatusPatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/VendorMenuItemStatus"
+          }
+        },
+        "required": [
+          "status"
         ],
         "type": "object"
       },
@@ -4510,6 +4542,25 @@
           "price",
           "maxDailyQuantity",
           "deliveryDate"
+        ],
+        "type": "object"
+      },
+      "VendorMenuPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VendorMenuItem"
+            },
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "items",
+          "page"
         ],
         "type": "object"
       },
@@ -4582,6 +4633,42 @@
           "createdAt"
         ],
         "type": "string"
+      },
+      "VendorOrderingPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "modifyCancelCutoffMinuteOfDay": {
+            "maximum": 1200,
+            "minimum": 900,
+            "type": "integer"
+          },
+          "preorderOpenDaysAhead": {
+            "maximum": 7,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "preorderOpenDaysAhead",
+          "modifyCancelCutoffMinuteOfDay"
+        ],
+        "type": "object"
+      },
+      "VendorOrderingPolicyUpsertRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "modifyCancelCutoffMinuteOfDay": {
+            "maximum": 1200,
+            "minimum": 900,
+            "type": "integer"
+          },
+          "preorderOpenDaysAhead": {
+            "maximum": 7,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
       },
       "VendorPlantDeliveryMapping": {
         "additionalProperties": false,
@@ -7071,6 +7158,64 @@
         }
       }
     },
+    "/api/v1/vendor/menu-items": {
+      "get": {
+        "operationId": "listVendorMenuItems",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FromDateQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ToDateQuery"
+          },
+          {
+            "$ref": "#/components/parameters/VendorMenuItemStatusFilterQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SortOrderQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VendorMenuPage"
+                }
+              }
+            },
+            "description": "Paginated vendor menu inventory page"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "vendorMfaBearer": []
+          }
+        ],
+        "summary": "List vendor menu items with delivery window and status filters",
+        "tags": [
+          "Vendor"
+        ]
+      }
+    },
     "/api/v1/vendor/menu-items/{menuItemId}": {
       "put": {
         "operationId": "upsertVendorMenuItem",
@@ -7119,6 +7264,65 @@
           }
         ],
         "summary": "Create or update a vendor menu item",
+        "tags": [
+          "Vendor"
+        ]
+      }
+    },
+    "/api/v1/vendor/menu-items/{menuItemId}/status": {
+      "patch": {
+        "operationId": "updateVendorMenuItemStatus",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MenuItemIdPath"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VendorMenuItemStatusPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VendorMenuItem"
+                }
+              }
+            },
+            "description": "Menu item status updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        },
+        "security": [
+          {
+            "vendorMfaBearer": []
+          }
+        ],
+        "summary": "Update vendor menu item listing status",
         "tags": [
           "Vendor"
         ]
@@ -7215,6 +7419,90 @@
           }
         ],
         "summary": "Create a presigned object-storage upload plan for vendor artifacts",
+        "tags": [
+          "Vendor"
+        ]
+      }
+    },
+    "/api/v1/vendor/ordering-policy": {
+      "get": {
+        "operationId": "getVendorOrderingPolicy",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VendorOrderingPolicy"
+                }
+              }
+            },
+            "description": "Effective ordering policy"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "vendorMfaBearer": []
+          }
+        ],
+        "summary": "Get effective vendor order-window policy",
+        "tags": [
+          "Vendor"
+        ]
+      },
+      "put": {
+        "operationId": "upsertVendorOrderingPolicy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VendorOrderingPolicyUpsertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VendorOrderingPolicy"
+                }
+              }
+            },
+            "description": "Ordering policy updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "vendorMfaBearer": []
+          }
+        ],
+        "summary": "Update vendor order-window overrides",
         "tags": [
           "Vendor"
         ]

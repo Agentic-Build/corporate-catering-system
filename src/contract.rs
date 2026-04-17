@@ -50,7 +50,11 @@ pub enum HttpOperation {
     CreateVendorObjectStorageAccessLink,
     ListVendorFulfillmentBoard,
     GetVendorOperationsAnalyticsDashboard,
+    ListVendorMenuItems,
     UpsertVendorMenuItem,
+    UpdateVendorMenuItemStatus,
+    GetVendorOrderingPolicy,
+    UpsertVendorOrderingPolicy,
     AdvanceVendorFulfillmentDeliveryStatus,
     CreateVendorFulfillmentExportBatch,
     GetVendorFulfillmentExportBatch,
@@ -83,7 +87,7 @@ pub enum HttpOperation {
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 44] = [
+    pub const ALL: [Self; 48] = [
         Self::ListEmployeeMenus,
         Self::ListEmployeeOrders,
         Self::UpsertEmployeeRushReminderPreferences,
@@ -98,7 +102,11 @@ impl HttpOperation {
         Self::CreateVendorObjectStorageAccessLink,
         Self::ListVendorFulfillmentBoard,
         Self::GetVendorOperationsAnalyticsDashboard,
+        Self::ListVendorMenuItems,
         Self::UpsertVendorMenuItem,
+        Self::UpdateVendorMenuItemStatus,
+        Self::GetVendorOrderingPolicy,
+        Self::UpsertVendorOrderingPolicy,
         Self::AdvanceVendorFulfillmentDeliveryStatus,
         Self::CreateVendorFulfillmentExportBatch,
         Self::GetVendorFulfillmentExportBatch,
@@ -146,7 +154,11 @@ impl HttpOperation {
             Self::CreateVendorObjectStorageAccessLink => "createVendorObjectStorageAccessLink",
             Self::ListVendorFulfillmentBoard => "listVendorFulfillmentBoard",
             Self::GetVendorOperationsAnalyticsDashboard => "getVendorOperationsAnalyticsDashboard",
+            Self::ListVendorMenuItems => "listVendorMenuItems",
             Self::UpsertVendorMenuItem => "upsertVendorMenuItem",
+            Self::UpdateVendorMenuItemStatus => "updateVendorMenuItemStatus",
+            Self::GetVendorOrderingPolicy => "getVendorOrderingPolicy",
+            Self::UpsertVendorOrderingPolicy => "upsertVendorOrderingPolicy",
             Self::AdvanceVendorFulfillmentDeliveryStatus => {
                 "advanceVendorFulfillmentDeliveryStatus"
             }
@@ -190,6 +202,8 @@ impl HttpOperation {
             | Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
             | Self::GetVendorOperationsAnalyticsDashboard
+            | Self::ListVendorMenuItems
+            | Self::GetVendorOrderingPolicy
             | Self::GetVendorFulfillmentExportBatch
             | Self::ListAdminVendors
             | Self::ListVendorPlantDeliveryMappings
@@ -200,6 +214,7 @@ impl HttpOperation {
             | Self::ExportPayrollDeductions => HttpMethod::Get,
             Self::UpsertEmployeeRushReminderPreferences
             | Self::UpsertVendorMenuItem
+            | Self::UpsertVendorOrderingPolicy
             | Self::UpsertComplianceDocumentTemplate
             | Self::UpsertVendorPlantDeliveryMapping
             | Self::UpsertAnomalyRule => HttpMethod::Put,
@@ -222,6 +237,7 @@ impl HttpOperation {
             | Self::UnlockPayrollSettlementCycle
             | Self::SyncPayrollHrApiAdjunct => HttpMethod::Post,
             Self::UpdateEmployeeOrder
+            | Self::UpdateVendorMenuItemStatus
             | Self::UpdateAdminPayrollDispute
             | Self::UpdateAdminAnomalyAlert => HttpMethod::Patch,
             Self::ListAnomalyRules | Self::ListAnomalyAlerts => HttpMethod::Get,
@@ -257,7 +273,11 @@ impl HttpOperation {
             Self::GetVendorOperationsAnalyticsDashboard => {
                 "/api/v1/vendor/analytics/operations-dashboard"
             }
+            Self::ListVendorMenuItems => "/api/v1/vendor/menu-items",
             Self::UpsertVendorMenuItem => "/api/v1/vendor/menu-items/{menuItemId}",
+            Self::UpdateVendorMenuItemStatus => "/api/v1/vendor/menu-items/{menuItemId}/status",
+            Self::GetVendorOrderingPolicy => "/api/v1/vendor/ordering-policy",
+            Self::UpsertVendorOrderingPolicy => "/api/v1/vendor/ordering-policy",
             Self::AdvanceVendorFulfillmentDeliveryStatus => {
                 "/api/v1/vendor/orders/{orderId}/delivery-status"
             }
@@ -324,7 +344,11 @@ impl HttpOperation {
             | Self::CreateVendorObjectStorageAccessLink
             | Self::ListVendorFulfillmentBoard
             | Self::GetVendorOperationsAnalyticsDashboard
+            | Self::ListVendorMenuItems
             | Self::UpsertVendorMenuItem
+            | Self::UpdateVendorMenuItemStatus
+            | Self::GetVendorOrderingPolicy
+            | Self::UpsertVendorOrderingPolicy
             | Self::AdvanceVendorFulfillmentDeliveryStatus
             | Self::CreateVendorFulfillmentExportBatch
             | Self::GetVendorFulfillmentExportBatch => HttpAudience::Vendor,
@@ -368,6 +392,8 @@ impl HttpOperation {
             Self::CreateVendorObjectStorageUploadPlan
             | Self::CreateVendorObjectStorageAccessLink
             | Self::UpsertVendorMenuItem
+            | Self::UpdateVendorMenuItemStatus
+            | Self::UpsertVendorOrderingPolicy
             | Self::AdvanceVendorFulfillmentDeliveryStatus
             | Self::CreateVendorFulfillmentExportBatch => Some(Action::ManageVendorMenu),
             Self::UpsertComplianceDocumentTemplate
@@ -393,6 +419,8 @@ impl HttpOperation {
             | Self::GetEmployeeOrderPayrollLedger
             | Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
+            | Self::ListVendorMenuItems
+            | Self::GetVendorOrderingPolicy
             | Self::GetVendorFulfillmentExportBatch
             | Self::ListAdminVendors
             | Self::ListVendorPlantDeliveryMappings
@@ -435,7 +463,11 @@ impl HttpOperation {
             "getVendorOperationsAnalyticsDashboard" => {
                 Some(Self::GetVendorOperationsAnalyticsDashboard)
             }
+            "listVendorMenuItems" => Some(Self::ListVendorMenuItems),
             "upsertVendorMenuItem" => Some(Self::UpsertVendorMenuItem),
+            "updateVendorMenuItemStatus" => Some(Self::UpdateVendorMenuItemStatus),
+            "getVendorOrderingPolicy" => Some(Self::GetVendorOrderingPolicy),
+            "upsertVendorOrderingPolicy" => Some(Self::UpsertVendorOrderingPolicy),
             "advanceVendorFulfillmentDeliveryStatus" => {
                 Some(Self::AdvanceVendorFulfillmentDeliveryStatus)
             }
@@ -1097,6 +1129,36 @@ pub fn canonical_openapi_spec() -> Value {
             }
           }
         },
+        "/api/v1/vendor/menu-items": {
+          "get": {
+            "tags": ["Vendor"],
+            "summary": "List vendor menu items with delivery window and status filters",
+            "operationId": HttpOperation::ListVendorMenuItems.operation_id(),
+            "security": [{ "vendorMfaBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/FromDateQuery" },
+              { "$ref": "#/components/parameters/ToDateQuery" },
+              { "$ref": "#/components/parameters/VendorMenuItemStatusFilterQuery" },
+              { "$ref": "#/components/parameters/PageQuery" },
+              { "$ref": "#/components/parameters/PageSizeQuery" },
+              { "$ref": "#/components/parameters/SortOrderQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Paginated vendor menu inventory page",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/VendorMenuPage" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
         "/api/v1/vendor/menu-items/{menuItemId}": {
           "put": {
             "tags": ["Vendor"],
@@ -1127,6 +1189,91 @@ pub fn canonical_openapi_spec() -> Value {
               "401": { "$ref": "#/components/responses/Unauthorized" },
               "403": { "$ref": "#/components/responses/Forbidden" },
               "422": { "$ref": "#/components/responses/ValidationFailed" }
+            }
+          }
+        },
+        "/api/v1/vendor/menu-items/{menuItemId}/status": {
+          "patch": {
+            "tags": ["Vendor"],
+            "summary": "Update vendor menu item listing status",
+            "operationId": HttpOperation::UpdateVendorMenuItemStatus.operation_id(),
+            "security": [{ "vendorMfaBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/MenuItemIdPath" }
+            ],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/VendorMenuItemStatusPatchRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Menu item status updated",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/VendorMenuItem" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "409": { "$ref": "#/components/responses/Conflict" },
+              "422": { "$ref": "#/components/responses/ValidationFailed" }
+            }
+          }
+        },
+        "/api/v1/vendor/ordering-policy": {
+          "get": {
+            "tags": ["Vendor"],
+            "summary": "Get effective vendor order-window policy",
+            "operationId": HttpOperation::GetVendorOrderingPolicy.operation_id(),
+            "security": [{ "vendorMfaBearer": [] }],
+            "responses": {
+              "200": {
+                "description": "Effective ordering policy",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/VendorOrderingPolicy" }
+                  }
+                }
+              },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          },
+          "put": {
+            "tags": ["Vendor"],
+            "summary": "Update vendor order-window overrides",
+            "operationId": HttpOperation::UpsertVendorOrderingPolicy.operation_id(),
+            "security": [{ "vendorMfaBearer": [] }],
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": { "$ref": "#/components/schemas/VendorOrderingPolicyUpsertRequest" }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "Ordering policy updated",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/VendorOrderingPolicy" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "422": { "$ref": "#/components/responses/ValidationFailed" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
             }
           }
         },
@@ -2355,6 +2502,12 @@ pub fn canonical_openapi_spec() -> Value {
             "in": "query",
             "required": false,
             "schema": { "$ref": "#/components/schemas/EmployeeOrderStatus" }
+          },
+          "VendorMenuItemStatusFilterQuery": {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/VendorMenuItemStatus" }
           },
           "VendorStatusFilterQuery": {
             "name": "status",
@@ -3636,6 +3789,10 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "additionalProperties": false
           },
+          "VendorMenuItemStatus": {
+            "type": "string",
+            "enum": ["LISTED", "PAUSED", "DELISTED"]
+          },
           "VendorFulfillmentDeliveryStatus": {
             "type": "string",
             "enum": [
@@ -3997,6 +4154,18 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "additionalProperties": false
           },
+          "VendorMenuPage": {
+            "type": "object",
+            "required": ["items", "page"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/VendorMenuItem" }
+              },
+              "page": { "$ref": "#/components/schemas/PageMeta" }
+            },
+            "additionalProperties": false
+          },
           "VendorMenuItemUpsertRequest": {
             "type": "object",
             "required": [
@@ -4039,6 +4208,39 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "additionalProperties": false
           },
+          "VendorMenuItemStatusPatchRequest": {
+            "type": "object",
+            "required": ["status"],
+            "properties": {
+              "status": { "$ref": "#/components/schemas/VendorMenuItemStatus" }
+            },
+            "additionalProperties": false
+          },
+          "VendorOrderingPolicy": {
+            "type": "object",
+            "required": ["preorderOpenDaysAhead", "modifyCancelCutoffMinuteOfDay"],
+            "properties": {
+              "preorderOpenDaysAhead": { "type": "integer", "minimum": 1, "maximum": 7 },
+              "modifyCancelCutoffMinuteOfDay": {
+                "type": "integer",
+                "minimum": 900,
+                "maximum": 1200
+              }
+            },
+            "additionalProperties": false
+          },
+          "VendorOrderingPolicyUpsertRequest": {
+            "type": "object",
+            "properties": {
+              "preorderOpenDaysAhead": { "type": "integer", "minimum": 1, "maximum": 7 },
+              "modifyCancelCutoffMinuteOfDay": {
+                "type": "integer",
+                "minimum": 900,
+                "maximum": 1200
+              }
+            },
+            "additionalProperties": false
+          },
           "VendorMenuItem": {
             "type": "object",
             "required": [
@@ -4047,6 +4249,7 @@ pub fn canonical_openapi_spec() -> Value {
               "name",
               "description",
               "menuType",
+              "status",
               "price",
               "maxDailyQuantity",
               "remainingQuantity",
@@ -4061,6 +4264,7 @@ pub fn canonical_openapi_spec() -> Value {
               "name": { "type": "string", "minLength": 1, "maxLength": 80 },
               "description": { "type": "string", "minLength": 1, "maxLength": 280 },
               "menuType": { "$ref": "#/components/schemas/MenuType" },
+              "status": { "$ref": "#/components/schemas/VendorMenuItemStatus" },
               "imageUrl": {
                 "type": "string",
                 "format": "uri",

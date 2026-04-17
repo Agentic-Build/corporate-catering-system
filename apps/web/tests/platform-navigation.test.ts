@@ -30,6 +30,16 @@ describe("platform navigation", () => {
     );
   });
 
+  it("supports vendor docs section route activation", () => {
+    const navigation = buildRoleAwareNavigation("vendor", "/vendor/docs");
+
+    assert.equal(navigation.activeSectionId, "docs");
+    assert.equal(
+      navigation.sectionLinks.find((sectionLink) => sectionLink.id === "docs")?.active,
+      true
+    );
+  });
+
   it("rejects legacy /portal and /console guard prefixes", () => {
     assert.equal(resolveRoleGuard("/portal/admin"), null);
     assert.equal(resolveRoleGuard("/console/vendor"), null);

@@ -19,8 +19,9 @@ use crate::vendor_delivery_mapping::{
     TaipeiBusinessMoment, VendorPlantDeliveryError, VendorPlantDeliveryPolicy,
 };
 use crate::vendor_fulfillment::{
-    FulfillmentBatchId, FulfillmentDeliveryStatus, VendorFulfillmentBatchSnapshot,
-    VendorFulfillmentBoardSnapshot, VendorFulfillmentError, VendorFulfillmentPolicy,
+    FulfillmentBatchId, FulfillmentDeliveryStatus, FulfillmentStatusAuditEntry,
+    VendorFulfillmentBatchSnapshot, VendorFulfillmentBoardSnapshot, VendorFulfillmentError,
+    VendorFulfillmentPolicy,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -52,7 +53,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 47] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 51] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -120,9 +121,29 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 47] = [
         "getVendorOperationsAnalyticsDashboard",
     ),
     RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/vendor/menu-items",
+        "listVendorMenuItems",
+    ),
+    RuntimeHttpRoute::new(
         HttpMethod::Put,
         "/api/v1/vendor/menu-items/{menuItemId}",
         "upsertVendorMenuItem",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Patch,
+        "/api/v1/vendor/menu-items/{menuItemId}/status",
+        "updateVendorMenuItemStatus",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/vendor/ordering-policy",
+        "getVendorOrderingPolicy",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Put,
+        "/api/v1/vendor/ordering-policy",
+        "upsertVendorOrderingPolicy",
     ),
     RuntimeHttpRoute::new(
         HttpMethod::Post,
@@ -761,16 +782,19 @@ impl<'a> HttpVendorFulfillmentExecutionGateway<'a> {
         order_id: &OrderId,
         to_status: FulfillmentDeliveryStatus,
         at: TaipeiBusinessMoment,
-    ) -> Result<(), VendorFulfillmentError> {
+    ) -> Result<FulfillmentStatusAuditEntry, VendorFulfillmentError> {
         let telemetry = TelemetryService::HttpApi.begin_internal_operation(
             "advanceVendorFulfillmentDeliveryStatus",
             Some(actor.actor_id().as_str()),
             None,
         );
-        let result = self
-            .fulfillment_policy
-            .transition_delivery_status(actor, self.menu_supply_policy, order_id, to_status, at)
-            .map(|_| ());
+        let result = self.fulfillment_policy.transition_delivery_status(
+            actor,
+            self.menu_supply_policy,
+            order_id,
+            to_status,
+            at,
+        );
         telemetry.finish(if result.is_ok() {
             TelemetryOutcome::Success
         } else {

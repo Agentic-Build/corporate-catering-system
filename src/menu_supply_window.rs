@@ -225,6 +225,49 @@ impl fmt::Display for MenuHealthTag {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum VendorMenuItemStatus {
+    Listed,
+    Paused,
+    Delisted,
+}
+
+impl VendorMenuItemStatus {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, MenuSupplyWindowError> {
+        match value.as_ref() {
+            "LISTED" => Ok(Self::Listed),
+            "PAUSED" => Ok(Self::Paused),
+            "DELISTED" => Ok(Self::Delisted),
+            _ => Err(MenuSupplyWindowError::InvalidVendorMenuStatus),
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Listed => "LISTED",
+            Self::Paused => "PAUSED",
+            Self::Delisted => "DELISTED",
+        }
+    }
+
+    pub const fn is_orderable(self) -> bool {
+        matches!(self, Self::Listed)
+    }
+}
+
+impl Default for VendorMenuItemStatus {
+    fn default() -> Self {
+        Self::Listed
+    }
+}
+
+impl fmt::Display for VendorMenuItemStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum SpecialRequest {
     LessRice,
     NoGreenOnion,
@@ -306,6 +349,7 @@ pub struct VendorMenuItemDraft {
     name: String,
     description: String,
     menu_type: String,
+    status: VendorMenuItemStatus,
     health_tags: BTreeSet<MenuHealthTag>,
     image_url: Option<MenuImageUrl>,
     price: Money,
@@ -352,6 +396,7 @@ impl VendorMenuItemDraft {
             name,
             description,
             menu_type,
+            status: VendorMenuItemStatus::Listed,
             health_tags: deduped_health_tags,
             image_url,
             price,
@@ -360,6 +405,11 @@ impl VendorMenuItemDraft {
             preorder_open_days_ahead_override: None,
             modify_cancel_cutoff_minute_of_day_override: None,
         })
+    }
+
+    pub fn with_status(mut self, status: VendorMenuItemStatus) -> Self {
+        self.status = status;
+        self
     }
 
     pub fn with_ordering_policy_overrides(
@@ -382,6 +432,10 @@ impl VendorMenuItemDraft {
 
     pub fn menu_type(&self) -> &str {
         &self.menu_type
+    }
+
+    pub fn status(&self) -> VendorMenuItemStatus {
+        self.status
     }
 
     pub fn health_tags(&self) -> &BTreeSet<MenuHealthTag> {
@@ -420,6 +474,8 @@ pub struct VendorMenuItem {
     name: String,
     description: String,
     menu_type: String,
+    #[serde(default)]
+    status: VendorMenuItemStatus,
     health_tags: BTreeSet<MenuHealthTag>,
     image_url: Option<MenuImageUrl>,
     price: Money,
@@ -437,6 +493,7 @@ impl VendorMenuItem {
             name: draft.name,
             description: draft.description,
             menu_type: draft.menu_type,
+            status: draft.status,
             health_tags: draft.health_tags,
             image_url: draft.image_url,
             price: draft.price,
@@ -468,6 +525,10 @@ impl VendorMenuItem {
         &self.menu_type
     }
 
+    pub fn status(&self) -> VendorMenuItemStatus {
+        self.status
+    }
+
     pub fn health_tags(&self) -> &BTreeSet<MenuHealthTag> {
         &self.health_tags
     }
@@ -494,6 +555,11 @@ impl VendorMenuItem {
 
     pub fn modify_cancel_cutoff_minute_of_day_override(&self) -> Option<u16> {
         self.modify_cancel_cutoff_minute_of_day_override
+    }
+
+    pub fn with_status(mut self, status: VendorMenuItemStatus) -> Self {
+        self.status = status;
+        self
     }
 }
 
@@ -1233,6 +1299,43 @@ impl MenuSupplyPolicy {
         }))
     }
 
+    pub fn vendor_menu_item_states(
+        &self,
+        vendor_id: &VendorId,
+    ) -> Result<Vec<VendorMenuItemState>, MenuSupplyWindowError> {
+        let state = lock_state(&self.state)?;
+        let mut states = Vec::new();
+        for menu_item in state.menu_items.values() {
+            if menu_item.vendor_id() != vendor_id {
+                continue;
+            }
+            let allocated = state
+                .allocated_quantity_by_menu_item
+                .get(menu_item.menu_item_id())
+                .copied()
+                .unwrap_or(0);
+            let policy = self.effective_vendor_policy_locked(&state, menu_item.vendor_id());
+            states.push(VendorMenuItemState {
+                menu_item: menu_item.clone(),
+                remaining_quantity: menu_item.max_daily_quantity().saturating_sub(allocated),
+                preorder_open_days_ahead: policy.preorder_open_days_ahead(),
+                modify_cancel_cutoff_minute_of_day: policy.modify_cancel_cutoff_minute_of_day(),
+            });
+        }
+        states.sort_by(|left, right| {
+            left.menu_item()
+                .delivery_epoch_day()
+                .cmp(&right.menu_item().delivery_epoch_day())
+                .then_with(|| left.menu_item().name().cmp(right.menu_item().name()))
+                .then_with(|| {
+                    left.menu_item()
+                        .menu_item_id()
+                        .cmp(right.menu_item().menu_item_id())
+                })
+        });
+        Ok(states)
+    }
+
     pub fn remaining_quantity(
         &self,
         menu_item_id: &MenuItemId,
@@ -1261,6 +1364,9 @@ impl MenuSupplyPolicy {
         let mut entries = Vec::new();
         for menu_item in state.menu_items.values() {
             if !deliverable_vendor_ids.contains(menu_item.vendor_id()) {
+                continue;
+            }
+            if !menu_item.status().is_orderable() {
                 continue;
             }
 
@@ -1984,6 +2090,12 @@ impl MenuSupplyPolicy {
                     actual_delivery_epoch_day: menu_item.delivery_epoch_day(),
                 });
             }
+            if !menu_item.status().is_orderable() {
+                return Err(MenuSupplyWindowError::MenuItemUnavailableStatus {
+                    menu_item_id: menu_item.menu_item_id().clone(),
+                    status: menu_item.status(),
+                });
+            }
 
             if quantities
                 .insert(line_item.menu_item_id().clone(), line_item.quantity())
@@ -2411,6 +2523,7 @@ pub enum MenuSupplyWindowError {
         minimum: u16,
         maximum: u16,
     },
+    InvalidVendorMenuStatus,
     InvalidMenuHealthTag,
     DuplicateMenuHealthTag(MenuHealthTag),
     DuplicateSpecialRequest(SpecialRequest),
@@ -2456,6 +2569,10 @@ pub enum MenuSupplyWindowError {
         menu_item_id: MenuItemId,
         expected_delivery_epoch_day: i32,
         actual_delivery_epoch_day: i32,
+    },
+    MenuItemUnavailableStatus {
+        menu_item_id: MenuItemId,
+        status: VendorMenuItemStatus,
     },
     QuotaExceeded {
         menu_item_id: MenuItemId,
@@ -2521,6 +2638,9 @@ impl fmt::Display for MenuSupplyWindowError {
                 f,
                 "order line-item quantity must be between {minimum} and {maximum}, got {quantity}"
             ),
+            Self::InvalidVendorMenuStatus => {
+                f.write_str("vendor menu status must be one of LISTED, PAUSED, DELISTED")
+            }
             Self::InvalidMenuHealthTag => f.write_str(
                 "menu health tag must be one of LOW_CALORIE, HIGH_PROTEIN, VEGETARIAN, VEGAN, GLUTEN_FREE",
             ),
@@ -2599,6 +2719,13 @@ impl fmt::Display for MenuSupplyWindowError {
             } => write!(
                 f,
                 "menu item {menu_item_id} targets delivery day {actual_delivery_epoch_day}, expected {expected_delivery_epoch_day}"
+            ),
+            Self::MenuItemUnavailableStatus {
+                menu_item_id,
+                status,
+            } => write!(
+                f,
+                "menu item {menu_item_id} is currently in {status} status and cannot be ordered"
             ),
             Self::QuotaExceeded {
                 menu_item_id,

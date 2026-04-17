@@ -5,6 +5,7 @@
 import type { MenuHealthTag } from './MenuHealthTag';
 import type { MenuType } from './MenuType';
 import type { Money } from './Money';
+import type { VendorMenuItemStatus } from './VendorMenuItemStatus';
 export type VendorMenuItem = {
     deliveryDate: string;
     description: string;
@@ -18,6 +19,7 @@ export type VendorMenuItem = {
     preorderOpenDaysAhead: number;
     price: Money;
     remainingQuantity: number;
+    status: VendorMenuItemStatus;
     vendorId: string;
 };
 

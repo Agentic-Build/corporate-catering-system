@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PortalSurface from "$lib/components/portal-surface.svelte";
+  import VendorPortalMvp from "$lib/components/vendor-portal-mvp.svelte";
 
   import type { PageData } from "./$types";
 
@@ -7,12 +7,12 @@
 </script>
 
 {#if data.actor}
-  <PortalSurface
-    role="vendor"
+  <VendorPortalMvp
     sectionId={data.sectionId}
     actorDisplayName={data.actor.displayName}
     actorId={data.actor.id}
     provider={data.auth.provider}
-    experienceMode={data.experienceMode}
+    plantId={data.actor.scope.plantIds[0] ?? null}
+    apiBearerToken={data.auth.apiBearerToken}
   />
 {/if}

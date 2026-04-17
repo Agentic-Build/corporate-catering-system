@@ -16,7 +16,12 @@ import type { VendorFulfillmentDeliveryStatusTransitionRequest } from '../models
 import type { VendorFulfillmentDeliveryStatusTransitionResult } from '../models/VendorFulfillmentDeliveryStatusTransitionResult';
 import type { VendorFulfillmentExportBatch } from '../models/VendorFulfillmentExportBatch';
 import type { VendorMenuItem } from '../models/VendorMenuItem';
+import type { VendorMenuItemStatus } from '../models/VendorMenuItemStatus';
+import type { VendorMenuItemStatusPatchRequest } from '../models/VendorMenuItemStatusPatchRequest';
 import type { VendorMenuItemUpsertRequest } from '../models/VendorMenuItemUpsertRequest';
+import type { VendorMenuPage } from '../models/VendorMenuPage';
+import type { VendorOrderingPolicy } from '../models/VendorOrderingPolicy';
+import type { VendorOrderingPolicyUpsertRequest } from '../models/VendorOrderingPolicyUpsertRequest';
 import type { VendorOrderPage } from '../models/VendorOrderPage';
 import type { VendorOrderSortField } from '../models/VendorOrderSortField';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -125,6 +130,44 @@ export class VendorService {
         });
     }
     /**
+     * List vendor menu items with delivery window and status filters
+     * @param fromDate
+     * @param toDate
+     * @param status
+     * @param page
+     * @param pageSize
+     * @param sortOrder
+     * @returns VendorMenuPage Paginated vendor menu inventory page
+     * @throws ApiError
+     */
+    public static listVendorMenuItems(
+        fromDate?: string,
+        toDate?: string,
+        status?: VendorMenuItemStatus,
+        page: number = 1,
+        pageSize: number = 20,
+        sortOrder?: SortOrder,
+    ): CancelablePromise<VendorMenuPage> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/vendor/menu-items',
+            query: {
+                'fromDate': fromDate,
+                'toDate': toDate,
+                'status': status,
+                'page': page,
+                'pageSize': pageSize,
+                'sortOrder': sortOrder,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
      * Create or update a vendor menu item
      * @param menuItemId
      * @param requestBody
@@ -147,6 +190,35 @@ export class VendorService {
                 400: `Request payload or query is invalid.`,
                 401: `Authentication token is missing or invalid.`,
                 403: `Authenticated actor is not authorized to perform this operation.`,
+                422: `Request is syntactically valid but violates business validation rules.`,
+            },
+        });
+    }
+    /**
+     * Update vendor menu item listing status
+     * @param menuItemId
+     * @param requestBody
+     * @returns VendorMenuItem Menu item status updated
+     * @throws ApiError
+     */
+    public static updateVendorMenuItemStatus(
+        menuItemId: string,
+        requestBody: VendorMenuItemStatusPatchRequest,
+    ): CancelablePromise<VendorMenuItem> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/vendor/menu-items/{menuItemId}/status',
+            path: {
+                'menuItemId': menuItemId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                409: `Request conflicts with business constraints.`,
                 422: `Request is syntactically valid but violates business validation rules.`,
             },
         });
@@ -191,6 +263,45 @@ export class VendorService {
                 400: `Request payload or query is invalid.`,
                 401: `Authentication token is missing or invalid.`,
                 403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Get effective vendor order-window policy
+     * @returns VendorOrderingPolicy Effective ordering policy
+     * @throws ApiError
+     */
+    public static getVendorOrderingPolicy(): CancelablePromise<VendorOrderingPolicy> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/vendor/ordering-policy',
+            errors: {
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Update vendor order-window overrides
+     * @param requestBody
+     * @returns VendorOrderingPolicy Ordering policy updated
+     * @throws ApiError
+     */
+    public static upsertVendorOrderingPolicy(
+        requestBody: VendorOrderingPolicyUpsertRequest,
+    ): CancelablePromise<VendorOrderingPolicy> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/vendor/ordering-policy',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                422: `Request is syntactically valid but violates business validation rules.`,
                 500: `Internal server error while processing request.`,
             },
         });

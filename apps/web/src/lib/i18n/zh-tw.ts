@@ -57,7 +57,8 @@ export const zhTW = {
       vendor: {
         overview: "總覽",
         fulfillment: "履約配送",
-        menu: "菜單與供應"
+        menu: "菜單與供應",
+        docs: "文件與追蹤"
       },
       admin: {
         overview: "總覽",
@@ -82,7 +83,8 @@ export const zhTW = {
       sectionDescriptions: {
         overview: "檢視當日作業摘要。",
         fulfillment: "依廠區追蹤履約與配送狀態。",
-        menu: "維護菜單、供應量與截單規則。"
+        menu: "維護菜單、供應量與截單規則。",
+        docs: "管理文件上傳、存取連結與 objectRef 追蹤。"
       }
     },
     admin: {

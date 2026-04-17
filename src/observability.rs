@@ -533,6 +533,10 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
         }
         "createEmployeeOrderDispute" => ("/api/v1/employee/orders/{orderId}/disputes", "POST"),
         "listVendorOrders" => ("/api/v1/vendor/orders", "GET"),
+        "listVendorMenuItems" => ("/api/v1/vendor/menu-items", "GET"),
+        "updateVendorMenuItemStatus" => ("/api/v1/vendor/menu-items/{menuItemId}/status", "PATCH"),
+        "getVendorOrderingPolicy" => ("/api/v1/vendor/ordering-policy", "GET"),
+        "upsertVendorOrderingPolicy" => ("/api/v1/vendor/ordering-policy", "PUT"),
         "listVendorFulfillmentBoard" => ("/api/v1/vendor/fulfillment-board", "GET"),
         "upsertVendorMenuItem" => ("/api/v1/vendor/menu-items/{menuItemId}", "PUT"),
         "advanceVendorFulfillmentDeliveryStatus" => {
