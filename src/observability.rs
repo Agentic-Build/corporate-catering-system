@@ -550,19 +550,16 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
         "getVendorFulfillmentExportBatch" => {
             ("/api/v1/vendor/fulfillment-batches/{batchId}", "GET")
         }
-        "createVendorObjectStorageUploadPlan" => (
-            "/api/v1/vendor/object-storage/upload-plans",
-            "POST",
-        ),
-        "createVendorObjectStorageAccessLink" => (
-            "/api/v1/vendor/object-storage/access-links",
-            "POST",
-        ),
+        "createVendorObjectStorageUploadPlan" => {
+            ("/api/v1/vendor/object-storage/upload-plans", "POST")
+        }
+        "createVendorObjectStorageAccessLink" => {
+            ("/api/v1/vendor/object-storage/access-links", "POST")
+        }
         "listAdminVendors" => ("/api/v1/admin/vendors", "GET"),
-        "createAdminObjectStorageAccessLink" => (
-            "/api/v1/admin/object-storage/access-links",
-            "POST",
-        ),
+        "createAdminObjectStorageAccessLink" => {
+            ("/api/v1/admin/object-storage/access-links", "POST")
+        }
         "listVendorPlantDeliveryMappings" => {
             ("/api/v1/admin/vendor-plant-delivery-mappings", "GET")
         }
@@ -592,6 +589,8 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
         }
         "reviewVendorApplication" => ("/api/v1/admin/vendors/{vendorId}/reviews", "POST"),
         "runVendorComplianceLifecycle" => ("/api/v1/admin/compliance/lifecycle/executions", "POST"),
+        "queryAuditInvestigations" => ("/api/v1/admin/audit/investigations", "GET"),
+        "queryAuditResponsibilities" => ("/api/v1/admin/audit/responsibilities", "GET"),
         "updateAdminPayrollDispute" => ("/api/v1/admin/payroll/disputes/{disputeId}", "PATCH"),
         "closePayrollMonthlySettlement" => {
             ("/api/v1/admin/payroll/monthly-settlements/close", "POST")
@@ -930,6 +929,18 @@ mod tests {
         assert_eq!(
             http_route_and_method("getVendorOperationsAnalyticsDashboard"),
             ("/api/v1/vendor/analytics/operations-dashboard", "GET")
+        );
+    }
+
+    #[test]
+    fn telemetry_route_mapping_covers_admin_audit_queries() {
+        assert_eq!(
+            http_route_and_method("queryAuditInvestigations"),
+            ("/api/v1/admin/audit/investigations", "GET")
+        );
+        assert_eq!(
+            http_route_and_method("queryAuditResponsibilities"),
+            ("/api/v1/admin/audit/responsibilities", "GET")
         );
     }
 }

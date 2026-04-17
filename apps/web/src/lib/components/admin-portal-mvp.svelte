@@ -601,17 +601,23 @@
       return;
     }
 
-    const reminderDaysBeforeExpiry = templateDraft.reminderDaysBeforeExpiryCsv
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0)
-      .map((entry) => {
-        const parsed = Number(entry);
-        if (!Number.isInteger(parsed) || parsed < 0) {
-          throw new Error(`提醒天數 \`${entry}\` 無效`);
-        }
-        return parsed;
-      });
+    let reminderDaysBeforeExpiry: number[];
+    try {
+      reminderDaysBeforeExpiry = templateDraft.reminderDaysBeforeExpiryCsv
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+        .map((entry) => {
+          const parsed = Number(entry);
+          if (!Number.isInteger(parsed) || parsed < 0) {
+            throw new Error(`提醒天數 \`${entry}\` 無效`);
+          }
+          return parsed;
+        });
+    } catch (error) {
+      pushNotification("error", error instanceof Error ? error.message : "提醒天數格式無效。");
+      return;
+    }
 
     templateSaving = true;
     try {
@@ -901,43 +907,51 @@
     }
 
     let payload: Parameters<typeof apiClient.admin.updateAdminPayrollDispute>[1];
-    if (disputeDraft.operation === "ASSIGN_OWNER") {
-      const ownerActorId = disputeDraft.ownerActorId.trim();
-      if (ownerActorId.length === 0) {
-        pushNotification("error", "ASSIGN_OWNER 需要 ownerActorId。");
-        return;
+    try {
+      if (disputeDraft.operation === "ASSIGN_OWNER") {
+        const ownerActorId = disputeDraft.ownerActorId.trim();
+        if (ownerActorId.length === 0) {
+          pushNotification("error", "ASSIGN_OWNER 需要 ownerActorId。");
+          return;
+        }
+        payload = {
+          operation: "ASSIGN_OWNER",
+          ownerActorId,
+          note: normalizeOptional(disputeDraft.note) ?? undefined
+        };
+      } else if (disputeDraft.operation === "RESOLVE_REFUND") {
+        const note = disputeDraft.note.trim();
+        if (note.length === 0) {
+          pushNotification("error", "RESOLVE_REFUND 需要 note。");
+          return;
+        }
+        const refundAmountMinor = parseOptionalNumber(disputeDraft.refundAmountMinor);
+        if (
+          refundAmountMinor !== undefined &&
+          (!Number.isInteger(refundAmountMinor) || refundAmountMinor < 1)
+        ) {
+          pushNotification("error", "refundAmountMinor 必須是大於等於 1 的整數。");
+          return;
+        }
+        payload = {
+          operation: "RESOLVE_REFUND",
+          note,
+          refundAmountMinor: refundAmountMinor === undefined ? undefined : Number(refundAmountMinor)
+        };
+      } else {
+        const note = disputeDraft.note.trim();
+        if (note.length === 0) {
+          pushNotification("error", "RESOLVE_REJECTED 需要 note。");
+          return;
+        }
+        payload = {
+          operation: "RESOLVE_REJECTED",
+          note
+        };
       }
-      payload = {
-        operation: "ASSIGN_OWNER",
-        ownerActorId,
-        note: normalizeOptional(disputeDraft.note) ?? undefined
-      };
-    } else if (disputeDraft.operation === "RESOLVE_REFUND") {
-      const note = disputeDraft.note.trim();
-      if (note.length === 0) {
-        pushNotification("error", "RESOLVE_REFUND 需要 note。");
-        return;
-      }
-      const refundAmountMinor = parseOptionalNumber(disputeDraft.refundAmountMinor);
-      if (refundAmountMinor !== undefined && (!Number.isInteger(refundAmountMinor) || refundAmountMinor < 1)) {
-        pushNotification("error", "refundAmountMinor 必須是大於等於 1 的整數。");
-        return;
-      }
-      payload = {
-        operation: "RESOLVE_REFUND",
-        note,
-        refundAmountMinor: refundAmountMinor === undefined ? undefined : Number(refundAmountMinor)
-      };
-    } else {
-      const note = disputeDraft.note.trim();
-      if (note.length === 0) {
-        pushNotification("error", "RESOLVE_REJECTED 需要 note。");
-        return;
-      }
-      payload = {
-        operation: "RESOLVE_REJECTED",
-        note
-      };
+    } catch (error) {
+      pushNotification("error", error instanceof Error ? error.message : "爭議處理參數格式無效。");
+      return;
     }
 
     disputeSubmitting = true;
@@ -956,17 +970,33 @@
       return;
     }
 
-    anomalyAlertsLoading = true;
     anomalyAlertsError = null;
+    let escalatedOnly: boolean | undefined;
+    let asOfEpochDay: number | undefined;
+    let asOfMinuteOfDay: number | undefined;
+    try {
+      escalatedOnly = parseBooleanFlag(anomalyFilters.escalatedOnly);
+      asOfEpochDay = parseOptionalEpochDay(anomalyFilters.asOfEpochDay);
+      asOfMinuteOfDay = parseOptionalMinuteOfDay(anomalyFilters.asOfMinuteOfDay);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "異常篩選參數格式無效";
+      anomalyAlertsError = message;
+      if (notifyOnError) {
+        pushNotification("error", message);
+      }
+      return;
+    }
+
+    anomalyAlertsLoading = true;
     try {
       const alerts = await apiClient.admin.listAnomalyAlerts(
         normalizeOptional(anomalyFilters.vendorId) ?? undefined,
         normalizeOptional(anomalyFilters.ownerActorId) ?? undefined,
         anomalyFilters.status === "ALL" ? undefined : anomalyFilters.status,
-        parseBooleanFlag(anomalyFilters.escalatedOnly),
+        escalatedOnly,
         anomalyFilters.slaStatus === "ALL" ? undefined : anomalyFilters.slaStatus,
-        parseOptionalEpochDay(anomalyFilters.asOfEpochDay),
-        parseOptionalMinuteOfDay(anomalyFilters.asOfMinuteOfDay)
+        asOfEpochDay,
+        asOfMinuteOfDay
       );
       anomalyAlerts = alerts.items;
     } catch (error) {
@@ -1221,13 +1251,24 @@
       return;
     }
 
-    analyticsLoading = true;
     analyticsError = null;
+    let fromEpochDay: number | undefined;
+    let toEpochDay: number | undefined;
     try {
-      const dashboard = await apiClient.admin.getAdminOperationsAnalyticsDashboard(
-        parseOptionalEpochDay(analyticsFilters.fromEpochDay),
-        parseOptionalEpochDay(analyticsFilters.toEpochDay)
-      );
+      fromEpochDay = parseOptionalEpochDay(analyticsFilters.fromEpochDay);
+      toEpochDay = parseOptionalEpochDay(analyticsFilters.toEpochDay);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "分析篩選參數格式無效";
+      analyticsError = message;
+      if (notifyOnError) {
+        pushNotification("error", message);
+      }
+      return;
+    }
+
+    analyticsLoading = true;
+    try {
+      const dashboard = await apiClient.admin.getAdminOperationsAnalyticsDashboard(fromEpochDay, toEpochDay);
       analyticsDashboard = dashboard;
     } catch (error) {
       const failure = normalizeApiFailure(error);

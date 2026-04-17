@@ -1168,6 +1168,63 @@ impl VendorComplianceLifecycle {
         result
     }
 
+    pub fn run_lifecycle_dry_run(
+        &self,
+        actor: &AuthenticatedActorContext,
+        run_on: ComplianceDate,
+    ) -> Result<LifecycleRunResult, VendorComplianceError> {
+        ensure_role(actor, Role::CommitteeAdmin)?;
+        let mut run_result = LifecycleRunResult::default();
+        for vendor in self.vendors.values() {
+            if !matches!(
+                vendor.status,
+                VendorComplianceStatus::Active | VendorComplianceStatus::Suspended
+            ) {
+                continue;
+            }
+            let templates = self
+                .templates_by_category
+                .get(vendor.category())
+                .ok_or_else(|| {
+                    VendorComplianceError::MissingTemplateConfiguration(vendor.category().clone())
+                })?;
+            let evaluation = evaluate_vendor_lifecycle(vendor, templates, run_on);
+
+            for reminder in evaluation.reminders {
+                let marker = ReminderRegistryKey {
+                    template_id: reminder.template_id.clone(),
+                    expires_on: reminder.expires_on,
+                    lead_days: reminder.days_until_expiry,
+                };
+                if vendor.reminder_registry.contains(&marker) {
+                    continue;
+                }
+                run_result.reminders.push(LifecycleExpiryReminder {
+                    vendor_id: vendor.vendor_id.clone(),
+                    template_id: reminder.template_id,
+                    expires_on: reminder.expires_on,
+                    days_until_expiry: reminder.days_until_expiry,
+                });
+            }
+
+            if let Some(reason) = evaluation.suspension_reason {
+                if vendor.status != VendorComplianceStatus::Suspended
+                    || vendor.suspension_reason.as_ref() != Some(&reason)
+                {
+                    run_result.suspensions.push(LifecycleSuspension {
+                        vendor_id: vendor.vendor_id.clone(),
+                        reason,
+                    });
+                }
+            } else if vendor.status == VendorComplianceStatus::Suspended {
+                run_result.reinstatements.push(LifecycleReinstatement {
+                    vendor_id: vendor.vendor_id.clone(),
+                });
+            }
+        }
+        Ok(run_result)
+    }
+
     pub fn prune_history(
         &mut self,
         actor: &AuthenticatedActorContext,

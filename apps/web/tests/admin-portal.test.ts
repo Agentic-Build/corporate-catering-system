@@ -40,19 +40,19 @@ describe("admin portal helpers", () => {
     assert.equal(parseOptionalEpochDay("123"), 123);
     assert.equal(parseOptionalMinuteOfDay("0"), 0);
     assert.equal(parseOptionalMinuteOfDay("1439"), 1439);
-    assert.throws(() => parseOptionalEpochDay("-1"), /at least/);
-    assert.throws(() => parseOptionalMinuteOfDay("1440"), /at most/);
+    assert.throws(() => parseOptionalEpochDay("-1"), /大於或等於/);
+    assert.throws(() => parseOptionalMinuteOfDay("1440"), /小於或等於/);
   });
 
   it("parses deterministic boolean filters for tri-state controls", () => {
     assert.equal(parseBooleanFlag("ALL"), undefined);
     assert.equal(parseBooleanFlag("true"), true);
     assert.equal(parseBooleanFlag("FALSE"), false);
-    assert.throws(() => parseBooleanFlag("maybe"), /flag must be ALL, TRUE, or FALSE/);
+    assert.throws(() => parseBooleanFlag("maybe"), /僅接受 ALL、TRUE 或 FALSE/);
   });
 
   it("formats datetime-local values into fixed taipei offset timestamps", () => {
     assert.equal(toTaipeiDateTime("2026-04-17T14:30"), "2026-04-17T14:30:00+08:00");
-    assert.throws(() => toTaipeiDateTime(""), /required/);
+    assert.throws(() => toTaipeiDateTime(""), /為必填/);
   });
 });

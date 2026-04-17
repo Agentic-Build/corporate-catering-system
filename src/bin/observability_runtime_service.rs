@@ -3941,8 +3941,10 @@ where
                                         "delivery policy state is uninitialized".to_owned(),
                                     )
                                 })?;
-                                let mut policy =
-                                    VendorPlantDeliveryPolicy::from_snapshot(snapshot, audit_trail)?;
+                                let mut policy = VendorPlantDeliveryPolicy::from_snapshot(
+                                    snapshot,
+                                    audit_trail,
+                                )?;
                                 let value = mutator(&mut policy)?;
                                 let snapshot = policy.snapshot();
                                 Ok((snapshot, value))
@@ -9332,7 +9334,9 @@ fn parse_contract_document_template_id(
     })
 }
 
-fn parse_contract_vendor_category(value: &str) -> Result<VendorCategory, (StatusCode, ErrorPayload)> {
+fn parse_contract_vendor_category(
+    value: &str,
+) -> Result<VendorCategory, (StatusCode, ErrorPayload)> {
     let normalized = value.trim().to_ascii_uppercase();
     let category = match normalized.as_str() {
         "RESTAURANT" | "BEVERAGE" | "DESSERT" | "HEALTHY_MEAL" | "SNACK" => normalized,
@@ -10174,7 +10178,8 @@ fn handle_list_admin_vendors(
 
     let sort_by = query.sort_by.unwrap_or(VendorSortFieldQuery::CreatedAt);
     let sort_order = query.sort_order.unwrap_or(SortOrderQuery::Asc);
-    items.sort_by(|left, right| compare_vendor_enrollment_payload(left, right, sort_by, sort_order));
+    items
+        .sort_by(|left, right| compare_vendor_enrollment_payload(left, right, sort_by, sort_order));
 
     let total_items = items.len();
     let total_pages = if total_items == 0 {
@@ -10230,7 +10235,8 @@ async fn list_compliance_document_templates(
         }
     };
 
-    let response = match handle_list_compliance_document_templates(&state, &committee_actor, query) {
+    let response = match handle_list_compliance_document_templates(&state, &committee_actor, query)
+    {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -10290,7 +10296,9 @@ fn handle_list_compliance_document_templates(
                 .map(|category| template.vendor_category() == category)
                 .unwrap_or(true)
         })
-        .map(|template| to_vendor_compliance_document_template_payload(template, updated_at.as_str()))
+        .map(|template| {
+            to_vendor_compliance_document_template_payload(template, updated_at.as_str())
+        })
         .collect::<Vec<_>>();
 
     items.sort_by(|left, right| {
@@ -10435,30 +10443,29 @@ async fn list_vendor_plant_delivery_mappings(
         }
     };
 
-    let response =
-        match handle_list_vendor_plant_delivery_mappings(&state, &committee_actor, query) {
-            Ok(payload) => {
-                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
-                (
-                    StatusCode::OK,
-                    Json(
-                        serde_json::to_value(payload)
-                            .expect("mapping page payload serialization should succeed"),
-                    ),
-                )
-            }
-            Err((status, error)) => {
-                telemetry.finish_with_http_status(status.as_u16());
-                (
-                    status,
-                    Json(
-                        serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
-                            "mapping page error payload serialization should succeed",
-                        ),
-                    ),
-                )
-            }
-        };
+    let response = match handle_list_vendor_plant_delivery_mappings(&state, &committee_actor, query)
+    {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("mapping page payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("mapping page error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
 
     response
 }
@@ -10969,23 +10976,25 @@ fn handle_run_vendor_compliance_lifecycle(
     committee_actor: &AuthenticatedActorContext,
     request: VendorComplianceLifecycleExecutionRequestPayload,
 ) -> Result<VendorComplianceLifecycleExecutionResultPayload, (StatusCode, ErrorPayload)> {
-    if request.dry_run.unwrap_or(false) {
-        return Err(domain_error(
-            StatusCode::BAD_REQUEST,
-            "BAD_REQUEST",
-            "dryRun=true is not supported in v1 lifecycle execution".to_owned(),
-        ));
-    }
-    let run_epoch_day = parse_iso_date_to_epoch_day(request.run_date.as_str()).map_err(|error| {
-        domain_error(
-            StatusCode::BAD_REQUEST,
-            "BAD_REQUEST",
-            format!("runDate must use YYYY-MM-DD format: {error}"),
-        )
-    })?;
-    let result = mutate_compliance_lifecycle(state, |lifecycle| {
-        lifecycle.run_lifecycle(committee_actor, ComplianceDate::from_epoch_day(run_epoch_day))
-    })?;
+    let run_epoch_day =
+        parse_iso_date_to_epoch_day(request.run_date.as_str()).map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("runDate must use YYYY-MM-DD format: {error}"),
+            )
+        })?;
+    let run_on = ComplianceDate::from_epoch_day(run_epoch_day);
+    let result = if request.dry_run.unwrap_or(false) {
+        let lifecycle = load_compliance_lifecycle_snapshot(state)?;
+        lifecycle
+            .run_lifecycle_dry_run(committee_actor, run_on)
+            .map_err(map_vendor_compliance_error)?
+    } else {
+        mutate_compliance_lifecycle(state, |lifecycle| {
+            lifecycle.run_lifecycle(committee_actor, run_on)
+        })?
+    };
     Ok(VendorComplianceLifecycleExecutionResultPayload {
         run_date: request.run_date,
         reminder_count: result.reminders.len(),
@@ -12386,11 +12395,7 @@ async fn close_payroll_monthly_settlement(
         }
     };
 
-    let response = match handle_close_payroll_monthly_settlement(
-        &state,
-        &payroll_actor,
-        request,
-    ) {
+    let response = match handle_close_payroll_monthly_settlement(&state, &payroll_actor, request) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
             (
@@ -12709,17 +12714,19 @@ fn to_vendor_enrollment_payload(
     lifecycle: &VendorComplianceLifecycle,
     as_of: ComplianceDate,
 ) -> Result<VendorEnrollmentPayload, (StatusCode, ErrorPayload)> {
-    let templates = lifecycle.templates_for_category(record.category()).ok_or_else(|| {
-        domain_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "VENDOR_COMPLIANCE_PERSISTENCE_ERROR",
-            format!(
-                "vendor `{}` category `{}` has no document template configuration",
-                record.vendor_id().as_str(),
-                record.category().as_str()
-            ),
-        )
-    })?;
+    let templates = lifecycle
+        .templates_for_category(record.category())
+        .ok_or_else(|| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "VENDOR_COMPLIANCE_PERSISTENCE_ERROR",
+                format!(
+                    "vendor `{}` category `{}` has no document template configuration",
+                    record.vendor_id().as_str(),
+                    record.category().as_str()
+                ),
+            )
+        })?;
 
     let application_submitted_on = record
         .history()
@@ -12834,7 +12841,9 @@ fn vendor_review_decision_label(decision: VendorReviewDecision) -> &'static str 
     }
 }
 
-fn to_vendor_lifecycle_event_payload(entry: &ComplianceHistoryEntry) -> VendorLifecycleEventPayload {
+fn to_vendor_lifecycle_event_payload(
+    entry: &ComplianceHistoryEntry,
+) -> VendorLifecycleEventPayload {
     let (event_type, summary, template_id, suspension_reason_code) = match entry.kind() {
         ComplianceHistoryKind::ApplicationSubmitted { category } => (
             "APPLICATION_SUBMITTED".to_owned(),
@@ -12948,8 +12957,9 @@ fn compare_vendor_enrollment_payload(
     sort_order: SortOrderQuery,
 ) -> CmpOrdering {
     let ordering = match sort_by {
-        VendorSortFieldQuery::CreatedAt => vendor_enrollment_created_at(left)
-            .cmp(vendor_enrollment_created_at(right)),
+        VendorSortFieldQuery::CreatedAt => {
+            vendor_enrollment_created_at(left).cmp(vendor_enrollment_created_at(right))
+        }
         VendorSortFieldQuery::Status => left.status.cmp(&right.status),
         VendorSortFieldQuery::DisplayName => left.display_name.cmp(&right.display_name),
         VendorSortFieldQuery::VendorCategory => left.vendor_category.cmp(&right.vendor_category),
@@ -13502,7 +13512,14 @@ fn ensure_required_issue_sign_off(
     required_issue_id: &str,
     field_name: &str,
 ) -> Result<(), (StatusCode, ErrorPayload)> {
-    let normalized_required_issue_id = required_issue_id.trim().to_ascii_uppercase();
+    let normalized_required_issue_id = required_issue_id.trim();
+    if !is_valid_issue_checklist_id(normalized_required_issue_id) {
+        return Err(domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "VENDOR_COMPLIANCE_INTERNAL_ERROR",
+            format!("required issue id `{normalized_required_issue_id}` has invalid format"),
+        ));
+    }
     let checklist = issue_checklist.ok_or_else(|| {
         domain_error(
             StatusCode::BAD_REQUEST,
@@ -13512,12 +13529,7 @@ fn ensure_required_issue_sign_off(
             ),
         )
     })?;
-    let normalized_checklist = checklist
-        .iter()
-        .map(|entry| entry.trim().to_ascii_uppercase())
-        .filter(|entry| !entry.is_empty())
-        .collect::<Vec<_>>();
-    if normalized_checklist.is_empty() {
+    if checklist.is_empty() {
         return Err(domain_error(
             StatusCode::BAD_REQUEST,
             "BAD_REQUEST",
@@ -13526,10 +13538,28 @@ fn ensure_required_issue_sign_off(
             ),
         ));
     }
-    if !normalized_checklist
-        .iter()
-        .any(|entry| entry == &normalized_required_issue_id)
-    {
+    let mut seen_issue_ids = HashSet::new();
+    let mut sign_off_confirmed = false;
+    for (index, issue_id) in checklist.iter().enumerate() {
+        if !is_valid_issue_checklist_id(issue_id.as_str()) {
+            return Err(domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("{field_name}[{index}] must match `ISS-000` format"),
+            ));
+        }
+        if !seen_issue_ids.insert(issue_id.as_str()) {
+            return Err(domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("{field_name} must not contain duplicate issue IDs"),
+            ));
+        }
+        if issue_id == normalized_required_issue_id {
+            sign_off_confirmed = true;
+        }
+    }
+    if !sign_off_confirmed {
         return Err(domain_error(
             StatusCode::BAD_REQUEST,
             "BAD_REQUEST",
@@ -13539,6 +13569,18 @@ fn ensure_required_issue_sign_off(
         ));
     }
     Ok(())
+}
+
+fn is_valid_issue_checklist_id(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 7
+        && bytes[0] == b'I'
+        && bytes[1] == b'S'
+        && bytes[2] == b'S'
+        && bytes[3] == b'-'
+        && bytes[4].is_ascii_digit()
+        && bytes[5].is_ascii_digit()
+        && bytes[6].is_ascii_digit()
 }
 
 fn normalize_optional_patch_note(
@@ -17776,9 +17818,9 @@ mod tests {
             runtime_state_cache: None,
             runtime_state_cache_bypass_keys: Arc::new(Mutex::new(HashSet::new())),
             order_event_backbone: None,
-            delivery_policy: Arc::new(RwLock::new(
-                VendorPlantDeliveryPolicy::with_audit_trail(audit_trail.clone()),
-            )),
+            delivery_policy: Arc::new(RwLock::new(VendorPlantDeliveryPolicy::with_audit_trail(
+                audit_trail.clone(),
+            ))),
             menu_supply_policy: MenuSupplyPolicy::with_audit_trail(
                 Default::default(),
                 audit_trail.clone(),
@@ -19993,6 +20035,129 @@ mod tests {
         assert_eq!(payload.page.page_size, 1);
         assert_eq!(payload.page.total_items, 0);
         assert_eq!(payload.page.total_pages, 0);
+    }
+
+    #[test]
+    fn run_vendor_compliance_lifecycle_dry_run_preserves_live_transitions() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let committee = committee_admin();
+        let vendor_actor = vendor_operator();
+
+        let lifecycle_vendor_id = vendor_id("ven-dryrun-handler001");
+        let template_id = DocumentTemplateId::parse("tmpl-discovery-license")
+            .expect("template id should be valid");
+        mutate_compliance_lifecycle(&state, |lifecycle| {
+            let category = VendorCategory::parse("RESTAURANT").expect("category should be valid");
+            lifecycle.register_vendor_application(
+                &vendor_actor,
+                lifecycle_vendor_id.clone(),
+                "Dry Run Handler Vendor",
+                category,
+                ComplianceDate::from_epoch_day(now_epoch_day.saturating_sub(2)),
+            )?;
+            lifecycle.submit_document(
+                &vendor_actor,
+                &lifecycle_vendor_id,
+                &template_id,
+                VendorDocumentSubmission::new(
+                    seeded_compliance_document_ref(&lifecycle_vendor_id, "dry-run-license.pdf"),
+                    ComplianceDate::from_epoch_day(now_epoch_day.saturating_sub(2)),
+                    ComplianceDate::from_epoch_day(now_epoch_day.saturating_add(7)),
+                )
+                .expect("document submission should be valid"),
+            )?;
+            lifecycle.review_application(
+                &committee,
+                &lifecycle_vendor_id,
+                VendorReviewDecision::Approved,
+                "approved for lifecycle dry-run validation",
+                ComplianceDate::from_epoch_day(now_epoch_day.saturating_sub(1)),
+            )?;
+            Ok(())
+        })
+        .expect("dry-run lifecycle fixture should be seeded");
+
+        let run_date = epoch_day_to_iso_date(now_epoch_day);
+        let dry_run_result = handle_run_vendor_compliance_lifecycle(
+            &state,
+            &committee,
+            VendorComplianceLifecycleExecutionRequestPayload {
+                run_date: run_date.clone(),
+                dry_run: Some(true),
+            },
+        )
+        .expect("dry-run execution should succeed");
+        assert_eq!(dry_run_result.reminder_count, 1);
+
+        let first_live_result = handle_run_vendor_compliance_lifecycle(
+            &state,
+            &committee,
+            VendorComplianceLifecycleExecutionRequestPayload {
+                run_date: run_date.clone(),
+                dry_run: Some(false),
+            },
+        )
+        .expect("first live lifecycle execution should still emit reminder");
+        assert_eq!(first_live_result.reminder_count, 1);
+
+        let replay_live_result = handle_run_vendor_compliance_lifecycle(
+            &state,
+            &committee,
+            VendorComplianceLifecycleExecutionRequestPayload {
+                run_date,
+                dry_run: Some(false),
+            },
+        )
+        .expect("replayed live lifecycle execution should be idempotent");
+        assert_eq!(replay_live_result.reminder_count, 0);
+    }
+
+    #[test]
+    fn issue_sign_off_checklist_enforces_format_and_uniqueness_contract() {
+        let valid = vec!["ISS-003".to_owned(), "ISS-120".to_owned()];
+        ensure_required_issue_sign_off(
+            Some(valid.as_slice()),
+            SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID,
+            "issueChecklist",
+        )
+        .expect("well-formed unique issue checklist should pass");
+
+        let invalid_format = vec!["iss-003".to_owned()];
+        let invalid_format_error = ensure_required_issue_sign_off(
+            Some(invalid_format.as_slice()),
+            SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID,
+            "issueChecklist",
+        )
+        .expect_err("non-conforming issue ids should be rejected");
+        assert_eq!(invalid_format_error.0, StatusCode::BAD_REQUEST);
+        assert!(
+            invalid_format_error
+                .1
+                .message
+                .contains("must match `ISS-000` format"),
+            "expected format error, got `{}`",
+            invalid_format_error.1.message
+        );
+
+        let duplicate = vec!["ISS-003".to_owned(), "ISS-003".to_owned()];
+        let duplicate_error = ensure_required_issue_sign_off(
+            Some(duplicate.as_slice()),
+            SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID,
+            "issueChecklist",
+        )
+        .expect_err("duplicate issue ids should be rejected");
+        assert_eq!(duplicate_error.0, StatusCode::BAD_REQUEST);
+        assert!(
+            duplicate_error
+                .1
+                .message
+                .contains("must not contain duplicate issue IDs"),
+            "expected duplicate error, got `{}`",
+            duplicate_error.1.message
+        );
     }
 
     #[test]

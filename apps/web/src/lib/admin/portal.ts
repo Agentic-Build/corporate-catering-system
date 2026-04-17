@@ -43,7 +43,7 @@ export function parseOptionalNumber(value: string): number | undefined {
 
   const parsed = Number(trimmed);
   if (!Number.isFinite(parsed)) {
-    throw new Error("must be a finite number");
+    throw new Error("必須是有效數字。");
   }
   return parsed;
 }
@@ -51,7 +51,7 @@ export function parseOptionalNumber(value: string): number | undefined {
 export function parseRequiredNumber(value: string, field: string): number {
   const parsed = parseOptionalNumber(value);
   if (parsed === undefined) {
-    throw new Error(`${field} is required`);
+    throw new Error(`${field} 為必填。`);
   }
   return parsed;
 }
@@ -67,7 +67,7 @@ export function parseBooleanFlag(value: string): boolean | undefined {
   if (normalized === "false") {
     return false;
   }
-  throw new Error("flag must be ALL, TRUE, or FALSE");
+  throw new Error("旗標僅接受 ALL、TRUE 或 FALSE。");
 }
 
 export function isIssueSignOffConfirmed(
@@ -92,12 +92,12 @@ export function normalizeIssueId(value: string): string {
 export function toTaipeiDateTime(dateTimeLocal: string): string {
   const trimmed = dateTimeLocal.trim();
   if (trimmed.length === 0) {
-    throw new Error("datetime input is required");
+    throw new Error("日期時間為必填。");
   }
 
   const candidate = `${trimmed}:00+08:00`;
   if (!isValidIsoDateTime(candidate)) {
-    throw new Error("datetime input must follow YYYY-MM-DDTHH:mm");
+    throw new Error("日期時間格式必須為 YYYY-MM-DDTHH:mm。");
   }
   return candidate;
 }
@@ -125,7 +125,7 @@ export function todayTaipeiIsoDate(): string {
 export function addDaysIsoDate(dateIso: string, days: number): string {
   const source = Date.parse(`${dateIso}T00:00:00+08:00`);
   if (Number.isNaN(source)) {
-    throw new Error("dateIso must be a valid YYYY-MM-DD date string");
+    throw new Error("dateIso 必須是有效的 YYYY-MM-DD 日期字串。");
   }
   const target = source + days * 24 * 60 * 60 * 1000;
   return new Date(target).toLocaleDateString("en-CA", {
@@ -148,13 +148,13 @@ function parseOptionalInteger(
 
   const parsed = Number(trimmed);
   if (!Number.isInteger(parsed)) {
-    throw new Error(`${constraints.field} must be an integer`);
+    throw new Error(`${constraints.field} 必須是整數。`);
   }
   if (parsed < constraints.minimum) {
-    throw new Error(`${constraints.field} must be at least ${constraints.minimum}`);
+    throw new Error(`${constraints.field} 必須大於或等於 ${constraints.minimum}。`);
   }
   if (constraints.maximum !== undefined && parsed > constraints.maximum) {
-    throw new Error(`${constraints.field} must be at most ${constraints.maximum}`);
+    throw new Error(`${constraints.field} 必須小於或等於 ${constraints.maximum}。`);
   }
 
   return parsed;

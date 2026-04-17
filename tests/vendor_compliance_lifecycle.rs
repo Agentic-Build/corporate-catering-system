@@ -283,6 +283,65 @@ fn lifecycle_automation_emits_reminders_and_suspends_then_reinstates_vendors() {
 }
 
 #[test]
+fn lifecycle_dry_run_reports_expected_changes_without_mutating_state() {
+    ensure_test_otel_endpoint();
+    let committee = committee_admin();
+    let vendor_actor = vendor_operator();
+    let category = vendor_category("RESTAURANT");
+    let mut lifecycle = VendorComplianceLifecycle::new(HistoryRetentionPolicy::default());
+
+    lifecycle
+        .upsert_document_template(&committee, required_template_for(&category))
+        .expect("template upsert should succeed");
+
+    let vendor = vendor_id("ven-dryrun0001");
+    lifecycle
+        .register_vendor_application(
+            &vendor_actor,
+            vendor.clone(),
+            "Dry Run Vendor",
+            category,
+            ComplianceDate::from_epoch_day(0),
+        )
+        .expect("vendor application should be registered");
+    submit_required_document(&mut lifecycle, &vendor_actor, &vendor, 0, 130);
+    lifecycle
+        .review_application(
+            &committee,
+            &vendor,
+            VendorReviewDecision::Approved,
+            "approved for lifecycle dry-run checks",
+            ComplianceDate::from_epoch_day(1),
+        )
+        .expect("approval should succeed");
+
+    let history_len_before = lifecycle
+        .vendor(&vendor)
+        .expect("vendor should exist")
+        .history()
+        .len();
+    let dry_run = lifecycle
+        .run_lifecycle_dry_run(&committee, ComplianceDate::from_epoch_day(100))
+        .expect("dry-run lifecycle should succeed");
+    assert_eq!(dry_run.reminders.len(), 1);
+    assert_eq!(dry_run.suspensions.len(), 0);
+    assert_eq!(dry_run.reinstatements.len(), 0);
+    assert_eq!(
+        lifecycle
+            .vendor(&vendor)
+            .expect("vendor should exist")
+            .history()
+            .len(),
+        history_len_before
+    );
+
+    let live_run = lifecycle
+        .run_lifecycle(&committee, ComplianceDate::from_epoch_day(100))
+        .expect("live lifecycle should still emit the same reminder");
+    assert_eq!(live_run.reminders.len(), 1);
+}
+
+#[test]
 fn document_submission_requires_managed_compliance_bucket() {
     ensure_test_otel_endpoint();
     let error = VendorDocumentSubmission::new(
