@@ -42,6 +42,7 @@ pub enum HttpOperation {
     CreateEmployeeOrder,
     UpdateEmployeeOrder,
     VerifyPickupOrder,
+    GetEmployeePickupVerificationQr,
     GetEmployeeOrderPayrollLedger,
     CreateEmployeeOrderDispute,
     ListVendorOrders,
@@ -82,13 +83,14 @@ pub enum HttpOperation {
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 43] = [
+    pub const ALL: [Self; 44] = [
         Self::ListEmployeeMenus,
         Self::ListEmployeeOrders,
         Self::UpsertEmployeeRushReminderPreferences,
         Self::CreateEmployeeOrder,
         Self::UpdateEmployeeOrder,
         Self::VerifyPickupOrder,
+        Self::GetEmployeePickupVerificationQr,
         Self::GetEmployeeOrderPayrollLedger,
         Self::CreateEmployeeOrderDispute,
         Self::ListVendorOrders,
@@ -136,6 +138,7 @@ impl HttpOperation {
             Self::CreateEmployeeOrder => "createEmployeeOrder",
             Self::UpdateEmployeeOrder => "updateEmployeeOrder",
             Self::VerifyPickupOrder => "verifyPickupOrder",
+            Self::GetEmployeePickupVerificationQr => "getEmployeePickupVerificationQr",
             Self::GetEmployeeOrderPayrollLedger => "getEmployeeOrderPayrollLedger",
             Self::CreateEmployeeOrderDispute => "createEmployeeOrderDispute",
             Self::ListVendorOrders => "listVendorOrders",
@@ -182,6 +185,7 @@ impl HttpOperation {
         match self {
             Self::ListEmployeeMenus
             | Self::ListEmployeeOrders
+            | Self::GetEmployeePickupVerificationQr
             | Self::GetEmployeeOrderPayrollLedger
             | Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
@@ -235,6 +239,9 @@ impl HttpOperation {
             Self::CreateEmployeeOrder => "/api/v1/employee/orders",
             Self::UpdateEmployeeOrder => "/api/v1/employee/orders/{orderId}",
             Self::VerifyPickupOrder => "/api/v1/employee/orders/{orderId}/pickup-verifications",
+            Self::GetEmployeePickupVerificationQr => {
+                "/api/v1/employee/orders/{orderId}/pickup-verification-qr"
+            }
             Self::GetEmployeeOrderPayrollLedger => {
                 "/api/v1/employee/orders/{orderId}/payroll-ledger"
             }
@@ -309,6 +316,7 @@ impl HttpOperation {
             | Self::CreateEmployeeOrder
             | Self::UpdateEmployeeOrder
             | Self::VerifyPickupOrder
+            | Self::GetEmployeePickupVerificationQr
             | Self::GetEmployeeOrderPayrollLedger
             | Self::CreateEmployeeOrderDispute => HttpAudience::Employee,
             Self::ListVendorOrders
@@ -381,6 +389,7 @@ impl HttpOperation {
             | Self::SyncPayrollHrApiAdjunct => Some(Action::ExportPayrollDeductions),
             Self::ListEmployeeMenus
             | Self::ListEmployeeOrders
+            | Self::GetEmployeePickupVerificationQr
             | Self::GetEmployeeOrderPayrollLedger
             | Self::ListVendorOrders
             | Self::ListVendorFulfillmentBoard
@@ -412,6 +421,7 @@ impl HttpOperation {
             "createEmployeeOrder" => Some(Self::CreateEmployeeOrder),
             "updateEmployeeOrder" => Some(Self::UpdateEmployeeOrder),
             "verifyPickupOrder" => Some(Self::VerifyPickupOrder),
+            "getEmployeePickupVerificationQr" => Some(Self::GetEmployeePickupVerificationQr),
             "getEmployeeOrderPayrollLedger" => Some(Self::GetEmployeeOrderPayrollLedger),
             "createEmployeeOrderDispute" => Some(Self::CreateEmployeeOrderDispute),
             "listVendorOrders" => Some(Self::ListVendorOrders),
@@ -816,6 +826,43 @@ pub fn canonical_openapi_spec() -> Value {
                 "content": {
                   "application/json": {
                     "schema": { "$ref": "#/components/schemas/PickupVerificationResponse" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "404": { "$ref": "#/components/responses/NotFound" },
+              "409": { "$ref": "#/components/responses/Conflict" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/employee/orders/{orderId}/pickup-verification-qr": {
+          "get": {
+            "tags": ["Employee"],
+            "summary": "Get rotating pickup verification QR payload",
+            "operationId": HttpOperation::GetEmployeePickupVerificationQr.operation_id(),
+            "x-order-governance": {
+              "timezone": "Asia/Taipei",
+              "strictLifecycle": true,
+              "pickupVerification": {
+                "required": true,
+                "mechanism": "TOTP_QR_SINGLE_USE",
+                "stepSeconds": 30,
+                "maxClockSkewSteps": 1
+              }
+            },
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/OrderIdPath" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Pickup verification QR payload with refresh metadata",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/PickupVerificationQr" }
                   }
                 }
               },
@@ -3387,6 +3434,32 @@ pub fn canonical_openapi_spec() -> Value {
             "properties": {
               "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
               "verified": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          },
+          "PickupVerificationQr": {
+            "type": "object",
+            "required": [
+              "orderId",
+              "verificationCode",
+              "generatedAtEpochSecond",
+              "expiresAtEpochSecond",
+              "refreshIntervalSeconds",
+              "secondsUntilRefresh"
+            ],
+            "properties": {
+              "orderId": { "type": "string", "pattern": "^ord-[a-z0-9]{8,32}$" },
+              "verificationCode": {
+                "type": "string",
+                "minLength": 15,
+                "maxLength": 64,
+                "pattern": "^TOTP1:[0-9]{1,20}:[0-9]{6}$",
+                "description": "Current TOTP QR payload bound to orderId and Asia/Taipei 30-second step boundary."
+              },
+              "generatedAtEpochSecond": { "type": "integer", "minimum": 0 },
+              "expiresAtEpochSecond": { "type": "integer", "minimum": 0 },
+              "refreshIntervalSeconds": { "type": "integer", "enum": [30] },
+              "secondsUntilRefresh": { "type": "integer", "minimum": 1, "maximum": 30 }
             },
             "additionalProperties": false
           },

@@ -52,7 +52,7 @@ impl RuntimeHttpRoute {
     }
 }
 
-const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 46] = [
+const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 47] = [
     RuntimeHttpRoute::new(
         HttpMethod::Get,
         "/api/v1/employee/menus",
@@ -82,6 +82,11 @@ const RUNTIME_HTTP_ROUTES: [RuntimeHttpRoute; 46] = [
         HttpMethod::Post,
         "/api/v1/employee/orders/{orderId}/pickup-verifications",
         "verifyPickupOrder",
+    ),
+    RuntimeHttpRoute::new(
+        HttpMethod::Get,
+        "/api/v1/employee/orders/{orderId}/pickup-verification-qr",
+        "getEmployeePickupVerificationQr",
     ),
     RuntimeHttpRoute::new(
         HttpMethod::Get,

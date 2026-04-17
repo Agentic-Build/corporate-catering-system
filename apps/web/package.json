@@ -10,16 +10,20 @@
     "test": "tsx --test tests/**/*.test.ts"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.1.14",
-    "@types/node": "^24.8.1",
     "@sveltejs/adapter-node": "^5.3.2",
     "@sveltejs/kit": "^2.57.1",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/node": "^24.8.1",
+    "@types/qrcode": "^1.5.6",
     "svelte": "^5.55.4",
     "svelte-check": "^4.4.6",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.20.5",
     "typescript": "^5.9.3",
     "vite": "^8.0.8"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   }
 }

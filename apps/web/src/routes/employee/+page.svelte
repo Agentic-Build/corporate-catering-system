@@ -1,17 +1,16 @@
 <script lang="ts">
-  import PortalSurface from "$lib/components/portal-surface.svelte";
+  import EmployeePortalMvp from "$lib/components/employee-portal-mvp.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 </script>
 
 {#if data.actor}
-  <PortalSurface
-    role="employee"
+  <EmployeePortalMvp
     sectionId={data.sectionId}
     actorDisplayName={data.actor.displayName}
     actorId={data.actor.id}
     provider={data.auth.provider}
-    experienceMode={data.experienceMode}
+    plantId={data.actor.scope.plantIds[0] ?? null}
   />
 {/if}

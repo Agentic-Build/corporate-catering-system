@@ -18,6 +18,7 @@ import type { MenuPage } from '../models/MenuPage';
 import type { MenuSortField } from '../models/MenuSortField';
 import type { MenuType } from '../models/MenuType';
 import type { PayrollDispute } from '../models/PayrollDispute';
+import type { PickupVerificationQr } from '../models/PickupVerificationQr';
 import type { PickupVerificationRequest } from '../models/PickupVerificationRequest';
 import type { PickupVerificationResponse } from '../models/PickupVerificationResponse';
 import type { PlantId } from '../models/PlantId';
@@ -238,6 +239,31 @@ export class EmployeeService {
                 401: `Authentication token is missing or invalid.`,
                 403: `Authenticated actor is not authorized to perform this operation.`,
                 404: `Requested resource was not found.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * Get rotating pickup verification QR payload
+     * @param orderId
+     * @returns PickupVerificationQr Pickup verification QR payload with refresh metadata
+     * @throws ApiError
+     */
+    public static getEmployeePickupVerificationQr(
+        orderId: string,
+    ): CancelablePromise<PickupVerificationQr> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/employee/orders/{orderId}/pickup-verification-qr',
+            path: {
+                'orderId': orderId,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
+                409: `Request conflicts with business constraints.`,
                 500: `Internal server error while processing request.`,
             },
         });

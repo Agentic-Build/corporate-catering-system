@@ -158,6 +158,7 @@ export type { PayrollSettlementCycleLockResponse } from './models/PayrollSettlem
 export type { PayrollSettlementCycleLockState } from './models/PayrollSettlementCycleLockState';
 export type { PayrollSortByQuery } from './models/PayrollSortByQuery';
 export type { PayrollSortField } from './models/PayrollSortField';
+export type { PickupVerificationQr } from './models/PickupVerificationQr';
 export type { PickupVerificationRequest } from './models/PickupVerificationRequest';
 export type { PickupVerificationResponse } from './models/PickupVerificationResponse';
 export type { PlantId } from './models/PlantId';

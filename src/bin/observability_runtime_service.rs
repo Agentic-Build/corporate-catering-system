@@ -78,7 +78,7 @@ use corporate_catering_system::persistence::{
     VendorCompliancePersistenceError, VendorComplianceSqlRepository,
 };
 use corporate_catering_system::pickup_totp::{
-    PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
+    taipei_step_from_unix_seconds, PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
 };
 use corporate_catering_system::rush_reminder::{
     NoopRushReminderDeliveryGateway, RushReminderDeliveryGateway, RushReminderPolicy,
@@ -129,6 +129,7 @@ const DEFAULT_PAYROLL_EXCHANGE_RETENTION_DAYS: u16 = 365;
 const DEFAULT_PAYROLL_PURGE_INTERVAL_SECONDS: u64 = 3600;
 const DEFAULT_ORDER_RETENTION_DAYS: u16 = 365;
 const DEFAULT_ORDER_PURGE_INTERVAL_SECONDS: u64 = 3600;
+const PICKUP_QR_REFRESH_INTERVAL_SECONDS: i64 = 30;
 const LOAD_GATE_EMPLOYEE_ACTOR_ID: &str = "emp-load-gate";
 const LOAD_GATE_COMMITTEE_ACTOR_ID: &str = "committee-load-gate";
 const LOAD_GATE_PAYROLL_ACTOR_ID: &str = "payroll-load-gate";
@@ -533,6 +534,17 @@ struct PickupVerificationRequest {
 struct PickupVerificationResponse {
     order_id: String,
     verified: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PickupVerificationQrResponse {
+    order_id: String,
+    verification_code: String,
+    generated_at_epoch_second: i64,
+    expires_at_epoch_second: i64,
+    refresh_interval_seconds: i64,
+    seconds_until_refresh: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1646,6 +1658,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         .route(
             "/api/v1/employee/orders/:orderId/pickup-verifications",
             post(verify_order_pickup),
+        )
+        .route(
+            "/api/v1/employee/orders/:orderId/pickup-verification-qr",
+            get(get_employee_pickup_verification_qr),
         )
         .route(
             "/api/v1/employee/orders/:orderId/payroll-ledger",
@@ -4152,13 +4168,16 @@ fn resolve_delivery_epoch_day() -> Result<i32, String> {
     Ok(now.epoch_day().saturating_add(DEFAULT_DELIVERY_DAY_OFFSET))
 }
 
-fn current_taipei_business_moment() -> Result<TaipeiBusinessMoment, String> {
+fn current_unix_epoch_seconds() -> Result<i64, String> {
     let unix_seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("failed to read system clock: {error}"))?
         .as_secs();
-    let unix_seconds_i64 = i64::try_from(unix_seconds)
-        .map_err(|_| "system clock overflowed i64 seconds".to_owned())?;
+    i64::try_from(unix_seconds).map_err(|_| "system clock overflowed i64 seconds".to_owned())
+}
+
+fn current_taipei_business_moment() -> Result<TaipeiBusinessMoment, String> {
+    let unix_seconds_i64 = current_unix_epoch_seconds()?;
     TaipeiBusinessMoment::from_utc_unix_seconds(unix_seconds_i64).map_err(|error| {
         format!("failed to convert system time to Taipei business moment: {error}")
     })
@@ -7391,6 +7410,125 @@ fn handle_update_employee_order_for_actor(
         requested_at,
     )?;
     build_employee_order_payload(state, &updated_snapshot)
+}
+
+async fn get_employee_pickup_verification_qr(
+    State(state): State<AppState>,
+    Path(order_id): Path<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "getEmployeePickupVerificationQr",
+        Some("load-gate"),
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+
+    let response = match handle_get_employee_pickup_verification_qr(&state, order_id) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("pickup verification QR payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                        "pickup verification QR error payload serialization should succeed",
+                    ),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_get_employee_pickup_verification_qr(
+    state: &AppState,
+    order_id_raw: String,
+) -> Result<PickupVerificationQrResponse, (StatusCode, ErrorPayload)> {
+    let order_id = parse_contract_order_id(&order_id_raw).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "INVALID_PICKUP_VERIFICATION_REQUEST",
+            format!("orderId path parameter is invalid: {error}"),
+        )
+    })?;
+    let snapshot = load_order_snapshot_or_not_found(state, &order_id)?;
+    let actor = load_gate_employee_actor_for_plant(state, snapshot.plant_id())?;
+    if snapshot.employee_actor_id() != actor.actor_id() {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "actor `{}` cannot access pickup verification QR for order `{}`",
+                actor.actor_id().as_str(),
+                order_id.as_str()
+            ),
+        ));
+    }
+    if !matches!(
+        snapshot.state(),
+        OrderLifecycleState::Pending | OrderLifecycleState::Modified
+    ) {
+        return Err(domain_error(
+            StatusCode::CONFLICT,
+            "PICKUP_VERIFICATION_STATE_CONFLICT",
+            format!(
+                "order `{}` is in `{}` state and cannot issue pickup verification QR",
+                order_id.as_str(),
+                snapshot.state().as_str()
+            ),
+        ));
+    }
+
+    let generated_at_epoch_second = current_unix_epoch_seconds().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+    let current_step =
+        taipei_step_from_unix_seconds(generated_at_epoch_second).map_err(|error| {
+            domain_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "TIME_RESOLUTION_FAILED",
+                format!("failed to resolve pickup TOTP step: {error}"),
+            )
+        })?;
+    let verification_code = state
+        .pickup_totp_verifier
+        .generate_qr_payload(&order_id, current_step);
+    let seconds_until_refresh = pickup_qr_seconds_until_refresh(generated_at_epoch_second);
+    let expires_at_epoch_second = generated_at_epoch_second.saturating_add(seconds_until_refresh);
+
+    Ok(PickupVerificationQrResponse {
+        order_id: order_id.as_str().to_owned(),
+        verification_code,
+        generated_at_epoch_second,
+        expires_at_epoch_second,
+        refresh_interval_seconds: PICKUP_QR_REFRESH_INTERVAL_SECONDS,
+        seconds_until_refresh,
+    })
+}
+
+fn pickup_qr_seconds_until_refresh(current_unix_epoch_second: i64) -> i64 {
+    let elapsed_within_window =
+        current_unix_epoch_second.rem_euclid(PICKUP_QR_REFRESH_INTERVAL_SECONDS);
+    let remaining = PICKUP_QR_REFRESH_INTERVAL_SECONDS.saturating_sub(elapsed_within_window);
+    if remaining == 0 {
+        PICKUP_QR_REFRESH_INTERVAL_SECONDS
+    } else {
+        remaining
+    }
 }
 
 async fn get_employee_order_payroll_ledger(
@@ -14066,6 +14204,55 @@ mod tests {
         let updated_snapshot = load_order_snapshot_or_not_found(&state, &parsed_order_id)
             .expect("fulfilled order should remain queryable");
         assert_eq!(updated_snapshot.state(), OrderLifecycleState::Fulfilled);
+    }
+
+    #[test]
+    fn pickup_qr_endpoint_returns_rotating_code_and_refresh_metadata() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let create_request = EmployeeOrderCreateRequestPayload {
+            plant_id: "fab-a".to_owned(),
+            delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
+            line_items: vec![OrderLineItemRequestPayload {
+                menu_item_id: "menu-discoverytsta1".to_owned(),
+                quantity: 1,
+                special_requests: vec![],
+            }],
+            employee_note: None,
+        };
+        let created_order =
+            handle_create_employee_order(&state, create_request).expect("order should be created");
+
+        let pickup_qr =
+            handle_get_employee_pickup_verification_qr(&state, created_order.order_id.clone())
+                .expect("pickup QR should be issued for pending order");
+        assert_eq!(pickup_qr.order_id, created_order.order_id);
+        assert!(pickup_qr.verification_code.starts_with("TOTP1:"));
+        assert_eq!(
+            pickup_qr.refresh_interval_seconds,
+            PICKUP_QR_REFRESH_INTERVAL_SECONDS
+        );
+        assert!(
+            (1..=PICKUP_QR_REFRESH_INTERVAL_SECONDS).contains(&pickup_qr.seconds_until_refresh),
+            "secondsUntilRefresh must remain within one 30-second TOTP window",
+        );
+        assert_eq!(
+            pickup_qr.expires_at_epoch_second - pickup_qr.generated_at_epoch_second,
+            pickup_qr.seconds_until_refresh,
+        );
+
+        let verification = handle_verify_order_pickup(
+            &state,
+            created_order.order_id.clone(),
+            PickupVerificationRequest {
+                verification_code: pickup_qr.verification_code,
+            },
+            "req-pickup-qr-issued",
+        )
+        .expect("issued QR code should pass pickup verification");
+        assert_eq!(verification.order_id, created_order.order_id);
     }
 
     #[test]
