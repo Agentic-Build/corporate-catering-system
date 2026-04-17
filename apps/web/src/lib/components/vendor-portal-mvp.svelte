@@ -774,13 +774,27 @@
     return trimmed.length === 0 ? null : trimmed;
   }
 
-  function parseOptionalPositiveInt(value: string): number | undefined {
+  function parseOptionalPositiveInt(value: string | number | null | undefined): number | undefined {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value === "number") {
+      if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+        throw new Error(`invalid positive integer: ${String(value)}`);
+      }
+      return value;
+    }
+
     const trimmed = value.trim();
     if (!trimmed) {
       return undefined;
     }
+    if (!/^[0-9]+$/.test(trimmed)) {
+      throw new Error(`invalid positive integer: ${value}`);
+    }
     const parsed = Number.parseInt(trimmed, 10);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
       throw new Error(`invalid positive integer: ${value}`);
     }
     return parsed;

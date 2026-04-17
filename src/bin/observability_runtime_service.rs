@@ -14589,6 +14589,47 @@ mod tests {
         headers
     }
 
+    fn vendor_bearer_headers_with_claims(
+        actor_id: &str,
+        plant_ids: &[&str],
+        vendor_ids: &[&str],
+    ) -> HeaderMap {
+        ensure_test_access_bearer_env();
+        let claims = serde_json::json!({
+            "iss": std::env::var(VENDOR_MFA_JWT_ISSUER_ENV).expect("test bearer issuer env should be configured"),
+            "aud": std::env::var(VENDOR_MFA_JWT_AUDIENCE_ENV).expect("test bearer audience env should be configured"),
+            "sub": actor_id,
+            "exp": 4_102_444_800i64,
+            "iat": 1_577_836_800i64,
+            "nbf": 1_577_836_800i64,
+            "role": "VENDOR_OPERATOR",
+            "allPlants": false,
+            "plantIds": plant_ids,
+            "vendorIds": vendor_ids,
+        });
+        let token = build_test_hs256_jwt_token(
+            claims,
+            load_test_hs256_secret(VENDOR_MFA_JWT_HS256_SECRET_BASE64_ENV).as_slice(),
+        );
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AUTHORIZATION,
+            axum::http::HeaderValue::from_str(
+                format!("{AUTHORIZATION_BEARER_PREFIX}{token}").as_str(),
+            )
+            .expect("authorization header should be valid"),
+        );
+        headers
+    }
+
+    fn run_async_test<T>(future: impl std::future::Future<Output = T>) -> T {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test tokio runtime should initialize")
+            .block_on(future)
+    }
+
     fn ensure_test_access_bearer_env() {
         std::env::set_var(
             CORPORATE_SSO_JWT_ISSUER_ENV,
@@ -15333,6 +15374,65 @@ mod tests {
             AuthenticationSource::VendorAccountMfa
         );
         assert!(vendor.is_scoped_for_vendor(&vendor_id("ven-discoverytst-a1")));
+    }
+
+    #[test]
+    fn vendor_menu_api_rejects_wrong_role_token_claim() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let headers = bearer_headers("committee-claim", "COMMITTEE_ADMIN");
+
+        let (status, payload) = run_async_test(list_vendor_menu_items(
+            State(state),
+            headers,
+            Query(VendorMenuListQuery::default()),
+        ));
+
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(payload.0["code"].as_str(), Some("UNAUTHORIZED"));
+    }
+
+    #[test]
+    fn vendor_menu_api_rejects_mismatched_vendor_scope_claim() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let headers =
+            vendor_bearer_headers_with_claims("vendor-claim-mismatch", &["fab-a"], &["ven-other"]);
+
+        let (status, payload) = run_async_test(list_vendor_menu_items(
+            State(state),
+            headers,
+            Query(VendorMenuListQuery::default()),
+        ));
+
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(payload.0["code"].as_str(), Some("FORBIDDEN"));
+    }
+
+    #[test]
+    fn vendor_fulfillment_api_rejects_mismatched_plant_scope_claim() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let headers = vendor_bearer_headers_with_claims(
+            "vendor-plant-mismatch",
+            &["fab-b"],
+            &["ven-discoverytst-a1"],
+        );
+
+        let (status, payload) = run_async_test(list_vendor_fulfillment_board(
+            State(state),
+            headers,
+            Query(VendorFulfillmentBoardQuery::default()),
+        ));
+
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(payload.0["code"].as_str(), Some("FORBIDDEN"));
     }
 
     #[test]
