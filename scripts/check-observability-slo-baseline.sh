@@ -81,11 +81,21 @@ rg -q "corporate-catering-postgres-rw" ops/kubernetes/base/postgres-topology.yam
 rg -q "corporate-catering-postgres-ro" ops/kubernetes/base/postgres-topology.yaml
 rg -q "kind: ExternalSecret" ops/kubernetes/base/external-secrets.yaml
 rg -q "kind: Gateway" ops/kubernetes/base/gateway.yaml
+rg -q "protocol: HTTPS" ops/kubernetes/base/gateway.yaml
+if rg -q '^[[:space:]]*protocol:[[:space:]]*HTTP[[:space:]]*$' ops/kubernetes/base/gateway.yaml; then
+  echo "gateway must not expose plaintext HTTP listeners"
+  exit 1
+fi
 rg -q "RateLimitPolicy" ops/kubernetes/base/gateway.yaml
 rg -q "maxRequestBodyBytes" ops/kubernetes/base/gateway.yaml
 rg -q "kind: NetworkPolicy" ops/kubernetes/base/networkpolicy-default-deny.yaml
 rg -q "podSelector: {}" ops/kubernetes/base/networkpolicy-default-deny.yaml
 rg -q "kind: NetworkPolicy" ops/kubernetes/base/networkpolicy-runtime-allow.yaml
+rg -q "corporate-catering-postgres-allow-pgbouncer-and-cluster" ops/kubernetes/base/networkpolicy-runtime-allow.yaml
+rg -q "corporate-catering-runtime-allow-egress-object-storage" ops/kubernetes/base/networkpolicy-runtime-allow.yaml
+rg -q "corporate-catering-object-storage-provision" ops/kubernetes/base/networkpolicy-runtime-allow.yaml
+rg -q "port: 5432" ops/kubernetes/base/networkpolicy-runtime-allow.yaml
+rg -q "port: 9000" ops/kubernetes/base/networkpolicy-runtime-allow.yaml
 rg -q "FRONTEND_RUNTIME_KIND" ops/kubernetes/base/deployment-web.yaml
 rg -q "sveltekit-adapter-node" ops/kubernetes/base/deployment-web.yaml
 rg -q "cache-control" apps/web/src/hooks.server.ts

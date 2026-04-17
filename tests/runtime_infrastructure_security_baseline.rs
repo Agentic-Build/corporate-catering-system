@@ -187,6 +187,27 @@ fn postgres_topology_and_pgbouncer_transaction_pools_are_declared() {
 fn gateway_external_secret_and_default_deny_controls_are_active() {
     let gateway = read_text("ops/kubernetes/base/gateway.yaml");
     assert!(gateway.contains("kind: Gateway"));
+    let gateway_docs = read_yaml_documents("ops/kubernetes/base/gateway.yaml");
+    let gateway_spec = gateway_docs
+        .iter()
+        .find(|doc| yaml_get(doc, "kind").as_str() == Some("Gateway"))
+        .map(|doc| yaml_get(doc, "spec"))
+        .expect("gateway.yaml must define a Gateway resource");
+    let listener_protocols = yaml_get(gateway_spec, "listeners")
+        .as_sequence()
+        .expect("Gateway listeners must be a sequence")
+        .iter()
+        .map(|listener| {
+            yaml_get(listener, "protocol")
+                .as_str()
+                .expect("listener protocol must be string")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(
+        listener_protocols.len() == 1 && listener_protocols.contains("HTTPS"),
+        "gateway must enforce TLS-only ingress listeners"
+    );
     assert!(gateway.contains("kind: SecurityPolicy"));
     assert!(gateway.contains("allowOrigins"));
     assert!(gateway.contains("kind: RateLimitPolicy"));
@@ -260,6 +281,9 @@ fn gateway_external_secret_and_default_deny_controls_are_active() {
     let allow_network = read_text("ops/kubernetes/base/networkpolicy-runtime-allow.yaml");
     assert!(allow_network.contains("corporate-catering-runtime-allow-egress-db-pool"));
     assert!(allow_network.contains("corporate-catering-pgbouncer-allow-runtime-and-postgres"));
+    assert!(allow_network.contains("corporate-catering-postgres-allow-pgbouncer-and-cluster"));
+    assert!(allow_network.contains("corporate-catering-runtime-allow-egress-object-storage"));
+    assert!(allow_network.contains("corporate-catering-object-storage-provision"));
     assert!(!allow_network.contains("0.0.0.0/0"));
 }
 
