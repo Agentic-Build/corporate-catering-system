@@ -788,6 +788,11 @@ fn ordering_and_menu_endpoints_have_tested_error_code_to_schema_refs() {
     );
     assert_error_response_ref(
         reminder_preferences_operation,
+        "404",
+        "#/components/responses/NotFound",
+    );
+    assert_error_response_ref(
+        reminder_preferences_operation,
         "500",
         "#/components/responses/InternalServerError",
     );

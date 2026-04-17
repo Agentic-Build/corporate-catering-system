@@ -315,6 +315,7 @@ export class EmployeeService {
                 400: `Request payload or query is invalid.`,
                 401: `Authentication token is missing or invalid.`,
                 403: `Authenticated actor is not authorized to perform this operation.`,
+                404: `Requested resource was not found.`,
                 500: `Internal server error while processing request.`,
             },
         });
