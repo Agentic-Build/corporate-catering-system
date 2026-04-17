@@ -1,0 +1,80 @@
+{
+  "acceptanceSignals": [
+    "Single app serves `/employee/*`, `/vendor/*`, `/admin/*` with role-aware nav.",
+    "zh-TW strings are centralized.",
+    "Global loading/offline/localized-error UX exists."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260416-130343-corporate-catering-system-f006-f06-a1",
+      "finishedAt": "2026-04-16T19:35:27.219Z",
+      "lastStage": "completed",
+      "lastCommit": {
+        "hash": "b98c3729bc1af6fa42d6246a0e212b4fca08285a",
+        "message": "feat: implement Shared Frontend Platform and UX Baseline (attempt 3)"
+      },
+      "latestEventSummary": "feature completed: Shared Frontend Platform and UX Baseline in 0 attempts",
+      "outcome": "completed",
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Contract Lockstep Gate",
+          "summary": "No blocking issues found. The workspace meets the feature baseline: role-aware shared routing for `/employee/*`, `/vendor/*`, `/admin/*`, centralized `zh-TW` UI copy, and global loading/offline/localized-error UX are present in the web platform layer. Policy is satisfied for this feature because the feature diff is frontend-only (no backend/OpenAPI/generated-client contract boundary changes), so no contract-sync update was required in this scope. Residual risk: CI pass state is not directly observable from workspace files.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Authorization Boundary Gate",
+          "summary": "Pass. The feature responsibilities and active policy checks are satisfied in the current workspace: `/employee/*`, `/vendor/*`, `/admin/*` routing and role-aware nav are centralized (`apps/web/src/hooks.server.ts`, `apps/web/src/lib/platform/navigation.ts`, `apps/web/src/routes/+layout.svelte`); zh-TW UI copy is centralized (`apps/web/src/lib/i18n/zh-tw.ts`); global loading/offline/localized-error UX exists (`apps/web/src/routes/+layout.svelte`, `apps/web/src/routes/+error.svelte`); and frontend API access is centralized through the generated TS client only (`apps/web/src/lib/platform/api/client.ts`). Auth boundary evidence is present via tests for route isolation (`apps/web/tests/hooks.test.ts`), token refresh plus rejection paths (`apps/web/tests/runtime.test.ts`), and role/scope denial in privileged HTTP/API authorization flows (`tests/identity_access_governance.rs`, `src/access.rs`, `src/transport/http.rs`). Test execution in this environment is blocked by sandbox EPERM (tsx IPC socket), so this verdict is based on static review plus test coverage presence.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "UX Reliability Gate",
+          "summary": "Workspace review indicates this feature currently satisfies the active policy. Evidence shows a single SvelteKit app serving `/employee/*`, `/vendor/*`, and `/admin/*` with role-aware navigation/guards (`navigation.ts`, `guards.ts`, `hooks.server.ts`); zh-TW copy centralized in `src/lib/i18n/zh-tw.ts` and consumed across shell/pages/errors; global loading/offline/localized-error UX implemented in layout and error routes (`+layout.svelte`, `+error.svelte`, API failure normalization); async actions show loading and suppress duplicate submits (`+page.svelte` with `pendingActionKey` + disabled buttons); responsive baseline is role-specific (mobile-first employee, desktop/tablet vendor/admin via `presentation.ts`/`shell.ts`). API access is through the generated TS client in `platform/api/client.ts` with no direct `fetch` usage found in `apps/web/src`. Automated checks executed via `node --import tsx --test tests/**/*.test.ts` in `apps/web` passed (20/20).",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No-Legacy/Fallback Gate",
+          "summary": "No blocking issues found for this feature. The workspace implements a shared SvelteKit app for `/employee/*`, `/vendor/*`, and `/admin/*` with role-aware navigation; zh-TW UI copy is centralized; and global loading/offline/localized-error UX is present. Frontend API access is centralized through the generated TypeScript client layer. Policy evidence checks in scope are satisfied (production runtime wired to SQL persistence, mock-only auth phase remains enforced, optional runtime capabilities remain flag-gated). Runtime verification commands could not be executed in this sandbox due EPERM restrictions (tsx IPC/socket creation and `svelte-kit sync` file writes).",
+          "verdict": "pass"
+        }
+      ],
+      "resultStatus": "passed",
+      "startedAt": "2026-04-16T18:46:09.979Z"
+    }
+  ],
+  "completedAt": "2026-04-16T19:35:27.346Z",
+  "decisionIssueIds": [],
+  "dependsOn": [
+    "F04",
+    "F05"
+  ],
+  "excludedApproaches": [
+    "Hardcoded distributed UI strings.",
+    "Per-page custom API wrappers."
+  ],
+  "executionConstraints": [
+    "Use SvelteKit 2.x + Tailwind 4.x + TypeScript.",
+    "Generated TS client is sole API access layer.",
+    "Maintain mobile-first employee UX; desktop-first vendor/admin UX with tablet stability."
+  ],
+  "featureId": "F06",
+  "name": "Shared Frontend Platform and UX Baseline",
+  "order": 6,
+  "phase": "completed",
+  "priority": "core",
+  "rationale": "Shared frontend primitives avoid cross-portal rework.",
+  "summary": "Build common routing, i18n, async-state, and error-handling foundations."
+}

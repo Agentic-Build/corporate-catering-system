@@ -1,0 +1,72 @@
+{
+  "acceptanceSignals": [
+    "Valkey key/TTL/invalidation behavior is observable.",
+    "JetStream consumers are idempotent with retry + DLQ.",
+    "Concurrent stock decrement tests prevent oversell."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260416-130343-corporate-catering-system-f008-f09-a1",
+      "finishedAt": "2026-04-17T00:12:27.945Z",
+      "lastStage": "completed",
+      "lastCommit": {
+        "hash": "1effe315d5fd31917a4a6733c582914a485f35a3",
+        "message": "feat: implement Cache and Event Backbone (Valkey + JetStream) (attempt 7)"
+      },
+      "latestEventSummary": "feature completed: Cache and Event Backbone (Valkey + JetStream) in 0 attempts",
+      "outcome": "completed",
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Contract Lockstep Gate",
+          "summary": "Pass. The workspace includes observable Valkey key/TTL/invalidation behavior (`src/cache_backbone.rs`, `tests/cache_backbone_valkey.rs`), JetStream idempotent consumer flow with retry + DLQ and configured `max_ack_pending` (`src/event_backbone.rs`, `tests/event_backbone_jetstream.rs`), and concurrent SQL stock-decrement coverage preventing oversell (`tests/postgres_runtime_state_persistence.rs`). No API contract-surface change requiring synchronized OpenAPI/TS-client artifacts was identified in this feature diff.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Cache and Event Correctness Gate",
+          "summary": "Pass for the current feature scope. The workspace implements and wires the cache/event backbone with correctness-first behavior: Valkey key/TTL/write-through invalidation is implemented and observable (`src/cache_backbone.rs`) with focused integration coverage (`tests/cache_backbone_valkey.rs`); JetStream consumer topology config includes `max_ack_pending`, retry (`max_deliver`/`ack_wait`), idempotent dedup, and DLQ routing (`src/event_backbone.rs`, `migrations/20260417090000_cache_event_backbone.up.sql`, `migrations/20260417100000_order_projection_monotonic_guard.up.sql`) with replay/retry/DLQ tests (`tests/event_backbone_jetstream.rs`); DB remains authoritative for correctness-critical transitions via transactional SQL mutation (`FOR UPDATE`) and outbox atomics (`src/persistence.rs`, `src/bin/observability_runtime_service.rs`), and concurrent stock decrement oversell protection is explicitly tested (`tests/postgres_runtime_state_persistence.rs`). DLQ alerting is defined and validated against runtime metric names (`ops/observability/slo/alerts.yaml`, `tests/observability_k8s_slo_baseline.rs`).",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No-Legacy/Fallback Gate",
+          "summary": "Validated against the current workspace code and tests: Valkey cache keys/TTLs/write-through invalidation are implemented and observable (`src/cache_backbone.rs`, `tests/cache_backbone_valkey.rs`), JetStream consumer idempotency/retry/DLQ plus `max_ack_pending` are implemented (`src/event_backbone.rs`, `tests/event_backbone_jetstream.rs`), and concurrent SQL stock decrement oversell protection is covered (`tests/postgres_runtime_state_persistence.rs`). Correctness-critical state transitions remain SQL-authoritative with transactional mutation/outbox paths (`src/persistence.rs`, runtime SQL mutation paths), and the in-memory persistence path is test-only (`#[cfg(test)]`), not a production fallback. I could not execute tests in this environment due read-only sandbox restrictions on Cargo lock/artifact writes, so this verdict is based on implementation and test evidence present in the workspace.",
+          "verdict": "pass"
+        }
+      ],
+      "resultStatus": "passed",
+      "startedAt": "2026-04-16T22:28:10.492Z"
+    }
+  ],
+  "completedAt": "2026-04-17T00:12:28.058Z",
+  "decisionIssueIds": [],
+  "dependsOn": [
+    "F03",
+    "F04"
+  ],
+  "excludedApproaches": [
+    "Using cache as source-of-truth.",
+    "At-most-once assumptions for event processing."
+  ],
+  "executionConstraints": [
+    "Implement required keys/TTLs + write-through invalidation.",
+    "Configure `max_ack_pending` and dead-letter routing.",
+    "Keep DB authoritative for correctness-critical transitions."
+  ],
+  "featureId": "F09",
+  "name": "Cache and Event Backbone (Valkey + JetStream)",
+  "order": 8,
+  "phase": "completed",
+  "priority": "core",
+  "rationale": "Async/event correctness should exist before portal workflows consume it.",
+  "summary": "Establish cache/event backbone with correctness safeguards."
+}

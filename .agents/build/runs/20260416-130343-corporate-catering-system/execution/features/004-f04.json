@@ -1,0 +1,70 @@
+{
+  "acceptanceSignals": [
+    "Missing employee/vendor endpoints are delivered with auth.",
+    "OpenAPI + generated TS client regenerate and pass checks.",
+    "Pagination/filter/RBAC tests pass for added endpoints."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260416-130343-corporate-catering-system-f004-f04-a1",
+      "finishedAt": "2026-04-16T18:04:31.372Z",
+      "lastStage": "completed",
+      "lastCommit": {
+        "hash": "58b4652bdde623abd55bcae7e6bb9ca75cdb3dd5",
+        "message": "feat: implement API Gap Closure and Contract Sync (attempt 1)"
+      },
+      "latestEventSummary": "feature completed: API Gap Closure and Contract Sync in 0 attempts",
+      "outcome": "completed",
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Contract Lockstep Gate",
+          "summary": "Feature changes appear to keep handlers, OpenAPI, and generated TS client synchronized, and contract drift/type checks pass; full Cargo-backed pagination/filter/RBAC and contract verification evidence cannot be confirmed in this read-only review environment.",
+          "verdict": "defer"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Persistence Integrity Gate",
+          "summary": "Pass. The feature’s required surface is present and synchronized: missing employee/vendor list endpoints are implemented with auth/RBAC guards in runtime handlers, OpenAPI and generated TS client artifacts are updated in lockstep, and sync checks passed (`contract:check-client`, `contract:check-drift`). Added endpoint behavior evidence also passed via targeted tests from existing binaries (`order_list_contracts_expose_pagination_filters_and_page_schemas`, `employee_order_list_supports_pagination_filter_and_sorting`, `vendor_order_list_supports_pagination_filter_and_sorting`, plus role-enforcement tests). No migration/schema/data-layer changes were introduced in this feature, so migration-driven real-DB policy gates are not triggered here.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No-Legacy/Fallback Gate",
+          "summary": "No blocking issues found for this feature. The workspace closes the API gaps with authenticated `GET /api/v1/employee/orders` and wired `GET /api/v1/vendor/orders`, keeps handler/spec/client changes atomic (`src/bin/observability_runtime_service.rs`, `src/contract.rs`, `contract/openapi/*`, `contract/generated/ts-client/*`), and adds pagination/filter/RBAC coverage for the new endpoints (`src/bin/observability_runtime_service.rs` tests and `tests/openapi_contract_platform.rs`). Policy checks are consistent with a single SQL production path (in-memory persistence remains test-only via `#[cfg(test)]`). Executed checks: `pnpm run contract:check-client` and `pnpm run contract:check-drift` passed.",
+          "verdict": "pass"
+        }
+      ],
+      "resultStatus": "passed",
+      "startedAt": "2026-04-16T17:29:18.466Z"
+    }
+  ],
+  "completedAt": "2026-04-16T18:04:31.491Z",
+  "decisionIssueIds": [],
+  "dependsOn": [
+    "F03"
+  ],
+  "excludedApproaches": [
+    "Changing handlers without OpenAPI/client sync.",
+    "Frontend direct `fetch` bypassing generated client."
+  ],
+  "executionConstraints": [
+    "Update handlers/spec/client atomically.",
+    "Keep semantics aligned with state machine + RBAC."
+  ],
+  "featureId": "F04",
+  "name": "API Gap Closure and Contract Sync",
+  "order": 4,
+  "phase": "completed",
+  "priority": "core",
+  "rationale": "Frontend implementation requires complete and stable contract surface.",
+  "summary": "Close API flow gaps and enforce contract lockstep."
+}

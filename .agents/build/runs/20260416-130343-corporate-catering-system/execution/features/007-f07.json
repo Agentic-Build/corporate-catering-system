@@ -1,0 +1,72 @@
+{
+  "acceptanceSignals": [
+    "Menu/compliance upload + retrieval works via S3-compatible storage.",
+    "Invalid MIME/size is rejected with localized errors.",
+    "DB stores object references only."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260416-130343-corporate-catering-system-f007-f07-a1",
+      "finishedAt": "2026-04-16T22:28:10.344Z",
+      "lastStage": "completed",
+      "lastCommit": {
+        "hash": "eb6aaeaab75b4af4ab42fe7c3971cbc751c097b4",
+        "message": "feat: implement Object Storage Upload Pipeline (attempt 6)"
+      },
+      "latestEventSummary": "feature completed: Object Storage Upload Pipeline in 0 attempts",
+      "outcome": "completed",
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Contract Lockstep Gate",
+          "summary": "Feature implementation satisfies the active policy in this workspace: object-storage upload/access flow is present for vendor/admin via presigned URLs, MIME/size limits are enforced per artifact class with localized errors, and menu/compliance/export domain state persists object references (s3://...) rather than binary payloads. Contract boundary is synchronized: backend handlers, OpenAPI artifacts, and generated TS client include the object-storage API/models, and local contract checks (`scripts/check-contract-drift.sh`, `pnpm run contract:check-client`) pass.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Canonical File Storage Gate",
+          "summary": "Pass. The current workspace satisfies the object-storage upload pipeline policy for this feature: vendor/admin flows use presigned object-storage upload/access endpoints; MIME allowlists and per-artifact size limits are enforced with localized errors; menu images include thumbnail upload targets and metadata in the plan; menu/compliance domains accept only managed `s3://` references with validated key metadata envelopes; persistence stores JSON state/object references (no runtime DB base64/binary storage path); and MinIO provisioning explicitly sets all managed buckets to `anonymous set none` (no public bucket write exposure).",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No-Legacy/Fallback Gate",
+          "summary": "Pass. The current workspace satisfies the object-storage upload pipeline requirements for this feature: presigned upload/download flows are wired for vendor/admin, artifact-class MIME and size limits are enforced with menu thumbnail planning, and invalid MIME/size paths return localized errors. Menu/compliance state stores `s3://...` object references only (no DB base64/blob runtime storage path), bucket provisioning keeps anonymous access disabled, and production persistence remains SQL-only with in-memory branches test-gated (`#[cfg(test)]`).",
+          "verdict": "pass"
+        }
+      ],
+      "resultStatus": "passed",
+      "startedAt": "2026-04-16T19:35:27.379Z"
+    }
+  ],
+  "completedAt": "2026-04-16T22:28:10.467Z",
+  "decisionIssueIds": [],
+  "dependsOn": [
+    "F03",
+    "F04"
+  ],
+  "excludedApproaches": [
+    "DB base64 runtime storage.",
+    "Public bucket write exposure."
+  ],
+  "executionConstraints": [
+    "Respect `CLAR-001` object-storage-only policy.",
+    "Use presigned upload + metadata + thumbnails.",
+    "Enforce MIME allowlist and size limits per artifact class."
+  ],
+  "featureId": "F07",
+  "name": "Object Storage Upload Pipeline",
+  "order": 7,
+  "phase": "completed",
+  "priority": "core",
+  "rationale": "Vendor/admin workflows depend on reliable binary asset handling.",
+  "summary": "Integrate object storage for images, compliance docs, and export artifacts."
+}

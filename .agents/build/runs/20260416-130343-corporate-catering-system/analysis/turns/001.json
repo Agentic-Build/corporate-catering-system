@@ -1,0 +1,1526 @@
+{
+  "attempt": 1,
+  "blockingIssues": [
+    {
+      "blocking": false,
+      "clarifications": [
+        {
+          "allowCustomNote": true,
+          "id": "CLAR-002",
+          "maxActiveOptions": 1,
+          "minActiveOptions": 1,
+          "options": [
+            {
+              "conflictOptionIds": [
+                "CLAR-002-OPT-2",
+                "CLAR-002-OPT-3"
+              ],
+              "id": "CLAR-002-OPT-1",
+              "label": "Mock-only for this phase",
+              "rationale": "Maximizes delivery predictability; real provider hookup deferred to optional feature.",
+              "recommendedState": "core"
+            },
+            {
+              "conflictOptionIds": [
+                "CLAR-002-OPT-1",
+                "CLAR-002-OPT-3"
+              ],
+              "id": "CLAR-002-OPT-2",
+              "label": "Real OIDC now, Vendor MFA later",
+              "rationale": "Balances enterprise readiness with reduced external dependency risk.",
+              "recommendedState": "excluded"
+            },
+            {
+              "conflictOptionIds": [
+                "CLAR-002-OPT-1",
+                "CLAR-002-OPT-2"
+              ],
+              "id": "CLAR-002-OPT-3",
+              "label": "Full real OIDC + Vendor MFA now",
+              "rationale": "Most complete but highest schedule risk due external integration dependencies.",
+              "recommendedState": "excluded"
+            }
+          ],
+          "prompt": "第二階段驗收是否必須接通真實 Corporate OIDC 與 Vendor MFA？",
+          "rationale": "Auth integration depth changes acceptance scope and sequencing for F05/F15.",
+          "recommendationSummary": "Lock one explicit phase gate now to prevent auth implementation churn."
+        }
+      ],
+      "details": "Spec allows mock auth for MVP but also defines full real auth integration. Acceptance depth is not explicitly locked.",
+      "id": "ISS-002",
+      "kind": "open-question",
+      "severity": "high",
+      "status": "open",
+      "title": "Authentication Scope for Phase-2 Acceptance"
+    },
+    {
+      "blocking": false,
+      "clarifications": [
+        {
+          "allowCustomNote": true,
+          "id": "CLAR-008",
+          "maxActiveOptions": 1,
+          "minActiveOptions": 1,
+          "options": [
+            {
+              "conflictOptionIds": [
+                "CLAR-008-OPT-2",
+                "CLAR-008-OPT-3"
+              ],
+              "id": "CLAR-008-OPT-1",
+              "label": "Keep 25k RPS target for phase-2 gate",
+              "rationale": "Aligns with documented headroom target and infrastructure sizing.",
+              "recommendedState": "excluded"
+            },
+            {
+              "conflictOptionIds": [
+                "CLAR-008-OPT-1",
+                "CLAR-008-OPT-3"
+              ],
+              "id": "CLAR-008-OPT-2",
+              "label": "Use lower staged target now, ramp later",
+              "rationale": "Reduces immediate risk while preserving measurable progress.",
+              "recommendedState": "core"
+            },
+            {
+              "conflictOptionIds": [
+                "CLAR-008-OPT-1",
+                "CLAR-008-OPT-2"
+              ],
+              "id": "CLAR-008-OPT-3",
+              "label": "Defer hard RPS gate to post-MVP",
+              "rationale": "Focuses phase-2 on functional completeness only.",
+              "recommendedState": "excluded"
+            }
+          ],
+          "prompt": "第二階段是否要以 25k RPS 作為硬性驗收門檻？",
+          "rationale": "Capacity gate strictness changes delivery risk and release readiness criteria.",
+          "recommendationSummary": "Adopt staged capacity gates unless business requires immediate 25k RPS certification."
+        }
+      ],
+      "details": "Throughput assumptions are explicit but may diverge from actual usage and environment limits; staged benchmarking policy is not locked.",
+      "id": "ISS-008",
+      "kind": "risk",
+      "severity": "high",
+      "status": "open",
+      "title": "Capacity Target Risk Without Staged Validation Policy"
+    },
+    {
+      "blocking": true,
+      "clarifications": [
+        {
+          "allowCustomNote": true,
+          "id": "CLAR-001",
+          "maxActiveOptions": 1,
+          "minActiveOptions": 1,
+          "options": [
+            {
+              "conflictOptionIds": [
+                "CLAR-001-OPT-2",
+                "CLAR-001-OPT-3"
+              ],
+              "id": "CLAR-001-OPT-1",
+              "label": "Object storage only",
+              "rationale": "Aligns with scale, security, presigned upload, and backup strategy in §12.6.",
+              "recommendedState": "core"
+            },
+            {
+              "conflictOptionIds": [
+                "CLAR-001-OPT-1",
+                "CLAR-001-OPT-3"
+              ],
+              "id": "CLAR-001-OPT-2",
+              "label": "DB base64 only",
+              "rationale": "Simpler MVP implementation but conflicts with large-scale architecture and storage separation.",
+              "recommendedState": "excluded"
+            },
+            {
+              "conflictOptionIds": [
+                "CLAR-001-OPT-1",
+                "CLAR-001-OPT-2"
+              ],
+              "id": "CLAR-001-OPT-3",
+              "label": "Dual mode by environment",
+              "rationale": "Technically possible but introduces dual source-of-truth and legacy-like maintenance overhead.",
+              "recommendedState": "excluded"
+            }
+          ],
+          "prompt": "MVP 的檔案與圖片儲存唯一來源要採哪個？",
+          "rationale": "Current requirement text defines two competing canonical storage paths and size limits.",
+          "recommendationSummary": "Choose object storage as the only source-of-truth, and remove DB base64 path from runtime requirements."
+        }
+      ],
+      "details": "§9 allows base64-in-DB (<=500KB) for MVP, while §12.6 mandates object storage presigned flow with <=2MB and thumbnails. This is a direct source-of-truth conflict for upload architecture.",
+      "id": "ISS-001",
+      "kind": "conflict",
+      "severity": "high",
+      "status": "open",
+      "title": "Image/File Storage Path Conflict (DB base64 vs Object Storage)"
+    }
+  ],
+  "createdAt": "2026-04-16T13:20:38.114Z",
+  "resolutions": [
+    {
+      "answers": [
+        {
+          "decisions": [
+            {
+              "optionId": "CLAR-002-OPT-1",
+              "optionLabel": "Mock-only for this phase",
+              "state": "core"
+            },
+            {
+              "optionId": "CLAR-002-OPT-2",
+              "optionLabel": "Real OIDC now, Vendor MFA later",
+              "state": "excluded"
+            },
+            {
+              "optionId": "CLAR-002-OPT-3",
+              "optionLabel": "Full real OIDC + Vendor MFA now",
+              "state": "excluded"
+            }
+          ],
+          "note": "",
+          "questionId": "CLAR-002",
+          "response": "Core: Mock-only for this phase | Excluded: Real OIDC now, Vendor MFA later, Full real OIDC + Vendor MFA now"
+        }
+      ],
+      "decidedBy": "cli-auto-recommendation",
+      "issueId": "ISS-002",
+      "notes": []
+    },
+    {
+      "answers": [
+        {
+          "decisions": [
+            {
+              "optionId": "CLAR-008-OPT-1",
+              "optionLabel": "Keep 25k RPS target for phase-2 gate",
+              "state": "excluded"
+            },
+            {
+              "optionId": "CLAR-008-OPT-2",
+              "optionLabel": "Use lower staged target now, ramp later",
+              "state": "core"
+            },
+            {
+              "optionId": "CLAR-008-OPT-3",
+              "optionLabel": "Defer hard RPS gate to post-MVP",
+              "state": "excluded"
+            }
+          ],
+          "note": "",
+          "questionId": "CLAR-008",
+          "response": "Core: Use lower staged target now, ramp later | Excluded: Keep 25k RPS target for phase-2 gate, Defer hard RPS gate to post-MVP"
+        }
+      ],
+      "decidedBy": "cli-auto-recommendation",
+      "issueId": "ISS-008",
+      "notes": []
+    },
+    {
+      "answers": [
+        {
+          "decisions": [
+            {
+              "optionId": "CLAR-001-OPT-1",
+              "optionLabel": "Object storage only",
+              "state": "core"
+            },
+            {
+              "optionId": "CLAR-001-OPT-2",
+              "optionLabel": "DB base64 only",
+              "state": "excluded"
+            },
+            {
+              "optionId": "CLAR-001-OPT-3",
+              "optionLabel": "Dual mode by environment",
+              "state": "excluded"
+            }
+          ],
+          "note": "",
+          "questionId": "CLAR-001",
+          "response": "Core: Object storage only | Excluded: DB base64 only, Dual mode by environment"
+        }
+      ],
+      "decidedBy": "cli-auto-recommendation",
+      "issueId": "ISS-001",
+      "notes": []
+    }
+  ],
+  "snapshot": {
+    "assumptions": [
+      "No prior clarifications are locked; all decision gates below remain open.",
+      "Stage-1 backend domain behavior and existing OpenAPI baseline remain valid unless explicitly extended here.",
+      "Phase-2 delivery is planned as: runnable MVP first, then production hardening as optional feature-flagged extensions.",
+      "Frontend and backend remain in one monorepo (Cargo workspace + `frontend/` PNPM workspace) sharing generated API client artifacts.",
+      "External enterprise dependencies (OIDC/MFA/HR template) may require cross-team coordination outside this repository.",
+      "Requirement text in this prompt is treated as highest-priority source when it conflicts with older docs."
+    ],
+    "features": [
+      {
+        "acceptanceSignals": [
+          "`make dev`, `make dev-deps`, `make dev-full`, `make dev-seed`, and `make dev-down` run as documented.",
+          "Fresh clone can start dependency services and run backend/frontend locally without manual DB/cache/queue installs.",
+          "Seed command creates coverage data for all major UI states (order lifecycle, compliance states, disputes, anomalies)."
+        ],
+        "decisionIssueIds": [],
+        "dependsOn": [],
+        "excludedApproaches": [
+          "Relying on unmanaged developer-local services or cloud-only dependencies for normal development.",
+          "Ad-hoc startup scripts without Makefile entrypoints."
+        ],
+        "executionConstraints": [
+          "Provide `docker-compose.yml` and `docker-compose.full.yml` with PostgreSQL, Valkey, NATS JetStream, and MinIO.",
+          "Commit `.env.development`; keep `.env.local` as gitignored override.",
+          "Include `scripts/setup-dev.sh` checks for toolchain readiness and Docker daemon availability."
+        ],
+        "id": "F01",
+        "name": "Local Development Stack and Seed Baseline",
+        "order": 1,
+        "priority": "core",
+        "rationale": "Every downstream feature depends on reproducible local execution and realistic test data.",
+        "summary": "Bootstrap one-command local development and seeded data coverage."
+      },
+      {
+        "acceptanceSignals": [
+          "Full migration up/down cycle succeeds in CI on clean PostgreSQL.",
+          "Schema includes required phase-2 tables, timestamps, constraints, and indexes.",
+          "Monetary, enum/check, and append-only invariants are validated by integration tests."
+        ],
+        "decisionIssueIds": [
+          "ISS-006"
+        ],
+        "dependsOn": [
+          "F01"
+        ],
+        "excludedApproaches": [
+          "Manual schema edits in runtime environments.",
+          "FLOAT/DOUBLE usage for monetary values."
+        ],
+        "executionConstraints": [
+          "Use PostgreSQL 16+ and `sqlx migrate` only for schema evolution.",
+          "Apply one global ID strategy from ISS-006 across core tables.",
+          "Store monetary amounts as `BIGINT` in minor units; include UTC `created_at`/`updated_at` fields.",
+          "Keep `order_timeline_events` and `audit_events` append-only."
+        ],
+        "id": "F02",
+        "name": "PostgreSQL Schema and Migration Foundation",
+        "order": 2,
+        "priority": "core",
+        "rationale": "Persistent correctness is prerequisite for all API and UI workflows.",
+        "summary": "Define audited relational schema and migration lifecycle."
+      },
+      {
+        "acceptanceSignals": [
+          "Core domain flows pass against real PostgreSQL using testcontainers.",
+          "`sqlx` compile-time query checks pass in CI.",
+          "Production path no longer depends on in-memory persistence adapters."
+        ],
+        "decisionIssueIds": [],
+        "dependsOn": [
+          "F02"
+        ],
+        "excludedApproaches": [
+          "Mock-only DB integration tests.",
+          "Runtime fallback to in-memory writes when DB operations fail."
+        ],
+        "executionConstraints": [
+          "Implement repository adapters with explicit SQL (`sqlx`), not opaque ORM-generated SQL.",
+          "Use `sqlx::PgPool` and explicit transaction boundaries for order/payroll state transitions.",
+          "Remove legacy in-memory repository path from production runtime."
+        ],
+        "id": "F03",
+        "name": "Rust Persistence Integration",
+        "order": 3,
+        "priority": "core",
+        "rationale": "Domain logic must execute on durable storage before frontend rollout.",
+        "summary": "Bind existing domain services to SQL-backed repositories and transactions."
+      },
+      {
+        "acceptanceSignals": [
+          "New endpoints exist and are authorized: employee orders list, payroll summary, vendor documents (POST/GET), menu-item status PATCH.",
+          "OpenAPI and generated TypeScript client regenerate cleanly and pass contract checks.",
+          "Pagination/filter validation and RBAC constraints are covered by API tests."
+        ],
+        "decisionIssueIds": [
+          "ISS-003"
+        ],
+        "dependsOn": [
+          "F03"
+        ],
+        "excludedApproaches": [
+          "Backend route changes without OpenAPI/client updates.",
+          "Temporary frontend calls bypassing generated client contracts."
+        ],
+        "executionConstraints": [
+          "Add all phase-2 missing endpoints in API and OpenAPI spec together.",
+          "Regenerate `contract/generated/ts-client/` for every contract change.",
+          "Keep endpoint semantics aligned with existing domain state machine and authorization model."
+        ],
+        "id": "F04",
+        "name": "API Flow Gap Closure and Contract Sync",
+        "order": 4,
+        "priority": "core",
+        "rationale": "Frontend implementation cannot proceed safely without complete contract surface.",
+        "summary": "Implement missing API workflows and keep contract artifacts in lockstep."
+      },
+      {
+        "acceptanceSignals": [
+          "SvelteKit hooks inject authenticated actor context for all role routes.",
+          "Access token refresh works (15 min access, 7 day refresh) with safe re-login behavior.",
+          "Unauthorized cross-role route access is blocked both server-side and client-side."
+        ],
+        "decisionIssueIds": [
+          "ISS-002"
+        ],
+        "dependsOn": [
+          "F01",
+          "F04"
+        ],
+        "excludedApproaches": [
+          "Hardcoding identities inside page components.",
+          "Auth implementation that cannot swap providers cleanly."
+        ],
+        "executionConstraints": [
+          "Define pluggable auth provider interface with mock provider default in dev.",
+          "Centralize JWT/session lifecycle in middleware/hooks; avoid duplicated auth logic in pages.",
+          "Preserve clean seam for real OIDC/Vendor MFA providers."
+        ],
+        "id": "F05",
+        "name": "Authentication and Session Middleware Foundation",
+        "order": 5,
+        "priority": "core",
+        "rationale": "Role-safe routing and API access are required before user-facing pages.",
+        "summary": "Implement provider-agnostic authn/authz pipeline with mock-first runtime support."
+      },
+      {
+        "acceptanceSignals": [
+          "Single SvelteKit app serves `/employee/*`, `/vendor/*`, and `/admin/*` route trees with role-aware navigation.",
+          "Centralized i18n message catalog (zh-TW) is used for UI strings and API error translation.",
+          "Global loading, retry-safe action states, and offline messaging are present."
+        ],
+        "decisionIssueIds": [],
+        "dependsOn": [
+          "F01",
+          "F04",
+          "F05"
+        ],
+        "excludedApproaches": [
+          "Handwritten backend `fetch` calls in feature pages.",
+          "Scattered hardcoded Chinese strings across components."
+        ],
+        "executionConstraints": [
+          "Use SvelteKit 2.x + Tailwind 4.x + TypeScript.",
+          "Use generated TS client as the only backend API access layer.",
+          "Keep responsive baseline: mobile-first employee UX, desktop-first vendor/admin without tablet breakage."
+        ],
+        "id": "F06",
+        "name": "Shared Frontend Platform and UX Guardrails",
+        "order": 6,
+        "priority": "core",
+        "rationale": "A stable shared UI foundation prevents duplicated logic across three role portals.",
+        "summary": "Create common frontend architecture, routing, localization, and reliability primitives."
+      },
+      {
+        "acceptanceSignals": [
+          "Vendor can upload valid image/doc artifacts and obtain usable object references.",
+          "Invalid MIME and oversize uploads are rejected with localized errors.",
+          "Menu image and compliance document retrieval obeys bucket access policy and audit expectations."
+        ],
+        "decisionIssueIds": [
+          "ISS-001",
+          "ISS-005"
+        ],
+        "dependsOn": [
+          "F03"
+        ],
+        "excludedApproaches": [
+          "Unbounded binary/base64 payloads through normal API bodies.",
+          "Direct public write permissions to storage buckets."
+        ],
+        "executionConstraints": [
+          "Implement presigned upload flow and metadata persistence for menu images/documents/exports.",
+          "Enforce MIME allowlist (`image/jpeg`, `image/png`, `image/webp`) and selected size policy from ISS-001.",
+          "Generate thumbnail variants for menu images and persist object keys, not opaque large blobs (unless ISS-001 decides DB path)."
+        ],
+        "id": "F07",
+        "name": "Object Storage Upload and Retrieval Pipeline",
+        "order": 7,
+        "priority": "core",
+        "rationale": "Vendor menu/document workflows and admin review depend on file storage.",
+        "summary": "Integrate S3-compatible object storage for images, compliance files, and exports."
+      },
+      {
+        "acceptanceSignals": [
+          "Employee can complete flow: login -> browse menus -> place/modify order -> view timeline -> pickup verification.",
+          "Payroll summary and dispute submission flows are functional and stateful.",
+          "Role and plant filtering behavior matches API scope controls."
+        ],
+        "decisionIssueIds": [
+          "ISS-004"
+        ],
+        "dependsOn": [
+          "F06",
+          "F04",
+          "F05",
+          "F07"
+        ],
+        "excludedApproaches": [
+          "Client-only authorization assumptions without server enforcement.",
+          "Temporary bypass of generated client for speed."
+        ],
+        "executionConstraints": [
+          "Implement menu calendar/week views, filters, stock-aware ordering, and cutoff countdown behavior.",
+          "Render TOTP pickup QR with 30-second refresh cadence and clear mobile readability.",
+          "Expose order list/status mappings and payroll detail/dispute UX in localized form."
+        ],
+        "id": "F08",
+        "name": "Employee Frontend MVP",
+        "order": 8,
+        "priority": "core",
+        "rationale": "Employee ordering and pickup are the primary end-to-end value path.",
+        "summary": "Deliver complete employee-side browser workflow for ordering and payroll visibility."
+      },
+      {
+        "acceptanceSignals": [
+          "Cache hit path is observable for menu/mapping reads and reduces DB read pressure.",
+          "Concurrent stock decrement tests prevent oversell.",
+          "JetStream consumers process idempotently and route repeated failures to DLQ."
+        ],
+        "decisionIssueIds": [
+          "ISS-004",
+          "ISS-005"
+        ],
+        "dependsOn": [
+          "F03",
+          "F04"
+        ],
+        "excludedApproaches": [
+          "Treating cache as source of truth for order correctness.",
+          "At-most-once assumptions for event processing."
+        ],
+        "executionConstraints": [
+          "Implement Valkey key patterns/TTLs for menu, delivery mapping, stock, session, and lock use-cases.",
+          "Apply explicit cache invalidation on menu/mapping writes.",
+          "Provision JetStream streams/consumers with backpressure (`max_ack_pending`) and DLQ policy after 5 failures."
+        ],
+        "id": "F09",
+        "name": "Cache and Event Backbone (Valkey + NATS JetStream)",
+        "order": 9,
+        "priority": "core",
+        "rationale": "High-frequency reads and async workflows must be decoupled before vendor/admin heavy operations.",
+        "summary": "Add cache consistency and event-driven workers for fulfillment, notifications, settlement, and audit."
+      },
+      {
+        "acceptanceSignals": [
+          "Vendor can run daily cycle: manage menu/status -> inspect fulfillment board -> export batch -> update delivery status.",
+          "Vendor document upload/list and review status visibility are complete.",
+          "Order and revenue views support required filters and monthly summaries."
+        ],
+        "decisionIssueIds": [
+          "ISS-001",
+          "ISS-004"
+        ],
+        "dependsOn": [
+          "F06",
+          "F04",
+          "F05",
+          "F07",
+          "F09"
+        ],
+        "excludedApproaches": [
+          "Mixing admin-only operations into vendor role routes.",
+          "Browser-only export generation without tracked backend batch records."
+        ],
+        "executionConstraints": [
+          "Support menu CRUD-like operations, status patch, temporary sold-out action, and ordering window configuration.",
+          "Integrate fulfillment board, print/PDF export, and delivery status updates with batch tracking.",
+          "Keep vendor UX desktop-first while preserving tablet operability."
+        ],
+        "id": "F10",
+        "name": "Vendor Frontend MVP",
+        "order": 10,
+        "priority": "core",
+        "rationale": "Supply-side execution is required for end-to-end order fulfillment.",
+        "summary": "Deliver vendor self-service menu, fulfillment, delivery, and operational dashboards."
+      },
+      {
+        "acceptanceSignals": [
+          "Admin can review vendors/documents, manage mapping matrix, and execute settlement/dispute workflows.",
+          "Anomaly board supports assign -> investigate -> remediate -> close with audit trail.",
+          "Audit and operations dashboards support required filters and date/plant slicing."
+        ],
+        "decisionIssueIds": [
+          "ISS-003",
+          "ISS-007"
+        ],
+        "dependsOn": [
+          "F06",
+          "F04",
+          "F05",
+          "F09"
+        ],
+        "excludedApproaches": [
+          "Skipping review reason capture on compliance decisions.",
+          "Settlement exports without deterministic schema/version tracking."
+        ],
+        "executionConstraints": [
+          "Implement compliance review lifecycle, document expiry board, and suspend/restore reason capture.",
+          "Implement settlement cycle lock/unlock, payroll export, exception triage, and dispute assignment/status.",
+          "Provide anomaly rule management and SLA status rendering according to resolved threshold policy."
+        ],
+        "id": "F11",
+        "name": "Committee Admin Frontend MVP",
+        "order": 11,
+        "priority": "core",
+        "rationale": "Operational governance and compliance handling are core business controls.",
+        "summary": "Deliver admin-side compliance, mapping, settlement, anomaly, audit, and analytics workflows."
+      },
+      {
+        "acceptanceSignals": [
+          "Gateway routes API/MCP/frontend/health paths with TLS and policy controls.",
+          "Default-deny NetworkPolicy is effective and allows only approved traffic matrix.",
+          "Sensitive runtime configuration comes via ExternalSecret-managed Kubernetes Secrets."
+        ],
+        "decisionIssueIds": [
+          "ISS-005"
+        ],
+        "dependsOn": [
+          "F04",
+          "F05",
+          "F07",
+          "F09"
+        ],
+        "excludedApproaches": [
+          "Flat allow-all pod networking.",
+          "Embedding secrets directly in manifests or repository files."
+        ],
+        "executionConstraints": [
+          "Use Gateway API for host/path routing, TLS via cert-manager, and configured rate limits/CORS/body-size policies.",
+          "Implement per-component NetworkPolicy allowlists from defined communication matrix.",
+          "Adopt External Secrets Operator flow for DB, queue, storage, OIDC, TOTP, and JWT keys with rotation windows."
+        ],
+        "id": "F12",
+        "name": "Edge Routing, Network Isolation, and Secret Management",
+        "order": 12,
+        "priority": "core",
+        "rationale": "Secure, production-usable runtime boundaries are mandatory before rollout.",
+        "summary": "Establish gateway security controls, zero-trust networking, and externalized secret flow."
+      },
+      {
+        "acceptanceSignals": [
+          "`kustomize build` succeeds for dev/staging/production overlays.",
+          "HPA/KEDA objects exist with configured metrics and bounds per component class.",
+          "Topology spread constraints and HA placement rules are present for critical stateful/stateless services."
+        ],
+        "decisionIssueIds": [
+          "ISS-005"
+        ],
+        "dependsOn": [
+          "F12",
+          "F09"
+        ],
+        "excludedApproaches": [
+          "Single-environment manifests without overlay separation.",
+          "Manual scaling-only operations outside declarative manifests."
+        ],
+        "executionConstraints": [
+          "Create `base`, `components`, and environment overlays (`dev`, `staging`, `production`).",
+          "Implement HPA/KEDA scaling profiles and topology spread/multi-AZ constraints per requirement.",
+          "Keep dev overlay lightweight and debuggable while preserving structural parity with staging/prod."
+        ],
+        "id": "F13",
+        "name": "Kustomize Environment Layers and Autoscaling Topology",
+        "order": 13,
+        "priority": "core",
+        "rationale": "Repeatable promotion and scaling policy require environment-specific declarative configuration.",
+        "summary": "Codify deployment overlays, scaling policy, and topology constraints."
+      },
+      {
+        "acceptanceSignals": [
+          "New workflows exist and pass: image build, migration check, e2e smoke, production deploy, load-test gate.",
+          "Migration checks validate reversibility and fail PRs on non-reversible changes.",
+          "Production deploy path consumes kustomize production overlay as the source artifact."
+        ],
+        "decisionIssueIds": [],
+        "dependsOn": [
+          "F04",
+          "F06",
+          "F10",
+          "F11",
+          "F13"
+        ],
+        "excludedApproaches": [
+          "Manual production kubectl operations without pipeline evidence.",
+          "Skipping smoke/load gates before production rollout."
+        ],
+        "executionConstraints": [
+          "Add GitHub Actions workflows for image build, DB migration checks, E2E smoke, deployment, and load-test gate.",
+          "Use staging/ephemeral deploy targets for smoke and performance checks.",
+          "Keep CI gates contract-aware and environment-layer aware."
+        ],
+        "id": "F14",
+        "name": "CI/CD Expansion and Release Gates",
+        "order": 14,
+        "priority": "core",
+        "rationale": "Operational safety and repeatability depend on automated quality gates.",
+        "summary": "Extend pipelines to enforce build, migration, e2e, deploy, and load-test checks."
+      },
+      {
+        "acceptanceSignals": [
+          "Employee/admin login succeeds against Corporate OIDC in staging with claim mapping.",
+          "Vendor MFA login flow succeeds and issues valid session tokens.",
+          "Feature flags can disable real providers outside production while keeping middleware contract unchanged."
+        ],
+        "decisionIssueIds": [
+          "ISS-002",
+          "ISS-005"
+        ],
+        "dependsOn": [
+          "F05",
+          "F12"
+        ],
+        "excludedApproaches": [
+          "Shipping production auth with mock-only identities.",
+          "Bypassing issuer/audience/signature validation."
+        ],
+        "executionConstraints": [
+          "Implement real provider adapters behind feature flags (e.g., `auth.oidc.enabled`, `auth.vendor_mfa.enabled`).",
+          "Consume client secrets and signing keys via external secret pipeline only.",
+          "Preserve mock mode for local development, not as production fallback behavior."
+        ],
+        "id": "F15",
+        "name": "Real Identity Provider Integration (OIDC + Vendor MFA)",
+        "order": 15,
+        "priority": "optional",
+        "rationale": "External identity integration may be dependency-bound but should be planned as a clean extension.",
+        "summary": "Wire real enterprise auth providers without changing core middleware contracts."
+      },
+      {
+        "acceptanceSignals": [
+          "k6 staging tests meet agreed throughput/latency/error budgets with evidence artifact.",
+          "Autoscaling behavior (HPA/KEDA) reaches expected ranges and stabilizes under load.",
+          "Failover/backpressure drills confirm resilience targets (including DB failover objective)."
+        ],
+        "decisionIssueIds": [
+          "ISS-005",
+          "ISS-008"
+        ],
+        "dependsOn": [
+          "F09",
+          "F13",
+          "F14"
+        ],
+        "excludedApproaches": [
+          "Declaring scale readiness without measured benchmarks.",
+          "Branching application logic per environment instead of scaling policy controls."
+        ],
+        "executionConstraints": [
+          "Run staged capacity tests and tune manifests/queue settings without introducing code-path forks.",
+          "Validate queue throughput, cache hit behavior, and DB read/write separation under stress.",
+          "Ship scale profile adjustments as declarative config + documented benchmark evidence."
+        ],
+        "id": "F16",
+        "name": "Capacity Validation and Scale Tuning",
+        "order": 16,
+        "priority": "optional",
+        "rationale": "Hyperscale targets require empirical validation after functional completeness.",
+        "summary": "Benchmark and tune system toward target RPS/SLO with repeatable evidence."
+      }
+    ],
+    "issues": [
+      {
+        "blocking": true,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "CLAR-001",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "CLAR-001-OPT-2",
+                  "CLAR-001-OPT-3"
+                ],
+                "id": "CLAR-001-OPT-1",
+                "label": "Object storage only",
+                "rationale": "Aligns with scale, security, presigned upload, and backup strategy in §12.6.",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-001-OPT-1",
+                  "CLAR-001-OPT-3"
+                ],
+                "id": "CLAR-001-OPT-2",
+                "label": "DB base64 only",
+                "rationale": "Simpler MVP implementation but conflicts with large-scale architecture and storage separation.",
+                "recommendedState": "excluded"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-001-OPT-1",
+                  "CLAR-001-OPT-2"
+                ],
+                "id": "CLAR-001-OPT-3",
+                "label": "Dual mode by environment",
+                "rationale": "Technically possible but introduces dual source-of-truth and legacy-like maintenance overhead.",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "MVP 的檔案與圖片儲存唯一來源要採哪個？",
+            "rationale": "Current requirement text defines two competing canonical storage paths and size limits.",
+            "recommendationSummary": "Choose object storage as the only source-of-truth, and remove DB base64 path from runtime requirements."
+          }
+        ],
+        "details": "§9 allows base64-in-DB (<=500KB) for MVP, while §12.6 mandates object storage presigned flow with <=2MB and thumbnails. This is a direct source-of-truth conflict for upload architecture.",
+        "id": "ISS-001",
+        "kind": "conflict",
+        "severity": "high",
+        "status": "open",
+        "title": "Image/File Storage Path Conflict (DB base64 vs Object Storage)"
+      },
+      {
+        "blocking": false,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "CLAR-002",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "CLAR-002-OPT-2",
+                  "CLAR-002-OPT-3"
+                ],
+                "id": "CLAR-002-OPT-1",
+                "label": "Mock-only for this phase",
+                "rationale": "Maximizes delivery predictability; real provider hookup deferred to optional feature.",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-002-OPT-1",
+                  "CLAR-002-OPT-3"
+                ],
+                "id": "CLAR-002-OPT-2",
+                "label": "Real OIDC now, Vendor MFA later",
+                "rationale": "Balances enterprise readiness with reduced external dependency risk.",
+                "recommendedState": "excluded"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-002-OPT-1",
+                  "CLAR-002-OPT-2"
+                ],
+                "id": "CLAR-002-OPT-3",
+                "label": "Full real OIDC + Vendor MFA now",
+                "rationale": "Most complete but highest schedule risk due external integration dependencies.",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "第二階段驗收是否必須接通真實 Corporate OIDC 與 Vendor MFA？",
+            "rationale": "Auth integration depth changes acceptance scope and sequencing for F05/F15.",
+            "recommendationSummary": "Lock one explicit phase gate now to prevent auth implementation churn."
+          }
+        ],
+        "details": "Spec allows mock auth for MVP but also defines full real auth integration. Acceptance depth is not explicitly locked.",
+        "id": "ISS-002",
+        "kind": "open-question",
+        "severity": "high",
+        "status": "open",
+        "title": "Authentication Scope for Phase-2 Acceptance"
+      },
+      {
+        "blocking": false,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "CLAR-003",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "CLAR-003-OPT-2",
+                  "CLAR-003-OPT-3"
+                ],
+                "id": "CLAR-003-OPT-1",
+                "label": "CSV only for MVP",
+                "rationale": "Fastest path with deterministic schema control and easy downstream parsing.",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-003-OPT-1",
+                  "CLAR-003-OPT-3"
+                ],
+                "id": "CLAR-003-OPT-2",
+                "label": "XLSX only for MVP",
+                "rationale": "Useful when HR demands template fidelity but adds generation complexity.",
+                "recommendedState": "excluded"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-003-OPT-1",
+                  "CLAR-003-OPT-2"
+                ],
+                "id": "CLAR-003-OPT-3",
+                "label": "CSV + XLSX both in MVP",
+                "rationale": "Covers both consumption modes with higher implementation/test cost.",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "月結扣款匯出 MVP 要交付哪種格式？",
+            "rationale": "Admin settlement export cannot be finalized without locked output format and schema expectation.",
+            "recommendationSummary": "Default to CSV-first unless HR explicitly requires XLSX in phase-2."
+          }
+        ],
+        "details": "Requirement asks for HR-compatible payroll export (CSV/Excel) but does not lock MVP format/schema versioning expectations.",
+        "id": "ISS-003",
+        "kind": "missing-detail",
+        "severity": "medium",
+        "status": "open",
+        "title": "Payroll Export Format and Contract Not Locked"
+      },
+      {
+        "blocking": false,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "CLAR-004",
+            "maxActiveOptions": 3,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [],
+                "id": "CLAR-004-OPT-1",
+                "label": "In-app notifications",
+                "rationale": "Lowest complexity, fully in-product, supports MVP visibility requirements.",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [],
+                "id": "CLAR-004-OPT-2",
+                "label": "Email notifications",
+                "rationale": "Adds out-of-app reach for sold-out/rush reminders.",
+                "recommendedState": "optional"
+              },
+              {
+                "conflictOptionIds": [],
+                "id": "CLAR-004-OPT-3",
+                "label": "Web push notifications",
+                "rationale": "Real-time delivery with browser permission flow and additional infra.",
+                "recommendedState": "optional"
+              }
+            ],
+            "prompt": "MVP 通知通道要包含哪些？",
+            "rationale": "Channel scope affects event payloads, worker implementation, and consent UX.",
+            "recommendationSummary": "Start with in-app channel, then add email/web-push as optional extensions."
+          }
+        ],
+        "details": "Employee flow mentions push alerts or prominent UI prompts, but required notification channels are not explicitly fixed.",
+        "id": "ISS-004",
+        "kind": "missing-detail",
+        "severity": "medium",
+        "status": "open",
+        "title": "Notification Channel Scope Ambiguity"
+      },
+      {
+        "blocking": false,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "CLAR-005",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "CLAR-005-OPT-2",
+                  "CLAR-005-OPT-3"
+                ],
+                "id": "CLAR-005-OPT-1",
+                "label": "Self-host operators in-cluster",
+                "rationale": "Maximizes IaC reproducibility across environments.",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-005-OPT-1",
+                  "CLAR-005-OPT-3"
+                ],
+                "id": "CLAR-005-OPT-2",
+                "label": "Hybrid: dev self-host, prod managed",
+                "rationale": "Common enterprise pattern balancing control and operational burden.",
+                "recommendedState": "excluded"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-005-OPT-1",
+                  "CLAR-005-OPT-2"
+                ],
+                "id": "CLAR-005-OPT-3",
+                "label": "Managed services everywhere possible",
+                "rationale": "Reduces ops toil but shifts repo focus from infra manifests to integration config.",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "正式環境基礎設施策略要採哪種？",
+            "rationale": "Operator-vs-managed choice changes manifest ownership and delivery artifacts in F12/F13/F16.",
+            "recommendationSummary": "Lock one environment strategy early to avoid rewriting infra overlays."
+          }
+        ],
+        "details": "Multiple alternatives are listed (CloudNativePG vs managed DB, operator vs managed cache/queue/storage, Envoy vs Cilium gateway) without environment-level lock.",
+        "id": "ISS-005",
+        "kind": "open-question",
+        "severity": "medium",
+        "status": "open",
+        "title": "Infrastructure Deployment Model Not Fixed"
+      },
+      {
+        "blocking": false,
+        "clarifications": [
+          {
+            "allowCustomNote": false,
+            "id": "CLAR-006",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "CLAR-006-OPT-2"
+                ],
+                "id": "CLAR-006-OPT-1",
+                "label": "UUIDv7",
+                "rationale": "Strong temporal locality and straightforward PostgreSQL handling.",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-006-OPT-1"
+                ],
+                "id": "CLAR-006-OPT-2",
+                "label": "ULID",
+                "rationale": "Lexicographically sortable and language-agnostic identifier format.",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "全域主鍵格式採 UUIDv7 還是 ULID？",
+            "rationale": "Mixed ID schemes complicate schema conventions, indexing, and API typing.",
+            "recommendationSummary": "Use UUIDv7 as default unless ULID is a hard organizational standard."
+          }
+        ],
+        "details": "Requirement allows UUIDv7 or ULID but does not choose one global standard.",
+        "id": "ISS-006",
+        "kind": "ambiguity",
+        "severity": "low",
+        "status": "open",
+        "title": "Primary Key Standard Not Chosen"
+      },
+      {
+        "blocking": false,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "CLAR-007",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "CLAR-007-OPT-2",
+                  "CLAR-007-OPT-3"
+                ],
+                "id": "CLAR-007-OPT-1",
+                "label": "Severity defaults + per-rule override",
+                "rationale": "Provides consistent baseline with controlled flexibility.",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-007-OPT-1",
+                  "CLAR-007-OPT-3"
+                ],
+                "id": "CLAR-007-OPT-2",
+                "label": "Per-rule custom only",
+                "rationale": "Maximum flexibility but weaker cross-rule comparability.",
+                "recommendedState": "excluded"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-007-OPT-1",
+                  "CLAR-007-OPT-2"
+                ],
+                "id": "CLAR-007-OPT-3",
+                "label": "Label-only (no breach automation)",
+                "rationale": "Lowest complexity but weak operational governance signal.",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "異常告警 SLA 的門檻計算要採哪種模式？",
+            "rationale": "Admin anomaly board status (normal/risk/breach) needs deterministic thresholds to be testable.",
+            "recommendationSummary": "Use severity defaults with optional per-rule overrides."
+          }
+        ],
+        "details": "Anomaly workflow requires SLA status rendering, but threshold formulas and timing baselines are unspecified.",
+        "id": "ISS-007",
+        "kind": "missing-detail",
+        "severity": "medium",
+        "status": "open",
+        "title": "Anomaly SLA Threshold Policy Undefined"
+      },
+      {
+        "blocking": false,
+        "clarifications": [
+          {
+            "allowCustomNote": true,
+            "id": "CLAR-008",
+            "maxActiveOptions": 1,
+            "minActiveOptions": 1,
+            "options": [
+              {
+                "conflictOptionIds": [
+                  "CLAR-008-OPT-2",
+                  "CLAR-008-OPT-3"
+                ],
+                "id": "CLAR-008-OPT-1",
+                "label": "Keep 25k RPS target for phase-2 gate",
+                "rationale": "Aligns with documented headroom target and infrastructure sizing.",
+                "recommendedState": "excluded"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-008-OPT-1",
+                  "CLAR-008-OPT-3"
+                ],
+                "id": "CLAR-008-OPT-2",
+                "label": "Use lower staged target now, ramp later",
+                "rationale": "Reduces immediate risk while preserving measurable progress.",
+                "recommendedState": "core"
+              },
+              {
+                "conflictOptionIds": [
+                  "CLAR-008-OPT-1",
+                  "CLAR-008-OPT-2"
+                ],
+                "id": "CLAR-008-OPT-3",
+                "label": "Defer hard RPS gate to post-MVP",
+                "rationale": "Focuses phase-2 on functional completeness only.",
+                "recommendedState": "excluded"
+              }
+            ],
+            "prompt": "第二階段是否要以 25k RPS 作為硬性驗收門檻？",
+            "rationale": "Capacity gate strictness changes delivery risk and release readiness criteria.",
+            "recommendationSummary": "Adopt staged capacity gates unless business requires immediate 25k RPS certification."
+          }
+        ],
+        "details": "Throughput assumptions are explicit but may diverge from actual usage and environment limits; staged benchmarking policy is not locked.",
+        "id": "ISS-008",
+        "kind": "risk",
+        "severity": "high",
+        "status": "open",
+        "title": "Capacity Target Risk Without Staged Validation Policy"
+      }
+    ],
+    "reinforcements": [
+      {
+        "activation": {
+          "featureIds": [],
+          "mode": "always",
+          "rationale": "API and frontend contract drift can break every role portal.",
+          "requiresFeatureIds": []
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "API behavior changes include synchronized updates to OpenAPI and generated TS client artifacts.",
+            "Contract verification workflow passes on each PR touching API surface.",
+            "Frontend code imports generated client modules for backend calls instead of handwritten API wrappers."
+          ]
+        },
+        "influencedBy": [],
+        "instructions": "Treat OpenAPI as the executable interface source-of-truth and enforce lockstep regeneration.",
+        "name": "Contract-First Delivery Gate",
+        "policy": "No contract drift between backend handlers, OpenAPI spec, and generated TypeScript client.",
+        "scope": "engineering"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "F02",
+            "F03",
+            "F04"
+          ],
+          "mode": "feature",
+          "rationale": "Persistence features are high-risk for irreversible data defects.",
+          "requiresFeatureIds": [
+            "F01"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "Migration up/down reversibility test passes in CI using PostgreSQL container.",
+            "Schema review confirms BIGINT money, UTC timestamps, and append-only event tables.",
+            "Integration tests run on real PostgreSQL, not DB mocks, for transactional flows."
+          ]
+        },
+        "influencedBy": [
+          "ISS-006"
+        ],
+        "instructions": "Accept schema/query changes only through migration-reviewed, test-backed SQL paths.",
+        "name": "Persistence Integrity Gate",
+        "policy": "All durable data behavior must be migration-driven, query-auditable, and integration-tested.",
+        "scope": "data"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "F05",
+            "F06",
+            "F08",
+            "F10",
+            "F11",
+            "F15"
+          ],
+          "mode": "feature",
+          "rationale": "Role boundaries and token lifecycle are central to all UIs and APIs.",
+          "requiresFeatureIds": [
+            "F04"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "Route guard tests prove `/employee/*`, `/vendor/*`, `/admin/*` cannot be crossed by wrong roles.",
+            "Token expiration/refresh scenarios are covered with positive and negative tests.",
+            "Backend authorization checks validate issuer/audience/claims before privileged actions."
+          ]
+        },
+        "influencedBy": [
+          "ISS-002"
+        ],
+        "instructions": "Centralize authn/authz in middleware/hooks and enforce role scopes consistently.",
+        "name": "Authentication and Authorization Boundary Gate",
+        "policy": "Every protected route and endpoint must enforce actor identity, role, and scope deterministically.",
+        "scope": "security"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "F07",
+            "F10",
+            "F11"
+          ],
+          "mode": "feature",
+          "rationale": "Upload flows affect security, compliance, and operational cost.",
+          "requiresFeatureIds": [
+            "F03"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "Upload API validates MIME type and size limits before accepting metadata.",
+            "Bucket access model is verified per artifact class (public read vs private read).",
+            "Object references stored in DB are auditable and can be revoked/expired per policy."
+          ]
+        },
+        "influencedBy": [
+          "ISS-001"
+        ],
+        "instructions": "Enforce one storage source-of-truth, explicit validation, and auditable access controls.",
+        "name": "File Storage Safety Gate",
+        "policy": "Uploaded artifacts must follow a single canonical storage path with strict validation and access controls.",
+        "scope": "compliance"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "F09",
+            "F10",
+            "F11",
+            "F16"
+          ],
+          "mode": "feature",
+          "rationale": "Cache/event layers can silently corrupt state if consistency is weak.",
+          "requiresFeatureIds": [
+            "F03",
+            "F04"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "Cache invalidation tests confirm read-after-write correctness for menu and mapping updates.",
+            "Consumer replay tests prove idempotent processing under at-least-once delivery.",
+            "DLQ routing and alerting trigger after configured retry exhaustion."
+          ]
+        },
+        "influencedBy": [
+          "ISS-004",
+          "ISS-008"
+        ],
+        "instructions": "Keep DB authoritative, make event handlers idempotent, and verify failure-path observability.",
+        "name": "Cache and Event Consistency Gate",
+        "policy": "Performance optimizations must not compromise correctness under concurrency or retries.",
+        "scope": "operations"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "F06",
+            "F08",
+            "F10",
+            "F11"
+          ],
+          "mode": "feature",
+          "rationale": "Usability failures directly block operational adoption.",
+          "requiresFeatureIds": [
+            "F04"
+          ]
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "All async actions show loading state and prevent duplicate submissions.",
+            "API/network errors are translated into understandable zh-TW user messages.",
+            "Responsive checks cover employee mobile and vendor/admin desktop-tablet layouts."
+          ]
+        },
+        "influencedBy": [],
+        "instructions": "Fail UI reviews when loading/error/offline states or role-specific responsiveness are missing.",
+        "name": "User Experience Reliability Gate",
+        "policy": "Every async user action must be resilient, localized, and device-appropriate.",
+        "scope": "user"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "F12",
+            "F13",
+            "F14",
+            "F15"
+          ],
+          "mode": "feature",
+          "rationale": "Security posture depends on runtime isolation and secret hygiene.",
+          "requiresFeatureIds": []
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "Gateway policy enforces TLS, CORS allowlist, request-size limits, and endpoint rate limits.",
+            "NetworkPolicy verification confirms default-deny plus explicit allowlist matrix only.",
+            "Secret manifests reference ExternalSecret flows; plaintext credentials are absent from repo."
+          ]
+        },
+        "influencedBy": [
+          "ISS-005"
+        ],
+        "instructions": "Treat edge policy, network isolation, and external secret sync as release blockers.",
+        "name": "Zero-Trust Runtime Gate",
+        "policy": "Production runtime must enforce least-privilege traffic and externally managed secrets.",
+        "scope": "security"
+      },
+      {
+        "activation": {
+          "featureIds": [
+            "F14",
+            "F16"
+          ],
+          "mode": "feature",
+          "rationale": "Scale and reliability claims must be test-backed before promotion.",
+          "requiresFeatureIds": [
+            "F09",
+            "F13"
+          ]
+        },
+        "blocking": false,
+        "evidence": {
+          "checks": [
+            "Staging smoke tests pass before production promotion.",
+            "Load-test gate publishes throughput/latency/error evidence for target profile.",
+            "Failover and scaling behavior are documented and reproducible from CI artifacts."
+          ]
+        },
+        "influencedBy": [
+          "ISS-008"
+        ],
+        "instructions": "Use measured benchmark evidence to tune scaling policies and finalize release readiness.",
+        "name": "Performance Readiness Gate",
+        "policy": "Capacity and resiliency assertions require repeatable benchmark and drill evidence.",
+        "scope": "operations"
+      },
+      {
+        "activation": {
+          "featureIds": [],
+          "mode": "always",
+          "rationale": "Project explicitly rejects legacy compatibility and unverified fallback paths.",
+          "requiresFeatureIds": []
+        },
+        "blocking": true,
+        "evidence": {
+          "checks": [
+            "Legacy in-memory production path is removed after persistence cutover.",
+            "Optional capabilities are isolated behind explicit feature flags rather than parallel permanent paths.",
+            "No unverified fallback logic is introduced in critical auth/storage/order flows."
+          ]
+        },
+        "influencedBy": [
+          "ISS-001",
+          "ISS-002"
+        ],
+        "instructions": "Continuously remove obsolete compatibility branches and keep one clear runtime path per capability.",
+        "name": "No-Legacy Path Enforcement",
+        "policy": "Prefer clean, singular, verified implementations over compatibility-heavy branching.",
+        "scope": "engineering"
+      }
+    ],
+    "roles": [
+      {
+        "influenceAreas": [
+          "user",
+          "product",
+          "data"
+        ],
+        "kind": "system-user",
+        "name": "Employee",
+        "responsibilities": [
+          "Browse plant-scoped menus and complete pre-order workflows before cutoff.",
+          "Track order lifecycle, pickup status, and payroll deduction/refund details.",
+          "Submit and monitor deduction disputes and reminder preferences."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "user",
+          "operations",
+          "product"
+        ],
+        "kind": "system-user",
+        "name": "Vendor Operator",
+        "responsibilities": [
+          "Manage menu items, status, supply limits, and ordering windows.",
+          "Run fulfillment board operations, export batches/labels, and update delivery states.",
+          "Upload compliance documents and monitor order/revenue views."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "compliance",
+          "operations",
+          "data"
+        ],
+        "kind": "system-user",
+        "name": "Committee Admin",
+        "responsibilities": [
+          "Review vendor compliance, approve/reject/remediate documents, and manage suspension actions.",
+          "Control vendor-plant mappings, settlement cycles, exception handling, and dispute assignment.",
+          "Operate anomaly governance, audit investigations, and operations analytics dashboards."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "data",
+          "operations",
+          "compliance"
+        ],
+        "kind": "system-user",
+        "name": "HR/Payroll Consumer",
+        "responsibilities": [
+          "Consume payroll deduction exports and reconcile monthly settlement outputs.",
+          "Report schema/format mismatches and downstream integration exceptions."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "engineering",
+          "data",
+          "security"
+        ],
+        "kind": "delivery",
+        "name": "Backend Engineer",
+        "responsibilities": [
+          "Implement SQLx persistence, transactional domain flows, and API endpoint behavior.",
+          "Maintain OpenAPI lockstep with server handlers and generated client artifacts.",
+          "Build queue consumers/workers with idempotency and DLQ behavior."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "engineering",
+          "user",
+          "product"
+        ],
+        "kind": "delivery",
+        "name": "Frontend Engineer",
+        "responsibilities": [
+          "Build SvelteKit role portals and shared UI primitives with Tailwind and TypeScript.",
+          "Integrate generated TS client, route guards, localization, and resilient async UX.",
+          "Deliver employee/vendor/admin workflows and responsive behavior targets."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "operations",
+          "engineering",
+          "cost"
+        ],
+        "kind": "delivery",
+        "name": "Platform/SRE Engineer",
+        "responsibilities": [
+          "Own Kubernetes manifests, overlays, autoscaling, and topology constraints.",
+          "Deploy and operate gateway, poolers, cache, queue, and storage runtime components.",
+          "Maintain CI/CD deployment gates and environment promotion reliability."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "security",
+          "compliance",
+          "engineering"
+        ],
+        "kind": "delivery",
+        "name": "Security and IAM Engineer",
+        "responsibilities": [
+          "Define token validation, RBAC enforcement, and auth provider integration controls.",
+          "Design secret rotation, dual-key windows, and external secret governance.",
+          "Review network isolation and edge policy configuration for least privilege."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "engineering",
+          "operations",
+          "user"
+        ],
+        "kind": "delivery",
+        "name": "QA and Automation Engineer",
+        "responsibilities": [
+          "Implement integration/e2e/contract/load test suites and release gate evidence.",
+          "Validate critical end-to-end flows across employee, vendor, and admin journeys.",
+          "Track regression risk across schema, auth, and event-driven processing changes."
+        ]
+      },
+      {
+        "influenceAreas": [
+          "product",
+          "operations",
+          "compliance"
+        ],
+        "kind": "delivery",
+        "name": "Product/Delivery Lead",
+        "responsibilities": [
+          "Lock scope decisions on open clarifications and sequence backlog execution.",
+          "Define acceptance criteria for MVP and optional hardening milestones.",
+          "Coordinate external dependencies (IdP, HR format, managed service constraints)."
+        ]
+      }
+    ],
+    "summary": "Phase-2 planning is structured as 14 core features for runnable MVP + secure deployability, followed by 2 optional hardening features (real provider auth and capacity certification). One issue is currently truly blocking (storage source-of-truth conflict); the remaining open items are decision gates that can be resolved in parallel without stopping core implementation."
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "acceptanceSignals": [
+    "Staging load profiles meet staged phase targets.",
+    "Autoscaling converges under burst/decay without severe oscillation.",
+    "Tuning changes are committed as declarative config + benchmark evidence."
+  ],
+  "attemptCount": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "branch": "a-build-20260416-130343-corporate-catering-system-f015-f15-a1",
+      "finishedAt": "2026-04-17T16:49:51.298Z",
+      "lastStage": "completed",
+      "lastCommit": {
+        "hash": "91c876d927220dc56670387d0d62050e09edf191",
+        "message": "feat: implement Staged Capacity Validation and Tuning (attempt 2)"
+      },
+      "latestEventSummary": "feature completed: Staged Capacity Validation and Tuning in 1 attempt",
+      "outcome": "completed",
+      "reinforcementResults": [
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Contract Lockstep Gate",
+          "summary": "Pass. The workspace contains the staged-capacity policy and evidence required for this feature (`CLAR-008`, `ISS-005`), retained benchmark artifacts show staged phase/split/autoscaling checks passing with no violations, and tuning is committed as declarative staging autoscaling config plus benchmark reports. Release-readiness wiring is present in load-gate/deploy evidence flow. No API-surface changes are introduced by this feature’s commits, so the OpenAPI + generated client synchronization policy is satisfied.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": false,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "Scale Evidence Gate",
+          "summary": "Feature evidence is present and policy-aligned: CLAR-008 staged ramp policy is codified (`ops/observability/load/staged-capacity-policy.json`), staged load + SLO reports are generated and retained by the gate script (`scripts/check-observability-slo-baseline.sh` + `scripts/evaluate-prelaunch-load.py`), CI uploads staged artifacts (`.github/workflows/observability-slo-gate.yml`, `.github/workflows/deploy.yml`), autoscaling burst/decay convergence is captured in the staged report (`ops/observability/load/reports/staged-capacity-report.json`), and tuning is committed as declarative staging autoscaling config (`ops/kubernetes/overlays/staging/patch-autoscaling.yaml`) with release evidence traceability (`scripts/emit-release-evidence.sh`). No current-feature blockers found.",
+          "verdict": "pass"
+        },
+        {
+          "blocking": true,
+          "blockingIssueCount": 0,
+          "blockingIssueTitles": [],
+          "name": "No-Legacy/Fallback Gate",
+          "summary": "Pass. The workspace has committed, policy-aligned staged capacity validation and tuning evidence for ISS-005 with CLAR-008: declarative staged ramp/split/autoscaling policy (`ops/observability/load/staged-capacity-policy.json`), a non-placeholder passing staged benchmark report (`ops/observability/load/reports/staged-capacity-report.json`) covering ramp/burst/decay plus cache/db/queue split and convergence, tuned staging autoscaling config (`ops/kubernetes/overlays/staging/patch-autoscaling.yaml`), and release-readiness wiring in gate/deploy evidence paths (`scripts/check-observability-slo-baseline.sh`, `.github/workflows/observability-slo-gate.yml`, `.github/workflows/deploy.yml`, `scripts/emit-release-evidence.sh`). No concrete blocker owned by this feature was found.",
+          "verdict": "pass"
+        }
+      ],
+      "startedAt": "2026-04-17T11:03:46.142Z"
+    }
+  ],
+  "decisionIssueIds": [
+    "ISS-005"
+  ],
+  "dependsOn": [
+    "F12",
+    "F13",
+    "F14"
+  ],
+  "excludedApproaches": [
+    "Treating 25k RPS as mandatory phase-2 gate.",
+    "Undocumented manual performance tuning."
+  ],
+  "executionConstraints": [
+    "Apply staged ramp policy from `CLAR-008`.",
+    "Validate cache/queue/DB split behavior under load.",
+    "Use results as release-readiness evidence."
+  ],
+  "featureId": "F15",
+  "name": "Staged Capacity Validation and Tuning",
+  "order": 15,
+  "phase": "completed",
+  "priority": "core",
+  "rationale": "Capacity assertions require measured evidence under locked staged gate policy.",
+  "summary": "Run staged load validation and tune scale parameters.",
+  "completedAt": "2026-04-17T16:49:51.298Z"
+}

@@ -1,0 +1,89 @@
+[
+  {
+    "answers": [
+      {
+        "decisions": [
+          {
+            "optionId": "CLAR-002-OPT-1",
+            "optionLabel": "Mock-only for this phase",
+            "state": "core"
+          },
+          {
+            "optionId": "CLAR-002-OPT-2",
+            "optionLabel": "Real OIDC now, Vendor MFA later",
+            "state": "excluded"
+          },
+          {
+            "optionId": "CLAR-002-OPT-3",
+            "optionLabel": "Full real OIDC + Vendor MFA now",
+            "state": "excluded"
+          }
+        ],
+        "note": "",
+        "questionId": "CLAR-002",
+        "response": "Core: Mock-only for this phase | Excluded: Real OIDC now, Vendor MFA later, Full real OIDC + Vendor MFA now"
+      }
+    ],
+    "decidedBy": "cli-auto-recommendation",
+    "issueId": "ISS-002",
+    "notes": []
+  },
+  {
+    "answers": [
+      {
+        "decisions": [
+          {
+            "optionId": "CLAR-008-OPT-1",
+            "optionLabel": "Keep 25k RPS target for phase-2 gate",
+            "state": "excluded"
+          },
+          {
+            "optionId": "CLAR-008-OPT-2",
+            "optionLabel": "Use lower staged target now, ramp later",
+            "state": "core"
+          },
+          {
+            "optionId": "CLAR-008-OPT-3",
+            "optionLabel": "Defer hard RPS gate to post-MVP",
+            "state": "excluded"
+          }
+        ],
+        "note": "",
+        "questionId": "CLAR-008",
+        "response": "Core: Use lower staged target now, ramp later | Excluded: Keep 25k RPS target for phase-2 gate, Defer hard RPS gate to post-MVP"
+      }
+    ],
+    "decidedBy": "cli-auto-recommendation",
+    "issueId": "ISS-008",
+    "notes": []
+  },
+  {
+    "answers": [
+      {
+        "decisions": [
+          {
+            "optionId": "CLAR-001-OPT-1",
+            "optionLabel": "Object storage only",
+            "state": "core"
+          },
+          {
+            "optionId": "CLAR-001-OPT-2",
+            "optionLabel": "DB base64 only",
+            "state": "excluded"
+          },
+          {
+            "optionId": "CLAR-001-OPT-3",
+            "optionLabel": "Dual mode by environment",
+            "state": "excluded"
+          }
+        ],
+        "note": "",
+        "questionId": "CLAR-001",
+        "response": "Core: Object storage only | Excluded: DB base64 only, Dual mode by environment"
+      }
+    ],
+    "decidedBy": "cli-auto-recommendation",
+    "issueId": "ISS-001",
+    "notes": []
+  }
+]

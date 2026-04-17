@@ -1,0 +1,26 @@
+{
+  "baseBranch": "main",
+  "createdAt": "2026-04-16T13:03:43.965Z",
+  "defaults": {
+    "analysis": {
+      "maxIterations": 10,
+      "model": "gpt-5.3-codex",
+      "provider": "codex"
+    },
+    "execution": {
+      "maxIterationOutcome": "continue",
+      "maxIterations": 10,
+      "model": "gpt-5.3-codex",
+      "mode": "debt-tolerant",
+      "provider": "codex"
+    }
+  },
+  "execution": {
+    "totalFeatureCount": 16
+  },
+  "id": "20260416-130343-corporate-catering-system",
+  "phase": "completed",
+  "project": "corporate-catering-system",
+  "runBranch": "a-build-20260416-130343-corporate-catering-system",
+  "updatedAt": "2026-04-17T17:59:30.474Z"
+}
