@@ -327,6 +327,7 @@ fn vendor_operations_board_aggregates_per_plant_special_needs_and_delivery_statu
         .transition_delivery_status(
             &vendor_actor,
             &menu_supply,
+            &vendor,
             &order_id("ord-fulfill-001"),
             FulfillmentDeliveryStatus::Preparing,
             taipei_moment(delivery_epoch_day, 721),
@@ -416,6 +417,7 @@ fn export_batches_are_immutable_and_generated_from_snapshot_state() {
         .transition_delivery_status(
             &vendor_actor,
             &menu_supply,
+            &vendor,
             &order_id("ord-fulfill-002"),
             FulfillmentDeliveryStatus::Packed,
             taipei_moment(delivery_epoch_day, 731),
@@ -480,7 +482,7 @@ fn export_batches_are_immutable_and_generated_from_snapshot_state() {
 #[test]
 fn transition_rejects_orders_outside_vendor_scope() {
     let delivery_epoch_day = 230;
-    let (menu_supply, _vendor, _, _) = setup_policy_with_orders(delivery_epoch_day);
+    let (menu_supply, vendor, _, _) = setup_policy_with_orders(delivery_epoch_day);
     let fulfillment_policy = fulfillment_policy();
     let scoped_actor = vendor_operator_with_scope(&["fab-a"]);
 
@@ -488,6 +490,7 @@ fn transition_rejects_orders_outside_vendor_scope() {
         .transition_delivery_status(
             &scoped_actor,
             &menu_supply,
+            &vendor,
             &order_id("ord-fulfill-002"),
             FulfillmentDeliveryStatus::Preparing,
             taipei_moment(delivery_epoch_day, 740),

@@ -218,6 +218,7 @@ fn http_gateway_drives_vendor_fulfillment_board_status_transition_and_export_bat
     gateway
         .execute_transition_delivery_status(
             &vendor_actor,
+            &vendor,
             &order_id("ord-http-fulfill-001"),
             FulfillmentDeliveryStatus::Preparing,
             taipei_moment(delivery_epoch_day, 702),
@@ -294,6 +295,7 @@ fn http_gateway_rejects_status_transition_for_order_outside_actor_scope() {
     let error = gateway
         .execute_transition_delivery_status(
             &scoped_actor,
+            &vendor,
             &order_id("ord-http-fulfill-002"),
             FulfillmentDeliveryStatus::Preparing,
             taipei_moment(delivery_epoch_day, 710),

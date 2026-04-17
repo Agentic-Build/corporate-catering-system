@@ -825,6 +825,7 @@ impl VendorFulfillmentPolicy {
         &self,
         actor: &AuthenticatedActorContext,
         menu_supply_policy: &MenuSupplyPolicy,
+        expected_vendor_id: &VendorId,
         order_id: &OrderId,
         to_status: FulfillmentDeliveryStatus,
         occurred_at: TaipeiBusinessMoment,
@@ -834,6 +835,13 @@ impl VendorFulfillmentPolicy {
         let order_snapshot = menu_supply_policy
             .order_snapshot(order_id)?
             .ok_or_else(|| VendorFulfillmentError::OrderNotFound(order_id.clone()))?;
+        if order_snapshot.vendor_id() != expected_vendor_id {
+            return Err(VendorFulfillmentError::OrderVendorScopeMismatch {
+                order_id: order_id.clone(),
+                expected_vendor_id: expected_vendor_id.clone(),
+                actual_vendor_id: order_snapshot.vendor_id().clone(),
+            });
+        }
         if !actor.plant_scope().contains(order_snapshot.plant_id()) {
             return Err(VendorFulfillmentError::TargetPlantOutOfScope {
                 actor_id: actor.actor_id().clone(),
@@ -843,11 +851,19 @@ impl VendorFulfillmentPolicy {
 
         let mut state = lock_state(&self.state)?;
         let previous_state = state.clone();
-        let from_status = state
-            .order_delivery_statuses
-            .get(order_id)
-            .map(|record| record.status)
-            .unwrap_or_else(|| default_delivery_status(order_snapshot.state()));
+        let from_status = match state.order_delivery_statuses.get(order_id) {
+            Some(record) => {
+                if record.vendor_id != *expected_vendor_id {
+                    return Err(VendorFulfillmentError::OrderVendorScopeMismatch {
+                        order_id: order_id.clone(),
+                        expected_vendor_id: expected_vendor_id.clone(),
+                        actual_vendor_id: record.vendor_id.clone(),
+                    });
+                }
+                record.status
+            }
+            None => default_delivery_status(order_snapshot.state()),
+        };
         if from_status == to_status {
             return Err(VendorFulfillmentError::DeliveryStatusUnchanged {
                 order_id: order_id.clone(),
@@ -1499,6 +1515,11 @@ pub enum VendorFulfillmentError {
         target_plant: PlantId,
     },
     OrderNotFound(OrderId),
+    OrderVendorScopeMismatch {
+        order_id: OrderId,
+        expected_vendor_id: VendorId,
+        actual_vendor_id: VendorId,
+    },
     MissingSpecialRequestSnapshot {
         order_id: OrderId,
         menu_item_id: MenuItemId,
@@ -1564,6 +1585,14 @@ impl fmt::Display for VendorFulfillmentError {
             Self::OrderNotFound(order_id) => {
                 write!(f, "order {order_id} does not exist in menu supply state")
             }
+            Self::OrderVendorScopeMismatch {
+                order_id,
+                expected_vendor_id,
+                actual_vendor_id,
+            } => write!(
+                f,
+                "order {order_id} belongs to vendor {actual_vendor_id}, expected {expected_vendor_id}"
+            ),
             Self::MissingSpecialRequestSnapshot {
                 order_id,
                 menu_item_id,

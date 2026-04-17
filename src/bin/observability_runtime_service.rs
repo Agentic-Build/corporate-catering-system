@@ -3538,10 +3538,19 @@ where
     }
 }
 
+fn requires_sql_authoritative_reads(state_key: &'static str) -> bool {
+    // Fulfillment state drives vendor read-after-write UX and delivery execution;
+    // keep it SQL-authoritative across pods instead of relying on best-effort cache invalidation.
+    matches!(state_key, VENDOR_FULFILLMENT_STATE_KEY)
+}
+
 fn load_runtime_state_snapshot_from_cache<T>(state: &AppState, state_key: &'static str) -> Option<T>
 where
     T: DeserializeOwned,
 {
+    if requires_sql_authoritative_reads(state_key) {
+        return None;
+    }
     let bypass_guard = state.runtime_state_cache_bypass_keys.lock();
     match bypass_guard {
         Ok(guard) => {
@@ -3582,6 +3591,9 @@ fn write_runtime_state_snapshot_to_cache<T>(state: &AppState, state_key: &'stati
 where
     T: Serialize,
 {
+    if requires_sql_authoritative_reads(state_key) {
+        return;
+    }
     let Some(cache) = state.runtime_state_cache.as_ref() else {
         return;
     };
@@ -5361,10 +5373,6 @@ fn bootstrap_runtime_state(
         let menu_snapshot = menu_supply_policy.snapshot().map_err(|error| {
             format!("failed to snapshot menu supply state for cache warmup: {error}")
         })?;
-        let vendor_fulfillment_snapshot =
-            vendor_fulfillment_policy.snapshot().map_err(|error| {
-                format!("failed to snapshot vendor fulfillment state for cache warmup: {error}")
-            })?;
         let payroll_snapshot = payroll_ledger_service.snapshot().map_err(|error| {
             format!("failed to snapshot payroll ledger state for cache warmup: {error}")
         })?;
@@ -5379,12 +5387,6 @@ fn bootstrap_runtime_state(
                     .await?;
                 cache
                     .write_through_snapshot(MENU_SUPPLY_STATE_KEY, &menu_snapshot)
-                    .await?;
-                cache
-                    .write_through_snapshot(
-                        VENDOR_FULFILLMENT_STATE_KEY,
-                        &vendor_fulfillment_snapshot,
-                    )
                     .await?;
                 cache
                     .write_through_snapshot(PAYROLL_LEDGER_STATE_KEY, &payroll_snapshot)
@@ -7115,6 +7117,7 @@ fn handle_advance_vendor_fulfillment_delivery_status(
             HttpVendorFulfillmentExecutionGateway::new(fulfillment_policy, &menu_supply_policy);
         gateway.execute_transition_delivery_status(
             vendor_actor.actor(),
+            &state.vendor_id,
             &order_id,
             to_status,
             occurred_at,
@@ -7392,6 +7395,13 @@ fn handle_create_vendor_object_storage_upload_plan(
                 localized_invalid_artifact_class_message(locale, request.artifact_class.as_str()),
             )
         })?;
+    if !is_vendor_upload_artifact_class_allowed(&artifact_class) {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "OBJECT_STORAGE_INVALID_ARTIFACT_CLASS",
+            localized_invalid_artifact_class_message(locale, request.artifact_class.as_str()),
+        ));
+    }
     let plan = state
         .object_storage_upload_pipeline
         .create_upload_plan(
@@ -7731,6 +7741,15 @@ fn parse_storage_artifact_class_label(value: &str) -> Option<StorageArtifactClas
         "FULFILLMENT_BASKET_LIST" => Some(StorageArtifactClass::FulfillmentBasketList),
         _ => None,
     }
+}
+
+fn is_vendor_upload_artifact_class_allowed(artifact_class: &StorageArtifactClass) -> bool {
+    matches!(
+        artifact_class,
+        StorageArtifactClass::ComplianceDocument
+            | StorageArtifactClass::MenuImage
+            | StorageArtifactClass::MenuImageThumbnail
+    )
 }
 
 fn localized_invalid_artifact_class_message(locale: StorageLocale, value: &str) -> String {
@@ -13327,6 +13346,7 @@ fn map_vendor_fulfillment_error(error: VendorFulfillmentError) -> (StatusCode, E
             domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
         }
         VendorFulfillmentError::OrderNotFound(_)
+        | VendorFulfillmentError::OrderVendorScopeMismatch { .. }
         | VendorFulfillmentError::MenuSupply(MenuSupplyWindowError::OrderNotFound(_)) => {
             domain_error(StatusCode::NOT_FOUND, "ORDER_NOT_FOUND", error.to_string())
         }
@@ -15420,6 +15440,27 @@ mod tests {
         .expect_err("vendor scope mismatch should be rejected");
         assert_eq!(status, StatusCode::FORBIDDEN);
         assert_eq!(error.code, "FORBIDDEN");
+    }
+
+    #[test]
+    fn object_storage_vendor_upload_plan_rejects_fulfillment_artifact_class() {
+        let state = build_state(20_000);
+        let vendor_actor = vendor_scoped_operator();
+        let (status, error) = handle_create_vendor_object_storage_upload_plan(
+            &state,
+            &vendor_actor,
+            ObjectStorageUploadRequestPayload {
+                artifact_class: "FULFILLMENT_LABELS".to_owned(),
+                file_name: "labels.json".to_owned(),
+                mime_type: "application/json".to_owned(),
+                size_bytes: 2048,
+                thumbnail_size_bytes: None,
+                locale: Some("en-US".to_owned()),
+            },
+        )
+        .expect_err("vendor upload plan should reject fulfillment export artifact classes");
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.code, "OBJECT_STORAGE_INVALID_ARTIFACT_CLASS");
     }
 
     #[test]
@@ -18551,6 +18592,44 @@ mod tests {
 
         assert_eq!(result.0, StatusCode::NOT_FOUND);
         assert_eq!(result.1.code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn vendor_fulfillment_status_patch_rejects_cross_vendor_order_id() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let hidden_vendor = vendor_id("ven-discoverytst-b1");
+        state
+            .menu_supply_policy
+            .create_order(
+                &employee_actor(),
+                order_id("ord-crossvendr001"),
+                &hidden_vendor,
+                &state.plant_id,
+                now_epoch_day.saturating_add(2),
+                vec![
+                    OrderLineItemRequest::new(menu_item_id("menu-discoverytstb1"), 1, vec![])
+                        .expect("line item should be valid"),
+                ],
+                taipei_moment(now_epoch_day, 601),
+            )
+            .expect("hidden vendor order should be seeded");
+
+        let result = handle_advance_vendor_fulfillment_delivery_status(
+            &state,
+            &vendor_scoped_operator(),
+            "ord-crossvendr001".to_owned(),
+            VendorFulfillmentDeliveryStatusTransitionRequestPayload {
+                to_status: "PREPARING".to_owned(),
+                occurred_at: taipei_moment_to_iso_datetime(taipei_moment(now_epoch_day, 780)),
+            },
+        )
+        .expect_err("vendor must not update another vendor's order delivery status");
+
+        assert_eq!(result.0, StatusCode::NOT_FOUND);
+        assert_eq!(result.1.code, "ORDER_NOT_FOUND");
     }
 
     #[test]

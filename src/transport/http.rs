@@ -779,6 +779,7 @@ impl<'a> HttpVendorFulfillmentExecutionGateway<'a> {
     pub fn execute_transition_delivery_status(
         &self,
         actor: &AuthenticatedActorContext,
+        vendor_id: &VendorId,
         order_id: &OrderId,
         to_status: FulfillmentDeliveryStatus,
         at: TaipeiBusinessMoment,
@@ -791,6 +792,7 @@ impl<'a> HttpVendorFulfillmentExecutionGateway<'a> {
         let result = self.fulfillment_policy.transition_delivery_status(
             actor,
             self.menu_supply_policy,
+            vendor_id,
             order_id,
             to_status,
             at,

@@ -89,11 +89,7 @@
   const artifactClassOptions: UploadPlanRequest["artifactClass"][] = [
     "COMPLIANCE_DOCUMENT",
     "MENU_IMAGE",
-    "MENU_IMAGE_THUMBNAIL",
-    "FULFILLMENT_DAILY_SUMMARY",
-    "FULFILLMENT_PLANT_PARTITION_SHEET",
-    "FULFILLMENT_LABELS",
-    "FULFILLMENT_BASKET_LIST"
+    "MENU_IMAGE_THUMBNAIL"
   ];
 
   const initialTaipeiDate = todayTaipeiIsoDate();
@@ -1005,7 +1001,9 @@
                             onclick={() => updateMenuItemStatus(item, status)}
                             disabled={menuStatusUpdatingById[item.menuItemId] === true}
                           >
-                            {menuStatusLabel(status)}
+                            {menuStatusUpdatingById[item.menuItemId] === true
+                              ? "更新中..."
+                              : menuStatusLabel(status)}
                           </button>
                         {/each}
                       </div>
