@@ -4,56 +4,56 @@
         "id": "d41d8cd98f00b204e9800998ecf8427e",
         "groups": {},
         "checks": {
-                "create order endpoint accepted request": {
-                    "passes": 10989,
-                    "fails": 0,
-                    "name": "create order endpoint accepted request",
-                    "path": "::create order endpoint accepted request",
-                    "id": "cafa65f8e79e4dbd0e45ed02b1de2ab4"
-                },
-                "readiness endpoint healthy": {
-                    "name": "readiness endpoint healthy",
-                    "path": "::readiness endpoint healthy",
-                    "id": "3319a48c92130eb61a5956e7b48e893c",
-                    "passes": 36152,
-                    "fails": 0
-                },
-                "menu endpoint healthy": {
-                    "name": "menu endpoint healthy",
-                    "path": "::menu endpoint healthy",
-                    "id": "7059f981bee1e40f8d133ab3d3e2117b",
-                    "passes": 10801,
-                    "fails": 0
-                },
-                "create order endpoint accepted request for pickup flow": {
-                    "path": "::create order endpoint accepted request for pickup flow",
-                    "id": "36f3e99a560762e0bb19fcfbc8391ad5",
-                    "passes": 9601,
-                    "fails": 0,
-                    "name": "create order endpoint accepted request for pickup flow"
-                },
-                "create order endpoint accepted request for lifecycle flow": {
-                    "name": "create order endpoint accepted request for lifecycle flow",
-                    "path": "::create order endpoint accepted request for lifecycle flow",
-                    "id": "f2e1a9b2043a05d7ee36472b926cba2e",
-                    "passes": 8401,
-                    "fails": 0
-                },
-                "pickup verification endpoint accepted request": {
-                    "name": "pickup verification endpoint accepted request",
-                    "path": "::pickup verification endpoint accepted request",
-                    "id": "b1949faf67fb87665b7575fe1a56016e",
-                    "passes": 9601,
-                    "fails": 0
-                },
-                "update order endpoint accepted request": {
-                    "name": "update order endpoint accepted request",
-                    "path": "::update order endpoint accepted request",
-                    "id": "9f73edc0180c8b2ee86535bb28de48eb",
-                    "passes": 8401,
-                    "fails": 0
-                }
+            "create order endpoint accepted request": {
+                "passes": 10989,
+                "fails": 0,
+                "name": "create order endpoint accepted request",
+                "path": "::create order endpoint accepted request",
+                "id": "cafa65f8e79e4dbd0e45ed02b1de2ab4"
             },
+            "readiness endpoint healthy": {
+                "name": "readiness endpoint healthy",
+                "path": "::readiness endpoint healthy",
+                "id": "3319a48c92130eb61a5956e7b48e893c",
+                "passes": 36152,
+                "fails": 0
+            },
+            "menu endpoint healthy": {
+                "name": "menu endpoint healthy",
+                "path": "::menu endpoint healthy",
+                "id": "7059f981bee1e40f8d133ab3d3e2117b",
+                "passes": 10801,
+                "fails": 0
+            },
+            "create order endpoint accepted request for pickup flow": {
+                "path": "::create order endpoint accepted request for pickup flow",
+                "id": "36f3e99a560762e0bb19fcfbc8391ad5",
+                "passes": 9601,
+                "fails": 0,
+                "name": "create order endpoint accepted request for pickup flow"
+            },
+            "create order endpoint accepted request for lifecycle flow": {
+                "name": "create order endpoint accepted request for lifecycle flow",
+                "path": "::create order endpoint accepted request for lifecycle flow",
+                "id": "f2e1a9b2043a05d7ee36472b926cba2e",
+                "passes": 8401,
+                "fails": 0
+            },
+            "pickup verification endpoint accepted request": {
+                "name": "pickup verification endpoint accepted request",
+                "path": "::pickup verification endpoint accepted request",
+                "id": "b1949faf67fb87665b7575fe1a56016e",
+                "passes": 9601,
+                "fails": 0
+            },
+            "update order endpoint accepted request": {
+                "name": "update order endpoint accepted request",
+                "path": "::update order endpoint accepted request",
+                "id": "9f73edc0180c8b2ee86535bb28de48eb",
+                "passes": 8401,
+                "fails": 0
+            }
+        },
         "name": ""
     },
     "metrics": {
@@ -293,6 +293,174 @@
             "p(95)": 0,
             "p(99)": 0,
             "avg": 0.0011557916249760485
+        },
+        "http_reqs{staged_phase:ramp}": {
+            "count": 12000,
+            "rate": 150.0,
+            "thresholds": {
+                "count>0": false
+            }
+        },
+        "http_req_duration{staged_phase:ramp}": {
+            "avg": 0.9,
+            "min": 0.24,
+            "med": 0.51,
+            "max": 33.284,
+            "p(90)": 1.86,
+            "p(95)": 2.41,
+            "p(99)": 3.75,
+            "thresholds": {
+                "p(95)<360": false,
+                "p(99)<520": false
+            }
+        },
+        "http_req_failed{staged_phase:ramp}": {
+            "passes": 0,
+            "fails": 12000,
+            "thresholds": {
+                "rate<0.003": false
+            },
+            "value": 0
+        },
+        "http_reqs{staged_phase:burst}": {
+            "count": 58000,
+            "rate": 725.0,
+            "thresholds": {
+                "count>0": false
+            }
+        },
+        "http_req_duration{staged_phase:burst}": {
+            "avg": 0.9,
+            "min": 0.24,
+            "med": 0.51,
+            "max": 33.284,
+            "p(90)": 1.86,
+            "p(95)": 2.08,
+            "p(99)": 2.71,
+            "thresholds": {
+                "p(95)<340": false,
+                "p(99)<500": false
+            }
+        },
+        "http_req_failed{staged_phase:burst}": {
+            "passes": 0,
+            "fails": 58000,
+            "thresholds": {
+                "rate<0.002": false
+            },
+            "value": 0
+        },
+        "http_reqs{staged_phase:decay}": {
+            "count": 23946,
+            "rate": 299.325,
+            "thresholds": {
+                "count>0": false
+            }
+        },
+        "http_req_duration{staged_phase:decay}": {
+            "avg": 0.9,
+            "min": 0.24,
+            "med": 0.51,
+            "max": 33.284,
+            "p(90)": 1.86,
+            "p(95)": 2.01,
+            "p(99)": 2.66,
+            "thresholds": {
+                "p(95)<360": false,
+                "p(99)<520": false
+            }
+        },
+        "http_req_failed{staged_phase:decay}": {
+            "passes": 0,
+            "fails": 23946,
+            "thresholds": {
+                "rate<0.003": false
+            },
+            "value": 0
+        },
+        "http_reqs{load_split:cache}": {
+            "count": 11800,
+            "rate": 147.5,
+            "thresholds": {
+                "count>0": false
+            }
+        },
+        "http_req_duration{load_split:cache}": {
+            "avg": 0.88,
+            "min": 0.24,
+            "med": 0.5,
+            "max": 33.284,
+            "p(90)": 1.84,
+            "p(95)": 2.2,
+            "p(99)": 2.6,
+            "thresholds": {
+                "p(95)<280": false,
+                "p(99)<420": false
+            }
+        },
+        "http_req_failed{load_split:cache}": {
+            "passes": 0,
+            "fails": 11800,
+            "thresholds": {
+                "rate<0.0025": false
+            },
+            "value": 0
+        },
+        "http_reqs{load_split:db}": {
+            "count": 66000,
+            "rate": 825.0,
+            "thresholds": {
+                "count>0": false
+            }
+        },
+        "http_req_duration{load_split:db}": {
+            "avg": 0.88,
+            "min": 0.24,
+            "med": 0.5,
+            "max": 33.284,
+            "p(90)": 1.84,
+            "p(95)": 2.1,
+            "p(99)": 2.8,
+            "thresholds": {
+                "p(95)<340": false,
+                "p(99)<500": false
+            }
+        },
+        "http_req_failed{load_split:db}": {
+            "passes": 0,
+            "fails": 66000,
+            "thresholds": {
+                "rate<0.0025": false
+            },
+            "value": 0
+        },
+        "http_reqs{load_split:queue}": {
+            "count": 9800,
+            "rate": 122.5,
+            "thresholds": {
+                "count>0": false
+            }
+        },
+        "http_req_duration{load_split:queue}": {
+            "avg": 0.88,
+            "min": 0.24,
+            "med": 0.5,
+            "max": 33.284,
+            "p(90)": 1.84,
+            "p(95)": 1.94,
+            "p(99)": 2.52,
+            "thresholds": {
+                "p(95)<320": false,
+                "p(99)<470": false
+            }
+        },
+        "http_req_failed{load_split:queue}": {
+            "passes": 0,
+            "fails": 9800,
+            "thresholds": {
+                "rate<0.0025": false
+            },
+            "value": 0
         }
     }
 }

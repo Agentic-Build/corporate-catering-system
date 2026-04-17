@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-16T00:22:30.601Z",
+  "generatedAt": "2026-04-17T11:33:22.959325Z",
   "summaryPath": "ops/observability/load/reports/prelaunch-k6-summary.json",
   "scenarios": [
     {
@@ -8,13 +8,13 @@
         "requestRate": 183.63918999749393,
         "p95LatencyMs": 2.307,
         "p99LatencyMs": 3.627839999999996,
-        "errorRate": 0
+        "errorRate": 0.0
       },
       "thresholds": {
         "name": "peak-order-placement",
-        "minRps": 120,
-        "p95LatencyMsMax": 350,
-        "p99LatencyMsMax": 500,
+        "minRps": 120.0,
+        "p95LatencyMsMax": 350.0,
+        "p99LatencyMsMax": 500.0,
         "errorRateMax": 0.002,
         "readinessSuccessRateMin": 0.999
       }
@@ -25,13 +25,13 @@
         "requestRate": 315.37763191704596,
         "p95LatencyMs": 2.13,
         "p99LatencyMs": 2.536,
-        "errorRate": 0
+        "errorRate": 0.0
       },
       "thresholds": {
         "name": "mixed-order-and-menu-reads",
-        "minRps": 180,
-        "p95LatencyMsMax": 250,
-        "p99LatencyMsMax": 400,
+        "minRps": 180.0,
+        "p95LatencyMsMax": 250.0,
+        "p99LatencyMsMax": 400.0,
         "errorRateMax": 0.001,
         "readinessSuccessRateMin": 0.999
       }
@@ -42,13 +42,13 @@
         "requestRate": 314.8903596072146,
         "p95LatencyMs": 1.756,
         "p99LatencyMs": 2.5339599999999995,
-        "errorRate": 0
+        "errorRate": 0.0
       },
       "thresholds": {
         "name": "peak-order-lifecycle-mutations",
-        "minRps": 140,
-        "p95LatencyMsMax": 320,
-        "p99LatencyMsMax": 480,
+        "minRps": 140.0,
+        "p95LatencyMsMax": 320.0,
+        "p99LatencyMsMax": 480.0,
         "errorRateMax": 0.002,
         "readinessSuccessRateMin": 0.999
       }
@@ -59,20 +59,20 @@
         "requestRate": 359.8693420531921,
         "p95LatencyMs": 1.939,
         "p99LatencyMs": 2.514,
-        "errorRate": 0
+        "errorRate": 0.0
       },
       "thresholds": {
         "name": "peak-order-and-pickup-verification",
-        "minRps": 160,
-        "p95LatencyMsMax": 300,
-        "p99LatencyMsMax": 450,
+        "minRps": 160.0,
+        "p95LatencyMsMax": 300.0,
+        "p99LatencyMsMax": 450.0,
         "errorRateMax": 0.002,
         "readinessSuccessRateMin": 0.999
       }
     }
   ],
   "readiness": {
-    "observedRate": 1,
+    "observedRate": 1.0,
     "minimumRequired": 0.999
   },
   "violations": [],

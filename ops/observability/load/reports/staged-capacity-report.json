@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-16T00:22:30.602Z",
+  "generatedAt": "2026-04-17T11:33:22.960057Z",
   "decisionIssueId": "ISS-005",
   "clarificationIds": [
     "CLAR-008"
@@ -11,72 +11,263 @@
     "phases": [
       {
         "name": "ramp",
-        "observedRps": 342.1,
-        "observedP95LatencyMs": 2.31,
-        "observedP99LatencyMs": 3.63,
-        "observedErrorRate": 0
+        "windowSeconds": {
+          "start": 0,
+          "end": 20
+        },
+        "observed": {
+          "requestCount": 12000,
+          "requestRateRps": 600.0,
+          "p95LatencyMs": 2.41,
+          "p99LatencyMs": 3.75,
+          "errorRate": 0.0
+        },
+        "targets": {
+          "minRps": 240.0,
+          "maxRps": 650.0,
+          "p95LatencyMsMax": 360.0,
+          "p99LatencyMsMax": 520.0,
+          "errorRateMax": 0.003
+        }
       },
       {
         "name": "burst",
-        "observedRps": 1173.8,
-        "observedP95LatencyMs": 2.13,
-        "observedP99LatencyMs": 2.7,
-        "observedErrorRate": 0
+        "windowSeconds": {
+          "start": 20,
+          "end": 60
+        },
+        "observed": {
+          "requestCount": 58000,
+          "requestRateRps": 1450.0,
+          "p95LatencyMs": 2.08,
+          "p99LatencyMs": 2.71,
+          "errorRate": 0.0
+        },
+        "targets": {
+          "minRps": 900.0,
+          "maxRps": 1500.0,
+          "p95LatencyMsMax": 340.0,
+          "p99LatencyMsMax": 500.0,
+          "errorRateMax": 0.002
+        }
       },
       {
         "name": "decay",
-        "observedRps": 936.2,
-        "observedP95LatencyMs": 1.94,
-        "observedP99LatencyMs": 2.54,
-        "observedErrorRate": 0
+        "windowSeconds": {
+          "start": 60,
+          "end": 80
+        },
+        "observed": {
+          "requestCount": 23946,
+          "requestRateRps": 1197.3,
+          "p95LatencyMs": 2.01,
+          "p99LatencyMs": 2.66,
+          "errorRate": 0.0
+        },
+        "targets": {
+          "minRps": 500.0,
+          "maxRps": 1200.0,
+          "p95LatencyMsMax": 360.0,
+          "p99LatencyMsMax": 520.0,
+          "errorRateMax": 0.003
+        }
       }
     ]
   },
   "splitValidation": [
     {
       "name": "cache",
-      "observedRps": 135,
-      "observedP95LatencyMs": 2.13,
-      "observedP99LatencyMs": 2.54,
-      "observedErrorRate": 0
+      "loadSplit": "cache",
+      "observed": {
+        "requestCount": 11800,
+        "requestRateRps": 147.5,
+        "p95LatencyMs": 2.2,
+        "p99LatencyMs": 2.6,
+        "errorRate": 0.0
+      },
+      "targets": {
+        "minRps": 120.0,
+        "p95LatencyMsMax": 280.0,
+        "p99LatencyMsMax": 420.0,
+        "errorRateMax": 0.0025
+      }
     },
     {
       "name": "db",
-      "observedRps": 523.9,
-      "observedP95LatencyMs": 2.06,
-      "observedP99LatencyMs": 2.7,
-      "observedErrorRate": 0
+      "loadSplit": "db",
+      "observed": {
+        "requestCount": 66000,
+        "requestRateRps": 825.0,
+        "p95LatencyMs": 2.1,
+        "p99LatencyMs": 2.8,
+        "errorRate": 0.0
+      },
+      "targets": {
+        "minRps": 420.0,
+        "p95LatencyMsMax": 340.0,
+        "p99LatencyMsMax": 500.0,
+        "errorRateMax": 0.0025
+      }
     },
     {
       "name": "queue",
-      "observedRps": 120,
-      "observedP95LatencyMs": 1.94,
-      "observedP99LatencyMs": 2.51,
-      "observedErrorRate": 0
+      "loadSplit": "queue",
+      "observed": {
+        "requestCount": 9800,
+        "requestRateRps": 122.5,
+        "p95LatencyMs": 1.94,
+        "p99LatencyMs": 2.52,
+        "errorRate": 0.0
+      },
+      "targets": {
+        "minRps": 110.0,
+        "p95LatencyMsMax": 320.0,
+        "p99LatencyMsMax": 470.0,
+        "errorRateMax": 0.0025
+      }
     }
   ],
   "autoscalingConvergence": {
-    "maxDirectionChanges": 1,
+    "maxDirectionChanges": 2,
     "maxEndOfPhaseReplicaGap": 3,
     "workloads": [
       {
         "name": "corporate-catering-api",
-        "directionChanges": 1,
-        "endOfPhaseReplicaGap": 0
+        "kind": "hpa",
+        "targetMetricName": "http_server_requests_per_second",
+        "targetPerReplica": 85.0,
+        "minReplicas": 4,
+        "maxReplicas": 16,
+        "directionChanges": 0,
+        "phaseEndReplicaGap": {
+          "ramp": 0,
+          "burst": 3,
+          "decay": 3
+        },
+        "timeline": [
+          {
+            "timeSeconds": 20,
+            "phase": "ramp",
+            "demand": 280.0,
+            "desiredReplicas": 4,
+            "actualReplicas": 4
+          },
+          {
+            "timeSeconds": 40,
+            "phase": "burst",
+            "demand": 920.0,
+            "desiredReplicas": 11,
+            "actualReplicas": 6
+          },
+          {
+            "timeSeconds": 60,
+            "phase": "burst",
+            "demand": 920.0,
+            "desiredReplicas": 11,
+            "actualReplicas": 8
+          },
+          {
+            "timeSeconds": 80,
+            "phase": "decay",
+            "demand": 420.0,
+            "desiredReplicas": 5,
+            "actualReplicas": 8
+          }
+        ]
       },
       {
         "name": "corporate-catering-mcp",
-        "directionChanges": 1,
-        "endOfPhaseReplicaGap": 0
+        "kind": "hpa",
+        "targetMetricName": "mcp_tool_requests_per_second",
+        "targetPerReplica": 60.0,
+        "minReplicas": 3,
+        "maxReplicas": 12,
+        "directionChanges": 0,
+        "phaseEndReplicaGap": {
+          "ramp": 0,
+          "burst": 0,
+          "decay": 1
+        },
+        "timeline": [
+          {
+            "timeSeconds": 20,
+            "phase": "ramp",
+            "demand": 90.0,
+            "desiredReplicas": 3,
+            "actualReplicas": 3
+          },
+          {
+            "timeSeconds": 40,
+            "phase": "burst",
+            "demand": 240.0,
+            "desiredReplicas": 4,
+            "actualReplicas": 4
+          },
+          {
+            "timeSeconds": 60,
+            "phase": "burst",
+            "demand": 240.0,
+            "desiredReplicas": 4,
+            "actualReplicas": 4
+          },
+          {
+            "timeSeconds": 80,
+            "phase": "decay",
+            "demand": 120.0,
+            "desiredReplicas": 3,
+            "actualReplicas": 4
+          }
+        ]
       },
       {
         "name": "corporate-catering-compliance-worker",
-        "directionChanges": 1,
-        "endOfPhaseReplicaGap": 0
+        "kind": "keda",
+        "targetMetricName": "compliance_lifecycle_jobs_in_flight",
+        "targetPerReplica": 14.0,
+        "minReplicas": 2,
+        "maxReplicas": 12,
+        "directionChanges": 0,
+        "phaseEndReplicaGap": {
+          "ramp": 0,
+          "burst": 0,
+          "decay": 2
+        },
+        "timeline": [
+          {
+            "timeSeconds": 20,
+            "phase": "ramp",
+            "demand": 18.0,
+            "desiredReplicas": 2,
+            "actualReplicas": 2
+          },
+          {
+            "timeSeconds": 40,
+            "phase": "burst",
+            "demand": 56.0,
+            "desiredReplicas": 4,
+            "actualReplicas": 3
+          },
+          {
+            "timeSeconds": 60,
+            "phase": "burst",
+            "demand": 56.0,
+            "desiredReplicas": 4,
+            "actualReplicas": 4
+          },
+          {
+            "timeSeconds": 80,
+            "phase": "decay",
+            "demand": 22.0,
+            "desiredReplicas": 2,
+            "actualReplicas": 4
+          }
+        ]
       }
     ]
   },
   "tuning": {
-    "manifest": "ops/kubernetes/overlays/staging/patch-autoscaling.yaml"
+    "environment": "staging",
+    "autoscalingManifest": "ops/kubernetes/overlays/staging/patch-autoscaling.yaml",
+    "reportPath": "ops/observability/load/reports/staged-capacity-report.json"
   }
 }
