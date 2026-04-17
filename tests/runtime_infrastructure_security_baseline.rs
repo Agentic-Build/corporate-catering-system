@@ -208,6 +208,26 @@ fn gateway_external_secret_and_default_deny_controls_are_active() {
         listener_protocols.len() == 1 && listener_protocols.contains("HTTPS"),
         "gateway must enforce TLS-only ingress listeners"
     );
+    let edge_security_policy_spec = gateway_docs
+        .iter()
+        .find(|doc| yaml_get(doc, "kind").as_str() == Some("SecurityPolicy"))
+        .map(|doc| yaml_get(doc, "spec"))
+        .expect("gateway.yaml must define a SecurityPolicy resource");
+    let cors_allow_methods = yaml_get(yaml_get(edge_security_policy_spec, "cors"), "allowMethods")
+        .as_sequence()
+        .expect("cors.allowMethods must be a sequence")
+        .iter()
+        .map(|method| {
+            method
+                .as_str()
+                .expect("cors.allowMethods entries must be strings")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert!(
+        cors_allow_methods.contains("DELETE"),
+        "gateway CORS allowMethods must include DELETE for contract-backed admin APIs"
+    );
     assert!(gateway.contains("kind: SecurityPolicy"));
     assert!(gateway.contains("allowOrigins"));
     assert!(gateway.contains("kind: RateLimitPolicy"));

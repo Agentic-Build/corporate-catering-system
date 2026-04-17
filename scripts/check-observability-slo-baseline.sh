@@ -86,6 +86,8 @@ if rg -q '^[[:space:]]*protocol:[[:space:]]*HTTP[[:space:]]*$' ops/kubernetes/ba
   echo "gateway must not expose plaintext HTTP listeners"
   exit 1
 fi
+rg -q "allowMethods" ops/kubernetes/base/gateway.yaml
+rg -q '^[[:space:]]*-[[:space:]]*DELETE[[:space:]]*$' ops/kubernetes/base/gateway.yaml
 rg -q "RateLimitPolicy" ops/kubernetes/base/gateway.yaml
 rg -q "maxRequestBodyBytes" ops/kubernetes/base/gateway.yaml
 rg -q "kind: NetworkPolicy" ops/kubernetes/base/networkpolicy-default-deny.yaml
