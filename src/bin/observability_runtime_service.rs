@@ -102,13 +102,15 @@ use corporate_catering_system::transport::mcp::{
     MCP_TOOL_VERIFICATION_VERIFY_PICKUP_TOTP,
 };
 use corporate_catering_system::vendor_compliance::{
-    ComplianceDate, ComplianceDocumentTemplate, DocumentTemplateId, HistoryRetentionPolicy,
-    VendorCategory, VendorComplianceError, VendorComplianceLifecycle, VendorComplianceStatus,
-    VendorDocumentSubmission, VendorId, VendorReviewDecision,
+    ComplianceDate, ComplianceDocumentTemplate, ComplianceHistoryEntry, ComplianceHistoryKind,
+    DocumentTemplateId, HistoryRetentionPolicy, SuspensionReason, VendorCategory,
+    VendorComplianceError, VendorComplianceLifecycle, VendorComplianceRecord,
+    VendorComplianceStatus, VendorDocumentSubmission, VendorId, VendorReviewDecision,
 };
 use corporate_catering_system::vendor_delivery_mapping::{
-    DeliveryMappingId, DeliveryRuleEffect, PersistedPolicySnapshot, ServiceWindow,
-    TaipeiBusinessMoment, VendorPlantDeliveryMapping, VendorPlantDeliveryPolicy,
+    DeliveryMappingAuditEntry, DeliveryMappingAuditKind, DeliveryMappingId, DeliveryRuleEffect,
+    PersistedPolicySnapshot, ServiceWindow, TaipeiBusinessMoment, VendorPlantDeliveryError,
+    VendorPlantDeliveryMapping, VendorPlantDeliveryPolicy,
 };
 use corporate_catering_system::vendor_fulfillment::{
     FulfillmentArtifactReference, FulfillmentArtifactStore, FulfillmentBatchId,
@@ -216,6 +218,8 @@ const DEFAULT_SEED_DENY_PLANT_ID: &str = "fab-b";
 const DEFAULT_SEED_DENY_MAPPING_ID: &str = "map-load-gate-deny-fab-b";
 const DEFAULT_SEED_DISPUTE_EMPLOYEE_ACTOR_ID: &str = "emp-seed-dispute";
 const DEFAULT_SEED_DISPUTE_ORDER_ID: &str = "ord-seeddispute0001";
+const SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID: &str = "ISS-003";
+const ANOMALY_RELEASE_SIGN_OFF_ISSUE_ID: &str = "ISS-007";
 
 static ORDER_EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -341,7 +345,7 @@ struct AppState {
     #[cfg(test)]
     anomaly_alert_workflow: AnomalyAlertWorkflow,
     #[cfg(test)]
-    delivery_policy: Arc<VendorPlantDeliveryPolicy>,
+    delivery_policy: Arc<RwLock<VendorPlantDeliveryPolicy>>,
     #[cfg(test)]
     menu_supply_policy: MenuSupplyPolicy,
 }
@@ -928,28 +932,218 @@ struct EmployeePayrollDisputeCreateRequest {
 struct VendorApplicationReviewRequest {
     decision: String,
     comment: String,
-    decided_on_epoch_day: i32,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct VendorApplicationReviewResponse {
-    vendor_id: String,
-    status: String,
+struct VendorComplianceDocumentTemplatePayload {
+    template_id: String,
+    vendor_category: String,
+    display_name: String,
+    required: bool,
+    max_validity_days: u16,
+    reminder_days_before_expiry: Vec<u16>,
+    suspension_grace_days: u16,
+    updated_at: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorComplianceDocumentTemplatePagePayload {
+    items: Vec<VendorComplianceDocumentTemplatePayload>,
+    page: PageMetaPayload,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct VendorLifecycleRunRequest {
-    run_on_epoch_day: i32,
+struct VendorComplianceDocumentTemplateUpsertRequest {
+    display_name: String,
+    required: bool,
+    max_validity_days: u16,
+    reminder_days_before_expiry: Vec<u16>,
+    suspension_grace_days: u16,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct VendorLifecycleRunResponse {
+struct VendorComplianceDocumentRecordPayload {
+    template_id: String,
+    document_ref: String,
+    submitted_at: String,
+    expires_on: String,
+    status: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorReviewHistoryEntryPayload {
+    decided_at: String,
+    decided_by_actor_id: String,
+    decision: String,
+    comment: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorLifecycleEventPayload {
+    occurred_at: String,
+    event_type: String,
+    actor_id: String,
+    actor_role: String,
+    summary: String,
+    template_id: Option<String>,
+    suspension_reason_code: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorComplianceRetentionPolicyPayload {
+    review_history_days: u16,
+    lifecycle_history_days: u16,
+    rejected_vendor_deletion_days: u16,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorComplianceSummaryPayload {
+    documents: Vec<VendorComplianceDocumentRecordPayload>,
+    lifecycle_history: Vec<VendorLifecycleEventPayload>,
+    retention_policy: VendorComplianceRetentionPolicyPayload,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorEnrollmentPayload {
+    vendor_id: String,
+    display_name: String,
+    vendor_category: String,
+    status: String,
+    review_history: Vec<VendorReviewHistoryEntryPayload>,
+    compliance: VendorComplianceSummaryPayload,
+    updated_at: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorEnrollmentPagePayload {
+    items: Vec<VendorEnrollmentPayload>,
+    page: PageMetaPayload,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct AdminVendorListQuery {
+    page: Option<usize>,
+    page_size: Option<usize>,
+    sort_by: Option<VendorSortFieldQuery>,
+    sort_order: Option<SortOrderQuery>,
+    status: Option<VendorStatusQuery>,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+enum VendorSortFieldQuery {
+    CreatedAt,
+    Status,
+    DisplayName,
+    VendorCategory,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum VendorStatusQuery {
+    PendingReview,
+    FixRequested,
+    Approved,
+    Rejected,
+    Suspended,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ComplianceDocumentTemplateListQuery {
+    vendor_category: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VendorComplianceLifecycleExecutionRequestPayload {
+    run_date: String,
+    dry_run: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorComplianceLifecycleExecutionResultPayload {
+    run_date: String,
     reminder_count: usize,
     suspension_count: usize,
     reinstatement_count: usize,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct VendorPlantDeliveryMappingListQuery {
+    vendor_id: Option<String>,
+    plant_id: Option<String>,
+    active_at: Option<String>,
+    page: Option<usize>,
+    page_size: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VendorPlantDeliveryServiceWindowRequestPayload {
+    starts_at: String,
+    ends_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct VendorPlantDeliveryMappingUpsertRequestPayload {
+    plant_id: String,
+    service_window: VendorPlantDeliveryServiceWindowRequestPayload,
+    effect: String,
+    precedence: u16,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorPlantDeliveryServiceWindowPayload {
+    starts_at: String,
+    ends_at: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorPlantDeliveryMappingPayload {
+    mapping_id: String,
+    vendor_id: String,
+    plant_id: String,
+    service_window: VendorPlantDeliveryServiceWindowPayload,
+    effect: String,
+    precedence: u16,
+    updated_at: String,
+    updated_by_actor_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorPlantDeliveryMappingAuditEntryPayload {
+    occurred_at: String,
+    actor_id: String,
+    actor_role: String,
+    operation_id: String,
+    event_type: String,
+    mapping: VendorPlantDeliveryMappingPayload,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VendorPlantDeliveryMappingPagePayload {
+    items: Vec<VendorPlantDeliveryMappingPayload>,
+    audit_trail: Vec<VendorPlantDeliveryMappingAuditEntryPayload>,
+    page: PageMetaPayload,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1139,6 +1333,7 @@ struct AdminAnomalyAlertPatchRequest {
     operation: String,
     owner_actor_id: Option<String>,
     note: Option<String>,
+    issue_checklist: Option<Vec<String>>,
     closure_note: Option<String>,
     closure_evidence_refs: Option<Vec<String>>,
     ticket_reference: Option<String>,
@@ -1177,6 +1372,7 @@ struct PayrollExportQuery {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PayrollMonthlySettlementCloseRequest {
     cycle_key: Option<String>,
+    issue_checklist: Option<Vec<String>>,
     page: Option<usize>,
     page_size: Option<usize>,
     sort_by: Option<PayrollSortFieldQuery>,
@@ -1730,13 +1926,13 @@ struct McpReviewVendorApplicationArgs {
     vendor_id: String,
     decision: String,
     comment: String,
-    decided_on_epoch_day: i32,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct McpRunVendorLifecycleArgs {
-    run_on_epoch_day: i32,
+    run_date: String,
+    dry_run: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1783,7 +1979,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     let recommendation_engine_runtime_enabled =
         parse_bool_env_default_false(PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED_ENV)?;
     let advanced_analytics_dashboard_runtime_enabled =
-        parse_bool_env_default_false(PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED_ENV)?;
+        parse_bool_env_default_true(PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED_ENV)?;
     let rush_reminder_runtime_enabled =
         parse_bool_env_default_false(PRELAUNCH_RUSH_REMINDER_ENABLED_ENV)?;
     let rush_reminder_policy = resolve_rush_reminder_policy(rush_reminder_runtime_enabled)?;
@@ -1997,6 +2193,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
             "/api/v1/vendor/object-storage/access-links",
             post(create_vendor_object_storage_access_link),
         )
+        .route("/api/v1/admin/vendors", get(list_admin_vendors))
+        .route(
+            "/api/v1/admin/vendor-plant-delivery-mappings",
+            get(list_vendor_plant_delivery_mappings),
+        )
+        .route(
+            "/api/v1/admin/compliance/document-templates",
+            get(list_compliance_document_templates),
+        )
+        .route(
+            "/api/v1/admin/compliance/document-templates/:vendorCategory/:templateId",
+            put(upsert_compliance_document_template),
+        )
+        .route(
+            "/api/v1/admin/vendors/:vendorId/plant-delivery-mappings/:mappingId",
+            put(upsert_vendor_plant_delivery_mapping).delete(remove_vendor_plant_delivery_mapping),
+        )
         .route(
             "/api/v1/admin/vendors/:vendorId/reviews",
             post(review_vendor_application),
@@ -2067,6 +2280,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
             "/api/v1/integrations/payroll/sftp-batches/:batchId/hr-api-sync",
             post(sync_payroll_hr_api_adjunct),
         )
+        .route(
+            "/api/v1/admin/analytics/operations-dashboard",
+            get(get_admin_operations_analytics_dashboard),
+        )
+        .route(
+            "/api/v1/vendor/analytics/operations-dashboard",
+            get(get_vendor_operations_analytics_dashboard),
+        )
         .route("/mcp/v1/tools", get(list_mcp_tools))
         .route("/mcp/v1/resources", get(list_mcp_resources))
         .route("/mcp/v1/tools/:toolName/invoke", post(invoke_mcp_tool));
@@ -2078,19 +2299,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     } else {
         app
     };
-    let app = if advanced_analytics_dashboard_runtime_enabled {
-        app.route(
-            "/api/v1/admin/analytics/operations-dashboard",
-            get(get_admin_operations_analytics_dashboard),
-        )
-        .route(
-            "/api/v1/vendor/analytics/operations-dashboard",
-            get(get_vendor_operations_analytics_dashboard),
-        )
-    } else {
-        app
-    }
-    .with_state(state);
+    let app = app.with_state(state);
 
     let listener = tokio::net::TcpListener::bind(socket_addr).await?;
     tracing::info!(bind_addr = %socket_addr, "observability runtime service listening");
@@ -2588,7 +2797,6 @@ fn invoke_mcp_write_tool(
                 VendorApplicationReviewRequest {
                     decision: args.decision,
                     comment: args.comment,
-                    decided_on_epoch_day: args.decided_on_epoch_day,
                 },
             )?;
             Ok(serde_json::to_value(payload)
@@ -2609,8 +2817,9 @@ fn invoke_mcp_write_tool(
             let payload = handle_run_vendor_compliance_lifecycle(
                 state,
                 authorized.actor(),
-                VendorLifecycleRunRequest {
-                    run_on_epoch_day: args.run_on_epoch_day,
+                VendorComplianceLifecycleExecutionRequestPayload {
+                    run_date: args.run_date,
+                    dry_run: args.dry_run,
                 },
             )?;
             Ok(serde_json::to_value(payload)
@@ -2633,8 +2842,7 @@ fn invoke_mcp_write_tool(
                 .expect("mcp settlement export payload serialization should succeed"))
         }
         MCP_TOOL_SETTLEMENT_CLOSE_MONTHLY_SETTLEMENT => {
-            let request =
-                decode_optional_mcp_args::<PayrollMonthlySettlementCloseRequest>(args, tool_name)?;
+            let request = decode_mcp_args::<PayrollMonthlySettlementCloseRequest>(args, tool_name)?;
             let authorized = authorize_mcp_write_and_audit(
                 state,
                 auth_gateway,
@@ -2826,19 +3034,6 @@ where
             format!("arguments for `{tool_name}` are invalid: {error}"),
         )
     })
-}
-
-fn decode_optional_mcp_args<T>(
-    args: serde_json::Value,
-    tool_name: &str,
-) -> Result<T, (StatusCode, ErrorPayload)>
-where
-    T: serde::de::DeserializeOwned + Default,
-{
-    if args.is_null() {
-        return Ok(T::default());
-    }
-    decode_mcp_args::<T>(args, tool_name)
 }
 
 fn require_mcp_service_account_grant(
@@ -3414,7 +3609,7 @@ fn vendor_compliance_status_label(status: VendorComplianceStatus) -> &'static st
     match status {
         VendorComplianceStatus::PendingReview => "PENDING_REVIEW",
         VendorComplianceStatus::FixRequested => "FIX_REQUESTED",
-        VendorComplianceStatus::Active => "ACTIVE",
+        VendorComplianceStatus::Active => "APPROVED",
         VendorComplianceStatus::Rejected => "REJECTED",
         VendorComplianceStatus::Suspended => "SUSPENDED",
     }
@@ -3453,6 +3648,39 @@ fn map_vendor_compliance_persistence_error(
         | VendorCompliancePersistenceError::Serialize(_) => domain_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "VENDOR_COMPLIANCE_PERSISTENCE_ERROR",
+            error.to_string(),
+        ),
+    }
+}
+
+fn map_vendor_delivery_mapping_error(
+    error: VendorPlantDeliveryError,
+) -> (StatusCode, ErrorPayload) {
+    match error {
+        VendorPlantDeliveryError::UnauthorizedRole { .. } => {
+            domain_error(StatusCode::FORBIDDEN, "FORBIDDEN", error.to_string())
+        }
+        VendorPlantDeliveryError::MappingNotFound { .. }
+        | VendorPlantDeliveryError::VendorNotFound(_) => {
+            domain_error(StatusCode::NOT_FOUND, "NOT_FOUND", error.to_string())
+        }
+        VendorPlantDeliveryError::VendorNotEligibleForOrdering(_)
+        | VendorPlantDeliveryError::DeliverabilityRuleMissing { .. }
+        | VendorPlantDeliveryError::DeliverabilityDenied { .. } => {
+            domain_error(StatusCode::CONFLICT, "CONFLICT", error.to_string())
+        }
+        VendorPlantDeliveryError::InvalidMappingId
+        | VendorPlantDeliveryError::InvalidMinuteOfDay { .. }
+        | VendorPlantDeliveryError::InvalidServiceWindow
+        | VendorPlantDeliveryError::TimestampOutOfRange => {
+            domain_error(StatusCode::BAD_REQUEST, "BAD_REQUEST", error.to_string())
+        }
+        VendorPlantDeliveryError::AuditTrail(_)
+        | VendorPlantDeliveryError::PersistenceIo(_)
+        | VendorPlantDeliveryError::PersistenceSerde(_)
+        | VendorPlantDeliveryError::PersistenceDataCorrupted(_) => domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ORDER_POLICY_VIOLATION",
             error.to_string(),
         ),
     }
@@ -3678,7 +3906,84 @@ where
             reader(&delivery_policy)
         }
         #[cfg(test)]
-        RuntimeStatePersistence::InMemoryOnly => reader(state.delivery_policy.as_ref()),
+        RuntimeStatePersistence::InMemoryOnly => {
+            let delivery_policy = state.delivery_policy.read().map_err(|_| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    "delivery policy state lock is poisoned".to_owned(),
+                )
+            })?;
+            reader(&delivery_policy)
+        }
+    }
+}
+
+fn mutate_delivery_policy<T, F>(
+    state: &AppState,
+    mutator: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&mut VendorPlantDeliveryPolicy) -> Result<T, VendorPlantDeliveryError>,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let audit_trail = state.audit_trail.clone();
+            let persistence_result = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .delivery_policy
+                        .mutate_snapshot::<PersistedPolicySnapshot, T, VendorPlantDeliveryError, _>(
+                            move |snapshot| {
+                                let snapshot = snapshot.ok_or_else(|| {
+                                    VendorPlantDeliveryError::PersistenceDataCorrupted(
+                                        "delivery policy state is uninitialized".to_owned(),
+                                    )
+                                })?;
+                                let mut policy =
+                                    VendorPlantDeliveryPolicy::from_snapshot(snapshot, audit_trail)?;
+                                let value = mutator(&mut policy)?;
+                                let snapshot = policy.snapshot();
+                                Ok((snapshot, value))
+                            },
+                        ),
+                )
+            });
+            match persistence_result {
+                Ok((snapshot, value)) => {
+                    write_runtime_state_snapshot_to_cache(
+                        state,
+                        DELIVERY_POLICY_STATE_KEY,
+                        &snapshot,
+                    );
+                    Ok(value)
+                }
+                Err(JsonStatePersistenceError::Domain(error)) => {
+                    Err(map_vendor_delivery_mapping_error(error))
+                }
+                Err(JsonStatePersistenceError::Sqlx(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!("failed to persist delivery policy state: {error}"),
+                )),
+                Err(JsonStatePersistenceError::Serialize(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!("failed to serialize delivery policy state: {error}"),
+                )),
+            }
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            let mut policy = state.delivery_policy.write().map_err(|_| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    "delivery policy state lock is poisoned".to_owned(),
+                )
+            })?;
+            mutator(&mut policy).map_err(map_vendor_delivery_mapping_error)
+        }
     }
 }
 
@@ -4510,6 +4815,18 @@ fn parse_bool_env_default_false(key: &str) -> Result<bool, String> {
     }
 }
 
+fn parse_bool_env_default_true(key: &str) -> Result<bool, String> {
+    let raw = match std::env::var(key) {
+        Ok(value) => value,
+        Err(_) => return Ok(true),
+    };
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(format!("{key} must be either `true` or `false`")),
+    }
+}
+
 fn load_required_non_empty_env(key: &str) -> Result<String, String> {
     let raw = std::env::var(key).map_err(|_| format!("{key} environment variable is required"))?;
     let trimmed = raw.trim();
@@ -4669,6 +4986,28 @@ fn current_taipei_business_moment() -> Result<TaipeiBusinessMoment, String> {
     TaipeiBusinessMoment::from_utc_unix_seconds(unix_seconds_i64).map_err(|error| {
         format!("failed to convert system time to Taipei business moment: {error}")
     })
+}
+
+fn current_compliance_date() -> Result<ComplianceDate, (StatusCode, ErrorPayload)> {
+    let moment = current_taipei_business_moment().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+    Ok(ComplianceDate::from_epoch_day(moment.epoch_day()))
+}
+
+fn current_compliance_datetime_string() -> Result<String, (StatusCode, ErrorPayload)> {
+    let moment = current_taipei_business_moment().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+    Ok(taipei_moment_to_iso_datetime(moment))
 }
 
 fn seeded_menu_type(index: u16) -> &'static str {
@@ -5435,7 +5774,7 @@ fn bootstrap_runtime_state(
         #[cfg(test)]
         anomaly_alert_workflow,
         #[cfg(test)]
-        delivery_policy: Arc::new(delivery_policy),
+        delivery_policy: Arc::new(RwLock::new(delivery_policy)),
         #[cfg(test)]
         menu_supply_policy,
     })
@@ -8843,6 +9182,190 @@ fn parse_contract_fulfillment_batch_id(value: &str) -> Result<FulfillmentBatchId
     FulfillmentBatchId::parse(trimmed.to_owned()).map_err(|error| error.to_string())
 }
 
+fn parse_contract_vendor_id(value: &str) -> Result<VendorId, (StatusCode, ErrorPayload)> {
+    let trimmed = value.trim();
+    let Some(suffix) = trimmed.strip_prefix("ven-") else {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "vendor id must start with `ven-`".to_owned(),
+        ));
+    };
+    if !(8..=32).contains(&suffix.len()) {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "vendor id suffix length must be between 8 and 32 characters".to_owned(),
+        ));
+    }
+    if !suffix
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit())
+    {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "vendor id suffix must contain only lowercase letters and digits".to_owned(),
+        ));
+    }
+    VendorId::parse(trimmed.to_owned()).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("vendor id is invalid: {error}"),
+        )
+    })
+}
+
+fn parse_contract_plant_id(value: &str) -> Result<PlantId, (StatusCode, ErrorPayload)> {
+    let trimmed = value.trim();
+    if !(2..=32).contains(&trimmed.len()) {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "plant id length must be between 2 and 32 characters".to_owned(),
+        ));
+    }
+    let mut chars = trimmed.chars();
+    let Some(first) = chars.next() else {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "plant id must be non-empty".to_owned(),
+        ));
+    };
+    if !(first.is_ascii_lowercase() || first.is_ascii_digit()) {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "plant id must start with a lowercase letter or digit".to_owned(),
+        ));
+    }
+    if !chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-') {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "plant id must contain only lowercase letters, digits, or `-`".to_owned(),
+        ));
+    }
+    PlantId::parse(trimmed.to_owned()).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("plant id is invalid: {error}"),
+        )
+    })
+}
+
+fn parse_contract_delivery_mapping_id(
+    value: &str,
+) -> Result<DeliveryMappingId, (StatusCode, ErrorPayload)> {
+    let trimmed = value.trim();
+    let Some(suffix) = trimmed.strip_prefix("map-") else {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "mapping id must start with `map-`".to_owned(),
+        ));
+    };
+    if !(3..=64).contains(&suffix.len()) {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "mapping id suffix length must be between 3 and 64 characters".to_owned(),
+        ));
+    }
+    if !suffix
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+    {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "mapping id suffix must contain only lowercase letters, digits, or `-`".to_owned(),
+        ));
+    }
+    DeliveryMappingId::parse(trimmed.to_owned()).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("mapping id is invalid: {error}"),
+        )
+    })
+}
+
+fn parse_contract_document_template_id(
+    value: &str,
+) -> Result<DocumentTemplateId, (StatusCode, ErrorPayload)> {
+    let trimmed = value.trim();
+    let Some(suffix) = trimmed.strip_prefix("tmpl-") else {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "template id must start with `tmpl-`".to_owned(),
+        ));
+    };
+    if !(3..=64).contains(&suffix.len()) {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "template id suffix length must be between 3 and 64 characters".to_owned(),
+        ));
+    }
+    if !suffix
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+    {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "template id suffix must contain only lowercase letters, digits, or `-`".to_owned(),
+        ));
+    }
+    DocumentTemplateId::parse(trimmed.to_owned()).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("template id is invalid: {error}"),
+        )
+    })
+}
+
+fn parse_contract_vendor_category(value: &str) -> Result<VendorCategory, (StatusCode, ErrorPayload)> {
+    let normalized = value.trim().to_ascii_uppercase();
+    let category = match normalized.as_str() {
+        "RESTAURANT" | "BEVERAGE" | "DESSERT" | "HEALTHY_MEAL" | "SNACK" => normalized,
+        _ => {
+            return Err(domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("unsupported vendor category `{}`", value.trim()),
+            ));
+        }
+    };
+    VendorCategory::parse(category).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("vendor category is invalid: {error}"),
+        )
+    })
+}
+
+fn parse_vendor_delivery_rule_effect(
+    value: &str,
+) -> Result<DeliveryRuleEffect, (StatusCode, ErrorPayload)> {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "ALLOW" => Ok(DeliveryRuleEffect::Allow),
+        "DENY" => Ok(DeliveryRuleEffect::Deny),
+        _ => Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("unsupported delivery mapping effect `{}`", value.trim()),
+        )),
+    }
+}
+
 fn days_in_month(year: i32, month: u32) -> u32 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
@@ -9554,6 +10077,745 @@ fn handle_create_employee_order_dispute(
     Ok(to_payroll_dispute_payload(&dispute))
 }
 
+async fn list_admin_vendors(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminVendorListQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry =
+        TelemetryService::HttpApi.begin_operation("listAdminVendors", None::<&str>, None::<&str>);
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_list_admin_vendors(&state, &committee_actor, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("admin vendor page payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("admin vendor page error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_list_admin_vendors(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    query: AdminVendorListQuery,
+) -> Result<VendorEnrollmentPagePayload, (StatusCode, ErrorPayload)> {
+    if committee_actor.role() != Role::CommitteeAdmin {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::CommitteeAdmin,
+                committee_actor.role()
+            ),
+        ));
+    }
+
+    let page = query.page.unwrap_or(1);
+    if page == 0 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "page must be greater than or equal to 1".to_owned(),
+        ));
+    }
+    let page_size = query.page_size.unwrap_or(20);
+    if page_size == 0 || page_size > 200 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "pageSize must be between 1 and 200".to_owned(),
+        ));
+    }
+
+    let lifecycle = load_compliance_lifecycle_snapshot(state)?;
+    let as_of = current_compliance_date()?;
+    let mut items = lifecycle
+        .vendors()
+        .into_iter()
+        .map(|record| to_vendor_enrollment_payload(record, &lifecycle, as_of))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if let Some(status_filter) = query.status {
+        items.retain(|item| vendor_status_matches_query(item.status.as_str(), status_filter));
+    }
+
+    let sort_by = query.sort_by.unwrap_or(VendorSortFieldQuery::CreatedAt);
+    let sort_order = query.sort_order.unwrap_or(SortOrderQuery::Asc);
+    items.sort_by(|left, right| compare_vendor_enrollment_payload(left, right, sort_by, sort_order));
+
+    let total_items = items.len();
+    let total_pages = if total_items == 0 {
+        0
+    } else {
+        (total_items - 1) / page_size + 1
+    };
+    let start = page.saturating_sub(1).saturating_mul(page_size);
+    let end = start.saturating_add(page_size).min(total_items);
+    let items = if start >= total_items {
+        Vec::new()
+    } else {
+        items
+            .into_iter()
+            .skip(start)
+            .take(end.saturating_sub(start))
+            .collect::<Vec<_>>()
+    };
+
+    Ok(VendorEnrollmentPagePayload {
+        items,
+        page: PageMetaPayload {
+            page,
+            page_size,
+            total_items,
+            total_pages,
+        },
+    })
+}
+
+async fn list_compliance_document_templates(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ComplianceDocumentTemplateListQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "listComplianceDocumentTemplates",
+        None::<&str>,
+        None::<&str>,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_list_compliance_document_templates(&state, &committee_actor, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("template page payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("template page error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_list_compliance_document_templates(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    query: ComplianceDocumentTemplateListQuery,
+) -> Result<VendorComplianceDocumentTemplatePagePayload, (StatusCode, ErrorPayload)> {
+    if committee_actor.role() != Role::CommitteeAdmin {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::CommitteeAdmin,
+                committee_actor.role()
+            ),
+        ));
+    }
+
+    let category_filter = query
+        .vendor_category
+        .as_deref()
+        .map(parse_contract_vendor_category)
+        .transpose()?;
+
+    let lifecycle = load_compliance_lifecycle_snapshot(state)?;
+    let updated_at = current_compliance_datetime_string()?;
+    let mut items = lifecycle
+        .templates()
+        .into_iter()
+        .filter(|template| {
+            category_filter
+                .as_ref()
+                .map(|category| template.vendor_category() == category)
+                .unwrap_or(true)
+        })
+        .map(|template| to_vendor_compliance_document_template_payload(template, updated_at.as_str()))
+        .collect::<Vec<_>>();
+
+    items.sort_by(|left, right| {
+        left.vendor_category
+            .cmp(&right.vendor_category)
+            .then_with(|| left.template_id.cmp(&right.template_id))
+    });
+
+    let total_items = items.len();
+    let page_size = total_items;
+    let total_pages = usize::from(total_items > 0);
+    Ok(VendorComplianceDocumentTemplatePagePayload {
+        items,
+        page: PageMetaPayload {
+            page: 1,
+            page_size,
+            total_items,
+            total_pages,
+        },
+    })
+}
+
+async fn upsert_compliance_document_template(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((vendor_category, template_id)): Path<(String, String)>,
+    Json(request): Json<VendorComplianceDocumentTemplateUpsertRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "upsertComplianceDocumentTemplate",
+        None::<&str>,
+        None::<&str>,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_upsert_compliance_document_template(
+        &state,
+        &committee_actor,
+        vendor_category,
+        template_id,
+        request,
+    ) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("template payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("template error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_upsert_compliance_document_template(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    vendor_category_raw: String,
+    template_id_raw: String,
+    request: VendorComplianceDocumentTemplateUpsertRequest,
+) -> Result<VendorComplianceDocumentTemplatePayload, (StatusCode, ErrorPayload)> {
+    let vendor_category = parse_contract_vendor_category(vendor_category_raw.as_str())?;
+    let template_id = parse_contract_document_template_id(template_id_raw.as_str())?;
+    let template = ComplianceDocumentTemplate::new(
+        template_id.clone(),
+        vendor_category.clone(),
+        request.display_name,
+        request.required,
+        request.max_validity_days,
+        request.reminder_days_before_expiry,
+        request.suspension_grace_days,
+    )
+    .map_err(map_vendor_compliance_error)?;
+    mutate_compliance_lifecycle(state, |lifecycle| {
+        lifecycle.upsert_document_template(committee_actor, template.clone())
+    })?;
+    let updated_at = current_compliance_datetime_string()?;
+    Ok(VendorComplianceDocumentTemplatePayload {
+        template_id: template_id.as_str().to_owned(),
+        vendor_category: vendor_category.as_str().to_owned(),
+        display_name: template.display_name().to_owned(),
+        required: template.required(),
+        max_validity_days: template.max_validity_days(),
+        reminder_days_before_expiry: template.reminder_days_before_expiry().to_vec(),
+        suspension_grace_days: template.suspension_grace_days(),
+        updated_at,
+    })
+}
+
+async fn list_vendor_plant_delivery_mappings(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<VendorPlantDeliveryMappingListQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "listVendorPlantDeliveryMappings",
+        None::<&str>,
+        None::<&str>,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response =
+        match handle_list_vendor_plant_delivery_mappings(&state, &committee_actor, query) {
+            Ok(payload) => {
+                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                (
+                    StatusCode::OK,
+                    Json(
+                        serde_json::to_value(payload)
+                            .expect("mapping page payload serialization should succeed"),
+                    ),
+                )
+            }
+            Err((status, error)) => {
+                telemetry.finish_with_http_status(status.as_u16());
+                (
+                    status,
+                    Json(
+                        serde_json::to_value(error.with_request_id(request_id.as_str())).expect(
+                            "mapping page error payload serialization should succeed",
+                        ),
+                    ),
+                )
+            }
+        };
+
+    response
+}
+
+fn handle_list_vendor_plant_delivery_mappings(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    query: VendorPlantDeliveryMappingListQuery,
+) -> Result<VendorPlantDeliveryMappingPagePayload, (StatusCode, ErrorPayload)> {
+    if committee_actor.role() != Role::CommitteeAdmin {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?}, got {:?}",
+                Role::CommitteeAdmin,
+                committee_actor.role()
+            ),
+        ));
+    }
+
+    let page = query.page.unwrap_or(1);
+    if page == 0 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "page must be greater than or equal to 1".to_owned(),
+        ));
+    }
+    let page_size = query.page_size.unwrap_or(20);
+    if page_size == 0 || page_size > 200 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "pageSize must be between 1 and 200".to_owned(),
+        ));
+    }
+
+    let vendor_id_filter = query
+        .vendor_id
+        .as_deref()
+        .map(parse_contract_vendor_id)
+        .transpose()?;
+    let plant_id_filter = query
+        .plant_id
+        .as_deref()
+        .map(parse_contract_plant_id)
+        .transpose()?;
+    let active_at_filter = query
+        .active_at
+        .as_deref()
+        .map(parse_taipei_datetime_to_moment)
+        .transpose()
+        .map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("activeAt query parameter is invalid: {error}"),
+            )
+        })?;
+
+    let (mappings, audit_log) = with_delivery_policy(state, |policy| {
+        Ok((
+            policy.mappings().into_iter().cloned().collect::<Vec<_>>(),
+            policy.audit_log().to_vec(),
+        ))
+    })?;
+
+    let mut filtered_mappings = mappings
+        .into_iter()
+        .filter(|mapping| {
+            vendor_id_filter
+                .as_ref()
+                .map(|vendor_id| mapping.vendor_id() == vendor_id)
+                .unwrap_or(true)
+                && plant_id_filter
+                    .as_ref()
+                    .map(|plant_id| mapping.plant_id() == plant_id)
+                    .unwrap_or(true)
+                && active_at_filter
+                    .map(|active_at| mapping.service_window().is_active_at(active_at))
+                    .unwrap_or(true)
+        })
+        .collect::<Vec<_>>();
+
+    filtered_mappings.sort_by(|left, right| {
+        left.vendor_id()
+            .as_str()
+            .cmp(right.vendor_id().as_str())
+            .then_with(|| left.plant_id().as_str().cmp(right.plant_id().as_str()))
+            .then_with(|| right.precedence().cmp(&left.precedence()))
+            .then_with(|| left.mapping_id().as_str().cmp(right.mapping_id().as_str()))
+    });
+
+    let filtered_audit_log = audit_log
+        .iter()
+        .filter(|entry| {
+            vendor_id_filter
+                .as_ref()
+                .map(|vendor_id| entry.mapping().vendor_id() == vendor_id)
+                .unwrap_or(true)
+                && plant_id_filter
+                    .as_ref()
+                    .map(|plant_id| entry.mapping().plant_id() == plant_id)
+                    .unwrap_or(true)
+                && active_at_filter
+                    .map(|active_at| entry.mapping().service_window().is_active_at(active_at))
+                    .unwrap_or(true)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let total_items = filtered_mappings.len();
+    let total_pages = if total_items == 0 {
+        0
+    } else {
+        (total_items - 1) / page_size + 1
+    };
+    let start = page.saturating_sub(1).saturating_mul(page_size);
+    let end = start.saturating_add(page_size).min(total_items);
+    let paged_mappings = if start >= total_items {
+        Vec::new()
+    } else {
+        filtered_mappings[start..end].to_vec()
+    };
+
+    let mut items = Vec::with_capacity(paged_mappings.len());
+    for mapping in &paged_mappings {
+        let latest_audit = latest_mapping_audit_entry_for_mapping(&filtered_audit_log, mapping)
+            .ok_or_else(|| {
+                domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ORDER_POLICY_VIOLATION",
+                    format!(
+                        "mapping `{}` for vendor `{}` is missing audit metadata",
+                        mapping.mapping_id().as_str(),
+                        mapping.vendor_id().as_str()
+                    ),
+                )
+            })?;
+        items.push(to_vendor_plant_delivery_mapping_payload(
+            mapping,
+            latest_audit.occurred_at(),
+            latest_audit.audit_identity().actor_id().as_str(),
+        ));
+    }
+
+    let mut audit_trail = filtered_audit_log
+        .iter()
+        .map(to_vendor_plant_delivery_mapping_audit_entry_payload)
+        .collect::<Vec<_>>();
+    audit_trail.sort_by(|left, right| right.occurred_at.cmp(&left.occurred_at));
+
+    Ok(VendorPlantDeliveryMappingPagePayload {
+        items,
+        audit_trail,
+        page: PageMetaPayload {
+            page,
+            page_size,
+            total_items,
+            total_pages,
+        },
+    })
+}
+
+async fn upsert_vendor_plant_delivery_mapping(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((vendor_id, mapping_id)): Path<(String, String)>,
+    Json(request): Json<VendorPlantDeliveryMappingUpsertRequestPayload>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "upsertVendorPlantDeliveryMapping",
+        None::<&str>,
+        None::<&str>,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_upsert_vendor_plant_delivery_mapping(
+        &state,
+        &committee_actor,
+        vendor_id,
+        mapping_id,
+        request,
+    ) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("mapping payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("mapping error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_upsert_vendor_plant_delivery_mapping(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    vendor_id_raw: String,
+    mapping_id_raw: String,
+    request: VendorPlantDeliveryMappingUpsertRequestPayload,
+) -> Result<VendorPlantDeliveryMappingPayload, (StatusCode, ErrorPayload)> {
+    let vendor_id = parse_contract_vendor_id(vendor_id_raw.as_str())?;
+    let mapping_id = parse_contract_delivery_mapping_id(mapping_id_raw.as_str())?;
+    let lifecycle = load_compliance_lifecycle_snapshot(state)?;
+    if lifecycle.vendor(&vendor_id).is_none() {
+        return Err(domain_error(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            format!("vendor `{}` was not found", vendor_id.as_str()),
+        ));
+    }
+    let plant_id = parse_contract_plant_id(request.plant_id.as_str())?;
+    let starts_at = parse_taipei_datetime_to_moment(request.service_window.starts_at.as_str())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("serviceWindow.startsAt is invalid: {error}"),
+            )
+        })?;
+    let ends_at = parse_taipei_datetime_to_moment(request.service_window.ends_at.as_str())
+        .map_err(|error| {
+            domain_error(
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                format!("serviceWindow.endsAt is invalid: {error}"),
+            )
+        })?;
+    let service_window = ServiceWindow::new(starts_at, ends_at).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("serviceWindow is invalid: {error}"),
+        )
+    })?;
+    let effect = parse_vendor_delivery_rule_effect(request.effect.as_str())?;
+    let mapping = VendorPlantDeliveryMapping::new(
+        mapping_id,
+        vendor_id,
+        plant_id,
+        service_window,
+        effect,
+        request.precedence,
+    );
+    let changed_at = current_taipei_business_moment().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+    mutate_delivery_policy(state, |policy| {
+        policy.upsert_mapping(committee_actor, changed_at, mapping.clone())
+    })?;
+
+    Ok(to_vendor_plant_delivery_mapping_payload(
+        &mapping,
+        changed_at,
+        committee_actor.actor_id().as_str(),
+    ))
+}
+
+async fn remove_vendor_plant_delivery_mapping(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((vendor_id, mapping_id)): Path<(String, String)>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "deleteVendorPlantDeliveryMapping",
+        None::<&str>,
+        None::<&str>,
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role(&headers, Role::CommitteeAdmin) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_remove_vendor_plant_delivery_mapping(
+        &state,
+        &committee_actor,
+        vendor_id,
+        mapping_id,
+    ) {
+        Ok(()) => {
+            telemetry.finish_with_http_status(StatusCode::NO_CONTENT.as_u16());
+            (StatusCode::NO_CONTENT, Json(serde_json::Value::Null))
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("mapping delete error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_remove_vendor_plant_delivery_mapping(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    vendor_id_raw: String,
+    mapping_id_raw: String,
+) -> Result<(), (StatusCode, ErrorPayload)> {
+    let vendor_id = parse_contract_vendor_id(vendor_id_raw.as_str())?;
+    let mapping_id = parse_contract_delivery_mapping_id(mapping_id_raw.as_str())?;
+    let changed_at = current_taipei_business_moment().map_err(|error| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TIME_RESOLUTION_FAILED",
+            error,
+        )
+    })?;
+    mutate_delivery_policy(state, |policy| {
+        policy.remove_mapping(committee_actor, changed_at, &vendor_id, &mapping_id)
+    })?;
+    Ok(())
+}
+
 async fn review_vendor_application(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -9583,9 +10845,9 @@ async fn review_vendor_application(
     let response =
         match handle_review_vendor_application(&state, &committee_actor, vendor_id, request) {
             Ok(payload) => {
-                telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+                telemetry.finish_with_http_status(StatusCode::ACCEPTED.as_u16());
                 (
-                    StatusCode::OK,
+                    StatusCode::ACCEPTED,
                     Json(
                         serde_json::to_value(payload)
                             .expect("vendor review payload serialization should succeed"),
@@ -9612,14 +10874,8 @@ fn handle_review_vendor_application(
     committee_actor: &AuthenticatedActorContext,
     vendor_id_raw: String,
     request: VendorApplicationReviewRequest,
-) -> Result<VendorApplicationReviewResponse, (StatusCode, ErrorPayload)> {
-    let vendor_id = VendorId::parse(vendor_id_raw).map_err(|error| {
-        domain_error(
-            StatusCode::BAD_REQUEST,
-            "BAD_REQUEST",
-            format!("vendorId path parameter is invalid: {error}"),
-        )
-    })?;
+) -> Result<VendorEnrollmentPayload, (StatusCode, ErrorPayload)> {
+    let vendor_id = parse_contract_vendor_id(vendor_id_raw.as_str())?;
     let decision = parse_vendor_review_decision(request.decision.as_str()).ok_or_else(|| {
         domain_error(
             StatusCode::BAD_REQUEST,
@@ -9628,25 +10884,34 @@ fn handle_review_vendor_application(
         )
     })?;
 
-    let status = mutate_compliance_lifecycle(state, |lifecycle| {
+    let decided_on = current_compliance_date()?;
+    mutate_compliance_lifecycle(state, |lifecycle| {
         lifecycle.review_application(
             committee_actor,
             &vendor_id,
             decision,
             request.comment,
-            ComplianceDate::from_epoch_day(request.decided_on_epoch_day),
+            decided_on,
         )
     })?;
-    Ok(VendorApplicationReviewResponse {
-        vendor_id: vendor_id.as_str().to_owned(),
-        status: vendor_compliance_status_label(status).to_owned(),
-    })
+    let lifecycle = load_compliance_lifecycle_snapshot(state)?;
+    let vendor = lifecycle.vendor(&vendor_id).ok_or_else(|| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "VENDOR_COMPLIANCE_PERSISTENCE_ERROR",
+            format!(
+                "vendor `{}` is missing after review mutation completed",
+                vendor_id.as_str()
+            ),
+        )
+    })?;
+    to_vendor_enrollment_payload(vendor, &lifecycle, decided_on)
 }
 
 async fn run_vendor_compliance_lifecycle(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<VendorLifecycleRunRequest>,
+    Json(request): Json<VendorComplianceLifecycleExecutionRequestPayload>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "runVendorComplianceLifecycle",
@@ -9670,9 +10935,9 @@ async fn run_vendor_compliance_lifecycle(
 
     let response = match handle_run_vendor_compliance_lifecycle(&state, &committee_actor, request) {
         Ok(payload) => {
-            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            telemetry.finish_with_http_status(StatusCode::ACCEPTED.as_u16());
             (
-                StatusCode::OK,
+                StatusCode::ACCEPTED,
                 Json(
                     serde_json::to_value(payload)
                         .expect("vendor lifecycle payload serialization should succeed"),
@@ -9697,15 +10962,27 @@ async fn run_vendor_compliance_lifecycle(
 fn handle_run_vendor_compliance_lifecycle(
     state: &AppState,
     committee_actor: &AuthenticatedActorContext,
-    request: VendorLifecycleRunRequest,
-) -> Result<VendorLifecycleRunResponse, (StatusCode, ErrorPayload)> {
-    let result = mutate_compliance_lifecycle(state, |lifecycle| {
-        lifecycle.run_lifecycle(
-            committee_actor,
-            ComplianceDate::from_epoch_day(request.run_on_epoch_day),
+    request: VendorComplianceLifecycleExecutionRequestPayload,
+) -> Result<VendorComplianceLifecycleExecutionResultPayload, (StatusCode, ErrorPayload)> {
+    if request.dry_run.unwrap_or(false) {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "dryRun=true is not supported in v1 lifecycle execution".to_owned(),
+        ));
+    }
+    let run_epoch_day = parse_iso_date_to_epoch_day(request.run_date.as_str()).map_err(|error| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!("runDate must use YYYY-MM-DD format: {error}"),
         )
     })?;
-    Ok(VendorLifecycleRunResponse {
+    let result = mutate_compliance_lifecycle(state, |lifecycle| {
+        lifecycle.run_lifecycle(committee_actor, ComplianceDate::from_epoch_day(run_epoch_day))
+    })?;
+    Ok(VendorComplianceLifecycleExecutionResultPayload {
+        run_date: request.run_date,
         reminder_count: result.reminders.len(),
         suspension_count: result.suspensions.len(),
         reinstatement_count: result.reinstatements.len(),
@@ -9724,7 +11001,23 @@ async fn update_admin_payroll_dispute(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let payroll_actor = match require_corporate_actor_for_role(&headers, Role::PayrollOperator) {
+    let payroll_actor = match require_corporate_actor_for_any_role(
+        &headers,
+        &[Role::PayrollOperator, Role::CommitteeAdmin],
+    ) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+    let payroll_actor = match to_payroll_operator_actor(&payroll_actor) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -10676,11 +11969,13 @@ fn handle_update_admin_anomaly_alert(
             if request.closure_note.is_some()
                 || request.closure_evidence_refs.is_some()
                 || request.ticket_reference.is_some()
+                || request.issue_checklist.is_some()
             {
                 return Err(domain_error(
                     StatusCode::BAD_REQUEST,
                     "BAD_REQUEST",
-                    "closure fields are only allowed for CLOSE operation".to_owned(),
+                    "closure fields and issueChecklist are only allowed for CLOSE operation"
+                        .to_owned(),
                 ));
             }
             let owner_actor_id_raw = request.owner_actor_id.ok_or_else(|| {
@@ -10712,11 +12007,13 @@ fn handle_update_admin_anomaly_alert(
                 || request.closure_note.is_some()
                 || request.closure_evidence_refs.is_some()
                 || request.ticket_reference.is_some()
+                || request.issue_checklist.is_some()
             {
                 return Err(domain_error(
                     StatusCode::BAD_REQUEST,
                     "BAD_REQUEST",
-                    "owner and closure fields are not allowed for this operation".to_owned(),
+                    "owner, closure fields, and issueChecklist are not allowed for this operation"
+                        .to_owned(),
                 ));
             }
             let transition =
@@ -10751,6 +12048,11 @@ fn handle_update_admin_anomaly_alert(
                     "ownerActorId is not allowed for CLOSE operation".to_owned(),
                 ));
             }
+            ensure_required_issue_sign_off(
+                request.issue_checklist.as_deref(),
+                ANOMALY_RELEASE_SIGN_OFF_ISSUE_ID,
+                "issueChecklist",
+            )?;
             let closure_note = parse_required_patch_note(request.closure_note, "closureNote")?;
             let closure_evidence_refs =
                 parse_required_patch_evidence_refs(request.closure_evidence_refs)?;
@@ -10949,7 +12251,10 @@ async fn export_payroll_deductions(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let payroll_actor = match require_corporate_actor_for_role(&headers, Role::PayrollOperator) {
+    let payroll_actor = match require_corporate_actor_for_any_role(
+        &headers,
+        &[Role::PayrollOperator, Role::CommitteeAdmin],
+    ) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -11038,7 +12343,7 @@ fn handle_export_payroll_deductions(
 async fn close_payroll_monthly_settlement(
     State(state): State<AppState>,
     headers: HeaderMap,
-    request: Option<Json<PayrollMonthlySettlementCloseRequest>>,
+    Json(request): Json<PayrollMonthlySettlementCloseRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let telemetry = TelemetryService::HttpApi.begin_operation(
         "closePayrollMonthlySettlement",
@@ -11046,7 +12351,23 @@ async fn close_payroll_monthly_settlement(
         Some(state.plant_id.as_str()),
     );
     let request_id = telemetry.correlation_context().request_id().to_owned();
-    let payroll_actor = match require_corporate_actor_for_role(&headers, Role::PayrollOperator) {
+    let payroll_actor = match require_corporate_actor_for_any_role(
+        &headers,
+        &[Role::PayrollOperator, Role::CommitteeAdmin],
+    ) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+    let payroll_actor = match to_payroll_operator_actor(&payroll_actor) {
         Ok(actor) => actor,
         Err((status, error)) => {
             telemetry.finish_with_http_status(status.as_u16());
@@ -11063,9 +12384,7 @@ async fn close_payroll_monthly_settlement(
     let response = match handle_close_payroll_monthly_settlement(
         &state,
         &payroll_actor,
-        request.map_or_else(PayrollMonthlySettlementCloseRequest::default, |payload| {
-            payload.0
-        }),
+        request,
     ) {
         Ok(payload) => {
             telemetry.finish_with_http_status(StatusCode::OK.as_u16());
@@ -11097,6 +12416,11 @@ fn handle_close_payroll_monthly_settlement(
     payroll_actor: &AuthenticatedActorContext,
     request: PayrollMonthlySettlementCloseRequest,
 ) -> Result<PayrollDeductionPagePayload, (StatusCode, ErrorPayload)> {
+    ensure_required_issue_sign_off(
+        request.issue_checklist.as_deref(),
+        SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID,
+        "issueChecklist",
+    )?;
     let page = request.page.unwrap_or(1);
     let page_size = request.page_size.unwrap_or(20);
     let sort_by = request
@@ -11357,6 +12681,350 @@ fn handle_sync_payroll_hr_api_adjunct(
     Ok(PayrollHrApiSyncResponse {
         exchange_batch: to_payroll_exchange_batch_payload(&batch),
     })
+}
+
+fn to_vendor_compliance_document_template_payload(
+    template: &ComplianceDocumentTemplate,
+    updated_at: &str,
+) -> VendorComplianceDocumentTemplatePayload {
+    VendorComplianceDocumentTemplatePayload {
+        template_id: template.template_id().as_str().to_owned(),
+        vendor_category: template.vendor_category().as_str().to_owned(),
+        display_name: template.display_name().to_owned(),
+        required: template.required(),
+        max_validity_days: template.max_validity_days(),
+        reminder_days_before_expiry: template.reminder_days_before_expiry().to_vec(),
+        suspension_grace_days: template.suspension_grace_days(),
+        updated_at: updated_at.to_owned(),
+    }
+}
+
+fn to_vendor_enrollment_payload(
+    record: &VendorComplianceRecord,
+    lifecycle: &VendorComplianceLifecycle,
+    as_of: ComplianceDate,
+) -> Result<VendorEnrollmentPayload, (StatusCode, ErrorPayload)> {
+    let templates = lifecycle.templates_for_category(record.category()).ok_or_else(|| {
+        domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "VENDOR_COMPLIANCE_PERSISTENCE_ERROR",
+            format!(
+                "vendor `{}` category `{}` has no document template configuration",
+                record.vendor_id().as_str(),
+                record.category().as_str()
+            ),
+        )
+    })?;
+
+    let application_submitted_on = record
+        .history()
+        .iter()
+        .map(ComplianceHistoryEntry::occurred_on)
+        .min()
+        .unwrap_or(as_of);
+    let application_submitted_at = compliance_date_to_iso_datetime(application_submitted_on);
+
+    let mut documents = Vec::with_capacity(templates.len());
+    for template in templates.values() {
+        if let Some(submission) = record.documents().get(template.template_id()) {
+            documents.push(VendorComplianceDocumentRecordPayload {
+                template_id: template.template_id().as_str().to_owned(),
+                document_ref: submission.document_ref().to_owned(),
+                submitted_at: compliance_date_to_iso_datetime(submission.submitted_on()),
+                expires_on: epoch_day_to_iso_date(submission.expires_on().epoch_day()),
+                status: vendor_document_status_label(submission, template, as_of).to_owned(),
+            });
+        } else if template.required() {
+            documents.push(VendorComplianceDocumentRecordPayload {
+                template_id: template.template_id().as_str().to_owned(),
+                document_ref: "MISSING".to_owned(),
+                submitted_at: application_submitted_at.clone(),
+                expires_on: epoch_day_to_iso_date(as_of.epoch_day()),
+                status: "MISSING".to_owned(),
+            });
+        }
+    }
+    documents.sort_by(|left, right| left.template_id.cmp(&right.template_id));
+
+    let mut review_history = record
+        .history()
+        .iter()
+        .filter_map(|entry| match entry.kind() {
+            ComplianceHistoryKind::ReviewDecision { decision, comment } => {
+                Some(VendorReviewHistoryEntryPayload {
+                    decided_at: compliance_date_to_iso_datetime(entry.occurred_on()),
+                    decided_by_actor_id: entry.actor_id().as_str().to_owned(),
+                    decision: vendor_review_decision_label(*decision).to_owned(),
+                    comment: comment.to_owned(),
+                })
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    review_history.sort_by(|left, right| left.decided_at.cmp(&right.decided_at));
+
+    let mut lifecycle_history = record
+        .history()
+        .iter()
+        .map(to_vendor_lifecycle_event_payload)
+        .collect::<Vec<_>>();
+    lifecycle_history.sort_by(|left, right| left.occurred_at.cmp(&right.occurred_at));
+
+    let updated_on = record
+        .history()
+        .iter()
+        .map(ComplianceHistoryEntry::occurred_on)
+        .max()
+        .unwrap_or(as_of);
+
+    Ok(VendorEnrollmentPayload {
+        vendor_id: record.vendor_id().as_str().to_owned(),
+        display_name: record.display_name().to_owned(),
+        vendor_category: record.category().as_str().to_owned(),
+        status: vendor_compliance_status_label(record.status()).to_owned(),
+        review_history,
+        compliance: VendorComplianceSummaryPayload {
+            documents,
+            lifecycle_history,
+            retention_policy: VendorComplianceRetentionPolicyPayload {
+                review_history_days: lifecycle.retention_policy().review_history_days(),
+                lifecycle_history_days: lifecycle.retention_policy().lifecycle_history_days(),
+                rejected_vendor_deletion_days: lifecycle
+                    .retention_policy()
+                    .rejected_vendor_deletion_days(),
+            },
+        },
+        updated_at: compliance_date_to_iso_datetime(updated_on),
+    })
+}
+
+fn vendor_document_status_label(
+    submission: &VendorDocumentSubmission,
+    template: &ComplianceDocumentTemplate,
+    as_of: ComplianceDate,
+) -> &'static str {
+    if as_of > submission.expires_on() {
+        return "EXPIRED";
+    }
+    let days_until_expiry = as_of.days_until(submission.expires_on());
+    let expiring_threshold = template
+        .reminder_days_before_expiry()
+        .iter()
+        .copied()
+        .max()
+        .map(i32::from)
+        .unwrap_or(-1);
+    if days_until_expiry <= expiring_threshold {
+        "EXPIRING_SOON"
+    } else {
+        "VALID"
+    }
+}
+
+fn vendor_review_decision_label(decision: VendorReviewDecision) -> &'static str {
+    match decision {
+        VendorReviewDecision::Approved => "APPROVED",
+        VendorReviewDecision::Rejected => "REJECTED",
+        VendorReviewDecision::RequestFix => "REQUEST_FIX",
+    }
+}
+
+fn to_vendor_lifecycle_event_payload(entry: &ComplianceHistoryEntry) -> VendorLifecycleEventPayload {
+    let (event_type, summary, template_id, suspension_reason_code) = match entry.kind() {
+        ComplianceHistoryKind::ApplicationSubmitted { category } => (
+            "APPLICATION_SUBMITTED".to_owned(),
+            format!(
+                "Vendor application submitted for category {}",
+                category.as_str()
+            ),
+            None,
+            None,
+        ),
+        ComplianceHistoryKind::DocumentSubmitted {
+            template_id,
+            expires_on,
+        } => (
+            "DOCUMENT_SUBMITTED".to_owned(),
+            format!(
+                "Document submitted for template {} (expires on {})",
+                template_id.as_str(),
+                epoch_day_to_iso_date(expires_on.epoch_day())
+            ),
+            Some(template_id.as_str().to_owned()),
+            None,
+        ),
+        ComplianceHistoryKind::ReviewDecision { decision, comment } => (
+            "REVIEW_DECISION".to_owned(),
+            format!(
+                "Review decision {}: {}",
+                vendor_review_decision_label(*decision),
+                comment
+            ),
+            None,
+            None,
+        ),
+        ComplianceHistoryKind::ExpiryReminderIssued {
+            template_id,
+            expires_on,
+            days_until_expiry,
+        } => (
+            "EXPIRY_REMINDER_ISSUED".to_owned(),
+            format!(
+                "Expiry reminder for template {}: {} day(s) before {}",
+                template_id.as_str(),
+                days_until_expiry,
+                epoch_day_to_iso_date(expires_on.epoch_day())
+            ),
+            Some(template_id.as_str().to_owned()),
+            None,
+        ),
+        ComplianceHistoryKind::Suspended { reason } => match reason {
+            SuspensionReason::MissingRequiredDocument { template_id } => (
+                "SUSPENDED".to_owned(),
+                format!(
+                    "Vendor suspended due to missing required document {}",
+                    template_id.as_str()
+                ),
+                Some(template_id.as_str().to_owned()),
+                Some("MISSING_REQUIRED_DOCUMENT".to_owned()),
+            ),
+            SuspensionReason::ExpiredRequiredDocument {
+                template_id,
+                expired_on,
+            } => (
+                "SUSPENDED".to_owned(),
+                format!(
+                    "Vendor suspended due to expired required document {} (expired on {})",
+                    template_id.as_str(),
+                    epoch_day_to_iso_date(expired_on.epoch_day())
+                ),
+                Some(template_id.as_str().to_owned()),
+                Some("EXPIRED_REQUIRED_DOCUMENT".to_owned()),
+            ),
+        },
+        ComplianceHistoryKind::Reinstated => (
+            "REINSTATED".to_owned(),
+            "Vendor reinstated after compliance requirements were restored".to_owned(),
+            None,
+            None,
+        ),
+    };
+
+    VendorLifecycleEventPayload {
+        occurred_at: compliance_date_to_iso_datetime(entry.occurred_on()),
+        event_type,
+        actor_id: entry.actor_id().as_str().to_owned(),
+        actor_role: role_to_api_label(entry.actor_role()).to_owned(),
+        summary,
+        template_id,
+        suspension_reason_code,
+    }
+}
+
+fn compliance_date_to_iso_datetime(date: ComplianceDate) -> String {
+    audit_timestamp_to_iso_datetime(AuditTimestamp::from_epoch_day(date.epoch_day()))
+}
+
+fn vendor_status_matches_query(status: &str, filter: VendorStatusQuery) -> bool {
+    let expected = match filter {
+        VendorStatusQuery::PendingReview => "PENDING_REVIEW",
+        VendorStatusQuery::FixRequested => "FIX_REQUESTED",
+        VendorStatusQuery::Approved => "APPROVED",
+        VendorStatusQuery::Rejected => "REJECTED",
+        VendorStatusQuery::Suspended => "SUSPENDED",
+    };
+    status == expected
+}
+
+fn compare_vendor_enrollment_payload(
+    left: &VendorEnrollmentPayload,
+    right: &VendorEnrollmentPayload,
+    sort_by: VendorSortFieldQuery,
+    sort_order: SortOrderQuery,
+) -> CmpOrdering {
+    let ordering = match sort_by {
+        VendorSortFieldQuery::CreatedAt => vendor_enrollment_created_at(left)
+            .cmp(vendor_enrollment_created_at(right)),
+        VendorSortFieldQuery::Status => left.status.cmp(&right.status),
+        VendorSortFieldQuery::DisplayName => left.display_name.cmp(&right.display_name),
+        VendorSortFieldQuery::VendorCategory => left.vendor_category.cmp(&right.vendor_category),
+    }
+    .then_with(|| left.vendor_id.cmp(&right.vendor_id));
+
+    match sort_order {
+        SortOrderQuery::Desc => ordering.reverse(),
+        SortOrderQuery::Asc => ordering,
+    }
+}
+
+fn vendor_enrollment_created_at(payload: &VendorEnrollmentPayload) -> &str {
+    payload
+        .compliance
+        .lifecycle_history
+        .first()
+        .map(|entry| entry.occurred_at.as_str())
+        .unwrap_or(payload.updated_at.as_str())
+}
+
+fn latest_mapping_audit_entry_for_mapping<'a>(
+    audit_entries: &'a [DeliveryMappingAuditEntry],
+    mapping: &VendorPlantDeliveryMapping,
+) -> Option<&'a DeliveryMappingAuditEntry> {
+    audit_entries.iter().rev().find(|entry| {
+        entry.mapping().vendor_id() == mapping.vendor_id()
+            && entry.mapping().mapping_id() == mapping.mapping_id()
+    })
+}
+
+fn to_vendor_plant_delivery_mapping_payload(
+    mapping: &VendorPlantDeliveryMapping,
+    updated_at: TaipeiBusinessMoment,
+    updated_by_actor_id: &str,
+) -> VendorPlantDeliveryMappingPayload {
+    VendorPlantDeliveryMappingPayload {
+        mapping_id: mapping.mapping_id().as_str().to_owned(),
+        vendor_id: mapping.vendor_id().as_str().to_owned(),
+        plant_id: mapping.plant_id().as_str().to_owned(),
+        service_window: VendorPlantDeliveryServiceWindowPayload {
+            starts_at: taipei_moment_to_iso_datetime(mapping.service_window().starts_at()),
+            ends_at: taipei_moment_to_iso_datetime(mapping.service_window().ends_at()),
+        },
+        effect: delivery_rule_effect_label(mapping.effect()).to_owned(),
+        precedence: mapping.precedence(),
+        updated_at: taipei_moment_to_iso_datetime(updated_at),
+        updated_by_actor_id: updated_by_actor_id.to_owned(),
+    }
+}
+
+fn to_vendor_plant_delivery_mapping_audit_entry_payload(
+    entry: &DeliveryMappingAuditEntry,
+) -> VendorPlantDeliveryMappingAuditEntryPayload {
+    VendorPlantDeliveryMappingAuditEntryPayload {
+        occurred_at: taipei_moment_to_iso_datetime(entry.occurred_at()),
+        actor_id: entry.audit_identity().actor_id().as_str().to_owned(),
+        actor_role: role_to_api_label(entry.audit_identity().role()).to_owned(),
+        operation_id: entry.audit_identity().operation_id().to_owned(),
+        event_type: delivery_mapping_audit_event_label(entry.kind()).to_owned(),
+        mapping: to_vendor_plant_delivery_mapping_payload(
+            entry.mapping(),
+            entry.occurred_at(),
+            entry.audit_identity().actor_id().as_str(),
+        ),
+    }
+}
+
+fn delivery_mapping_audit_event_label(kind: DeliveryMappingAuditKind) -> &'static str {
+    match kind {
+        DeliveryMappingAuditKind::Upserted => "UPSERTED",
+        DeliveryMappingAuditKind::Removed => "REMOVED",
+    }
+}
+
+fn delivery_rule_effect_label(effect: DeliveryRuleEffect) -> &'static str {
+    match effect {
+        DeliveryRuleEffect::Allow => "ALLOW",
+        DeliveryRuleEffect::Deny => "DENY",
+    }
 }
 
 fn to_employee_order_payroll_ledger_response(
@@ -11824,6 +13492,50 @@ fn parse_required_patch_evidence_refs(
     Ok(normalized)
 }
 
+fn ensure_required_issue_sign_off(
+    issue_checklist: Option<&[String]>,
+    required_issue_id: &str,
+    field_name: &str,
+) -> Result<(), (StatusCode, ErrorPayload)> {
+    let normalized_required_issue_id = required_issue_id.trim().to_ascii_uppercase();
+    let checklist = issue_checklist.ok_or_else(|| {
+        domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!(
+                "{field_name} must include `{normalized_required_issue_id}` before release sign-off"
+            ),
+        )
+    })?;
+    let normalized_checklist = checklist
+        .iter()
+        .map(|entry| entry.trim().to_ascii_uppercase())
+        .filter(|entry| !entry.is_empty())
+        .collect::<Vec<_>>();
+    if normalized_checklist.is_empty() {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!(
+                "{field_name} must include `{normalized_required_issue_id}` before release sign-off"
+            ),
+        ));
+    }
+    if !normalized_checklist
+        .iter()
+        .any(|entry| entry == &normalized_required_issue_id)
+    {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            format!(
+                "{field_name} must include `{normalized_required_issue_id}` before release sign-off"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn normalize_optional_patch_note(
     note: Option<String>,
 ) -> Result<Option<String>, (StatusCode, ErrorPayload)> {
@@ -11975,6 +13687,74 @@ fn require_corporate_actor_for_role(
     let authorization =
         require_bearer_actor_for_role(headers, required_role, AuthenticationSource::CorporateSso)?;
     Ok(authorization.actor)
+}
+
+fn require_corporate_actor_for_any_role(
+    headers: &HeaderMap,
+    required_roles: &[Role],
+) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+    if required_roles.is_empty() {
+        return Err(domain_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "AUTHORIZATION_POLICY_ERROR",
+            "required_roles must not be empty".to_owned(),
+        ));
+    }
+
+    let mut last_forbidden_error: Option<(StatusCode, ErrorPayload)> = None;
+    for required_role in required_roles {
+        match require_corporate_actor_for_role(headers, *required_role) {
+            Ok(actor) => return Ok(actor),
+            Err((status, error)) => {
+                if status == StatusCode::UNAUTHORIZED {
+                    return Err((status, error));
+                }
+                last_forbidden_error = Some((status, error));
+            }
+        }
+    }
+
+    match last_forbidden_error {
+        Some(error) => Err(error),
+        None => Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            "authenticated actor role does not satisfy authorization requirements".to_owned(),
+        )),
+    }
+}
+
+fn to_payroll_operator_actor(
+    actor: &AuthenticatedActorContext,
+) -> Result<AuthenticatedActorContext, (StatusCode, ErrorPayload)> {
+    if actor.role() == Role::PayrollOperator {
+        return Ok(actor.clone());
+    }
+    if actor.role() != Role::CommitteeAdmin {
+        return Err(domain_error(
+            StatusCode::FORBIDDEN,
+            "FORBIDDEN",
+            format!(
+                "operation requires role {:?} or {:?}, got {:?}",
+                Role::PayrollOperator,
+                Role::CommitteeAdmin,
+                actor.role()
+            ),
+        ));
+    }
+    AuthenticatedActorContext::new(
+        actor.actor_id().clone(),
+        Role::PayrollOperator,
+        actor.plant_scope().clone(),
+        actor.authentication_source(),
+    )
+    .map_err(|error| {
+        domain_error(
+            StatusCode::UNAUTHORIZED,
+            "UNAUTHORIZED",
+            format!("failed to map committee actor to payroll capability context: {error}"),
+        )
+    })
 }
 
 fn require_vendor_operator_actor(
@@ -14983,7 +16763,7 @@ mod tests {
             runtime_state_cache: None,
             runtime_state_cache_bypass_keys: Arc::new(Mutex::new(HashSet::new())),
             order_event_backbone: None,
-            delivery_policy: Arc::new(delivery_policy),
+            delivery_policy: Arc::new(RwLock::new(delivery_policy)),
             menu_supply_policy,
             pickup_totp_verifier: Arc::new(
                 PickupTotpVerifier::from_secret("unit-test-pickup-totp-secret".as_bytes())
@@ -15206,9 +16986,12 @@ mod tests {
         let runtime_plant_id = plant_id(DEFAULT_PLANT_ID);
         let runtime_deny_plant_id = plant_id(DEFAULT_SEED_DENY_PLANT_ID);
         let mapping_check_at = taipei_moment(delivery_epoch_day, 600);
+        let delivery_policy = state
+            .delivery_policy
+            .read()
+            .expect("delivery policy lock should not be poisoned");
         assert!(
-            state
-                .delivery_policy
+            delivery_policy
                 .ensure_vendor_deliverable_for_order(
                     &compliance,
                     &lifecycle_vendor_id,
@@ -15218,7 +17001,7 @@ mod tests {
                 .is_ok(),
             "lifecycle vendor should be deliverable for runtime plant"
         );
-        let deny_result = state.delivery_policy.ensure_vendor_deliverable_for_order(
+        let deny_result = delivery_policy.ensure_vendor_deliverable_for_order(
             &compliance,
             &vendor_id(DEFAULT_VENDOR_ID),
             &runtime_deny_plant_id,
@@ -15988,8 +17771,8 @@ mod tests {
             runtime_state_cache: None,
             runtime_state_cache_bypass_keys: Arc::new(Mutex::new(HashSet::new())),
             order_event_backbone: None,
-            delivery_policy: Arc::new(VendorPlantDeliveryPolicy::with_audit_trail(
-                audit_trail.clone(),
+            delivery_policy: Arc::new(RwLock::new(
+                VendorPlantDeliveryPolicy::with_audit_trail(audit_trail.clone()),
             )),
             menu_supply_policy: MenuSupplyPolicy::with_audit_trail(
                 Default::default(),
@@ -16674,13 +18457,19 @@ mod tests {
         let first_close = handle_close_payroll_monthly_settlement(
             &state,
             &payroll,
-            PayrollMonthlySettlementCloseRequest::default(),
+            PayrollMonthlySettlementCloseRequest {
+                issue_checklist: Some(vec![SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID.to_owned()]),
+                ..PayrollMonthlySettlementCloseRequest::default()
+            },
         )
         .expect("first monthly close should succeed");
         let replay_close = handle_close_payroll_monthly_settlement(
             &state,
             &payroll,
-            PayrollMonthlySettlementCloseRequest::default(),
+            PayrollMonthlySettlementCloseRequest {
+                issue_checklist: Some(vec![SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID.to_owned()]),
+                ..PayrollMonthlySettlementCloseRequest::default()
+            },
         )
         .expect("replayed monthly close should succeed");
         assert_eq!(
@@ -16787,7 +18576,10 @@ mod tests {
         let closed = handle_close_payroll_monthly_settlement(
             &state,
             &payroll,
-            PayrollMonthlySettlementCloseRequest::default(),
+            PayrollMonthlySettlementCloseRequest {
+                issue_checklist: Some(vec![SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID.to_owned()]),
+                ..PayrollMonthlySettlementCloseRequest::default()
+            },
         )
         .expect("monthly close should succeed");
         let batch_id = closed.exchange_batch.batch_id.clone();
@@ -17789,6 +19581,7 @@ mod tests {
                 operation: "CLOSE".to_owned(),
                 owner_actor_id: None,
                 note: Some("attempted close".to_owned()),
+                issue_checklist: Some(vec![ANOMALY_RELEASE_SIGN_OFF_ISSUE_ID.to_owned()]),
                 closure_note: Some("closure evidence pending".to_owned()),
                 closure_evidence_refs: Some(vec!["   ".to_owned()]),
                 ticket_reference: None,
@@ -17886,6 +19679,7 @@ mod tests {
                 operation: "ASSIGN_OWNER".to_owned(),
                 owner_actor_id: Some("committee-owner-alpha".to_owned()),
                 note: Some("triaged by governance committee".to_owned()),
+                issue_checklist: None,
                 closure_note: None,
                 closure_evidence_refs: None,
                 ticket_reference: None,
@@ -17902,6 +19696,7 @@ mod tests {
                 operation: "START_REMEDIATION".to_owned(),
                 owner_actor_id: None,
                 note: Some("remediation started".to_owned()),
+                issue_checklist: None,
                 closure_note: None,
                 closure_evidence_refs: None,
                 ticket_reference: None,
@@ -17918,6 +19713,7 @@ mod tests {
                 operation: "CLOSE".to_owned(),
                 owner_actor_id: None,
                 note: Some("closure approved".to_owned()),
+                issue_checklist: Some(vec![ANOMALY_RELEASE_SIGN_OFF_ISSUE_ID.to_owned()]),
                 closure_note: Some("mitigated with vendor retraining and monitoring".to_owned()),
                 closure_evidence_refs: Some(vec![
                     "runbook://anomaly/on-time-degradation".to_owned(),
@@ -18107,7 +19903,10 @@ mod tests {
         let closed = handle_close_payroll_monthly_settlement(
             &state,
             &payroll,
-            PayrollMonthlySettlementCloseRequest::default(),
+            PayrollMonthlySettlementCloseRequest {
+                issue_checklist: Some(vec![SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID.to_owned()]),
+                ..PayrollMonthlySettlementCloseRequest::default()
+            },
         )
         .expect("monthly close should succeed");
 
@@ -18159,6 +19958,7 @@ mod tests {
             &state,
             &payroll,
             PayrollMonthlySettlementCloseRequest {
+                issue_checklist: Some(vec![SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID.to_owned()]),
                 page_size: Some(201),
                 ..PayrollMonthlySettlementCloseRequest::default()
             },
@@ -18179,7 +19979,10 @@ mod tests {
         let closed = handle_close_payroll_monthly_settlement(
             &state,
             &payroll,
-            PayrollMonthlySettlementCloseRequest::default(),
+            PayrollMonthlySettlementCloseRequest {
+                issue_checklist: Some(vec![SETTLEMENT_RELEASE_SIGN_OFF_ISSUE_ID.to_owned()]),
+                ..PayrollMonthlySettlementCloseRequest::default()
+            },
         )
         .expect("monthly close should succeed");
         let cycle_key = closed.exchange_batch.cycle_key.clone();
@@ -18298,7 +20101,6 @@ mod tests {
             VendorApplicationReviewRequest {
                 decision: "INVALID".to_owned(),
                 comment: "short".to_owned(),
-                decided_on_epoch_day: now_epoch_day,
             },
         )
         .expect_err("http compliance review should reject unsupported decision");
@@ -18321,8 +20123,7 @@ mod tests {
             serde_json::json!({
                 "vendorId": "ven-discoverytst-a1",
                 "decision": "INVALID",
-                "comment": "short",
-                "decidedOnEpochDay": now_epoch_day
+                "comment": "short"
             }),
         )
         .expect_err("mcp compliance review should reject unsupported decision");
@@ -18468,6 +20269,7 @@ mod tests {
                 operation: "INVALID".to_owned(),
                 owner_actor_id: None,
                 note: None,
+                issue_checklist: None,
                 closure_note: None,
                 closure_evidence_refs: None,
                 ticket_reference: None,

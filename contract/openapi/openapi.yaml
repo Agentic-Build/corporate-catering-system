@@ -496,6 +496,15 @@ components:
           minLength: 1
           pattern: .*\S.*
           type: string
+        issueChecklist:
+          items:
+            maxLength: 7
+            minLength: 7
+            pattern: ^ISS-[0-9]{3}$
+            type: string
+          minItems: 1
+          type: array
+          uniqueItems: true
         note:
           maxLength: 280
           minLength: 1
@@ -510,6 +519,7 @@ components:
           type: string
       required:
       - operation
+      - issueChecklist
       - closureNote
       - closureEvidenceRefs
       type: object
@@ -2294,6 +2304,15 @@ components:
         cycleKey:
           pattern: ^[A-Za-z0-9._-]{1,64}$
           type: string
+        issueChecklist:
+          items:
+            maxLength: 7
+            minLength: 7
+            pattern: ^ISS-[0-9]{3}$
+            type: string
+          minItems: 1
+          type: array
+          uniqueItems: true
         page:
           minimum: 1
           type: integer
@@ -2305,6 +2324,8 @@ components:
           $ref: '#/components/schemas/PayrollSortField'
         sortOrder:
           $ref: '#/components/schemas/SortOrder'
+      required:
+      - issueChecklist
       type: object
     PayrollReconciliation:
       additionalProperties: false
@@ -3714,7 +3735,7 @@ paths:
       tags:
       - Admin
       x-analytics-governance:
-        defaultEnabled: false
+        defaultEnabled: true
         featureFlag: PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED
         model: PREAGGREGATED_VENDOR_PLANT_DAY
         phase: OPTIONAL_PHASE_2
@@ -4145,7 +4166,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PayrollMonthlySettlementCloseRequest'
-        required: false
+        required: true
       responses:
         '200':
           content:
@@ -4792,7 +4813,7 @@ paths:
       tags:
       - Employee
       x-reminder-governance:
-        defaultEnabled: false
+        defaultEnabled: true
         enforcePreferenceOptOut: true
         featureFlag: PRELAUNCH_RUSH_REMINDER_ENABLED
         phase: OPTIONAL_PHASE_2
@@ -4892,7 +4913,7 @@ paths:
       tags:
       - Vendor
       x-analytics-governance:
-        defaultEnabled: false
+        defaultEnabled: true
         featureFlag: PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED
         model: PREAGGREGATED_VENDOR_PLANT_DAY
         phase: OPTIONAL_PHASE_2

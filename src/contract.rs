@@ -634,7 +634,7 @@ pub fn canonical_openapi_spec() -> Value {
             "x-reminder-governance": {
               "phase": "OPTIONAL_PHASE_2",
               "featureFlag": "PRELAUNCH_RUSH_REMINDER_ENABLED",
-              "defaultEnabled": false,
+              "defaultEnabled": true,
               "enforcePreferenceOptOut": true
             },
             "security": [{ "corporateSsoBearer": [] }],
@@ -1099,7 +1099,7 @@ pub fn canonical_openapi_spec() -> Value {
             "x-analytics-governance": {
               "phase": "OPTIONAL_PHASE_2",
               "featureFlag": "PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED",
-              "defaultEnabled": false,
+              "defaultEnabled": true,
               "model": "PREAGGREGATED_VENDOR_PLANT_DAY",
               "sourceContracts": [
                 "vendor-fulfillment-board-exports",
@@ -1928,7 +1928,7 @@ pub fn canonical_openapi_spec() -> Value {
             "x-analytics-governance": {
               "phase": "OPTIONAL_PHASE_2",
               "featureFlag": "PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED",
-              "defaultEnabled": false,
+              "defaultEnabled": true,
               "model": "PREAGGREGATED_VENDOR_PLANT_DAY",
               "sourceContracts": [
                 "vendor-fulfillment-board-exports",
@@ -2036,7 +2036,7 @@ pub fn canonical_openapi_spec() -> Value {
             },
             "security": [{ "corporateSsoBearer": [] }],
             "requestBody": {
-              "required": false,
+              "required": true,
               "content": {
                 "application/json": {
                   "schema": { "$ref": "#/components/schemas/PayrollMonthlySettlementCloseRequest" }
@@ -4898,9 +4898,20 @@ pub fn canonical_openapi_spec() -> Value {
           },
           "AdminAnomalyAlertClosePatchRequest": {
             "type": "object",
-            "required": ["operation", "closureNote", "closureEvidenceRefs"],
+            "required": ["operation", "issueChecklist", "closureNote", "closureEvidenceRefs"],
             "properties": {
               "operation": { "type": "string", "enum": ["CLOSE"] },
+              "issueChecklist": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "pattern": "^ISS-[0-9]{3}$",
+                  "minLength": 7,
+                  "maxLength": 7
+                },
+                "uniqueItems": true
+              },
               "note": {
                 "type": "string",
                 "minLength": 1,
@@ -5143,10 +5154,22 @@ pub fn canonical_openapi_spec() -> Value {
           },
           "PayrollMonthlySettlementCloseRequest": {
             "type": "object",
+            "required": ["issueChecklist"],
             "properties": {
               "cycleKey": {
                 "type": "string",
                 "pattern": "^[A-Za-z0-9._-]{1,64}$"
+              },
+              "issueChecklist": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "pattern": "^ISS-[0-9]{3}$",
+                  "minLength": 7,
+                  "maxLength": 7
+                },
+                "uniqueItems": true
               },
               "page": { "type": "integer", "minimum": 1 },
               "pageSize": { "type": "integer", "minimum": 1, "maximum": 200 },

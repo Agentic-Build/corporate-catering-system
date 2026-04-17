@@ -473,7 +473,7 @@ export class AdminService {
      * @throws ApiError
      */
     public static closePayrollMonthlySettlement(
-        requestBody?: PayrollMonthlySettlementCloseRequest,
+        requestBody: PayrollMonthlySettlementCloseRequest,
     ): CancelablePromise<PayrollDeductionPage> {
         return __request(OpenAPI, {
             method: 'POST',

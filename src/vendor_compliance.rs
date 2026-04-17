@@ -669,8 +669,19 @@ impl VendorComplianceLifecycle {
         self.templates_by_category.get(category)
     }
 
+    pub fn templates(&self) -> Vec<&ComplianceDocumentTemplate> {
+        self.templates_by_category
+            .values()
+            .flat_map(|templates| templates.values())
+            .collect()
+    }
+
     pub fn vendor(&self, vendor_id: &VendorId) -> Option<&VendorComplianceRecord> {
         self.vendors.get(vendor_id)
+    }
+
+    pub fn vendors(&self) -> Vec<&VendorComplianceRecord> {
+        self.vendors.values().collect()
     }
 
     pub fn vendor_has_document_reference(

@@ -5,6 +5,7 @@
 export type AdminAnomalyAlertClosePatchRequest = {
     closureEvidenceRefs: Array<string>;
     closureNote: string;
+    issueChecklist: Array<string>;
     note?: string;
     operation: 'CLOSE';
     ticketReference?: string;

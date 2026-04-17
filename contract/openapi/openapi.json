@@ -661,6 +661,17 @@
             "pattern": ".*\\S.*",
             "type": "string"
           },
+          "issueChecklist": {
+            "items": {
+              "maxLength": 7,
+              "minLength": 7,
+              "pattern": "^ISS-[0-9]{3}$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
           "note": {
             "maxLength": 280,
             "minLength": 1,
@@ -680,6 +691,7 @@
         },
         "required": [
           "operation",
+          "issueChecklist",
           "closureNote",
           "closureEvidenceRefs"
         ],
@@ -3081,6 +3093,17 @@
             "pattern": "^[A-Za-z0-9._-]{1,64}$",
             "type": "string"
           },
+          "issueChecklist": {
+            "items": {
+              "maxLength": 7,
+              "minLength": 7,
+              "pattern": "^ISS-[0-9]{3}$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
           "page": {
             "minimum": 1,
             "type": "integer"
@@ -3097,6 +3120,9 @@
             "$ref": "#/components/schemas/SortOrder"
           }
         },
+        "required": [
+          "issueChecklist"
+        ],
         "type": "object"
       },
       "PayrollReconciliation": {
@@ -5004,7 +5030,7 @@
           "Admin"
         ],
         "x-analytics-governance": {
-          "defaultEnabled": false,
+          "defaultEnabled": true,
           "featureFlag": "PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED",
           "model": "PREAGGREGATED_VENDOR_PLANT_DAY",
           "phase": "OPTIONAL_PHASE_2",
@@ -5752,7 +5778,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "200": {
@@ -6849,7 +6875,7 @@
           "Employee"
         ],
         "x-reminder-governance": {
-          "defaultEnabled": false,
+          "defaultEnabled": true,
           "enforcePreferenceOptOut": true,
           "featureFlag": "PRELAUNCH_RUSH_REMINDER_ENABLED",
           "phase": "OPTIONAL_PHASE_2"
@@ -7023,7 +7049,7 @@
           "Vendor"
         ],
         "x-analytics-governance": {
-          "defaultEnabled": false,
+          "defaultEnabled": true,
           "featureFlag": "PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED",
           "model": "PREAGGREGATED_VENDOR_PLANT_DAY",
           "phase": "OPTIONAL_PHASE_2",

@@ -528,6 +528,10 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
             "/api/v1/employee/orders/{orderId}/pickup-verifications",
             "POST",
         ),
+        "getEmployeePickupVerificationQr" => (
+            "/api/v1/employee/orders/{orderId}/pickup-verification-qr",
+            "GET",
+        ),
         "getEmployeeOrderPayrollLedger" => {
             ("/api/v1/employee/orders/{orderId}/payroll-ledger", "GET")
         }
@@ -546,7 +550,19 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
         "getVendorFulfillmentExportBatch" => {
             ("/api/v1/vendor/fulfillment-batches/{batchId}", "GET")
         }
+        "createVendorObjectStorageUploadPlan" => (
+            "/api/v1/vendor/object-storage/upload-plans",
+            "POST",
+        ),
+        "createVendorObjectStorageAccessLink" => (
+            "/api/v1/vendor/object-storage/access-links",
+            "POST",
+        ),
         "listAdminVendors" => ("/api/v1/admin/vendors", "GET"),
+        "createAdminObjectStorageAccessLink" => (
+            "/api/v1/admin/object-storage/access-links",
+            "POST",
+        ),
         "listVendorPlantDeliveryMappings" => {
             ("/api/v1/admin/vendor-plant-delivery-mappings", "GET")
         }
@@ -577,6 +593,17 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
         "reviewVendorApplication" => ("/api/v1/admin/vendors/{vendorId}/reviews", "POST"),
         "runVendorComplianceLifecycle" => ("/api/v1/admin/compliance/lifecycle/executions", "POST"),
         "updateAdminPayrollDispute" => ("/api/v1/admin/payroll/disputes/{disputeId}", "PATCH"),
+        "closePayrollMonthlySettlement" => {
+            ("/api/v1/admin/payroll/monthly-settlements/close", "POST")
+        }
+        "lockPayrollSettlementCycle" => (
+            "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/lock",
+            "POST",
+        ),
+        "unlockPayrollSettlementCycle" => (
+            "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/unlock",
+            "POST",
+        ),
         "purgePayrollData" => ("/api/v1/admin/payroll/retention-purge", "POST"),
         "exportPayrollDeductions" => ("/api/v1/integrations/payroll/deductions", "GET"),
         "syncPayrollHrApiAdjunct" => (

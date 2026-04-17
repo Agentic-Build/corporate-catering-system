@@ -6,6 +6,7 @@ import type { PayrollSortField } from './PayrollSortField';
 import type { SortOrder } from './SortOrder';
 export type PayrollMonthlySettlementCloseRequest = {
     cycleKey?: string;
+    issueChecklist: Array<string>;
     page?: number;
     pageSize?: number;
     sortBy?: PayrollSortField;

@@ -428,6 +428,13 @@ impl VendorPlantDeliveryPolicy {
             .unwrap_or_default()
     }
 
+    pub fn mappings(&self) -> Vec<&VendorPlantDeliveryMapping> {
+        self.mappings_by_vendor
+            .values()
+            .flat_map(|mappings| mappings.values().map(|mapping| &mapping.mapping))
+            .collect()
+    }
+
     pub fn audit_log(&self) -> &[DeliveryMappingAuditEntry] {
         &self.audit_log
     }

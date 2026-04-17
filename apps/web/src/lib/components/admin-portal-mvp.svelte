@@ -806,8 +806,17 @@
     settlementClosing = true;
     settlementError = null;
     try {
+      if (
+        !Number.isInteger(settlementCloseDraft.pageSize) ||
+        settlementCloseDraft.pageSize < 1 ||
+        settlementCloseDraft.pageSize > 200
+      ) {
+        pushNotification("error", "pageSize 必須是 1 到 200 的整數。");
+        return;
+      }
       const page = await apiClient.admin.closePayrollMonthlySettlement({
         cycleKey: normalizeOptional(settlementCloseDraft.cycleKey) ?? undefined,
+        issueChecklist: checklist,
         page: settlementCloseDraft.page,
         pageSize: settlementCloseDraft.pageSize,
         sortBy: settlementCloseDraft.sortBy,
@@ -910,8 +919,8 @@
         return;
       }
       const refundAmountMinor = parseOptionalNumber(disputeDraft.refundAmountMinor);
-      if (refundAmountMinor !== undefined && (!Number.isInteger(refundAmountMinor) || refundAmountMinor < 0)) {
-        pushNotification("error", "refundAmountMinor 必須是大於等於 0 的整數。");
+      if (refundAmountMinor !== undefined && (!Number.isInteger(refundAmountMinor) || refundAmountMinor < 1)) {
+        pushNotification("error", "refundAmountMinor 必須是大於等於 1 的整數。");
         return;
       }
       payload = {
@@ -1016,6 +1025,7 @@
       }
       payload = {
         operation: "CLOSE",
+        issueChecklist: checklist,
         note: normalizeOptional(anomalyPatchDraft.note) ?? undefined,
         closureNote,
         closureEvidenceRefs: evidenceRefs,
@@ -1834,7 +1844,7 @@
             </label>
             <label class="grid gap-1 text-xs text-slate-600">
               pageSize
-              <input type="number" bind:value={settlementCloseDraft.pageSize} min="1" max="500" class="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-800" />
+              <input type="number" bind:value={settlementCloseDraft.pageSize} min="1" max="200" class="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-800" />
             </label>
             <label class="grid gap-1 text-xs text-slate-600">
               sortBy
@@ -1981,7 +1991,7 @@
               {#if disputeDraft.operation === "RESOLVE_REFUND"}
                 <label class="grid gap-1 text-xs text-slate-600 md:col-span-2">
                   refundAmountMinor（選填）
-                  <input bind:value={disputeDraft.refundAmountMinor} placeholder="0" class="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-800" />
+                  <input bind:value={disputeDraft.refundAmountMinor} placeholder="1" class="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-800" />
                 </label>
               {/if}
               <label class="grid gap-1 text-xs text-slate-600 md:col-span-2">
