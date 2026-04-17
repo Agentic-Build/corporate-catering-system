@@ -6,8 +6,11 @@ import type { ActorId } from './ActorId';
 import type { PlantId } from './PlantId';
 export type EmployeeRushReminderPreferences = {
     demandSpikeEnabled: boolean;
+    emailEnabled: boolean;
     employeeActorId: ActorId;
+    inAppEnabled: boolean;
     plantId: PlantId;
     preorderOpenEnabled: boolean;
+    webPushEnabled: boolean;
 };
 

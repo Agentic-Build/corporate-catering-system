@@ -30,10 +30,87 @@ impl fmt::Display for RushReminderScenario {
     }
 }
 
+const RUSH_REMINDER_CHANNELS: [RushReminderChannel; 3] = [
+    RushReminderChannel::InApp,
+    RushReminderChannel::Email,
+    RushReminderChannel::WebPush,
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RushReminderChannel {
+    InApp,
+    Email,
+    WebPush,
+}
+
+impl RushReminderChannel {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InApp => "IN_APP",
+            Self::Email => "EMAIL",
+            Self::WebPush => "WEB_PUSH",
+        }
+    }
+}
+
+impl fmt::Display for RushReminderChannel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RushReminderChannelPreferences {
+    in_app_enabled: bool,
+    email_enabled: bool,
+    web_push_enabled: bool,
+}
+
+impl RushReminderChannelPreferences {
+    pub const fn new(in_app_enabled: bool, email_enabled: bool, web_push_enabled: bool) -> Self {
+        Self {
+            in_app_enabled,
+            email_enabled,
+            web_push_enabled,
+        }
+    }
+
+    pub const fn in_app_enabled(self) -> bool {
+        self.in_app_enabled
+    }
+
+    pub const fn email_enabled(self) -> bool {
+        self.email_enabled
+    }
+
+    pub const fn web_push_enabled(self) -> bool {
+        self.web_push_enabled
+    }
+
+    pub const fn allows(self, channel: RushReminderChannel) -> bool {
+        match channel {
+            RushReminderChannel::InApp => self.in_app_enabled,
+            RushReminderChannel::Email => self.email_enabled,
+            RushReminderChannel::WebPush => self.web_push_enabled,
+        }
+    }
+}
+
+impl Default for RushReminderChannelPreferences {
+    fn default() -> Self {
+        Self {
+            in_app_enabled: true,
+            email_enabled: false,
+            web_push_enabled: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RushReminderPreferences {
     preorder_open_enabled: bool,
     demand_spike_enabled: bool,
+    channels: RushReminderChannelPreferences,
 }
 
 impl RushReminderPreferences {
@@ -41,6 +118,23 @@ impl RushReminderPreferences {
         Self {
             preorder_open_enabled,
             demand_spike_enabled,
+            channels: RushReminderChannelPreferences {
+                in_app_enabled: true,
+                email_enabled: false,
+                web_push_enabled: false,
+            },
+        }
+    }
+
+    pub const fn with_channels(
+        preorder_open_enabled: bool,
+        demand_spike_enabled: bool,
+        channels: RushReminderChannelPreferences,
+    ) -> Self {
+        Self {
+            preorder_open_enabled,
+            demand_spike_enabled,
+            channels,
         }
     }
 
@@ -52,11 +146,31 @@ impl RushReminderPreferences {
         self.demand_spike_enabled
     }
 
+    pub const fn channel_preferences(self) -> RushReminderChannelPreferences {
+        self.channels
+    }
+
+    pub const fn in_app_enabled(self) -> bool {
+        self.channels.in_app_enabled()
+    }
+
+    pub const fn email_enabled(self) -> bool {
+        self.channels.email_enabled()
+    }
+
+    pub const fn web_push_enabled(self) -> bool {
+        self.channels.web_push_enabled()
+    }
+
     pub const fn allows(self, scenario: RushReminderScenario) -> bool {
         match scenario {
             RushReminderScenario::PreorderOpen => self.preorder_open_enabled,
             RushReminderScenario::DemandSpike => self.demand_spike_enabled,
         }
+    }
+
+    pub const fn allows_channel(self, channel: RushReminderChannel) -> bool {
+        self.channels.allows(channel)
     }
 }
 
@@ -65,6 +179,104 @@ impl Default for RushReminderPreferences {
         Self {
             preorder_open_enabled: true,
             demand_spike_enabled: true,
+            channels: RushReminderChannelPreferences::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RushReminderChannelFeatureFlags {
+    email_enabled: bool,
+    web_push_enabled: bool,
+}
+
+impl RushReminderChannelFeatureFlags {
+    pub const fn new(email_enabled: bool, web_push_enabled: bool) -> Self {
+        Self {
+            email_enabled,
+            web_push_enabled,
+        }
+    }
+
+    pub const fn email_enabled(self) -> bool {
+        self.email_enabled
+    }
+
+    pub const fn web_push_enabled(self) -> bool {
+        self.web_push_enabled
+    }
+
+    pub const fn supports(self, channel: RushReminderChannel) -> bool {
+        match channel {
+            RushReminderChannel::InApp => true,
+            RushReminderChannel::Email => self.email_enabled,
+            RushReminderChannel::WebPush => self.web_push_enabled,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RushReminderRetryPolicy {
+    in_app_max_attempts: u16,
+    email_max_attempts: u16,
+    web_push_max_attempts: u16,
+}
+
+impl RushReminderRetryPolicy {
+    pub fn new(
+        in_app_max_attempts: u16,
+        email_max_attempts: u16,
+        web_push_max_attempts: u16,
+    ) -> Result<Self, RushReminderError> {
+        if in_app_max_attempts == 0 {
+            return Err(RushReminderError::InvalidPolicy(
+                "in-app retry attempts must be greater than zero".to_owned(),
+            ));
+        }
+        if email_max_attempts == 0 {
+            return Err(RushReminderError::InvalidPolicy(
+                "email retry attempts must be greater than zero".to_owned(),
+            ));
+        }
+        if web_push_max_attempts == 0 {
+            return Err(RushReminderError::InvalidPolicy(
+                "web-push retry attempts must be greater than zero".to_owned(),
+            ));
+        }
+        Ok(Self {
+            in_app_max_attempts,
+            email_max_attempts,
+            web_push_max_attempts,
+        })
+    }
+
+    pub const fn in_app_max_attempts(self) -> u16 {
+        self.in_app_max_attempts
+    }
+
+    pub const fn email_max_attempts(self) -> u16 {
+        self.email_max_attempts
+    }
+
+    pub const fn web_push_max_attempts(self) -> u16 {
+        self.web_push_max_attempts
+    }
+
+    pub const fn max_attempts_for(self, channel: RushReminderChannel) -> u16 {
+        match channel {
+            RushReminderChannel::InApp => self.in_app_max_attempts,
+            RushReminderChannel::Email => self.email_max_attempts,
+            RushReminderChannel::WebPush => self.web_push_max_attempts,
+        }
+    }
+}
+
+impl Default for RushReminderRetryPolicy {
+    fn default() -> Self {
+        Self {
+            in_app_max_attempts: 1,
+            email_max_attempts: 3,
+            web_push_max_attempts: 3,
         }
     }
 }
@@ -209,9 +421,38 @@ impl RushReminderNotification {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RushReminderDeliveryRecord {
+    notification: RushReminderNotification,
+    channel: RushReminderChannel,
+    delivered_at: TaipeiBusinessMoment,
+    attempts: u16,
+}
+
+impl RushReminderDeliveryRecord {
+    pub fn notification(&self) -> &RushReminderNotification {
+        &self.notification
+    }
+
+    pub fn channel(&self) -> RushReminderChannel {
+        self.channel
+    }
+
+    pub fn delivered_at(&self) -> TaipeiBusinessMoment {
+        self.delivered_at
+    }
+
+    pub fn attempts(&self) -> u16 {
+        self.attempts
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RushReminderDeliveryFailure {
     notification: RushReminderNotification,
+    channel: RushReminderChannel,
     attempted_at: TaipeiBusinessMoment,
+    attempt: u16,
+    exhausted: bool,
     message: String,
 }
 
@@ -220,8 +461,20 @@ impl RushReminderDeliveryFailure {
         &self.notification
     }
 
+    pub fn channel(&self) -> RushReminderChannel {
+        self.channel
+    }
+
     pub fn attempted_at(&self) -> TaipeiBusinessMoment {
         self.attempted_at
+    }
+
+    pub fn attempt(&self) -> u16 {
+        self.attempt
+    }
+
+    pub fn exhausted(&self) -> bool {
+        self.exhausted
     }
 
     pub fn message(&self) -> &str {
@@ -238,13 +491,68 @@ pub struct RushReminderScheduleReport {
     pub scheduled: Vec<RushReminderNotification>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RushReminderChannelDispatchStat {
+    pub channel: RushReminderChannel,
+    pub attempted_count: usize,
+    pub delivered_count: usize,
+    pub failed_count: usize,
+    pub skipped_count: usize,
+    pub retry_count: usize,
+}
+
+impl RushReminderChannelDispatchStat {
+    fn new(channel: RushReminderChannel) -> Self {
+        Self {
+            channel,
+            attempted_count: 0,
+            delivered_count: 0,
+            failed_count: 0,
+            skipped_count: 0,
+            retry_count: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RushReminderDispatchReport {
     pub delivered_count: usize,
     pub failed_count: usize,
     pub skipped_count: usize,
-    pub delivered: Vec<RushReminderNotification>,
+    pub delivered: Vec<RushReminderDeliveryRecord>,
     pub failures: Vec<RushReminderDeliveryFailure>,
+    pub channel_stats: Vec<RushReminderChannelDispatchStat>,
+}
+
+impl Default for RushReminderDispatchReport {
+    fn default() -> Self {
+        Self {
+            delivered_count: 0,
+            failed_count: 0,
+            skipped_count: 0,
+            delivered: Vec::new(),
+            failures: Vec::new(),
+            channel_stats: RUSH_REMINDER_CHANNELS
+                .iter()
+                .copied()
+                .map(RushReminderChannelDispatchStat::new)
+                .collect(),
+        }
+    }
+}
+
+impl RushReminderDispatchReport {
+    fn channel_stat_mut(
+        &mut self,
+        channel: RushReminderChannel,
+    ) -> &mut RushReminderChannelDispatchStat {
+        let index = match channel {
+            RushReminderChannel::InApp => 0,
+            RushReminderChannel::Email => 1,
+            RushReminderChannel::WebPush => 2,
+        };
+        &mut self.channel_stats[index]
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -275,6 +583,7 @@ impl std::error::Error for RushReminderDeliveryError {}
 pub trait RushReminderDeliveryGateway: Send + Sync + fmt::Debug {
     fn deliver(
         &self,
+        channel: RushReminderChannel,
         notification: &RushReminderNotification,
     ) -> Result<(), RushReminderDeliveryError>;
 }
@@ -285,6 +594,7 @@ pub struct NoopRushReminderDeliveryGateway;
 impl RushReminderDeliveryGateway for NoopRushReminderDeliveryGateway {
     fn deliver(
         &self,
+        _channel: RushReminderChannel,
         _notification: &RushReminderNotification,
     ) -> Result<(), RushReminderDeliveryError> {
         Ok(())
@@ -393,30 +703,93 @@ impl RushReminderWorkflow {
     pub fn dispatch_pending(
         &self,
         runtime_enabled: bool,
+        channel_feature_flags: RushReminderChannelFeatureFlags,
+        retry_policy: RushReminderRetryPolicy,
         delivery_gateway: &(dyn RushReminderDeliveryGateway + Send + Sync),
         at: TaipeiBusinessMoment,
     ) -> Result<RushReminderDispatchReport, RushReminderError> {
         let mut report = RushReminderDispatchReport::default();
 
-        let pending = {
+        let (pending, preferences_by_actor, mut handled_registry) = {
             let mut state = lock_state(&self.state)?;
             if !runtime_enabled {
                 report.skipped_count = state.pending.len();
                 return Ok(report);
             }
-            std::mem::take(&mut state.pending)
+            (
+                std::mem::take(&mut state.pending),
+                state.preferences_by_actor.clone(),
+                state.handled_registry.clone(),
+            )
         };
 
         let mut delivered = Vec::new();
         let mut failures = Vec::new();
         for notification in pending {
-            match delivery_gateway.deliver(&notification) {
-                Ok(()) => delivered.push(notification),
-                Err(error) => failures.push(RushReminderDeliveryFailure {
-                    notification,
-                    attempted_at: at,
-                    message: error.to_string(),
-                }),
+            let preferences = preferences_by_actor
+                .get(notification.actor_id())
+                .copied()
+                .unwrap_or_default();
+            for channel in RUSH_REMINDER_CHANNELS {
+                if !channel_feature_flags.supports(channel) || !preferences.allows_channel(channel)
+                {
+                    report.skipped_count = report.skipped_count.saturating_add(1);
+                    let channel_stat = report.channel_stat_mut(channel);
+                    channel_stat.skipped_count = channel_stat.skipped_count.saturating_add(1);
+                    continue;
+                }
+
+                let delivery_key = reminder_delivery_key(&notification, channel);
+                if handled_registry.contains(&delivery_key) {
+                    report.skipped_count = report.skipped_count.saturating_add(1);
+                    let channel_stat = report.channel_stat_mut(channel);
+                    channel_stat.skipped_count = channel_stat.skipped_count.saturating_add(1);
+                    continue;
+                }
+
+                let max_attempts = retry_policy.max_attempts_for(channel);
+                let mut attempt = 0u16;
+                while attempt < max_attempts {
+                    attempt = attempt.saturating_add(1);
+                    let channel_stat = report.channel_stat_mut(channel);
+                    channel_stat.attempted_count = channel_stat.attempted_count.saturating_add(1);
+                    if attempt > 1 {
+                        channel_stat.retry_count = channel_stat.retry_count.saturating_add(1);
+                    }
+
+                    match delivery_gateway.deliver(channel, &notification) {
+                        Ok(()) => {
+                            delivered.push(RushReminderDeliveryRecord {
+                                notification: notification.clone(),
+                                channel,
+                                delivered_at: at,
+                                attempts: attempt,
+                            });
+                            let channel_stat = report.channel_stat_mut(channel);
+                            channel_stat.delivered_count =
+                                channel_stat.delivered_count.saturating_add(1);
+                            handled_registry.insert(delivery_key.clone());
+                            break;
+                        }
+                        Err(error) => {
+                            let exhausted = attempt >= max_attempts;
+                            failures.push(RushReminderDeliveryFailure {
+                                notification: notification.clone(),
+                                channel,
+                                attempted_at: at,
+                                attempt,
+                                exhausted,
+                                message: error.to_string(),
+                            });
+                            let channel_stat = report.channel_stat_mut(channel);
+                            channel_stat.failed_count = channel_stat.failed_count.saturating_add(1);
+                            if exhausted {
+                                handled_registry.insert(delivery_key.clone());
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -429,6 +802,7 @@ impl RushReminderWorkflow {
             let mut state = lock_state(&self.state)?;
             state.delivered.extend(report.delivered.iter().cloned());
             state.failures.extend(report.failures.iter().cloned());
+            state.handled_registry.extend(handled_registry);
         }
 
         Ok(report)
@@ -445,6 +819,17 @@ impl RushReminderWorkflow {
         &self,
     ) -> Result<Vec<RushReminderNotification>, RushReminderError> {
         let state = lock_state(&self.state)?;
+        Ok(state
+            .delivered
+            .iter()
+            .map(|delivery| delivery.notification.clone())
+            .collect())
+    }
+
+    pub fn delivered_channel_records(
+        &self,
+    ) -> Result<Vec<RushReminderDeliveryRecord>, RushReminderError> {
+        let state = lock_state(&self.state)?;
         Ok(state.delivered.clone())
     }
 
@@ -459,8 +844,9 @@ struct RushReminderState {
     preferences_by_actor: HashMap<ActorId, RushReminderPreferences>,
     throttle_registry: HashMap<ReminderThrottleKey, TaipeiBusinessMoment>,
     pending: Vec<RushReminderNotification>,
-    delivered: Vec<RushReminderNotification>,
+    delivered: Vec<RushReminderDeliveryRecord>,
     failures: Vec<RushReminderDeliveryFailure>,
+    handled_registry: HashSet<ReminderDeliveryKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -469,6 +855,15 @@ struct ReminderThrottleKey {
     scenario: RushReminderScenario,
     menu_item_id: MenuItemId,
     delivery_epoch_day: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ReminderDeliveryKey {
+    actor_id: ActorId,
+    scenario: RushReminderScenario,
+    menu_item_id: MenuItemId,
+    delivery_epoch_day: i32,
+    channel: RushReminderChannel,
 }
 
 fn should_schedule_preorder_open(
@@ -546,6 +941,19 @@ fn schedule_if_allowed(
 
     report.scheduled_count = report.scheduled_count.saturating_add(1);
     report.scheduled.push(notification);
+}
+
+fn reminder_delivery_key(
+    notification: &RushReminderNotification,
+    channel: RushReminderChannel,
+) -> ReminderDeliveryKey {
+    ReminderDeliveryKey {
+        actor_id: notification.actor_id().clone(),
+        scenario: notification.scenario(),
+        menu_item_id: notification.menu_item_id().clone(),
+        delivery_epoch_day: notification.delivery_epoch_day(),
+        channel,
+    }
 }
 
 fn minutes_between(previous: TaipeiBusinessMoment, current: TaipeiBusinessMoment) -> i64 {

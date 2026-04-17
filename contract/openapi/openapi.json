@@ -1753,13 +1753,22 @@
           "demandSpikeEnabled": {
             "type": "boolean"
           },
+          "emailEnabled": {
+            "type": "boolean"
+          },
           "employeeActorId": {
             "$ref": "#/components/schemas/ActorId"
+          },
+          "inAppEnabled": {
+            "type": "boolean"
           },
           "plantId": {
             "$ref": "#/components/schemas/PlantId"
           },
           "preorderOpenEnabled": {
+            "type": "boolean"
+          },
+          "webPushEnabled": {
             "type": "boolean"
           }
         },
@@ -1767,7 +1776,10 @@
           "employeeActorId",
           "plantId",
           "preorderOpenEnabled",
-          "demandSpikeEnabled"
+          "demandSpikeEnabled",
+          "inAppEnabled",
+          "emailEnabled",
+          "webPushEnabled"
         ],
         "type": "object"
       },
@@ -1777,17 +1789,29 @@
           "demandSpikeEnabled": {
             "type": "boolean"
           },
+          "emailEnabled": {
+            "type": "boolean"
+          },
+          "inAppEnabled": {
+            "type": "boolean"
+          },
           "plantId": {
             "$ref": "#/components/schemas/PlantId"
           },
           "preorderOpenEnabled": {
+            "type": "boolean"
+          },
+          "webPushEnabled": {
             "type": "boolean"
           }
         },
         "required": [
           "plantId",
           "preorderOpenEnabled",
-          "demandSpikeEnabled"
+          "demandSpikeEnabled",
+          "inAppEnabled",
+          "emailEnabled",
+          "webPushEnabled"
         ],
         "type": "object"
       },
@@ -6878,6 +6902,18 @@
           "defaultEnabled": false,
           "enforcePreferenceOptOut": true,
           "featureFlag": "PRELAUNCH_RUSH_REMINDER_ENABLED",
+          "optionalChannels": [
+            {
+              "channel": "EMAIL",
+              "defaultEnabled": false,
+              "featureFlag": "PRELAUNCH_RUSH_REMINDER_EMAIL_CHANNEL_ENABLED"
+            },
+            {
+              "channel": "WEB_PUSH",
+              "defaultEnabled": false,
+              "featureFlag": "PRELAUNCH_RUSH_REMINDER_WEB_PUSH_CHANNEL_ENABLED"
+            }
+          ],
           "phase": "OPTIONAL_PHASE_2"
         }
       }

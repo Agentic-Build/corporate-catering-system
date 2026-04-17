@@ -5,7 +5,10 @@
 import type { PlantId } from './PlantId';
 export type EmployeeRushReminderPreferencesUpsertRequest = {
     demandSpikeEnabled: boolean;
+    emailEnabled: boolean;
+    inAppEnabled: boolean;
     plantId: PlantId;
     preorderOpenEnabled: boolean;
+    webPushEnabled: boolean;
 };
 

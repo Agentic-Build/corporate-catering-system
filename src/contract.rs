@@ -635,7 +635,19 @@ pub fn canonical_openapi_spec() -> Value {
               "phase": "OPTIONAL_PHASE_2",
               "featureFlag": "PRELAUNCH_RUSH_REMINDER_ENABLED",
               "defaultEnabled": false,
-              "enforcePreferenceOptOut": true
+              "enforcePreferenceOptOut": true,
+              "optionalChannels": [
+                {
+                  "channel": "EMAIL",
+                  "featureFlag": "PRELAUNCH_RUSH_REMINDER_EMAIL_CHANNEL_ENABLED",
+                  "defaultEnabled": false
+                },
+                {
+                  "channel": "WEB_PUSH",
+                  "featureFlag": "PRELAUNCH_RUSH_REMINDER_WEB_PUSH_CHANNEL_ENABLED",
+                  "defaultEnabled": false
+                }
+              ]
             },
             "security": [{ "corporateSsoBearer": [] }],
             "requestBody": {
@@ -3503,11 +3515,21 @@ pub fn canonical_openapi_spec() -> Value {
           },
           "EmployeeRushReminderPreferencesUpsertRequest": {
             "type": "object",
-            "required": ["plantId", "preorderOpenEnabled", "demandSpikeEnabled"],
+            "required": [
+              "plantId",
+              "preorderOpenEnabled",
+              "demandSpikeEnabled",
+              "inAppEnabled",
+              "emailEnabled",
+              "webPushEnabled"
+            ],
             "properties": {
               "plantId": { "$ref": "#/components/schemas/PlantId" },
               "preorderOpenEnabled": { "type": "boolean" },
-              "demandSpikeEnabled": { "type": "boolean" }
+              "demandSpikeEnabled": { "type": "boolean" },
+              "inAppEnabled": { "type": "boolean" },
+              "emailEnabled": { "type": "boolean" },
+              "webPushEnabled": { "type": "boolean" }
             },
             "additionalProperties": false
           },
@@ -3517,13 +3539,19 @@ pub fn canonical_openapi_spec() -> Value {
               "employeeActorId",
               "plantId",
               "preorderOpenEnabled",
-              "demandSpikeEnabled"
+              "demandSpikeEnabled",
+              "inAppEnabled",
+              "emailEnabled",
+              "webPushEnabled"
             ],
             "properties": {
               "employeeActorId": { "$ref": "#/components/schemas/ActorId" },
               "plantId": { "$ref": "#/components/schemas/PlantId" },
               "preorderOpenEnabled": { "type": "boolean" },
-              "demandSpikeEnabled": { "type": "boolean" }
+              "demandSpikeEnabled": { "type": "boolean" },
+              "inAppEnabled": { "type": "boolean" },
+              "emailEnabled": { "type": "boolean" },
+              "webPushEnabled": { "type": "boolean" }
             },
             "additionalProperties": false
           },

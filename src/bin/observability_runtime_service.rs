@@ -81,8 +81,9 @@ use corporate_catering_system::pickup_totp::{
     taipei_step_from_unix_seconds, PickupTotpVerificationError, PickupTotpVerifier, VerifiedTotp,
 };
 use corporate_catering_system::rush_reminder::{
-    NoopRushReminderDeliveryGateway, RushReminderDeliveryGateway, RushReminderPolicy,
-    RushReminderPreferences, RushReminderWorkflow,
+    NoopRushReminderDeliveryGateway, RushReminderChannelFeatureFlags,
+    RushReminderChannelPreferences, RushReminderDeliveryGateway, RushReminderPolicy,
+    RushReminderPreferences, RushReminderRetryPolicy, RushReminderWorkflow,
 };
 use corporate_catering_system::transport::http::{
     HttpAuditInvestigationExecutionGateway, HttpEmployeeDiscoveryExecutionGateway,
@@ -154,6 +155,10 @@ const PRELAUNCH_RECOMMENDATION_ENGINE_ENABLED_ENV: &str = "PRELAUNCH_RECOMMENDAT
 const PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED_ENV: &str =
     "PRELAUNCH_ADVANCED_ANALYTICS_DASHBOARD_ENABLED";
 const PRELAUNCH_RUSH_REMINDER_ENABLED_ENV: &str = "PRELAUNCH_RUSH_REMINDER_ENABLED";
+const PRELAUNCH_RUSH_REMINDER_EMAIL_CHANNEL_ENABLED_ENV: &str =
+    "PRELAUNCH_RUSH_REMINDER_EMAIL_CHANNEL_ENABLED";
+const PRELAUNCH_RUSH_REMINDER_WEB_PUSH_CHANNEL_ENABLED_ENV: &str =
+    "PRELAUNCH_RUSH_REMINDER_WEB_PUSH_CHANNEL_ENABLED";
 const PRELAUNCH_RUSH_PREORDER_MIN_LEAD_DAYS_ENV: &str = "PRELAUNCH_RUSH_PREORDER_MIN_LEAD_DAYS";
 const PRELAUNCH_RUSH_PREORDER_MAX_LEAD_DAYS_ENV: &str = "PRELAUNCH_RUSH_PREORDER_MAX_LEAD_DAYS";
 const PRELAUNCH_RUSH_PREORDER_THROTTLE_MINUTES_ENV: &str =
@@ -162,6 +167,12 @@ const PRELAUNCH_RUSH_DEMAND_SPIKE_REMAINING_THRESHOLD_ENV: &str =
     "PRELAUNCH_RUSH_DEMAND_SPIKE_REMAINING_THRESHOLD";
 const PRELAUNCH_RUSH_DEMAND_SPIKE_THROTTLE_MINUTES_ENV: &str =
     "PRELAUNCH_RUSH_DEMAND_SPIKE_THROTTLE_MINUTES";
+const PRELAUNCH_RUSH_IN_APP_MAX_DELIVERY_ATTEMPTS_ENV: &str =
+    "PRELAUNCH_RUSH_IN_APP_MAX_DELIVERY_ATTEMPTS";
+const PRELAUNCH_RUSH_EMAIL_MAX_DELIVERY_ATTEMPTS_ENV: &str =
+    "PRELAUNCH_RUSH_EMAIL_MAX_DELIVERY_ATTEMPTS";
+const PRELAUNCH_RUSH_WEB_PUSH_MAX_DELIVERY_ATTEMPTS_ENV: &str =
+    "PRELAUNCH_RUSH_WEB_PUSH_MAX_DELIVERY_ATTEMPTS";
 const DEFAULT_RUSH_PREORDER_OPEN_MIN_LEAD_DAYS: u16 = 1;
 const DEFAULT_RUSH_PREORDER_OPEN_MAX_LEAD_DAYS: u16 = 7;
 const DEFAULT_RUSH_PREORDER_OPEN_THROTTLE_MINUTES: u16 = 180;
@@ -327,6 +338,8 @@ struct AppState {
     recommendation_engine_runtime_enabled: bool,
     advanced_analytics_dashboard_runtime_enabled: bool,
     rush_reminder_runtime_enabled: bool,
+    rush_reminder_channel_feature_flags: RushReminderChannelFeatureFlags,
+    rush_reminder_retry_policy: RushReminderRetryPolicy,
     menu_recommendation_ranker: MenuRecommendationRanker,
     rush_reminder_workflow: RushReminderWorkflow,
     rush_reminder_delivery_gateway: ReminderDeliveryGateway,
@@ -758,6 +771,9 @@ struct EmployeeRushReminderPreferencesUpsertRequest {
     plant_id: String,
     preorder_open_enabled: bool,
     demand_spike_enabled: bool,
+    in_app_enabled: bool,
+    email_enabled: bool,
+    web_push_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -767,6 +783,9 @@ struct EmployeeRushReminderPreferencesPayload {
     plant_id: String,
     preorder_open_enabled: bool,
     demand_spike_enabled: bool,
+    in_app_enabled: bool,
+    email_enabled: bool,
+    web_push_enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1989,6 +2008,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     let rush_reminder_runtime_enabled =
         parse_bool_env_default_false(PRELAUNCH_RUSH_REMINDER_ENABLED_ENV)?;
     let rush_reminder_policy = resolve_rush_reminder_policy(rush_reminder_runtime_enabled)?;
+    let rush_reminder_channel_feature_flags = if rush_reminder_runtime_enabled {
+        parse_rush_reminder_channel_feature_flags_from_env()?
+    } else {
+        RushReminderChannelFeatureFlags::default()
+    };
+    let rush_reminder_retry_policy = if rush_reminder_runtime_enabled {
+        parse_rush_reminder_retry_policy_from_env()?
+    } else {
+        RushReminderRetryPolicy::default()
+    };
     let object_storage_upload_pipeline = Arc::new(
         parse_object_storage_upload_pipeline_from_env()
             .map_err(|error| format!("object storage configuration is invalid: {error}"))?,
@@ -2117,6 +2146,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         recommendation_engine_runtime_enabled,
         advanced_analytics_dashboard_runtime_enabled,
         rush_reminder_runtime_enabled,
+        rush_reminder_channel_feature_flags,
+        rush_reminder_retry_policy,
         rush_reminder_policy,
         object_storage_upload_pipeline,
         payroll_retention_policy,
@@ -4982,6 +5013,40 @@ fn resolve_rush_reminder_policy(runtime_enabled: bool) -> Result<RushReminderPol
     }
 }
 
+fn parse_rush_reminder_channel_feature_flags_from_env(
+) -> Result<RushReminderChannelFeatureFlags, String> {
+    let email_enabled =
+        parse_bool_env_default_false(PRELAUNCH_RUSH_REMINDER_EMAIL_CHANNEL_ENABLED_ENV)?;
+    let web_push_enabled =
+        parse_bool_env_default_false(PRELAUNCH_RUSH_REMINDER_WEB_PUSH_CHANNEL_ENABLED_ENV)?;
+    Ok(RushReminderChannelFeatureFlags::new(
+        email_enabled,
+        web_push_enabled,
+    ))
+}
+
+fn parse_rush_reminder_retry_policy_from_env() -> Result<RushReminderRetryPolicy, String> {
+    let defaults = RushReminderRetryPolicy::default();
+    let in_app_max_attempts = parse_positive_u16_env(
+        PRELAUNCH_RUSH_IN_APP_MAX_DELIVERY_ATTEMPTS_ENV,
+        defaults.in_app_max_attempts(),
+    )?;
+    let email_max_attempts = parse_positive_u16_env(
+        PRELAUNCH_RUSH_EMAIL_MAX_DELIVERY_ATTEMPTS_ENV,
+        defaults.email_max_attempts(),
+    )?;
+    let web_push_max_attempts = parse_positive_u16_env(
+        PRELAUNCH_RUSH_WEB_PUSH_MAX_DELIVERY_ATTEMPTS_ENV,
+        defaults.web_push_max_attempts(),
+    )?;
+    RushReminderRetryPolicy::new(
+        in_app_max_attempts,
+        email_max_attempts,
+        web_push_max_attempts,
+    )
+    .map_err(|error| format!("rush reminder retry policy is invalid: {error}"))
+}
+
 fn parse_rush_reminder_policy_from_env() -> Result<RushReminderPolicy, String> {
     let preorder_open_min_lead_days = parse_positive_u16_env(
         PRELAUNCH_RUSH_PREORDER_MIN_LEAD_DAYS_ENV,
@@ -5407,6 +5472,8 @@ fn bootstrap_runtime_state(
     recommendation_engine_runtime_enabled: bool,
     advanced_analytics_dashboard_runtime_enabled: bool,
     rush_reminder_runtime_enabled: bool,
+    rush_reminder_channel_feature_flags: RushReminderChannelFeatureFlags,
+    rush_reminder_retry_policy: RushReminderRetryPolicy,
     rush_reminder_policy: RushReminderPolicy,
     object_storage_upload_pipeline: Arc<ObjectStorageUploadPipeline>,
     payroll_retention_policy: PayrollRetentionPolicy,
@@ -5840,6 +5907,8 @@ fn bootstrap_runtime_state(
         recommendation_engine_runtime_enabled,
         advanced_analytics_dashboard_runtime_enabled,
         rush_reminder_runtime_enabled,
+        rush_reminder_channel_feature_flags,
+        rush_reminder_retry_policy,
         menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
         rush_reminder_workflow,
         rush_reminder_delivery_gateway,
@@ -8397,9 +8466,14 @@ fn handle_upsert_employee_rush_reminder_preferences(
         .rush_reminder_workflow
         .upsert_preferences(
             employee_actor.actor_id().clone(),
-            RushReminderPreferences::new(
+            RushReminderPreferences::with_channels(
                 request.preorder_open_enabled,
                 request.demand_spike_enabled,
+                RushReminderChannelPreferences::new(
+                    request.in_app_enabled,
+                    request.email_enabled,
+                    request.web_push_enabled,
+                ),
             ),
         )
         .map_err(|error| {
@@ -8426,6 +8500,9 @@ fn handle_upsert_employee_rush_reminder_preferences(
         plant_id: state.plant_id.as_str().to_owned(),
         preorder_open_enabled: saved.preorder_open_enabled(),
         demand_spike_enabled: saved.demand_spike_enabled(),
+        in_app_enabled: saved.in_app_enabled(),
+        email_enabled: saved.email_enabled(),
+        web_push_enabled: saved.web_push_enabled(),
     })
 }
 
@@ -9014,6 +9091,8 @@ fn schedule_and_dispatch_rush_reminders_best_effort(
 
     let dispatch_report = match state.rush_reminder_workflow.dispatch_pending(
         state.rush_reminder_runtime_enabled,
+        state.rush_reminder_channel_feature_flags,
+        state.rush_reminder_retry_policy,
         state.rush_reminder_delivery_gateway.as_ref(),
         at,
     ) {
@@ -9027,6 +9106,22 @@ fn schedule_and_dispatch_rush_reminders_best_effort(
             return;
         }
     };
+
+    for channel_stat in &dispatch_report.channel_stats {
+        if channel_stat.attempted_count == 0 && channel_stat.skipped_count == 0 {
+            continue;
+        }
+        tracing::info!(
+            operation_id,
+            channel = channel_stat.channel.as_str(),
+            attempted_count = channel_stat.attempted_count,
+            delivered_count = channel_stat.delivered_count,
+            failed_count = channel_stat.failed_count,
+            skipped_count = channel_stat.skipped_count,
+            retry_count = channel_stat.retry_count,
+            "rush reminder channel dispatch report"
+        );
+    }
 
     if dispatch_report.failed_count > 0 {
         tracing::warn!(
@@ -16403,10 +16498,12 @@ mod tests {
     use corporate_catering_system::audit::{AuditEntityRef, AuditEvidenceWrite, AuditIdentityLink};
     use corporate_catering_system::payroll::PayrollDisputeStatus;
     use corporate_catering_system::rush_reminder::{
-        RushReminderDeliveryError, RushReminderPreferences, RushReminderScenario,
+        RushReminderChannel, RushReminderChannelPreferences, RushReminderDeliveryError,
+        RushReminderPreferences, RushReminderScenario,
     };
     use corporate_catering_system::vendor_compliance::ComplianceHistoryKind;
     use corporate_catering_system::vendor_delivery_mapping::VendorPlantDeliveryError;
+    use std::collections::HashMap;
 
     fn actor_id(value: &str) -> ActorId {
         ActorId::parse(value).expect("actor id should be valid")
@@ -17039,6 +17136,8 @@ mod tests {
             recommendation_engine_runtime_enabled: false,
             advanced_analytics_dashboard_runtime_enabled: false,
             rush_reminder_runtime_enabled: false,
+            rush_reminder_channel_feature_flags: RushReminderChannelFeatureFlags::default(),
+            rush_reminder_retry_policy: RushReminderRetryPolicy::default(),
             menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
             rush_reminder_workflow: RushReminderWorkflow::new(RushReminderPolicy::default()),
             rush_reminder_delivery_gateway: Arc::new(NoopRushReminderDeliveryGateway),
@@ -17082,6 +17181,19 @@ mod tests {
     ) -> AppState {
         let mut state = build_state(now_epoch_day);
         state.rush_reminder_runtime_enabled = rush_reminder_runtime_enabled;
+        state
+    }
+
+    fn build_state_with_rush_reminder_channels(
+        now_epoch_day: i32,
+        rush_reminder_runtime_enabled: bool,
+        email_enabled: bool,
+        web_push_enabled: bool,
+    ) -> AppState {
+        let mut state =
+            build_state_with_rush_reminder_runtime(now_epoch_day, rush_reminder_runtime_enabled);
+        state.rush_reminder_channel_feature_flags =
+            RushReminderChannelFeatureFlags::new(email_enabled, web_push_enabled);
         state
     }
 
@@ -17162,11 +17274,67 @@ mod tests {
     impl RushReminderDeliveryGateway for FailingRushReminderDeliveryGateway {
         fn deliver(
             &self,
+            _channel: corporate_catering_system::rush_reminder::RushReminderChannel,
             _notification: &corporate_catering_system::rush_reminder::RushReminderNotification,
         ) -> Result<(), RushReminderDeliveryError> {
             Err(RushReminderDeliveryError::new(
                 "simulated reminder delivery outage",
             ))
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct RecordingRushReminderDeliveryGateway {
+        attempts: Arc<Mutex<Vec<RushReminderChannel>>>,
+        failure_budget_by_channel: Arc<Mutex<HashMap<RushReminderChannel, usize>>>,
+    }
+
+    impl RecordingRushReminderDeliveryGateway {
+        fn new(failure_budget_by_channel: HashMap<RushReminderChannel, usize>) -> Self {
+            Self {
+                attempts: Arc::new(Mutex::new(Vec::new())),
+                failure_budget_by_channel: Arc::new(Mutex::new(failure_budget_by_channel)),
+            }
+        }
+
+        fn observed_channels(&self) -> Vec<RushReminderChannel> {
+            self.attempts
+                .lock()
+                .expect("attempt tracker lock should be healthy")
+                .clone()
+        }
+
+        fn attempt_count_for(&self, channel: RushReminderChannel) -> usize {
+            self.observed_channels()
+                .into_iter()
+                .filter(|candidate| *candidate == channel)
+                .count()
+        }
+    }
+
+    impl RushReminderDeliveryGateway for RecordingRushReminderDeliveryGateway {
+        fn deliver(
+            &self,
+            channel: RushReminderChannel,
+            _notification: &corporate_catering_system::rush_reminder::RushReminderNotification,
+        ) -> Result<(), RushReminderDeliveryError> {
+            self.attempts
+                .lock()
+                .expect("attempt tracker lock should be healthy")
+                .push(channel);
+
+            let mut budgets = self
+                .failure_budget_by_channel
+                .lock()
+                .expect("failure budget lock should be healthy");
+            let remaining_failures = budgets.entry(channel).or_insert(0);
+            if *remaining_failures > 0 {
+                *remaining_failures = remaining_failures.saturating_sub(1);
+                return Err(RushReminderDeliveryError::new(format!(
+                    "simulated {channel} delivery failure"
+                )));
+            }
+            Ok(())
         }
     }
 
@@ -17233,6 +17401,8 @@ mod tests {
             false,
             false,
             false,
+            RushReminderChannelFeatureFlags::default(),
+            RushReminderRetryPolicy::default(),
             RushReminderPolicy::default(),
             object_storage_upload_pipeline,
             PayrollRetentionPolicy::default(),
@@ -18194,6 +18364,8 @@ mod tests {
             recommendation_engine_runtime_enabled: false,
             advanced_analytics_dashboard_runtime_enabled: false,
             rush_reminder_runtime_enabled: false,
+            rush_reminder_channel_feature_flags: RushReminderChannelFeatureFlags::default(),
+            rush_reminder_retry_policy: RushReminderRetryPolicy::default(),
             menu_recommendation_ranker: heuristic_menu_recommendation_ranker,
             rush_reminder_workflow: RushReminderWorkflow::new(RushReminderPolicy::default()),
             rush_reminder_delivery_gateway: Arc::new(NoopRushReminderDeliveryGateway),
@@ -19098,6 +19270,9 @@ mod tests {
                 plant_id: "fab-a".to_owned(),
                 preorder_open_enabled: false,
                 demand_spike_enabled: false,
+                in_app_enabled: true,
+                email_enabled: false,
+                web_push_enabled: false,
             },
         )
         .expect_err("feature-disabled reminder preference endpoint should return 404");
@@ -19124,6 +19299,9 @@ mod tests {
                 plant_id: "fab-a".to_owned(),
                 preorder_open_enabled: false,
                 demand_spike_enabled: true,
+                in_app_enabled: true,
+                email_enabled: true,
+                web_push_enabled: false,
             },
         )
         .expect("preference upsert should succeed");
@@ -19131,6 +19309,9 @@ mod tests {
         assert_eq!(payload.plant_id, "fab-a");
         assert!(!payload.preorder_open_enabled);
         assert!(payload.demand_spike_enabled);
+        assert!(payload.in_app_enabled);
+        assert!(payload.email_enabled);
+        assert!(!payload.web_push_enabled);
 
         let persisted = state
             .rush_reminder_workflow
@@ -19138,6 +19319,9 @@ mod tests {
             .expect("persisted reminder preferences should be queryable");
         assert!(!persisted.preorder_open_enabled());
         assert!(persisted.demand_spike_enabled());
+        assert!(persisted.in_app_enabled());
+        assert!(persisted.email_enabled());
+        assert!(!persisted.web_push_enabled());
     }
 
     #[test]
@@ -19151,6 +19335,9 @@ mod tests {
                 plant_id: "fab-b".to_owned(),
                 preorder_open_enabled: false,
                 demand_spike_enabled: false,
+                in_app_enabled: true,
+                email_enabled: false,
+                web_push_enabled: false,
             },
         )
         .expect_err("unsupported plant should be rejected");
@@ -19331,6 +19518,234 @@ mod tests {
     }
 
     #[test]
+    fn rush_reminder_optional_channels_can_be_enabled_independently() {
+        let now_epoch_day = 300;
+
+        let mut email_state =
+            build_state_with_rush_reminder_channels(now_epoch_day, true, true, false);
+        let email_actor = employee_actor();
+        email_state
+            .rush_reminder_workflow
+            .upsert_preferences(
+                email_actor.actor_id().clone(),
+                RushReminderPreferences::with_channels(
+                    true,
+                    true,
+                    RushReminderChannelPreferences::new(true, true, true),
+                ),
+            )
+            .expect("email-channel reminder preference should persist");
+        let email_gateway = Arc::new(RecordingRushReminderDeliveryGateway::new(HashMap::new()));
+        email_state.rush_reminder_delivery_gateway = email_gateway.clone();
+        handle_list_employee_menus_at(
+            &email_state,
+            &email_actor,
+            EmployeeMenuDiscoveryQuery {
+                plant_id: Some("fab-a".to_owned()),
+                view: Some(MenuDiscoveryViewQuery::Week),
+                menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+                ..EmployeeMenuDiscoveryQuery::default()
+            },
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery should succeed with email channel enabled");
+        let email_channels = email_state
+            .rush_reminder_workflow
+            .delivered_channel_records()
+            .expect("channel delivery records should be queryable")
+            .into_iter()
+            .filter(|record| record.notification().menu_item_id().as_str() == "menu-discoverytsta1")
+            .map(|record| record.channel())
+            .collect::<BTreeSet<_>>();
+        assert!(email_channels.contains(&RushReminderChannel::InApp));
+        assert!(email_channels.contains(&RushReminderChannel::Email));
+        assert!(!email_channels.contains(&RushReminderChannel::WebPush));
+        assert_eq!(
+            email_gateway.attempt_count_for(RushReminderChannel::WebPush),
+            0,
+            "web-push must stay disabled when feature flag is off"
+        );
+
+        let mut web_push_state =
+            build_state_with_rush_reminder_channels(now_epoch_day, true, false, true);
+        let web_push_actor = employee_actor();
+        web_push_state
+            .rush_reminder_workflow
+            .upsert_preferences(
+                web_push_actor.actor_id().clone(),
+                RushReminderPreferences::with_channels(
+                    true,
+                    true,
+                    RushReminderChannelPreferences::new(true, true, true),
+                ),
+            )
+            .expect("web-push reminder preference should persist");
+        let web_push_gateway = Arc::new(RecordingRushReminderDeliveryGateway::new(HashMap::new()));
+        web_push_state.rush_reminder_delivery_gateway = web_push_gateway.clone();
+        handle_list_employee_menus_at(
+            &web_push_state,
+            &web_push_actor,
+            EmployeeMenuDiscoveryQuery {
+                plant_id: Some("fab-a".to_owned()),
+                view: Some(MenuDiscoveryViewQuery::Week),
+                menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+                ..EmployeeMenuDiscoveryQuery::default()
+            },
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery should succeed with web-push channel enabled");
+        let web_push_channels = web_push_state
+            .rush_reminder_workflow
+            .delivered_channel_records()
+            .expect("channel delivery records should be queryable")
+            .into_iter()
+            .filter(|record| record.notification().menu_item_id().as_str() == "menu-discoverytsta1")
+            .map(|record| record.channel())
+            .collect::<BTreeSet<_>>();
+        assert!(web_push_channels.contains(&RushReminderChannel::InApp));
+        assert!(!web_push_channels.contains(&RushReminderChannel::Email));
+        assert!(web_push_channels.contains(&RushReminderChannel::WebPush));
+        assert_eq!(
+            web_push_gateway.attempt_count_for(RushReminderChannel::Email),
+            0,
+            "email must stay disabled when feature flag is off"
+        );
+    }
+
+    #[test]
+    fn rush_reminder_dispatch_retries_by_channel_with_failure_isolation_and_idempotency() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for rush reminder retry test")
+            .epoch_day();
+        let mut state = build_state_with_rush_reminder_channels(now_epoch_day, true, true, true);
+        state.rush_reminder_retry_policy =
+            RushReminderRetryPolicy::new(1, 2, 3).expect("retry policy should be valid");
+        let employee = employee_actor();
+        state
+            .rush_reminder_workflow
+            .upsert_preferences(
+                employee.actor_id().clone(),
+                RushReminderPreferences::with_channels(
+                    true,
+                    true,
+                    RushReminderChannelPreferences::new(true, true, true),
+                ),
+            )
+            .expect("full channel preference should persist");
+        let gateway = Arc::new(RecordingRushReminderDeliveryGateway::new(HashMap::from([
+            (RushReminderChannel::Email, 100),
+            (RushReminderChannel::WebPush, 2),
+        ])));
+        state.rush_reminder_delivery_gateway = gateway.clone();
+
+        handle_list_employee_menus_at(
+            &state,
+            &employee,
+            EmployeeMenuDiscoveryQuery {
+                plant_id: Some("fab-a".to_owned()),
+                view: Some(MenuDiscoveryViewQuery::Week),
+                menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+                ..EmployeeMenuDiscoveryQuery::default()
+            },
+            taipei_moment(now_epoch_day, 600),
+        )
+        .expect("discovery should stay available with partial channel delivery failures");
+
+        let delivered_channels = state
+            .rush_reminder_workflow
+            .delivered_channel_records()
+            .expect("channel delivery records should be queryable")
+            .into_iter()
+            .filter(|record| record.notification().menu_item_id().as_str() == "menu-discoverytsta1")
+            .map(|record| record.channel())
+            .collect::<BTreeSet<_>>();
+        assert!(delivered_channels.contains(&RushReminderChannel::InApp));
+        assert!(delivered_channels.contains(&RushReminderChannel::WebPush));
+        assert!(
+            !delivered_channels.contains(&RushReminderChannel::Email),
+            "email channel should stay isolated when retries are exhausted"
+        );
+
+        let failures = state
+            .rush_reminder_workflow
+            .delivery_failures()
+            .expect("delivery failures should be queryable");
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.channel() == RushReminderChannel::Email
+                    && failure.exhausted()),
+            "email delivery should eventually exhaust retries"
+        );
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.channel() == RushReminderChannel::WebPush
+                    && !failure.exhausted()),
+            "web-push delivery should capture retriable failures before succeeding"
+        );
+
+        let in_app_attempts_before = gateway.attempt_count_for(RushReminderChannel::InApp);
+        let email_attempts_before = gateway.attempt_count_for(RushReminderChannel::Email);
+        let web_push_attempts_before = gateway.attempt_count_for(RushReminderChannel::WebPush);
+        let delivered_count_before = state
+            .rush_reminder_workflow
+            .delivered_channel_records()
+            .expect("channel delivery records should be queryable")
+            .len();
+
+        handle_list_employee_menus_at(
+            &state,
+            &employee,
+            EmployeeMenuDiscoveryQuery {
+                plant_id: Some("fab-a".to_owned()),
+                view: Some(MenuDiscoveryViewQuery::Week),
+                menu_date: Some(epoch_day_to_iso_date(now_epoch_day)),
+                ..EmployeeMenuDiscoveryQuery::default()
+            },
+            taipei_moment(now_epoch_day, 1000),
+        )
+        .expect("replayed discovery should remain idempotent per channel");
+
+        assert_eq!(
+            gateway.attempt_count_for(RushReminderChannel::InApp),
+            in_app_attempts_before
+        );
+        assert_eq!(
+            gateway.attempt_count_for(RushReminderChannel::Email),
+            email_attempts_before
+        );
+        assert_eq!(
+            gateway.attempt_count_for(RushReminderChannel::WebPush),
+            web_push_attempts_before
+        );
+        assert_eq!(
+            state
+                .rush_reminder_workflow
+                .delivered_channel_records()
+                .expect("channel delivery records should be queryable")
+                .len(),
+            delivered_count_before
+        );
+
+        let created = handle_create_employee_order(
+            &state,
+            EmployeeOrderCreateRequestPayload {
+                plant_id: "fab-a".to_owned(),
+                delivery_date: epoch_day_to_iso_date(now_epoch_day.saturating_add(2)),
+                line_items: vec![OrderLineItemRequestPayload {
+                    menu_item_id: "menu-discoverytsta1".to_owned(),
+                    quantity: 1,
+                    special_requests: vec![],
+                }],
+                employee_note: None,
+            },
+        )
+        .expect("ordering path should remain available despite optional channel failures");
+        assert_eq!(created.status, "PENDING");
+    }
+
+    #[test]
     fn rush_reminder_policy_throttles_repeated_scheduling() {
         let now_epoch_day = 300;
         let state = build_state_with_rush_reminder_runtime(now_epoch_day, true);
@@ -19358,6 +19773,8 @@ mod tests {
             .rush_reminder_workflow
             .dispatch_pending(
                 true,
+                state.rush_reminder_channel_feature_flags,
+                state.rush_reminder_retry_policy,
                 state.rush_reminder_delivery_gateway.as_ref(),
                 taipei_moment(now_epoch_day, 600),
             )
