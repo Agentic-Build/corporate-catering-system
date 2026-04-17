@@ -85,6 +85,7 @@
   let pickupQrImageDataUrl = $state<string | null>(null);
   let pickupQrLoading = $state(false);
   let pickupQrError = $state<string | null>(null);
+  let pickupQrPendingRefresh = $state<{ orderId: string; notifyOnError: boolean } | null>(null);
   let verifyingPickupByOrderId = $state<Record<string, boolean>>({});
 
   let clockTimer: ReturnType<typeof setInterval> | null = null;
@@ -494,16 +495,32 @@
   }
 
   async function activatePickupQr(orderId: string) {
+    if (pickupQrRefreshTimer) {
+      clearTimeout(pickupQrRefreshTimer);
+      pickupQrRefreshTimer = null;
+    }
+    if (activePickupOrderId !== orderId) {
+      pickupQr = null;
+      pickupQrImageDataUrl = null;
+      pickupQrError = null;
+    }
     activePickupOrderId = orderId;
     await refreshPickupQr(orderId, true);
   }
 
   async function refreshPickupQr(orderId: string, notifyOnError: boolean) {
     if (pickupQrLoading) {
+      pickupQrPendingRefresh = {
+        orderId,
+        notifyOnError: notifyOnError || pickupQrPendingRefresh?.notifyOnError === true
+      };
+      return;
+    }
+    if (activePickupOrderId !== orderId) {
       return;
     }
     const activeOrder = orders.find((order) => order.orderId === orderId) ?? null;
-    if (activePickupOrderId !== orderId || !activeOrder || !isPickupEligible(activeOrder.status)) {
+    if (!activeOrder || !isPickupEligible(activeOrder.status)) {
       clearPickupQrState();
       return;
     }
@@ -539,11 +556,18 @@
         pickupQrImageDataUrl = null;
         pickupQrError = failure.localizedMessage;
       }
-      if (notifyOnError) {
+      if (notifyOnError && activePickupOrderId === orderId) {
         pushNotification("error", failure.localizedMessage);
       }
     } finally {
       pickupQrLoading = false;
+      if (pickupQrPendingRefresh && pickupQrPendingRefresh.orderId === activePickupOrderId) {
+        const pendingRefresh = pickupQrPendingRefresh;
+        pickupQrPendingRefresh = null;
+        void refreshPickupQr(pendingRefresh.orderId, pendingRefresh.notifyOnError);
+      } else if (pickupQrPendingRefresh && pickupQrPendingRefresh.orderId !== activePickupOrderId) {
+        pickupQrPendingRefresh = null;
+      }
     }
   }
 
@@ -584,6 +608,7 @@
       clearTimeout(pickupQrRefreshTimer);
       pickupQrRefreshTimer = null;
     }
+    pickupQrPendingRefresh = null;
     activePickupOrderId = null;
     pickupQr = null;
     pickupQrImageDataUrl = null;
