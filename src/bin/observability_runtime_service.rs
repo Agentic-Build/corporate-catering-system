@@ -82,8 +82,9 @@ use corporate_catering_system::pickup_totp::{
 };
 use corporate_catering_system::rush_reminder::{
     NoopRushReminderDeliveryGateway, RushReminderChannelFeatureFlags,
-    RushReminderChannelPreferences, RushReminderDeliveryGateway, RushReminderPolicy,
-    RushReminderPreferences, RushReminderRetryPolicy, RushReminderWorkflow,
+    RushReminderChannelPreferences, RushReminderDeliveryGateway, RushReminderError,
+    RushReminderPolicy, RushReminderPreferences, RushReminderRetryPolicy, RushReminderWorkflow,
+    RushReminderWorkflowSnapshot,
 };
 use corporate_catering_system::transport::http::{
     HttpAuditInvestigationExecutionGateway, HttpEmployeeDiscoveryExecutionGateway,
@@ -320,6 +321,7 @@ struct SqlRuntimeStateRepositories {
     anomaly_alert: SqlJsonStateRepository,
     delivery_policy: SqlJsonStateRepository,
     operations_analytics: SqlJsonStateRepository,
+    rush_reminder: SqlJsonStateRepository,
 }
 
 #[derive(Debug, Clone)]
@@ -2122,6 +2124,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
             operational_rw_pool.clone(),
             operational_ro_pool.clone(),
         ),
+        rush_reminder: SqlJsonStateRepository::for_rush_reminder(
+            operational_rw_pool.clone(),
+            operational_ro_pool.clone(),
+        ),
     };
     let (compliance_lifecycle, include_lifecycle_seed_baseline) =
         load_or_seed_compliance_lifecycle(
@@ -3883,6 +3889,71 @@ where
     }
 }
 
+#[cfg(test)]
+fn map_rush_reminder_error(error: RushReminderError) -> (StatusCode, ErrorPayload) {
+    domain_error(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "INTERNAL_SERVER_ERROR",
+        format!("rush reminder workflow state operation failed: {error}"),
+    )
+}
+
+fn mutate_rush_reminder_workflow<T, F>(
+    state: &AppState,
+    mutator: F,
+) -> Result<T, (StatusCode, ErrorPayload)>
+where
+    F: FnOnce(&RushReminderWorkflow) -> Result<T, RushReminderError>,
+{
+    match &state.runtime_state_persistence {
+        RuntimeStatePersistence::Sql(repositories) => {
+            let policy = state.rush_reminder_workflow.policy();
+            let persistence_result = tokio::task::block_in_place(|| {
+                Handle::current().block_on(
+                    repositories
+                        .rush_reminder
+                        .mutate_snapshot::<RushReminderWorkflowSnapshot, T, String, _>(
+                            move |snapshot| {
+                                let snapshot = snapshot.ok_or_else(|| {
+                                    "rush reminder workflow state is uninitialized".to_owned()
+                                })?;
+                                let workflow =
+                                    RushReminderWorkflow::from_snapshot(policy, snapshot);
+                                let value =
+                                    mutator(&workflow).map_err(|error| error.to_string())?;
+                                let snapshot =
+                                    workflow.snapshot().map_err(|error| error.to_string())?;
+                                Ok((snapshot, value))
+                            },
+                        ),
+                )
+            });
+            match persistence_result {
+                Ok((_snapshot, value)) => Ok(value),
+                Err(JsonStatePersistenceError::Domain(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "INTERNAL_SERVER_ERROR",
+                    format!("failed to mutate rush reminder workflow state: {error}"),
+                )),
+                Err(JsonStatePersistenceError::Sqlx(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "INTERNAL_SERVER_ERROR",
+                    format!("failed to persist rush reminder workflow state: {error}"),
+                )),
+                Err(JsonStatePersistenceError::Serialize(error)) => Err(domain_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "INTERNAL_SERVER_ERROR",
+                    format!("failed to serialize rush reminder workflow state: {error}"),
+                )),
+            }
+        }
+        #[cfg(test)]
+        RuntimeStatePersistence::InMemoryOnly => {
+            mutator(&state.rush_reminder_workflow).map_err(map_rush_reminder_error)
+        }
+    }
+}
+
 fn requires_sql_authoritative_reads(state_key: &'static str) -> bool {
     // Fulfillment state drives vendor read-after-write UX and delivery execution;
     // keep it SQL-authoritative across pods instead of relying on best-effort cache invalidation.
@@ -5500,11 +5571,12 @@ fn bootstrap_runtime_state(
         parse_terminated_employee_actor_ids_from_env().map_err(|error| {
             format!("{PRELAUNCH_TERMINATED_EMPLOYEE_ACTOR_IDS_ENV} is invalid: {error}")
         })?;
-    let rush_reminder_workflow = RushReminderWorkflow::new(rush_reminder_policy);
+    let rush_reminder_workflow;
     let rush_reminder_delivery_gateway: ReminderDeliveryGateway =
         Arc::new(NoopRushReminderDeliveryGateway);
 
     let mut should_seed_runtime_baseline = true;
+    let mut should_initialize_rush_reminder_snapshot = false;
     let mut delivery_policy;
     let menu_supply_policy;
     let vendor_fulfillment_policy;
@@ -5522,6 +5594,7 @@ fn bootstrap_runtime_state(
                 payroll_snapshot,
                 anomaly_snapshot,
                 analytics_snapshot,
+                rush_reminder_snapshot,
             ) = tokio::task::block_in_place(|| {
                 Handle::current().block_on(async move {
                     let delivery_snapshot = repositories
@@ -5548,6 +5621,10 @@ fn bootstrap_runtime_state(
                         .operations_analytics
                         .load_snapshot::<OperationsAnalyticsWarehouseSnapshot>()
                         .await?;
+                    let rush_reminder_snapshot = repositories
+                        .rush_reminder
+                        .load_snapshot::<RushReminderWorkflowSnapshot>()
+                        .await?;
                     Ok::<_, JsonStatePersistenceError>((
                         delivery_snapshot,
                         menu_snapshot,
@@ -5555,6 +5632,7 @@ fn bootstrap_runtime_state(
                         payroll_snapshot,
                         anomaly_snapshot,
                         analytics_snapshot,
+                        rush_reminder_snapshot,
                     ))
                 })
             })
@@ -5567,6 +5645,7 @@ fn bootstrap_runtime_state(
                 payroll_snapshot,
                 anomaly_snapshot,
                 analytics_snapshot,
+                rush_reminder_snapshot,
             ) {
                 (
                     Some(delivery_snapshot),
@@ -5575,6 +5654,7 @@ fn bootstrap_runtime_state(
                     Some(payroll_snapshot),
                     Some(anomaly_snapshot),
                     Some(analytics_snapshot),
+                    rush_reminder_snapshot,
                 ) => {
                     delivery_policy = VendorPlantDeliveryPolicy::from_snapshot(
                         delivery_snapshot,
@@ -5617,9 +5697,16 @@ fn bootstrap_runtime_state(
                                     "failed to restore operations analytics state from SQL snapshot: {error}"
                                 )
                             })?;
+                    if rush_reminder_snapshot.is_none() {
+                        should_initialize_rush_reminder_snapshot = true;
+                    }
+                    rush_reminder_workflow = RushReminderWorkflow::from_snapshot(
+                        rush_reminder_policy,
+                        rush_reminder_snapshot.unwrap_or_default(),
+                    );
                     should_seed_runtime_baseline = false;
                 }
-                (None, None, None, None, None, None) => {
+                (None, None, None, None, None, None, None) => {
                     delivery_policy =
                         VendorPlantDeliveryPolicy::with_audit_trail(audit_trail.clone());
                     menu_supply_policy = MenuSupplyPolicy::with_audit_trail_and_retention(
@@ -5642,6 +5729,13 @@ fn bootstrap_runtime_state(
                     anomaly_alert_workflow =
                         AnomalyAlertWorkflow::with_default_rules(audit_trail.clone());
                     operations_analytics_warehouse = OperationsAnalyticsWarehouse::default();
+                    rush_reminder_workflow = RushReminderWorkflow::new(rush_reminder_policy);
+                }
+                (None, None, None, None, None, None, Some(_)) => {
+                    return Err(
+                        "runtime SQL state snapshots are partially initialized; rush reminder snapshot exists without baseline runtime state"
+                            .to_owned(),
+                    );
                 }
                 _ => {
                     return Err(
@@ -5672,6 +5766,7 @@ fn bootstrap_runtime_state(
                 PayrollLedgerService::new(payroll_retention_policy, audit_trail.clone());
             anomaly_alert_workflow = AnomalyAlertWorkflow::with_default_rules(audit_trail.clone());
             operations_analytics_warehouse = OperationsAnalyticsWarehouse::default();
+            rush_reminder_workflow = RushReminderWorkflow::new(rush_reminder_policy);
         }
     }
 
@@ -5766,6 +5861,9 @@ fn bootstrap_runtime_state(
                 .snapshot()
                 .map_err(|error| format!("failed to snapshot anomaly alert state: {error}"))?;
             let operations_analytics_snapshot = operations_analytics_warehouse.snapshot();
+            let rush_reminder_snapshot = rush_reminder_workflow
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot rush reminder state: {error}"))?;
             tokio::task::block_in_place(|| {
                 Handle::current().block_on(async move {
                     repositories
@@ -5791,6 +5889,10 @@ fn bootstrap_runtime_state(
                     repositories
                         .operations_analytics
                         .save_snapshot(&operations_analytics_snapshot)
+                        .await?;
+                    repositories
+                        .rush_reminder
+                        .save_snapshot(&rush_reminder_snapshot)
                         .await?;
                     Ok::<(), JsonStatePersistenceError>(())
                 })
@@ -5814,6 +5916,9 @@ fn bootstrap_runtime_state(
                 .snapshot()
                 .map_err(|error| format!("failed to snapshot anomaly alert state: {error}"))?;
             let operations_analytics_snapshot = operations_analytics_warehouse.snapshot();
+            let rush_reminder_snapshot = rush_reminder_workflow
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot rush reminder state: {error}"))?;
             tokio::task::block_in_place(|| {
                 Handle::current().block_on(async move {
                     repositories
@@ -5840,6 +5945,10 @@ fn bootstrap_runtime_state(
                         .operations_analytics
                         .save_snapshot(&operations_analytics_snapshot)
                         .await?;
+                    repositories
+                        .rush_reminder
+                        .save_snapshot(&rush_reminder_snapshot)
+                        .await?;
                     Ok::<(), JsonStatePersistenceError>(())
                 })
             })
@@ -5859,6 +5968,48 @@ fn bootstrap_runtime_state(
                 #[cfg(test)]
                 CompliancePersistence::InMemoryOnly => {}
             }
+        }
+    }
+
+    if should_initialize_rush_reminder_snapshot {
+        #[cfg(not(test))]
+        {
+            let RuntimeStatePersistence::Sql(repositories) = &runtime_state_persistence;
+            let repositories = repositories.clone();
+            let rush_reminder_snapshot = rush_reminder_workflow
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot rush reminder state: {error}"))?;
+            tokio::task::block_in_place(|| {
+                Handle::current().block_on(async move {
+                    repositories
+                        .rush_reminder
+                        .save_snapshot(&rush_reminder_snapshot)
+                        .await?;
+                    Ok::<(), JsonStatePersistenceError>(())
+                })
+            })
+            .map_err(|error| {
+                format!("failed to initialize rush reminder SQL snapshot baseline: {error}")
+            })?;
+        }
+        #[cfg(test)]
+        if let RuntimeStatePersistence::Sql(repositories) = &runtime_state_persistence {
+            let repositories = repositories.clone();
+            let rush_reminder_snapshot = rush_reminder_workflow
+                .snapshot()
+                .map_err(|error| format!("failed to snapshot rush reminder state: {error}"))?;
+            tokio::task::block_in_place(|| {
+                Handle::current().block_on(async move {
+                    repositories
+                        .rush_reminder
+                        .save_snapshot(&rush_reminder_snapshot)
+                        .await?;
+                    Ok::<(), JsonStatePersistenceError>(())
+                })
+            })
+            .map_err(|error| {
+                format!("failed to initialize rush reminder SQL snapshot baseline: {error}")
+            })?;
         }
     }
 
@@ -8460,37 +8611,16 @@ fn handle_upsert_employee_rush_reminder_preferences(
             ),
         ));
     }
-    state
-        .rush_reminder_workflow
-        .upsert_preferences(
-            employee_actor.actor_id().clone(),
-            RushReminderPreferences::with_channels(
-                request.preorder_open_enabled,
-                request.demand_spike_enabled,
-                RushReminderChannelPreferences::new(
-                    request.email_enabled,
-                    request.web_push_enabled,
-                ),
-            ),
-        )
-        .map_err(|error| {
-            domain_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL_SERVER_ERROR",
-                format!("failed to persist rush reminder preferences: {error}"),
-            )
-        })?;
-
-    let saved = state
-        .rush_reminder_workflow
-        .preferences_for(employee_actor.actor_id())
-        .map_err(|error| {
-            domain_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL_SERVER_ERROR",
-                format!("failed to load persisted rush reminder preferences: {error}"),
-            )
-        })?;
+    let actor_id = employee_actor.actor_id().clone();
+    let preferences = RushReminderPreferences::with_channels(
+        request.preorder_open_enabled,
+        request.demand_spike_enabled,
+        RushReminderChannelPreferences::new(request.email_enabled, request.web_push_enabled),
+    );
+    let saved = mutate_rush_reminder_workflow(state, move |workflow| {
+        workflow.upsert_preferences(actor_id.clone(), preferences)?;
+        workflow.preferences_for(&actor_id)
+    })?;
 
     Ok(EmployeeRushReminderPreferencesPayload {
         employee_actor_id: employee_actor.actor_id().as_str().to_owned(),
@@ -9068,35 +9198,39 @@ fn schedule_and_dispatch_rush_reminders_best_effort(
     at: TaipeiBusinessMoment,
     operation_id: &str,
 ) {
-    let schedule_report = match state.rush_reminder_workflow.schedule_from_discovery(
-        state.rush_reminder_runtime_enabled,
-        subscriber_actor_ids,
-        entries,
-        at,
-    ) {
+    let schedule_report = match mutate_rush_reminder_workflow(state, |workflow| {
+        workflow.schedule_from_discovery(
+            state.rush_reminder_runtime_enabled,
+            subscriber_actor_ids,
+            entries,
+            at,
+        )
+    }) {
         Ok(report) => report,
-        Err(error) => {
+        Err((_, error)) => {
             tracing::warn!(
                 operation_id,
-                reminder_error = %error,
+                reminder_error = %error.message,
                 "rush reminder scheduling failed; continuing without notification side effects"
             );
             return;
         }
     };
 
-    let dispatch_report = match state.rush_reminder_workflow.dispatch_pending(
-        state.rush_reminder_runtime_enabled,
-        state.rush_reminder_channel_feature_flags,
-        state.rush_reminder_retry_policy,
-        state.rush_reminder_delivery_gateway.as_ref(),
-        at,
-    ) {
+    let dispatch_report = match mutate_rush_reminder_workflow(state, |workflow| {
+        workflow.dispatch_pending(
+            state.rush_reminder_runtime_enabled,
+            state.rush_reminder_channel_feature_flags,
+            state.rush_reminder_retry_policy,
+            state.rush_reminder_delivery_gateway.as_ref(),
+            at,
+        )
+    }) {
         Ok(report) => report,
-        Err(error) => {
+        Err((_, error)) => {
             tracing::warn!(
                 operation_id,
-                reminder_error = %error,
+                reminder_error = %error.message,
                 "rush reminder dispatch failed; continuing without notification side effects"
             );
             return;

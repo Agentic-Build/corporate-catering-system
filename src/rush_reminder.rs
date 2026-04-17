@@ -2,6 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
+use serde::{Deserialize, Serialize};
+
 use crate::identity::ActorId;
 use crate::menu_supply_window::{EmployeeMenuDiscoveryEntry, MenuItemId};
 use crate::vendor_compliance::VendorId;
@@ -9,7 +11,7 @@ use crate::vendor_delivery_mapping::TaipeiBusinessMoment;
 
 const MINUTES_PER_DAY: i64 = 24 * 60;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum RushReminderScenario {
     PreorderOpen,
     DemandSpike,
@@ -36,7 +38,7 @@ const RUSH_REMINDER_CHANNELS: [RushReminderChannel; 3] = [
     RushReminderChannel::WebPush,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum RushReminderChannel {
     InApp,
     Email,
@@ -59,7 +61,7 @@ impl fmt::Display for RushReminderChannel {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RushReminderChannelPreferences {
     email_enabled: bool,
     web_push_enabled: bool,
@@ -99,7 +101,7 @@ impl Default for RushReminderChannelPreferences {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RushReminderPreferences {
     preorder_open_enabled: bool,
     demand_spike_enabled: bool,
@@ -172,7 +174,7 @@ impl Default for RushReminderPreferences {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct RushReminderChannelFeatureFlags {
     email_enabled: bool,
     web_push_enabled: bool,
@@ -203,7 +205,7 @@ impl RushReminderChannelFeatureFlags {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RushReminderRetryPolicy {
     in_app_max_attempts: u16,
     email_max_attempts: u16,
@@ -269,7 +271,7 @@ impl Default for RushReminderRetryPolicy {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RushReminderPolicy {
     preorder_open_min_lead_days: u16,
     preorder_open_max_lead_days: u16,
@@ -367,7 +369,7 @@ impl Default for RushReminderPolicy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RushReminderNotification {
     actor_id: ActorId,
     scenario: RushReminderScenario,
@@ -408,7 +410,7 @@ impl RushReminderNotification {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RushReminderDeliveryRecord {
     notification: RushReminderNotification,
     channel: RushReminderChannel,
@@ -434,7 +436,7 @@ impl RushReminderDeliveryRecord {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RushReminderDeliveryFailure {
     notification: RushReminderNotification,
     channel: RushReminderChannel,
@@ -470,7 +472,7 @@ impl RushReminderDeliveryFailure {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct RushReminderScheduleReport {
     pub scheduled_count: usize,
     pub throttled_count: usize,
@@ -479,7 +481,7 @@ pub struct RushReminderScheduleReport {
     pub scheduled: Vec<RushReminderNotification>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RushReminderChannelDispatchStat {
     pub channel: RushReminderChannel,
     pub attempted_count: usize,
@@ -502,7 +504,7 @@ impl RushReminderChannelDispatchStat {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RushReminderDispatchReport {
     pub delivered_count: usize,
     pub failed_count: usize,
@@ -609,8 +611,23 @@ impl RushReminderWorkflow {
         }
     }
 
+    pub fn from_snapshot(
+        policy: RushReminderPolicy,
+        snapshot: RushReminderWorkflowSnapshot,
+    ) -> Self {
+        Self {
+            policy,
+            state: Arc::new(Mutex::new(snapshot.into())),
+        }
+    }
+
     pub fn policy(&self) -> RushReminderPolicy {
         self.policy
+    }
+
+    pub fn snapshot(&self) -> Result<RushReminderWorkflowSnapshot, RushReminderError> {
+        let state = lock_state(&self.state)?;
+        Ok(RushReminderWorkflowSnapshot::from(&*state))
     }
 
     pub fn upsert_preferences(
@@ -827,6 +844,42 @@ impl RushReminderWorkflow {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct RushReminderWorkflowSnapshot {
+    preferences_by_actor: HashMap<ActorId, RushReminderPreferences>,
+    throttle_registry: HashMap<ReminderThrottleKey, TaipeiBusinessMoment>,
+    pending: Vec<RushReminderNotification>,
+    delivered: Vec<RushReminderDeliveryRecord>,
+    failures: Vec<RushReminderDeliveryFailure>,
+    handled_registry: HashSet<ReminderDeliveryKey>,
+}
+
+impl From<RushReminderWorkflowSnapshot> for RushReminderState {
+    fn from(value: RushReminderWorkflowSnapshot) -> Self {
+        Self {
+            preferences_by_actor: value.preferences_by_actor,
+            throttle_registry: value.throttle_registry,
+            pending: value.pending,
+            delivered: value.delivered,
+            failures: value.failures,
+            handled_registry: value.handled_registry,
+        }
+    }
+}
+
+impl From<&RushReminderState> for RushReminderWorkflowSnapshot {
+    fn from(value: &RushReminderState) -> Self {
+        Self {
+            preferences_by_actor: value.preferences_by_actor.clone(),
+            throttle_registry: value.throttle_registry.clone(),
+            pending: value.pending.clone(),
+            delivered: value.delivered.clone(),
+            failures: value.failures.clone(),
+            handled_registry: value.handled_registry.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 struct RushReminderState {
     preferences_by_actor: HashMap<ActorId, RushReminderPreferences>,
@@ -837,7 +890,7 @@ struct RushReminderState {
     handled_registry: HashSet<ReminderDeliveryKey>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct ReminderThrottleKey {
     actor_id: ActorId,
     scenario: RushReminderScenario,
@@ -845,7 +898,7 @@ struct ReminderThrottleKey {
     delivery_epoch_day: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct ReminderDeliveryKey {
     actor_id: ActorId,
     scenario: RushReminderScenario,

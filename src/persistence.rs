@@ -39,6 +39,7 @@ const PAYROLL_LEDGER_STATE_KEY: &str = "payroll_ledger_service";
 const ANOMALY_ALERT_STATE_KEY: &str = "anomaly_alert_workflow";
 const DELIVERY_POLICY_STATE_KEY: &str = "vendor_delivery_policy";
 const OPERATIONS_ANALYTICS_STATE_KEY: &str = "operations_analytics_warehouse";
+const RUSH_REMINDER_STATE_KEY: &str = "rush_reminder_workflow";
 
 #[derive(Debug, Clone)]
 pub struct OutboxEventRecord {
@@ -275,6 +276,10 @@ impl SqlJsonStateRepository {
             read_pool,
             state_key: OPERATIONS_ANALYTICS_STATE_KEY,
         }
+    }
+
+    pub fn for_rush_reminder(write_pool: PgPool, read_pool: PgPool) -> Self {
+        Self::new(RUSH_REMINDER_STATE_KEY, write_pool, read_pool)
     }
 
     fn new(state_key: &'static str, write_pool: PgPool, read_pool: PgPool) -> Self {
