@@ -4813,7 +4813,7 @@ paths:
       tags:
       - Employee
       x-reminder-governance:
-        defaultEnabled: true
+        defaultEnabled: false
         enforcePreferenceOptOut: true
         featureFlag: PRELAUNCH_RUSH_REMINDER_ENABLED
         phase: OPTIONAL_PHASE_2

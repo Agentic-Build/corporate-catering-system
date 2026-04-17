@@ -634,7 +634,7 @@ pub fn canonical_openapi_spec() -> Value {
             "x-reminder-governance": {
               "phase": "OPTIONAL_PHASE_2",
               "featureFlag": "PRELAUNCH_RUSH_REMINDER_ENABLED",
-              "defaultEnabled": true,
+              "defaultEnabled": false,
               "enforcePreferenceOptOut": true
             },
             "security": [{ "corporateSsoBearer": [] }],
