@@ -5,6 +5,7 @@ use corporate_catering_system::vendor_compliance::{
     ComplianceDate, ComplianceDocumentTemplate, ComplianceHistoryKind, DocumentTemplateId,
     HistoryRetentionPolicy, VendorCategory, VendorComplianceError, VendorComplianceLifecycle,
     VendorComplianceStatus, VendorDocumentSubmission, VendorId, VendorReviewDecision,
+    COMPLIANCE_DOCUMENT_TEMPLATE_COUNT_LIMIT,
 };
 
 fn actor_id(value: &str) -> ActorId {
@@ -403,5 +404,78 @@ fn retention_policy_prunes_history_and_deletes_rejected_vendor_records() {
             .history()
             .len(),
         0
+    );
+}
+
+#[test]
+fn document_template_upsert_enforces_count_limit_without_blocking_updates() {
+    ensure_test_otel_endpoint();
+    let committee = committee_admin();
+    let category = vendor_category("RESTAURANT");
+    let mut lifecycle = VendorComplianceLifecycle::new(HistoryRetentionPolicy::default());
+
+    for index in 0..COMPLIANCE_DOCUMENT_TEMPLATE_COUNT_LIMIT {
+        let template = ComplianceDocumentTemplate::new(
+            DocumentTemplateId::parse(format!("tmpl-limit-{index:03}"))
+                .expect("template id should be valid"),
+            category.clone(),
+            format!("Template {index}"),
+            true,
+            365,
+            vec![30, 7],
+            0,
+        )
+        .expect("template should be valid");
+        lifecycle
+            .upsert_document_template(&committee, template)
+            .expect("template upsert should succeed before reaching limit");
+    }
+
+    assert_eq!(
+        lifecycle.templates().len(),
+        COMPLIANCE_DOCUMENT_TEMPLATE_COUNT_LIMIT
+    );
+
+    let overflow_error = lifecycle
+        .upsert_document_template(
+            &committee,
+            ComplianceDocumentTemplate::new(
+                DocumentTemplateId::parse("tmpl-limit-overflow")
+                    .expect("overflow template id should be valid"),
+                category.clone(),
+                "Overflow Template",
+                true,
+                365,
+                vec![30, 7],
+                0,
+            )
+            .expect("overflow template payload should be valid"),
+        )
+        .expect_err("template upsert should reject entries beyond count limit");
+    assert!(matches!(
+        overflow_error,
+        VendorComplianceError::TemplateCountLimitExceeded { limit }
+            if limit == COMPLIANCE_DOCUMENT_TEMPLATE_COUNT_LIMIT
+    ));
+
+    lifecycle
+        .upsert_document_template(
+            &committee,
+            ComplianceDocumentTemplate::new(
+                DocumentTemplateId::parse("tmpl-limit-000")
+                    .expect("existing template id should be valid"),
+                category,
+                "Template 0 Updated",
+                true,
+                365,
+                vec![14],
+                1,
+            )
+            .expect("existing template payload should be valid"),
+        )
+        .expect("updating an existing template should be allowed at the limit");
+    assert_eq!(
+        lifecycle.templates().len(),
+        COMPLIANCE_DOCUMENT_TEMPLATE_COUNT_LIMIT
     );
 }

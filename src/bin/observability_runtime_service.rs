@@ -106,6 +106,7 @@ use corporate_catering_system::vendor_compliance::{
     DocumentTemplateId, HistoryRetentionPolicy, SuspensionReason, VendorCategory,
     VendorComplianceError, VendorComplianceLifecycle, VendorComplianceRecord,
     VendorComplianceStatus, VendorDocumentSubmission, VendorId, VendorReviewDecision,
+    COMPLIANCE_DOCUMENT_TEMPLATE_COUNT_LIMIT,
 };
 use corporate_catering_system::vendor_delivery_mapping::{
     DeliveryMappingAuditEntry, DeliveryMappingAuditKind, DeliveryMappingId, DeliveryRuleEffect,
@@ -10299,8 +10300,12 @@ fn handle_list_compliance_document_templates(
     });
 
     let total_items = items.len();
-    let page_size = total_items;
-    let total_pages = usize::from(total_items > 0);
+    let page_size = total_items.clamp(1, COMPLIANCE_DOCUMENT_TEMPLATE_COUNT_LIMIT);
+    let total_pages = if total_items == 0 {
+        0
+    } else {
+        (total_items - 1) / page_size + 1
+    };
     Ok(VendorComplianceDocumentTemplatePagePayload {
         items,
         page: PageMetaPayload {
@@ -19965,6 +19970,29 @@ mod tests {
         )
         .expect_err("monthly close should reject pageSize above OpenAPI max");
         assert_eq!(close_error.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn compliance_template_list_uses_contract_bounded_page_size_for_empty_results() {
+        let now_epoch_day = current_taipei_business_moment()
+            .expect("current time should resolve for test")
+            .epoch_day();
+        let state = build_state(now_epoch_day);
+        let committee = committee_admin();
+
+        let payload = handle_list_compliance_document_templates(
+            &state,
+            &committee,
+            ComplianceDocumentTemplateListQuery {
+                vendor_category: Some("BEVERAGE".to_owned()),
+            },
+        )
+        .expect("filtered template list should succeed");
+        assert!(payload.items.is_empty());
+        assert_eq!(payload.page.page, 1);
+        assert_eq!(payload.page.page_size, 1);
+        assert_eq!(payload.page.total_items, 0);
+        assert_eq!(payload.page.total_pages, 0);
     }
 
     #[test]

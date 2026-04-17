@@ -22,6 +22,7 @@ const DEFAULT_COMPLIANCE_BUCKET: &str = "compliance-evidence";
 const COMPLIANCE_DOCUMENT_OBJECT_KEY_PREFIX: &str = "compliance-documents";
 const COMPLIANCE_DOCUMENT_MAX_SIZE_BYTES: u64 = 20 * 1024 * 1024;
 const COMPLIANCE_DOCUMENT_ALLOWED_EXTENSIONS: [&str; 4] = ["pdf", "jpg", "jpeg", "png"];
+pub const COMPLIANCE_DOCUMENT_TEMPLATE_COUNT_LIMIT: usize = 200;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct VendorId(String);
@@ -811,6 +812,23 @@ impl VendorComplianceLifecycle {
         template: ComplianceDocumentTemplate,
     ) -> Result<(), VendorComplianceError> {
         ensure_role(actor, Role::CommitteeAdmin)?;
+        let total_template_count = self
+            .templates_by_category
+            .values()
+            .map(BTreeMap::len)
+            .sum::<usize>();
+        let is_existing_template = self
+            .templates_by_category
+            .get(template.vendor_category())
+            .map_or(false, |templates| {
+                templates.contains_key(template.template_id())
+            });
+        if !is_existing_template && total_template_count >= COMPLIANCE_DOCUMENT_TEMPLATE_COUNT_LIMIT
+        {
+            return Err(VendorComplianceError::TemplateCountLimitExceeded {
+                limit: COMPLIANCE_DOCUMENT_TEMPLATE_COUNT_LIMIT,
+            });
+        }
         let audit_event = AuditEvidenceWrite::new(
             AuditTimestamp::now_taipei().map_err(VendorComplianceError::AuditTrail)?,
             AuditIdentityLink::from_actor(actor, UPSERT_COMPLIANCE_TEMPLATE_OPERATION_ID),
@@ -1349,6 +1367,9 @@ pub enum VendorComplianceError {
     InvalidVendorDisplayName,
     InvalidReviewComment,
     InvalidHistoryRetentionPolicy,
+    TemplateCountLimitExceeded {
+        limit: usize,
+    },
     MissingTemplateConfiguration(VendorCategory),
     TemplateNotConfiguredForCategory {
         template_id: DocumentTemplateId,
@@ -1401,6 +1422,10 @@ impl fmt::Display for VendorComplianceError {
             Self::InvalidHistoryRetentionPolicy => {
                 f.write_str("retention policy values must all be greater than zero")
             }
+            Self::TemplateCountLimitExceeded { limit } => write!(
+                f,
+                "compliance template count exceeds configured limit of {limit}"
+            ),
             Self::MissingTemplateConfiguration(category) => {
                 write!(f, "no document templates configured for vendor category {category}")
             }
