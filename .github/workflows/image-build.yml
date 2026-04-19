@@ -31,6 +31,9 @@ jobs:
         with:
           version: 10
 
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
       - name: Run build-correctness gate
         run: ./scripts/check-image-build.sh --evidence-output artifacts/image-build/image-build-evidence.json
 
