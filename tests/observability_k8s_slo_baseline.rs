@@ -707,8 +707,11 @@ fn ci_workflow_enforces_observability_hard_slo_gate() {
     );
 
     let gate_script = read_text("scripts/check-observability-slo-baseline.sh");
+    let runs_real_binary = gate_script
+        .lines()
+        .any(|line| line.contains("cargo run") && line.contains("--bin observability_runtime_service"));
     assert!(
-        gate_script.contains("cargo run --quiet --bin observability_runtime_service"),
+        runs_real_binary,
         "hard-SLO gate must execute the Rust runtime service, not a synthetic mock"
     );
     assert!(
