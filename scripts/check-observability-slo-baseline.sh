@@ -286,6 +286,9 @@ BASE_URL="http://127.0.0.1:${PORT}" \
   MENU_VARIANT_COUNT="${prelaunch_menu_variant_count}" \
   DELIVERY_EPOCH_DAY="${delivery_epoch_day}" \
   PICKUP_TOTP_SECRET="${prelaunch_pickup_totp_secret}" \
+  CORPORATE_SSO_JWT_ISSUER="${CORPORATE_SSO_JWT_ISSUER}" \
+  CORPORATE_SSO_JWT_AUDIENCE="${CORPORATE_SSO_JWT_AUDIENCE}" \
+  CORPORATE_SSO_JWT_HS256_SECRET_BASE64="${CORPORATE_SSO_JWT_HS256_SECRET_BASE64}" \
   k6 run --quiet --summary-trend-stats "avg,min,med,max,p(90),p(95),p(99)" --summary-export "${summary_file}" ops/observability/load/k6-prelaunch.js
 
 cp "${summary_file}" "${retained_summary}"
