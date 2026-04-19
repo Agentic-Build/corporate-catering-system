@@ -194,6 +194,11 @@ fi
 
 SQLX_OFFLINE="true" cargo run --quiet --bin apply_sql_migrations >/dev/null
 
+# Pre-build the runtime service so the poll loop below doesn't race with a
+# cold compilation (can take minutes on CI). `cargo run` after `cargo build`
+# uses the cached artifact and boots in under a second.
+SQLX_OFFLINE="true" cargo build --quiet --bin observability_runtime_service
+
 for overlay in dev staging production; do
   overlay_manifest="$(mktemp -t kustomize-${overlay}.XXXXXX.yaml)"
   kustomize build "ops/kubernetes/overlays/${overlay}" >"${overlay_manifest}"
@@ -263,11 +268,11 @@ SQLX_OFFLINE="true" \
 cargo run --quiet --bin observability_runtime_service >"${service_log_file}" 2>&1 &
 service_pid=$!
 
-for _ in {1..40}; do
+for _ in {1..120}; do
   if curl --silent --fail --show-error "http://127.0.0.1:${PORT}/health/ready" >/dev/null; then
     break
   fi
-  sleep 0.25
+  sleep 0.5
 done
 
 if ! curl --silent --fail --show-error "http://127.0.0.1:${PORT}/health/ready" >/dev/null; then
