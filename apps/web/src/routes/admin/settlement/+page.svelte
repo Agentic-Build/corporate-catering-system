@@ -1,19 +1,41 @@
 <script lang="ts">
   import { onMount } from "svelte";
 
-  import { PageHeader, Card, Button, EmptyState } from "$lib/components/ui";
+  import { PageHeader, Card, Button, EmptyState, StateTag } from "$lib/components/ui";
   import { formatTaipeiDateTime } from "$lib/admin/portal";
-  import { readRecentSettlements, type RecentSettlementEntry } from "$lib/admin/api";
+  import { configureAdminApi, describeApiError } from "$lib/admin/api";
+  import { apiClient } from "$lib/platform/api";
+  import { maskIdentifier } from "$lib/platform/labels";
 
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
-  let recent = $state<RecentSettlementEntry | null>(null);
+  type CycleSummary = Awaited<
+    ReturnType<typeof apiClient.admin.listPayrollSettlementCycles>
+  >["items"][number];
+
+  let recent = $state<CycleSummary | null>(null);
+  let loadError = $state<string | null>(null);
+  let loading = $state(true);
 
   onMount(() => {
-    recent = readRecentSettlements()[0] ?? null;
+    void loadRecent();
   });
+
+  async function loadRecent() {
+    loading = true;
+    loadError = null;
+    try {
+      configureAdminApi(data.auth.apiBearerToken);
+      const page = await apiClient.admin.listPayrollSettlementCycles(1, 1);
+      recent = page.items[0] ?? null;
+    } catch (error) {
+      loadError = describeApiError(error);
+    } finally {
+      loading = false;
+    }
+  }
 
   const steps = [
     {
@@ -61,11 +83,15 @@
   </ol>
 </Card>
 
-<Card title="最近一次月結摘要" description="由本瀏覽器最近一次關帳產生。">
-  {#if !recent}
+<Card title="最近一次月結摘要" description="由伺服器返回的最新已關帳週期。">
+  {#if loading}
+    <p class="text-sm text-slate-600">同步中...</p>
+  {:else if loadError}
+    <p class="text-sm text-rose-700">{loadError}</p>
+  {:else if !recent}
     <EmptyState
-      title="尚未在此瀏覽器關帳"
-      description="前往「執行關帳」後，摘要會顯示於此。"
+      title="尚無已關帳週期"
+      description="尚未執行過月結關帳。請先依『執行關帳』wizard 完成本月結算。"
     >
       {#snippet actions()}
         <Button href="/admin/settlement/close" variant="primary">執行月結關帳</Button>
@@ -78,12 +104,25 @@
         <dd class="font-medium">{recent.cycleKey}</dd>
       </div>
       <div>
+        <dt class="text-xs text-slate-500">薪資月份</dt>
+        <dd class="font-mono text-sm tabular-nums">{recent.payPeriod}</dd>
+      </div>
+      <div>
         <dt class="text-xs text-slate-500">批次</dt>
-        <dd class="font-mono text-xs">{recent.batchId}</dd>
+        <dd class="font-mono text-xs" title={recent.batchId}>{maskIdentifier(recent.batchId, 8)}</dd>
+      </div>
+      <div>
+        <dt class="text-xs text-slate-500">鎖定狀態</dt>
+        <dd>
+          <StateTag
+            label={recent.lockState === "LOCKED" ? "已鎖定" : "未鎖定"}
+            tone={recent.lockState === "LOCKED" ? "danger" : "success"}
+          />
+        </dd>
       </div>
       <div>
         <dt class="text-xs text-slate-500">關帳時間</dt>
-        <dd class="font-medium">{formatTaipeiDateTime(new Date(recent.closedAtEpochMs).toISOString())}</dd>
+        <dd class="font-medium">{formatTaipeiDateTime(recent.generatedAt)}</dd>
       </div>
       <div>
         <dt class="text-xs text-slate-500">總筆數</dt>
@@ -96,14 +135,6 @@
       <div>
         <dt class="text-xs text-slate-500">扣款失敗</dt>
         <dd class="font-medium text-rose-700">{recent.deductionFailedRecords}</dd>
-      </div>
-      <div>
-        <dt class="text-xs text-slate-500">退款</dt>
-        <dd class="font-medium">{recent.refundedRecords}</dd>
-      </div>
-      <div>
-        <dt class="text-xs text-slate-500">例外筆數</dt>
-        <dd class="font-medium">{recent.exceptions.length}</dd>
       </div>
     </dl>
   {/if}

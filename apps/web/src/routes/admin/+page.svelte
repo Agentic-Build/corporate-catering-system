@@ -6,10 +6,8 @@
   import {
     configureAdminApi,
     describeApiError,
-    readRecentSettlements,
     anomalyStatusTone,
     type AnomalyAlertView,
-    type RecentSettlementEntry,
     type VendorView
   } from "$lib/admin/api";
   import { formatTaipeiDateTime } from "$lib/admin/portal";
@@ -19,6 +17,13 @@
     friendlyVendorCategory,
     maskIdentifier
   } from "$lib/platform/labels";
+
+  type CycleSummary = Awaited<
+    ReturnType<typeof apiClient.admin.listPayrollSettlementCycles>
+  >["items"][number];
+  type Dispute = Awaited<
+    ReturnType<typeof apiClient.admin.listPayrollDisputes>
+  >["items"][number];
 
   import type { PageData } from "./$types";
 
@@ -32,7 +37,8 @@
   let pendingVendors = $state<VendorView[]>([]);
   let openAlerts = $state<AnomalyAlertView[]>([]);
   let breachedAlerts = $state<AnomalyAlertView[]>([]);
-  let recentSettlement = $state<RecentSettlementEntry | null>(null);
+  let recentSettlement = $state<CycleSummary | null>(null);
+  let openDisputes = $state<Dispute[]>([]);
 
   const pendingCount = $derived(pendingVendors.length);
   const openAlertCount = $derived(openAlerts.length);
@@ -44,7 +50,7 @@
           recentSettlement.refundedRecords
       : null
   );
-  const disputeCount = $derived(recentSettlement?.disputedRecords ?? null);
+  const disputeCount = $derived(openDisputes.length);
 
   type QueueTone = "warning" | "danger" | "info" | "pending" | "success" | "neutral";
 
@@ -117,20 +123,16 @@
         href: `/admin/vendors/${vendor.vendorId}`
       });
     }
-    // Disputes: best-effort surface from recent close localStorage.
-    if (recentSettlement) {
-      for (const ex of recentSettlement.exceptions) {
-        if (ex.status !== "DISPUTED" || !ex.disputeId) continue;
-        items.push({
-          kind: "dispute",
-          key: `dispute-${ex.disputeId}`,
-          title: `爭議 ${maskIdentifier(ex.disputeId, 6)}`,
-          subtitle: `週期 ${recentSettlement.cycleKey} · 員工 ${maskIdentifier(ex.employeeActorId, 6)}`,
-          tone: "warning",
-          toneLabel: "待處理",
-          href: `/admin/settlement/disputes/${encodeURIComponent(ex.disputeId)}`
-        });
-      }
+    for (const dispute of openDisputes) {
+      items.push({
+        kind: "dispute",
+        key: `dispute-${dispute.disputeId}`,
+        title: `爭議 ${maskIdentifier(dispute.disputeId, 6)}`,
+        subtitle: `訂單 ${maskIdentifier(dispute.orderId, 6)} · 員工 ${maskIdentifier(dispute.employeeActorId, 6)}`,
+        tone: "warning",
+        toneLabel: "待處理",
+        href: `/admin/settlement/disputes/${encodeURIComponent(dispute.disputeId)}`
+      });
     }
     return items;
   });
@@ -159,17 +161,20 @@
     loadError = null;
     try {
       configureAdminApi(bearerToken);
-      const [pendingPage, openPage, breachedPage] = await Promise.allSettled([
-        apiClient.admin.listAdminVendors(1, 50, "createdAt", "desc", "PENDING_REVIEW"),
-        apiClient.admin.listAnomalyAlerts(undefined, undefined, "OPEN"),
-        apiClient.admin.listAnomalyAlerts(undefined, undefined, undefined, undefined, "BREACHED")
-      ]);
+      const [pendingPage, openPage, breachedPage, cyclePage, disputePage] =
+        await Promise.allSettled([
+          apiClient.admin.listAdminVendors(1, 50, "createdAt", "desc", "PENDING_REVIEW"),
+          apiClient.admin.listAnomalyAlerts(undefined, undefined, "OPEN"),
+          apiClient.admin.listAnomalyAlerts(undefined, undefined, undefined, undefined, "BREACHED"),
+          apiClient.admin.listPayrollSettlementCycles(1, 1),
+          apiClient.admin.listPayrollDisputes("OPEN", 1, 50)
+        ]);
 
       pendingVendors = pendingPage.status === "fulfilled" ? pendingPage.value.items : [];
       openAlerts = openPage.status === "fulfilled" ? openPage.value.items : [];
       breachedAlerts = breachedPage.status === "fulfilled" ? breachedPage.value.items : [];
-
-      recentSettlement = readRecentSettlements()[0] ?? null;
+      recentSettlement = cyclePage.status === "fulfilled" ? cyclePage.value.items[0] ?? null : null;
+      openDisputes = disputePage.status === "fulfilled" ? disputePage.value.items : [];
     } catch (error) {
       loadError = describeApiError(error);
     } finally {
@@ -285,7 +290,7 @@
   </section>
 
   {#if recentSettlement}
-    <Card title="最近關帳摘要" description="由本瀏覽器最近一次關帳匯總而得。">
+    <Card title="最近關帳摘要" description="由伺服器返回的最新已關帳週期。">
       <dl class="grid gap-2 text-sm text-slate-700 md:grid-cols-4">
         <div>
           <dt class="text-xs text-slate-500">週期</dt>
@@ -294,7 +299,7 @@
         <div>
           <dt class="text-xs text-slate-500">關帳時間</dt>
           <dd>
-            {formatTaipeiDateTime(new Date(recentSettlement.closedAtEpochMs).toISOString())}
+            {formatTaipeiDateTime(recentSettlement.generatedAt)}
           </dd>
         </div>
         <div>

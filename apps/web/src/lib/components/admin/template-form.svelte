@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { goto } from "$app/navigation";
 
   import { Card, Button, FormField, ChipInput, toasts } from "$lib/components/ui";
@@ -33,14 +34,17 @@
 
   let { mode, initial, apiBearerToken, lockKey = false }: Props = $props();
 
+  // Snapshot `initial` once at mount: the form is explicitly intended to
+  // detach from its prop after first render so user edits aren't clobbered
+  // by later prop changes. `untrack` documents that intent.
   let draft = $state(
-    ((init: InitialValues) => ({
-      ...init,
-      reminderDays: init.reminderDaysBeforeExpiryCsv
+    untrack(() => ({
+      ...initial,
+      reminderDays: initial.reminderDaysBeforeExpiryCsv
         .split(",")
         .map((entry) => entry.trim())
         .filter((entry) => entry.length > 0)
-    }))(initial)
+    }))
   );
   let submitting = $state(false);
   let formError = $state<string | null>(null);

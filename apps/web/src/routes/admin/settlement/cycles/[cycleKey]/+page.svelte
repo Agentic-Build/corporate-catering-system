@@ -11,12 +11,8 @@
   } from "$lib/components/ui";
   import { formatTaipeiDateTime } from "$lib/admin/portal";
   import { apiClient } from "$lib/platform/api";
-  import {
-    configureAdminApi,
-    describeApiError,
-    readRecentSettlements,
-    type RecentSettlementEntry
-  } from "$lib/admin/api";
+  import { configureAdminApi, describeApiError } from "$lib/admin/api";
+  import { maskIdentifier } from "$lib/platform/labels";
 
   import type { PageData } from "./$types";
 
@@ -24,7 +20,12 @@
 
   const cycleKey = $derived(data.cycleKey);
 
-  let recent = $state<RecentSettlementEntry | null>(null);
+  type CycleSummary = Awaited<
+    ReturnType<typeof apiClient.admin.listPayrollSettlementCycles>
+  >["items"][number];
+
+  let summary = $state<CycleSummary | null>(null);
+  let loadError = $state<string | null>(null);
   let lockReason = $state("");
   let unlockReason = $state("");
   let locking = $state(false);
@@ -34,9 +35,31 @@
   >["settlementCycle"] | null>(null);
 
   onMount(() => {
-    const entries = readRecentSettlements();
-    recent = entries.find((entry) => entry.cycleKey === cycleKey) ?? null;
+    void loadSummary();
   });
+
+  async function loadSummary() {
+    loadError = null;
+    try {
+      configureAdminApi(data.auth.apiBearerToken);
+      // Walk pages until we find the matching cycle. Bounds at 5 pages × 200 = 1000 cycles;
+      // anything beyond that is very old history and warrants a proper cycle-get API.
+      let page = 1;
+      const pageSize = 200;
+      for (; page <= 5; page += 1) {
+        const response = await apiClient.admin.listPayrollSettlementCycles(page, pageSize);
+        const hit = response.items.find((entry) => entry.cycleKey === cycleKey);
+        if (hit) {
+          summary = hit;
+          return;
+        }
+        if (response.items.length < pageSize) break;
+      }
+      summary = null;
+    } catch (error) {
+      loadError = describeApiError(error);
+    }
+  }
 
   async function lockCycle(event: SubmitEvent) {
     event.preventDefault();
@@ -89,28 +112,51 @@
 />
 
 <Card title="週期資訊">
-  {#if recent}
+  {#if loadError}
+    <p class="text-sm text-rose-700">{loadError}</p>
+  {:else if summary}
     <dl class="grid gap-2 text-sm text-slate-700 md:grid-cols-4">
       <div>
         <dt class="text-xs text-slate-500">cycleKey</dt>
-        <dd class="font-medium">{recent.cycleKey}</dd>
+        <dd class="font-medium">{summary.cycleKey}</dd>
+      </div>
+      <div>
+        <dt class="text-xs text-slate-500">薪資月份</dt>
+        <dd class="font-mono tabular-nums">{summary.payPeriod}</dd>
       </div>
       <div>
         <dt class="text-xs text-slate-500">batchId</dt>
-        <dd class="font-mono text-xs">{recent.batchId}</dd>
+        <dd class="font-mono text-xs" title={summary.batchId}>{maskIdentifier(summary.batchId, 10)}</dd>
+      </div>
+      <div>
+        <dt class="text-xs text-slate-500">鎖定狀態</dt>
+        <dd>
+          <StateTag
+            label={summary.lockState === "LOCKED" ? "已鎖定" : "未鎖定"}
+            tone={summary.lockState === "LOCKED" ? "danger" : "success"}
+          />
+        </dd>
       </div>
       <div>
         <dt class="text-xs text-slate-500">關帳時間</dt>
-        <dd>{formatTaipeiDateTime(new Date(recent.closedAtEpochMs).toISOString())}</dd>
+        <dd>{formatTaipeiDateTime(summary.generatedAt)}</dd>
       </div>
       <div>
         <dt class="text-xs text-slate-500">總筆數</dt>
-        <dd class="font-medium">{recent.totalRecords}</dd>
+        <dd class="font-medium">{summary.totalRecords}</dd>
+      </div>
+      <div>
+        <dt class="text-xs text-slate-500">爭議</dt>
+        <dd class="font-medium text-amber-700">{summary.disputedRecords}</dd>
+      </div>
+      <div>
+        <dt class="text-xs text-slate-500">扣款失敗</dt>
+        <dd class="font-medium text-rose-700">{summary.deductionFailedRecords}</dd>
       </div>
     </dl>
   {:else}
     <p class="text-sm text-slate-600">
-      本瀏覽器沒有 <span class="font-mono">{cycleKey}</span> 的本地紀錄。仍可透過下方表單進行鎖定 / 解鎖。
+      找不到週期 <span class="font-mono">{cycleKey}</span>（已查詢最近 1000 筆）。仍可透過下方表單嘗試鎖定 / 解鎖 — 後端會以真實狀態回應。
     </p>
   {/if}
 </Card>

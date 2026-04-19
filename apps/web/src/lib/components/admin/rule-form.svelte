@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { goto } from "$app/navigation";
 
   import { Card, Button, FormField, ChipInput, toasts } from "$lib/components/ui";
@@ -47,12 +48,14 @@
   let { mode, initial, apiBearerToken, lockRuleId = false }: Props = $props();
 
   // Governance issue is now a chip input so we can suggest ISS-007 / ISS-003.
+  // Snapshot `initial` once at mount; user edits must not be clobbered by
+  // later prop reruns. `untrack` documents that intent.
   let draft = $state(
-    ((init: InitialValues) => ({
-      ...init,
+    untrack(() => ({
+      ...initial,
       governanceIssueIds:
-        init.governanceIssueId.trim().length > 0 ? [init.governanceIssueId.trim()] : []
-    }))(initial)
+        initial.governanceIssueId.trim().length > 0 ? [initial.governanceIssueId.trim()] : []
+    }))
   );
   let submitting = $state(false);
   let formError = $state<string | null>(null);
