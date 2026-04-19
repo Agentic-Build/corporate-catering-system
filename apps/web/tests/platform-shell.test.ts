@@ -51,7 +51,7 @@ describe("platform shell data", () => {
     });
 
     assert.equal(shell.bootstrapState.status, "idle");
-    assert.equal(shell.navigation.sectionLinks.length, 0);
+    assert.equal(shell.navigation.primary.length, 0);
     assert.equal(shell.navigation.portalLinks.every((portalLink) => portalLink.locked === false), true);
   });
 

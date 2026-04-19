@@ -11,41 +11,51 @@ describe("platform navigation", () => {
     assert.equal(navigation.sectionPortal, "employee");
     assert.equal(navigation.activeSectionId, "orders");
     assert.equal(
-      navigation.portalLinks.find((portalLink) => portalLink.role === "vendor")?.locked,
+      navigation.portalLinks.find((link) => link.role === "vendor")?.locked,
       true
     );
     assert.equal(
-      navigation.portalLinks.find((portalLink) => portalLink.role === "admin")?.locked,
+      navigation.portalLinks.find((link) => link.role === "admin")?.locked,
       true
     );
   });
 
-  it("marks section links as active inside wildcard role routes", () => {
+  it("resolves admin anomalies as the active primary section", () => {
     const navigation = buildRoleAwareNavigation("admin", "/admin/anomalies");
 
     assert.equal(navigation.activeSectionId, "anomalies");
     assert.equal(
-      navigation.sectionLinks.find((sectionLink) => sectionLink.id === "anomalies")?.active,
+      navigation.primary.find((item) => item.id === "anomalies")?.active,
       true
     );
   });
 
-  it("activates new admin settlement section route", () => {
-    const navigation = buildRoleAwareNavigation("admin", "/admin/settlement");
+  it("keeps deep admin routes active under their parent section", () => {
+    const navigation = buildRoleAwareNavigation("admin", "/admin/settlement/close");
 
     assert.equal(navigation.activeSectionId, "settlement");
     assert.equal(
-      navigation.sectionLinks.find((sectionLink) => sectionLink.id === "settlement")?.active,
+      navigation.primary.find((item) => item.id === "settlement")?.active,
       true
     );
   });
 
-  it("supports vendor docs section route activation", () => {
-    const navigation = buildRoleAwareNavigation("vendor", "/vendor/docs");
+  it("activates vendor compliance section for sub-routes", () => {
+    const navigation = buildRoleAwareNavigation("vendor", "/vendor/compliance/upload");
 
-    assert.equal(navigation.activeSectionId, "docs");
+    assert.equal(navigation.activeSectionId, "compliance");
     assert.equal(
-      navigation.sectionLinks.find((sectionLink) => sectionLink.id === "docs")?.active,
+      navigation.primary.find((item) => item.id === "compliance")?.active,
+      true
+    );
+  });
+
+  it("activates employee pickup deep route under the orders section", () => {
+    const navigation = buildRoleAwareNavigation("employee", "/employee/orders/abc/pickup");
+
+    assert.equal(navigation.activeSectionId, "orders");
+    assert.equal(
+      navigation.primary.find((item) => item.id === "orders")?.active,
       true
     );
   });

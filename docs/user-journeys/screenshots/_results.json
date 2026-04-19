@@ -1,0 +1,118 @@
+[
+  {
+    "slug": "01-home-signed-out",
+    "ok": true
+  },
+  {
+    "slug": "02-login-employee",
+    "ok": true
+  },
+  {
+    "slug": "03-employee-home",
+    "ok": true
+  },
+  {
+    "slug": "04-employee-home-desktop",
+    "ok": true
+  },
+  {
+    "slug": "05-employee-discover",
+    "ok": true
+  },
+  {
+    "slug": "06-employee-orders",
+    "ok": true
+  },
+  {
+    "slug": "07-employee-wallet",
+    "ok": true
+  },
+  {
+    "slug": "08-vendor-today",
+    "ok": true
+  },
+  {
+    "slug": "09-vendor-today-board",
+    "ok": true
+  },
+  {
+    "slug": "10-vendor-menu-list",
+    "ok": true
+  },
+  {
+    "slug": "11-vendor-menu-new",
+    "ok": true
+  },
+  {
+    "slug": "12-vendor-schedule",
+    "ok": true
+  },
+  {
+    "slug": "13-vendor-batches",
+    "ok": true
+  },
+  {
+    "slug": "14-vendor-compliance",
+    "ok": true
+  },
+  {
+    "slug": "15-vendor-insights",
+    "ok": true
+  },
+  {
+    "slug": "16-admin-inbox",
+    "ok": true
+  },
+  {
+    "slug": "17-admin-vendors",
+    "ok": true
+  },
+  {
+    "slug": "18-admin-compliance-templates",
+    "ok": true
+  },
+  {
+    "slug": "19-admin-compliance-lifecycle",
+    "ok": true
+  },
+  {
+    "slug": "20-admin-settlement-hub",
+    "ok": true
+  },
+  {
+    "slug": "21-admin-settlement-close",
+    "ok": true
+  },
+  {
+    "slug": "22-admin-settlement-disputes",
+    "ok": true
+  },
+  {
+    "slug": "23-admin-anomalies",
+    "ok": true
+  },
+  {
+    "slug": "24-admin-anomaly-evaluate",
+    "ok": true
+  },
+  {
+    "slug": "25-admin-anomaly-rules",
+    "ok": true
+  },
+  {
+    "slug": "26-admin-audit",
+    "ok": true
+  },
+  {
+    "slug": "27-admin-analytics",
+    "ok": true
+  },
+  {
+    "slug": "28-cross-role-redirect",
+    "ok": true
+  },
+  {
+    "slug": "29-unauth-redirect",
+    "ok": true
+  }
+]

@@ -135,7 +135,9 @@ export type { PayrollDeductionPage } from './models/PayrollDeductionPage';
 export type { PayrollDeductionRecord } from './models/PayrollDeductionRecord';
 export type { PayrollDeductionStatus } from './models/PayrollDeductionStatus';
 export type { PayrollDispute } from './models/PayrollDispute';
+export type { PayrollDisputePage } from './models/PayrollDisputePage';
 export type { PayrollDisputeStatus } from './models/PayrollDisputeStatus';
+export type { PayrollDisputeStatusFilterQuery } from './models/PayrollDisputeStatusFilterQuery';
 export type { PayrollDisputeTraceEvent } from './models/PayrollDisputeTraceEvent';
 export type { PayrollDisputeTraceEventType } from './models/PayrollDisputeTraceEventType';
 export type { PayrollExceptionClass } from './models/PayrollExceptionClass';
@@ -156,6 +158,8 @@ export type { PayrollSettlementCycleLock } from './models/PayrollSettlementCycle
 export type { PayrollSettlementCycleLockRequest } from './models/PayrollSettlementCycleLockRequest';
 export type { PayrollSettlementCycleLockResponse } from './models/PayrollSettlementCycleLockResponse';
 export type { PayrollSettlementCycleLockState } from './models/PayrollSettlementCycleLockState';
+export type { PayrollSettlementCyclePage } from './models/PayrollSettlementCyclePage';
+export type { PayrollSettlementCycleSummary } from './models/PayrollSettlementCycleSummary';
 export type { PayrollSortByQuery } from './models/PayrollSortByQuery';
 export type { PayrollSortField } from './models/PayrollSortField';
 export type { PickupVerificationQr } from './models/PickupVerificationQr';

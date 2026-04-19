@@ -28,11 +28,14 @@ import type { OrderRetentionPurgeRequest } from '../models/OrderRetentionPurgeRe
 import type { OrderRetentionPurgeResponse } from '../models/OrderRetentionPurgeResponse';
 import type { PayrollDeductionPage } from '../models/PayrollDeductionPage';
 import type { PayrollDispute } from '../models/PayrollDispute';
+import type { PayrollDisputePage } from '../models/PayrollDisputePage';
+import type { PayrollDisputeStatus } from '../models/PayrollDisputeStatus';
 import type { PayrollMonthlySettlementCloseRequest } from '../models/PayrollMonthlySettlementCloseRequest';
 import type { PayrollRetentionPurgeRequest } from '../models/PayrollRetentionPurgeRequest';
 import type { PayrollRetentionPurgeResponse } from '../models/PayrollRetentionPurgeResponse';
 import type { PayrollSettlementCycleLockRequest } from '../models/PayrollSettlementCycleLockRequest';
 import type { PayrollSettlementCycleLockResponse } from '../models/PayrollSettlementCycleLockResponse';
+import type { PayrollSettlementCyclePage } from '../models/PayrollSettlementCyclePage';
 import type { PlantId } from '../models/PlantId';
 import type { SortOrder } from '../models/SortOrder';
 import type { TaipeiBusinessDateTime } from '../models/TaipeiBusinessDateTime';
@@ -438,6 +441,35 @@ export class AdminService {
         });
     }
     /**
+     * List payroll disputes across all orders with optional status filter
+     * @param status
+     * @param page
+     * @param pageSize
+     * @returns PayrollDisputePage Page of payroll disputes ordered by openedAt descending
+     * @throws ApiError
+     */
+    public static listPayrollDisputes(
+        status?: PayrollDisputeStatus,
+        page: number = 1,
+        pageSize: number = 20,
+    ): CancelablePromise<PayrollDisputePage> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/payroll/disputes',
+            query: {
+                'status': status,
+                'page': page,
+                'pageSize': pageSize,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
      * Assign and resolve payroll disputes with immutable trace
      * @param disputeId
      * @param requestBody
@@ -462,6 +494,32 @@ export class AdminService {
                 403: `Authenticated actor is not authorized to perform this operation.`,
                 404: `Requested resource was not found.`,
                 409: `Request conflicts with business constraints.`,
+                500: `Internal server error while processing request.`,
+            },
+        });
+    }
+    /**
+     * List closed monthly payroll settlement cycles with lock state and reconciliation counts
+     * @param page
+     * @param pageSize
+     * @returns PayrollSettlementCyclePage Page of closed settlement cycles ordered newest first
+     * @throws ApiError
+     */
+    public static listPayrollSettlementCycles(
+        page: number = 1,
+        pageSize: number = 20,
+    ): CancelablePromise<PayrollSettlementCyclePage> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/payroll/monthly-settlements',
+            query: {
+                'page': page,
+                'pageSize': pageSize,
+            },
+            errors: {
+                400: `Request payload or query is invalid.`,
+                401: `Authentication token is missing or invalid.`,
+                403: `Authenticated actor is not authorized to perform this operation.`,
                 500: `Internal server error while processing request.`,
             },
         });

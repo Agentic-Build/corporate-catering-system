@@ -1,6 +1,6 @@
 import type { Handle } from "@sveltejs/kit";
 
-import { error } from "@sveltejs/kit";
+import { error, redirect } from "@sveltejs/kit";
 
 import { authRuntime } from "./lib/server/auth";
 import { hasPermission, validateActorScope } from "./lib/server/auth/contracts";
@@ -23,10 +23,20 @@ export const handle: Handle = async ({ event, resolve }) => {
   const guard = authRuntime.resolveRoleGuard(event.url.pathname);
   if (guard) {
     if (!auth.actor) {
+      // Soft-redirect page navigation back to the sign-in landing; keep 401 for non-navigation callers.
+      if (isPageNavigation(event.request)) {
+        const next = encodeURIComponent(event.url.pathname + event.url.search);
+        throw redirect(303, `/?flash=auth-required&next=${next}`);
+      }
       throw error(401, `authentication is required for ${event.url.pathname}`);
     }
 
     if (!guard.allowedRoles.includes(auth.actor.role)) {
+      // Soft-redirect cross-role navigation back to the actor's own portal with a flash message.
+      if (isPageNavigation(event.request)) {
+        const attempted = encodeURIComponent(event.url.pathname);
+        throw redirect(303, `/${auth.actor.role}?flash=cross-role&attempted=${attempted}`);
+      }
       throw error(
         403,
         `role ${auth.actor.role} cannot access ${event.url.pathname}; allowed roles: ${guard.allowedRoles.join(", ")}`
@@ -105,3 +115,9 @@ export const handle: Handle = async ({ event, resolve }) => {
   response.headers.set("cache-control", dynamicCacheControl);
   return response;
 };
+
+function isPageNavigation(request: Request): boolean {
+  const accept = request.headers.get("accept") ?? "";
+  // HTML navigation requests include text/html; fetch/API callers typically set application/json.
+  return accept.includes("text/html");
+}

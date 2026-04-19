@@ -82,12 +82,14 @@ pub enum HttpOperation {
     CloseMonthlyPayrollSettlement,
     LockPayrollSettlementCycle,
     UnlockPayrollSettlementCycle,
+    ListPayrollSettlementCycles,
+    ListPayrollDisputes,
     ExportPayrollDeductions,
     SyncPayrollHrApiAdjunct,
 }
 
 impl HttpOperation {
-    pub const ALL: [Self; 48] = [
+    pub const ALL: [Self; 50] = [
         Self::ListEmployeeMenus,
         Self::ListEmployeeOrders,
         Self::UpsertEmployeeRushReminderPreferences,
@@ -134,6 +136,8 @@ impl HttpOperation {
         Self::CloseMonthlyPayrollSettlement,
         Self::LockPayrollSettlementCycle,
         Self::UnlockPayrollSettlementCycle,
+        Self::ListPayrollSettlementCycles,
+        Self::ListPayrollDisputes,
         Self::ExportPayrollDeductions,
         Self::SyncPayrollHrApiAdjunct,
     ];
@@ -188,6 +192,8 @@ impl HttpOperation {
             Self::CloseMonthlyPayrollSettlement => "closePayrollMonthlySettlement",
             Self::LockPayrollSettlementCycle => "lockPayrollSettlementCycle",
             Self::UnlockPayrollSettlementCycle => "unlockPayrollSettlementCycle",
+            Self::ListPayrollSettlementCycles => "listPayrollSettlementCycles",
+            Self::ListPayrollDisputes => "listPayrollDisputes",
             Self::ExportPayrollDeductions => "exportPayrollDeductions",
             Self::SyncPayrollHrApiAdjunct => "syncPayrollHrApiAdjunct",
         }
@@ -211,6 +217,8 @@ impl HttpOperation {
             | Self::QueryAuditInvestigations
             | Self::QueryAuditResponsibilities
             | Self::GetAdminOperationsAnalyticsDashboard
+            | Self::ListPayrollSettlementCycles
+            | Self::ListPayrollDisputes
             | Self::ExportPayrollDeductions => HttpMethod::Get,
             Self::UpsertEmployeeRushReminderPreferences
             | Self::UpsertVendorMenuItem
@@ -321,6 +329,8 @@ impl HttpOperation {
             Self::UnlockPayrollSettlementCycle => {
                 "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/unlock"
             }
+            Self::ListPayrollSettlementCycles => "/api/v1/admin/payroll/monthly-settlements",
+            Self::ListPayrollDisputes => "/api/v1/admin/payroll/disputes",
             Self::ExportPayrollDeductions => "/api/v1/integrations/payroll/deductions",
             Self::SyncPayrollHrApiAdjunct => {
                 "/api/v1/integrations/payroll/sftp-batches/{batchId}/hr-api-sync"
@@ -375,7 +385,9 @@ impl HttpOperation {
             | Self::PurgePayrollData
             | Self::CloseMonthlyPayrollSettlement
             | Self::LockPayrollSettlementCycle
-            | Self::UnlockPayrollSettlementCycle => HttpAudience::Admin,
+            | Self::UnlockPayrollSettlementCycle
+            | Self::ListPayrollSettlementCycles
+            | Self::ListPayrollDisputes => HttpAudience::Admin,
             Self::ExportPayrollDeductions | Self::SyncPayrollHrApiAdjunct => {
                 HttpAudience::Integration
             }
@@ -431,6 +443,8 @@ impl HttpOperation {
             | Self::ListAnomalyAlerts
             | Self::GetAdminOperationsAnalyticsDashboard
             | Self::GetVendorOperationsAnalyticsDashboard
+            | Self::ListPayrollSettlementCycles
+            | Self::ListPayrollDisputes
             | Self::ExportPayrollDeductions => None,
         }
     }
@@ -496,6 +510,8 @@ impl HttpOperation {
             }
             "updateAdminPayrollDispute" => Some(Self::UpdateAdminPayrollDispute),
             "purgePayrollData" => Some(Self::PurgePayrollData),
+            "listPayrollSettlementCycles" => Some(Self::ListPayrollSettlementCycles),
+            "listPayrollDisputes" => Some(Self::ListPayrollDisputes),
             "closePayrollMonthlySettlement" => Some(Self::CloseMonthlyPayrollSettlement),
             "lockPayrollSettlementCycle" => Some(Self::LockPayrollSettlementCycle),
             "unlockPayrollSettlementCycle" => Some(Self::UnlockPayrollSettlementCycle),
@@ -2143,6 +2159,59 @@ pub fn canonical_openapi_spec() -> Value {
             }
           }
         },
+        "/api/v1/admin/payroll/monthly-settlements": {
+          "get": {
+            "tags": ["Admin"],
+            "summary": "List closed monthly payroll settlement cycles with lock state and reconciliation counts",
+            "operationId": HttpOperation::ListPayrollSettlementCycles.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/PageQuery" },
+              { "$ref": "#/components/parameters/PageSizeQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Page of closed settlement cycles ordered newest first",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/PayrollSettlementCyclePage" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
+        "/api/v1/admin/payroll/disputes": {
+          "get": {
+            "tags": ["Admin"],
+            "summary": "List payroll disputes across all orders with optional status filter",
+            "operationId": HttpOperation::ListPayrollDisputes.operation_id(),
+            "security": [{ "corporateSsoBearer": [] }],
+            "parameters": [
+              { "$ref": "#/components/parameters/PayrollDisputeStatusFilterQuery" },
+              { "$ref": "#/components/parameters/PageQuery" },
+              { "$ref": "#/components/parameters/PageSizeQuery" }
+            ],
+            "responses": {
+              "200": {
+                "description": "Page of payroll disputes ordered by openedAt descending",
+                "content": {
+                  "application/json": {
+                    "schema": { "$ref": "#/components/schemas/PayrollDisputePage" }
+                  }
+                }
+              },
+              "400": { "$ref": "#/components/responses/BadRequest" },
+              "401": { "$ref": "#/components/responses/Unauthorized" },
+              "403": { "$ref": "#/components/responses/Forbidden" },
+              "500": { "$ref": "#/components/responses/InternalServerError" }
+            }
+          }
+        },
         "/api/v1/integrations/payroll/deductions": {
           "get": {
             "tags": ["Integration"],
@@ -2621,6 +2690,12 @@ pub fn canonical_openapi_spec() -> Value {
             "in": "query",
             "required": false,
             "schema": { "$ref": "#/components/schemas/AnomalyAlertStatus" }
+          },
+          "PayrollDisputeStatusFilterQuery": {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/PayrollDisputeStatus" }
           },
           "AnomalyEscalatedOnlyFilterQuery": {
             "name": "escalatedOnly",
@@ -5050,6 +5125,67 @@ pub fn canonical_openapi_spec() -> Value {
               "sourceEventKind": { "$ref": "#/components/schemas/PayrollLedgerSourceKind" },
               "sourceEventReference": { "type": "string", "minLength": 1, "maxLength": 128 },
               "refundLedgerEntryId": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          },
+          "PayrollSettlementCycleSummary": {
+            "type": "object",
+            "required": [
+              "cycleKey",
+              "batchId",
+              "payPeriod",
+              "lockState",
+              "generatedAt",
+              "totalRecords",
+              "disputedRecords",
+              "deductionFailedRecords",
+              "refundedRecords"
+            ],
+            "properties": {
+              "cycleKey": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
+              "batchId": { "type": "string", "pattern": "^sftp-[0-9]{6}-[0-9a-f]{16}$" },
+              "payPeriod": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$" },
+              "lockState": {
+                "type": "string",
+                "enum": ["LOCKED", "UNLOCKED"]
+              },
+              "generatedAt": { "$ref": "#/components/schemas/TaipeiBusinessDateTime" },
+              "totalRecords": { "type": "integer", "minimum": 0 },
+              "disputedRecords": { "type": "integer", "minimum": 0 },
+              "deductionFailedRecords": { "type": "integer", "minimum": 0 },
+              "refundedRecords": { "type": "integer", "minimum": 0 },
+              "hrSyncStatus": {
+                "type": "string",
+                "enum": ["SUCCEEDED", "FAILED"]
+              }
+            },
+            "additionalProperties": false
+          },
+          "PayrollSettlementCyclePage": {
+            "type": "object",
+            "required": ["items", "totalItems", "page", "pageSize"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/PayrollSettlementCycleSummary" }
+              },
+              "totalItems": { "type": "integer", "minimum": 0 },
+              "page": { "type": "integer", "minimum": 1 },
+              "pageSize": { "type": "integer", "minimum": 1, "maximum": 200 }
+            },
+            "additionalProperties": false
+          },
+          "PayrollDisputePage": {
+            "type": "object",
+            "required": ["items", "totalItems", "page", "pageSize"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/PayrollDispute" }
+              },
+              "totalItems": { "type": "integer", "minimum": 0 },
+              "page": { "type": "integer", "minimum": 1 },
+              "pageSize": { "type": "integer", "minimum": 1, "maximum": 200 }
             },
             "additionalProperties": false
           },

@@ -345,6 +345,14 @@
           "type": "string"
         }
       },
+      "PayrollDisputeStatusFilterQuery": {
+        "in": "query",
+        "name": "status",
+        "required": false,
+        "schema": {
+          "$ref": "#/components/schemas/PayrollDisputeStatus"
+        }
+      },
       "PayrollExchangeBatchIdPath": {
         "in": "path",
         "name": "batchId",
@@ -2875,6 +2883,37 @@
         ],
         "type": "object"
       },
+      "PayrollDisputePage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PayrollDispute"
+            },
+            "type": "array"
+          },
+          "page": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "pageSize": {
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "totalItems": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "totalItems",
+          "page",
+          "pageSize"
+        ],
+        "type": "object"
+      },
       "PayrollDisputeStatus": {
         "enum": [
           "OPEN",
@@ -3322,6 +3361,99 @@
           "UNLOCKED"
         ],
         "type": "string"
+      },
+      "PayrollSettlementCyclePage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PayrollSettlementCycleSummary"
+            },
+            "type": "array"
+          },
+          "page": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "pageSize": {
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "totalItems": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "totalItems",
+          "page",
+          "pageSize"
+        ],
+        "type": "object"
+      },
+      "PayrollSettlementCycleSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "batchId": {
+            "pattern": "^sftp-[0-9]{6}-[0-9a-f]{16}$",
+            "type": "string"
+          },
+          "cycleKey": {
+            "pattern": "^[A-Za-z0-9._-]{1,64}$",
+            "type": "string"
+          },
+          "deductionFailedRecords": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "disputedRecords": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "generatedAt": {
+            "$ref": "#/components/schemas/TaipeiBusinessDateTime"
+          },
+          "hrSyncStatus": {
+            "enum": [
+              "SUCCEEDED",
+              "FAILED"
+            ],
+            "type": "string"
+          },
+          "lockState": {
+            "enum": [
+              "LOCKED",
+              "UNLOCKED"
+            ],
+            "type": "string"
+          },
+          "payPeriod": {
+            "pattern": "^[0-9]{4}-[0-9]{2}$",
+            "type": "string"
+          },
+          "refundedRecords": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "totalRecords": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cycleKey",
+          "batchId",
+          "payPeriod",
+          "lockState",
+          "generatedAt",
+          "totalRecords",
+          "disputedRecords",
+          "deductionFailedRecords",
+          "refundedRecords"
+        ],
+        "type": "object"
       },
       "PayrollSortField": {
         "enum": [
@@ -5724,6 +5856,55 @@
         ]
       }
     },
+    "/api/v1/admin/payroll/disputes": {
+      "get": {
+        "operationId": "listPayrollDisputes",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PayrollDisputeStatusFilterQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayrollDisputePage"
+                }
+              }
+            },
+            "description": "Page of payroll disputes ordered by openedAt descending"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "corporateSsoBearer": []
+          }
+        ],
+        "summary": "List payroll disputes across all orders with optional status filter",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/api/v1/admin/payroll/disputes/{disputeId}": {
       "patch": {
         "operationId": "updateAdminPayrollDispute",
@@ -5778,6 +5959,52 @@
           }
         ],
         "summary": "Assign and resolve payroll disputes with immutable trace",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/api/v1/admin/payroll/monthly-settlements": {
+      "get": {
+        "operationId": "listPayrollSettlementCycles",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayrollSettlementCyclePage"
+                }
+              }
+            },
+            "description": "Page of closed settlement cycles ordered newest first"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "security": [
+          {
+            "corporateSsoBearer": []
+          }
+        ],
+        "summary": "List closed monthly payroll settlement cycles with lock state and reconciliation counts",
         "tags": [
           "Admin"
         ]
