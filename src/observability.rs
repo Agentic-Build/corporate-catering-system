@@ -603,6 +603,10 @@ fn http_route_and_method(operation_id: &str) -> (&'static str, &'static str) {
             "/api/v1/admin/payroll/monthly-settlements/{cycleKey}/unlock",
             "POST",
         ),
+        "listPayrollSettlementCycles" => {
+            ("/api/v1/admin/payroll/monthly-settlements", "GET")
+        }
+        "listPayrollDisputes" => ("/api/v1/admin/payroll/disputes", "GET"),
         "purgePayrollData" => ("/api/v1/admin/payroll/retention-purge", "POST"),
         "exportPayrollDeductions" => ("/api/v1/integrations/payroll/deductions", "GET"),
         "syncPayrollHrApiAdjunct" => (
@@ -941,6 +945,18 @@ mod tests {
         assert_eq!(
             http_route_and_method("queryAuditResponsibilities"),
             ("/api/v1/admin/audit/responsibilities", "GET")
+        );
+    }
+
+    #[test]
+    fn telemetry_route_mapping_covers_admin_payroll_list_operations() {
+        assert_eq!(
+            http_route_and_method("listPayrollSettlementCycles"),
+            ("/api/v1/admin/payroll/monthly-settlements", "GET")
+        );
+        assert_eq!(
+            http_route_and_method("listPayrollDisputes"),
+            ("/api/v1/admin/payroll/disputes", "GET")
         );
     }
 }

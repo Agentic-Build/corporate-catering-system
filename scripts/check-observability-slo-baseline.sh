@@ -194,6 +194,12 @@ fi
 
 SQLX_OFFLINE="true" cargo run --quiet --bin apply_sql_migrations >/dev/null
 
+# Pre-build the runtime service in release profile: debug builds are
+# 5-10x slower and cannot meet the hard-SLO throughput thresholds on a
+# shared CI runner. This also avoids racing the readiness poll below
+# against a cold compilation.
+SQLX_OFFLINE="true" cargo build --release --quiet --bin observability_runtime_service
+
 for overlay in dev staging production; do
   overlay_manifest="$(mktemp -t kustomize-${overlay}.XXXXXX.yaml)"
   kustomize build "ops/kubernetes/overlays/${overlay}" >"${overlay_manifest}"
@@ -260,14 +266,14 @@ PRELAUNCH_PICKUP_TOTP_SECRET="${prelaunch_pickup_totp_secret}" \
 OTEL_SERVICE_NAME="catering-http-api" \
 OTEL_EXPORTER_OTLP_ENDPOINT="${collector_endpoint}" \
 SQLX_OFFLINE="true" \
-cargo run --quiet --bin observability_runtime_service >"${service_log_file}" 2>&1 &
+cargo run --release --quiet --bin observability_runtime_service >"${service_log_file}" 2>&1 &
 service_pid=$!
 
-for _ in {1..40}; do
+for _ in {1..120}; do
   if curl --silent --fail --show-error "http://127.0.0.1:${PORT}/health/ready" >/dev/null; then
     break
   fi
-  sleep 0.25
+  sleep 0.5
 done
 
 if ! curl --silent --fail --show-error "http://127.0.0.1:${PORT}/health/ready" >/dev/null; then
@@ -281,6 +287,9 @@ BASE_URL="http://127.0.0.1:${PORT}" \
   MENU_VARIANT_COUNT="${prelaunch_menu_variant_count}" \
   DELIVERY_EPOCH_DAY="${delivery_epoch_day}" \
   PICKUP_TOTP_SECRET="${prelaunch_pickup_totp_secret}" \
+  CORPORATE_SSO_JWT_ISSUER="${CORPORATE_SSO_JWT_ISSUER}" \
+  CORPORATE_SSO_JWT_AUDIENCE="${CORPORATE_SSO_JWT_AUDIENCE}" \
+  CORPORATE_SSO_JWT_HS256_SECRET_BASE64="${CORPORATE_SSO_JWT_HS256_SECRET_BASE64}" \
   k6 run --quiet --summary-trend-stats "avg,min,med,max,p(90),p(95),p(99)" --summary-export "${summary_file}" ops/observability/load/k6-prelaunch.js
 
 cp "${summary_file}" "${retained_summary}"

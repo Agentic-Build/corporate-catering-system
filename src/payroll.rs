@@ -768,6 +768,114 @@ impl PayrollExchangeBatch {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PayrollSettlementCycleSummary {
+    cycle_key: String,
+    batch_id: PayrollExchangeBatchId,
+    pay_period: String,
+    lock_state: PayrollSettlementLockState,
+    generated_at: AuditTimestamp,
+    total_records: usize,
+    disputed_records: usize,
+    deduction_failed_records: usize,
+    refunded_records: usize,
+    hr_sync_status: Option<HrApiSyncStatus>,
+}
+
+impl PayrollSettlementCycleSummary {
+    pub fn cycle_key(&self) -> &str {
+        &self.cycle_key
+    }
+
+    pub fn batch_id(&self) -> &PayrollExchangeBatchId {
+        &self.batch_id
+    }
+
+    pub fn pay_period(&self) -> &str {
+        &self.pay_period
+    }
+
+    pub const fn lock_state(&self) -> PayrollSettlementLockState {
+        self.lock_state
+    }
+
+    pub const fn generated_at(&self) -> AuditTimestamp {
+        self.generated_at
+    }
+
+    pub const fn total_records(&self) -> usize {
+        self.total_records
+    }
+
+    pub const fn disputed_records(&self) -> usize {
+        self.disputed_records
+    }
+
+    pub const fn deduction_failed_records(&self) -> usize {
+        self.deduction_failed_records
+    }
+
+    pub const fn refunded_records(&self) -> usize {
+        self.refunded_records
+    }
+
+    pub const fn hr_sync_status(&self) -> Option<HrApiSyncStatus> {
+        self.hr_sync_status
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PayrollSettlementCyclePage {
+    items: Vec<PayrollSettlementCycleSummary>,
+    total_items: usize,
+    page: usize,
+    page_size: usize,
+}
+
+impl PayrollSettlementCyclePage {
+    pub fn items(&self) -> &[PayrollSettlementCycleSummary] {
+        &self.items
+    }
+
+    pub const fn total_items(&self) -> usize {
+        self.total_items
+    }
+
+    pub const fn page(&self) -> usize {
+        self.page
+    }
+
+    pub const fn page_size(&self) -> usize {
+        self.page_size
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PayrollDisputePage {
+    items: Vec<PayrollDisputeRecord>,
+    total_items: usize,
+    page: usize,
+    page_size: usize,
+}
+
+impl PayrollDisputePage {
+    pub fn items(&self) -> &[PayrollDisputeRecord] {
+        &self.items
+    }
+
+    pub const fn total_items(&self) -> usize {
+        self.total_items
+    }
+
+    pub const fn page(&self) -> usize {
+        self.page
+    }
+
+    pub const fn page_size(&self) -> usize {
+        self.page_size
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PayrollExportPage {
     items: Vec<PayrollDeductionRecord>,
     total_items: usize,
@@ -1673,6 +1781,122 @@ impl PayrollLedgerService {
             reason,
             changed_at: occurred_at,
             actor_id: actor.actor_id().clone(),
+        })
+    }
+
+    /// Summary of a closed settlement cycle suitable for listing in admin UI.
+    ///
+    /// Returns all cycles that have an associated exchange batch (i.e. have been
+    /// closed), sorted by pay period descending (newest first). Pagination is
+    /// applied after sorting so the `page_size` cap bounds payload size even
+    /// when many historical cycles exist.
+    pub fn list_monthly_settlement_cycles(
+        &self,
+        actor: &AuthenticatedActorContext,
+        page: usize,
+        page_size: usize,
+    ) -> Result<PayrollSettlementCyclePage, PayrollLedgerError> {
+        ensure_role(actor, Role::CommitteeAdmin)?;
+        let effective_page = page.max(1);
+        let effective_page_size = page_size.clamp(1, 200);
+        let state = lock_state(&self.state)?;
+
+        let mut summaries: Vec<PayrollSettlementCycleSummary> = state
+            .exchange_batch_ids_by_cycle
+            .iter()
+            .filter_map(|(cycle_key, batch_id)| {
+                let batch = state.exchange_batches.get(batch_id)?;
+                let lock_state = state
+                    .cycle_lock_state_by_cycle
+                    .get(cycle_key)
+                    .copied()
+                    .unwrap_or(PayrollSettlementLockState::Unlocked);
+                Some(PayrollSettlementCycleSummary {
+                    cycle_key: cycle_key.clone(),
+                    batch_id: batch_id.clone(),
+                    pay_period: batch.pay_period().to_owned(),
+                    lock_state,
+                    generated_at: batch.generated_at(),
+                    total_records: batch.reconciliation().total_records(),
+                    disputed_records: batch.reconciliation().disputed_records(),
+                    deduction_failed_records: batch.reconciliation().deduction_failed_records(),
+                    refunded_records: batch.reconciliation().refunded_records(),
+                    hr_sync_status: batch
+                        .hr_api_sync_receipt()
+                        .map(|receipt| receipt.status()),
+                })
+            })
+            .collect();
+
+        // Most recent pay period first; stable fall-back on cycle_key for determinism.
+        summaries.sort_by(|a, b| {
+            b.pay_period
+                .cmp(&a.pay_period)
+                .then_with(|| b.cycle_key.cmp(&a.cycle_key))
+        });
+
+        let total_items = summaries.len();
+        let start = effective_page_size.saturating_mul(effective_page.saturating_sub(1));
+        let page_items: Vec<PayrollSettlementCycleSummary> = summaries
+            .into_iter()
+            .skip(start)
+            .take(effective_page_size)
+            .collect();
+
+        Ok(PayrollSettlementCyclePage {
+            items: page_items,
+            total_items,
+            page: effective_page,
+            page_size: effective_page_size,
+        })
+    }
+
+    /// List payroll disputes across all orders, optionally filtered by status.
+    ///
+    /// Returns disputes sorted by `opened_at` descending (newest first) so the
+    /// SLA-critical items surface first. Used by the admin dispute queue UI.
+    pub fn list_payroll_disputes(
+        &self,
+        actor: &AuthenticatedActorContext,
+        status_filter: Option<PayrollDisputeStatus>,
+        page: usize,
+        page_size: usize,
+    ) -> Result<PayrollDisputePage, PayrollLedgerError> {
+        ensure_role(actor, Role::CommitteeAdmin)?;
+        let effective_page = page.max(1);
+        let effective_page_size = page_size.clamp(1, 200);
+        let state = lock_state(&self.state)?;
+
+        let mut items: Vec<PayrollDisputeRecord> = state
+            .disputes
+            .values()
+            .filter(|record| {
+                status_filter
+                    .map(|target| record.status() == target)
+                    .unwrap_or(true)
+            })
+            .cloned()
+            .collect();
+
+        items.sort_by(|a, b| {
+            b.opened_at()
+                .cmp(&a.opened_at())
+                .then_with(|| a.dispute_id().cmp(b.dispute_id()))
+        });
+
+        let total_items = items.len();
+        let start = effective_page_size.saturating_mul(effective_page.saturating_sub(1));
+        let page_items: Vec<PayrollDisputeRecord> = items
+            .into_iter()
+            .skip(start)
+            .take(effective_page_size)
+            .collect();
+
+        Ok(PayrollDisputePage {
+            items: page_items,
+            total_items,
+            page: effective_page,
+            page_size: effective_page_size,
         })
     }
 

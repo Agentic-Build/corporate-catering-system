@@ -6,9 +6,11 @@ import { handle } from "../src/hooks.server";
 import { createRequestEvent, MemoryCookies } from "./helpers";
 
 describe("auth middleware hooks", () => {
-  it("rejects guarded routes without an authenticated actor", async () => {
+  it("rejects guarded API-style requests without an authenticated actor", async () => {
     const cookies = new MemoryCookies();
-    const event = createRequestEvent("/admin", cookies);
+    const event = createRequestEvent("/admin", cookies, {
+      headers: { accept: "application/json" }
+    });
 
     await expectHttpStatus(
       Promise.resolve(
@@ -21,11 +23,30 @@ describe("auth middleware hooks", () => {
     );
   });
 
-  it("rejects guarded routes for roles outside guard policy", async () => {
+  it("soft-redirects unauthenticated page navigation back to the sign-in landing", async () => {
+    const cookies = new MemoryCookies();
+    const event = createRequestEvent("/admin", cookies, {
+      headers: { accept: "text/html" }
+    });
+
+    await expectRedirect(
+      Promise.resolve(
+        handle({
+          event,
+          resolve: async () => new Response("ok")
+        } as never)
+      ),
+      303,
+      /^\/\?flash=auth-required&next=/
+    );
+  });
+
+  it("rejects guarded API-style requests for roles outside guard policy", async () => {
     const cookies = new MemoryCookies();
     const event = createRequestEvent("/admin", cookies, {
       headers: {
-        "x-mock-role": "employee"
+        "x-mock-role": "employee",
+        accept: "application/json"
       }
     });
 
@@ -37,6 +58,27 @@ describe("auth middleware hooks", () => {
         } as never)
       ),
       403
+    );
+  });
+
+  it("soft-redirects cross-role page navigation to the actor's own portal", async () => {
+    const cookies = new MemoryCookies();
+    const event = createRequestEvent("/admin", cookies, {
+      headers: {
+        "x-mock-role": "employee",
+        accept: "text/html"
+      }
+    });
+
+    await expectRedirect(
+      Promise.resolve(
+        handle({
+          event,
+          resolve: async () => new Response("ok")
+        } as never)
+      ),
+      303,
+      /^\/employee\?flash=cross-role&attempted=/
     );
   });
 
@@ -140,5 +182,19 @@ async function expectHttpStatus(promise: Promise<unknown>, status: number) {
     }
 
     return (error as { status?: number }).status === status;
+  });
+}
+
+async function expectRedirect(
+  promise: Promise<unknown>,
+  status: number,
+  locationPattern: RegExp
+) {
+  await assert.rejects(promise, (error: unknown) => {
+    if (!error || typeof error !== "object") {
+      return false;
+    }
+    const err = error as { status?: number; location?: string };
+    return err.status === status && typeof err.location === "string" && locationPattern.test(err.location);
   });
 }

@@ -1,0 +1,72 @@
+[
+  {
+    "slug": "emp-02-discover",
+    "ok": true,
+    "label": "員工菜單瀏覽（Stepper + 即時 filter + confirm）"
+  },
+  {
+    "slug": "emp-03-orders",
+    "ok": true,
+    "label": "員工訂單列表（segmented tab + 卡片列表）"
+  },
+  {
+    "slug": "emp-07-pickup",
+    "ok": true,
+    "label": "領餐 QR（大字 verificationCode + wake lock）"
+  },
+  {
+    "slug": "emp-09-wallet",
+    "ok": true,
+    "label": "員工 wallet（本月扣款 / 上月 / 進行中 / 已結案）"
+  },
+  {
+    "slug": "ven-menu-new",
+    "ok": true,
+    "label": "新增菜單（MoneyInput 元 + ChipInput + FileDropzone）"
+  },
+  {
+    "slug": "ven-schedule",
+    "ok": true,
+    "label": "訂購政策（TimeInput 18:00 + live preview）"
+  },
+  {
+    "slug": "ven-compliance-upload",
+    "ok": true,
+    "label": "合規文件上傳（FileDropzone）"
+  },
+  {
+    "slug": "ven-today-kanban",
+    "ok": true,
+    "label": "今日看板（Kanban 6 欄 + 單鍵推進）"
+  },
+  {
+    "slug": "ven-menu-list",
+    "ok": true,
+    "label": "菜單列表（thumbnail + inline status）"
+  },
+  {
+    "slug": "adm-inbox",
+    "ok": true,
+    "label": "Admin 統一 Inbox（task queue 非 KPI wall）"
+  },
+  {
+    "slug": "adm-settlement-close",
+    "ok": true,
+    "label": "月結關帳（4-step Wizard + ISS-003 checkbox）"
+  },
+  {
+    "slug": "adm-anomalies",
+    "ok": true,
+    "label": "告警列表（DateInput + segmented tab + live refetch）"
+  },
+  {
+    "slug": "adm-anomaly-rules-new",
+    "ok": true,
+    "label": "新增規則（分區 + live sentence preview + ChipInput）"
+  },
+  {
+    "slug": "adm-compliance-templates-new",
+    "ok": true,
+    "label": "新增模板（分區 + ChipInput reminders）"
+  }
+]

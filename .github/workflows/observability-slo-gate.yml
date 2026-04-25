@@ -32,6 +32,9 @@ jobs:
       - name: Setup kustomize
         uses: imranismail/setup-kustomize@v2
 
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
       - name: Start local runtime dependencies
         run: ./scripts/setup-dev.sh up
 

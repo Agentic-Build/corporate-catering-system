@@ -1,6 +1,7 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 import crypto from "k6/crypto";
+import encoding from "k6/encoding";
 import exec from "k6/execution";
 
 const STAGED_PHASE_WINDOWS = [
@@ -110,6 +111,82 @@ if (!Number.isInteger(MENU_VARIANT_COUNT) || MENU_VARIANT_COUNT < 1) {
 }
 if (!PICKUP_TOTP_SECRET) {
   throw new Error("PICKUP_TOTP_SECRET must be set for pickup TOTP verification");
+}
+
+// ---------------------------------------------------------------------------
+// Load-gate authentication
+//
+// Every employee-scoped endpoint requires a Bearer JWT signed with the
+// CorporateSSO HS256 secret. Mirrors `apps/web/src/lib/server/auth/api-bearer.ts`
+// (`signHs256Jwt`) so load-gate traffic is indistinguishable from frontend
+// traffic. k6/crypto provides HMAC-SHA256, k6/encoding provides URL-safe
+// base64 — JWT is simply `base64url(header).base64url(payload).base64url(HMAC)`.
+// ---------------------------------------------------------------------------
+
+const JWT_ISSUER = (__ENV.CORPORATE_SSO_JWT_ISSUER || "").trim();
+const JWT_AUDIENCE = (__ENV.CORPORATE_SSO_JWT_AUDIENCE || "").trim();
+const JWT_SECRET_BASE64 = (__ENV.CORPORATE_SSO_JWT_HS256_SECRET_BASE64 || "").trim();
+const LOAD_GATE_EMPLOYEE_ACTOR_ID = (__ENV.LOAD_GATE_EMPLOYEE_ACTOR_ID || "emp-load-gate").trim();
+
+if (!JWT_ISSUER) {
+  throw new Error("CORPORATE_SSO_JWT_ISSUER must be set for load-gate JWT signing");
+}
+if (!JWT_AUDIENCE) {
+  throw new Error("CORPORATE_SSO_JWT_AUDIENCE must be set for load-gate JWT signing");
+}
+if (!JWT_SECRET_BASE64) {
+  throw new Error("CORPORATE_SSO_JWT_HS256_SECRET_BASE64 must be set for load-gate JWT signing");
+}
+
+const JWT_SECRET_BYTES = encoding.b64decode(JWT_SECRET_BASE64, "std", "s");
+
+function base64url(value) {
+  return encoding.b64encode(value, "rawurl");
+}
+
+function signLoadGateEmployeeJwt() {
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const payload = base64url(
+    JSON.stringify({
+      iss: JWT_ISSUER,
+      aud: JWT_AUDIENCE,
+      sub: LOAD_GATE_EMPLOYEE_ACTOR_ID,
+      iat: now,
+      nbf: now,
+      exp: now + 15 * 60,
+      role: "EMPLOYEE",
+      allPlants: false,
+      plantIds: [PLANT_ID],
+      vendorIds: []
+    })
+  );
+  const signingInput = `${header}.${payload}`;
+  const signatureBytes = crypto.hmac("sha256", JWT_SECRET_BYTES, signingInput, "binary");
+  const signature = base64url(signatureBytes);
+  return `${signingInput}.${signature}`;
+}
+
+// Cache the token per VU — each VU can reuse the same signature for 15 minutes.
+// `vu.idInTest` is stable so storing as a module-level var is safe; k6 isolates
+// VUs in separate JS runtimes.
+let cachedEmployeeJwt = null;
+let cachedEmployeeJwtExpiresAt = 0;
+
+function employeeBearerToken() {
+  const nowMs = Date.now();
+  if (!cachedEmployeeJwt || nowMs >= cachedEmployeeJwtExpiresAt - 60_000) {
+    cachedEmployeeJwt = signLoadGateEmployeeJwt();
+    cachedEmployeeJwtExpiresAt = nowMs + 14 * 60 * 1000;
+  }
+  return cachedEmployeeJwt;
+}
+
+function authorizedHeaders(extra) {
+  return Object.assign(
+    { "Content-Type": "application/json", Authorization: `Bearer ${employeeBearerToken()}` },
+    extra || {}
+  );
 }
 
 function scenarioIterationInTest() {
@@ -257,7 +334,7 @@ export function peakOrderPlacement() {
     `${BASE_URL}/api/v1/employee/orders`,
     buildOrderPayload(),
     {
-      headers: { "Content-Type": "application/json" },
+      headers: authorizedHeaders(),
       tags: withLoadTags({ operation: "createEmployeeOrder" }, "db")
     }
   );
@@ -291,6 +368,7 @@ export function mixedOrderAndMenuReads() {
       DELIVERY_DATE
     )}`,
     {
+      headers: authorizedHeaders(),
       tags: withLoadTags({ operation: "listEmployeeMenus" }, "cache")
     }
   );
@@ -333,7 +411,7 @@ export function peakOrderLifecycleMutations() {
     `${BASE_URL}/api/v1/employee/orders`,
     buildOrderPayload(),
     {
-      headers: { "Content-Type": "application/json" },
+      headers: authorizedHeaders(),
       tags: withLoadTags({ operation: "createEmployeeOrder" }, "db")
     }
   );
@@ -346,7 +424,7 @@ export function peakOrderLifecycleMutations() {
     `${BASE_URL}/api/v1/employee/orders/${orderId}`,
     buildOrderPatchPayload(),
     {
-      headers: { "Content-Type": "application/json" },
+      headers: authorizedHeaders(),
       tags: {
         operation: "updateEmployeeOrder",
         name: "PATCH /api/v1/employee/orders/{orderId}",
@@ -397,7 +475,7 @@ export function peakOrderAndPickupVerification() {
     `${BASE_URL}/api/v1/employee/orders`,
     buildOrderPayload(),
     {
-      headers: { "Content-Type": "application/json" },
+      headers: authorizedHeaders(),
       tags: withLoadTags({ operation: "createEmployeeOrder" }, "db")
     }
   );
@@ -410,7 +488,7 @@ export function peakOrderAndPickupVerification() {
     `${BASE_URL}/api/v1/employee/orders/${orderId}/pickup-verifications`,
     buildPickupVerificationPayload(orderId),
     {
-      headers: { "Content-Type": "application/json" },
+      headers: authorizedHeaders(),
       tags: {
         operation: "verifyPickupOrder",
         name: "POST /api/v1/employee/orders/{orderId}/pickup-verifications",

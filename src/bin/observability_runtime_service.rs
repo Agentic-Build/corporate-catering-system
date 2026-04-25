@@ -69,11 +69,12 @@ use corporate_catering_system::operations_analytics::{
 };
 use corporate_catering_system::payroll::{
     HrApiSyncStatus, OrderPayrollView, PayrollDeductionRecord, PayrollDisputeId,
-    PayrollDisputeRecord, PayrollDisputeTraceEvent, PayrollExchangeBatch, PayrollExchangeBatchId,
-    PayrollExportPage, PayrollHrApiSyncOutcome, PayrollLedgerError, PayrollLedgerService,
-    PayrollLedgerServiceSnapshot, PayrollLedgerSourceKind, PayrollLedgerSourceRef,
-    PayrollReconciliationMetadata, PayrollRetentionPolicy, PayrollSettlementLockReceipt,
-    PayrollSortField as PayrollSortFieldDomain, SortOrder as PayrollSortOrderDomain,
+    PayrollDisputeRecord, PayrollDisputeStatus, PayrollDisputeTraceEvent, PayrollExchangeBatch,
+    PayrollExchangeBatchId, PayrollExportPage, PayrollHrApiSyncOutcome, PayrollLedgerError,
+    PayrollLedgerService, PayrollLedgerServiceSnapshot, PayrollLedgerSourceKind,
+    PayrollLedgerSourceRef, PayrollReconciliationMetadata, PayrollRetentionPolicy,
+    PayrollSettlementLockReceipt, PayrollSortField as PayrollSortFieldDomain,
+    SortOrder as PayrollSortOrderDomain,
 };
 use corporate_catering_system::persistence::{
     allocate_order_id_hex_from_postgres, build_operational_pg_pool_topology_from_env,
@@ -1524,6 +1525,64 @@ struct PayrollSettlementCycleLockPayload {
     actor_id: String,
 }
 
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct PayrollSettlementCyclesListQuery {
+    page: Option<usize>,
+    page_size: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollSettlementCycleSummaryPayload {
+    cycle_key: String,
+    batch_id: String,
+    pay_period: String,
+    lock_state: String,
+    generated_at: String,
+    total_records: usize,
+    disputed_records: usize,
+    deduction_failed_records: usize,
+    refunded_records: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hr_sync_status: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollSettlementCyclePagePayload {
+    items: Vec<PayrollSettlementCycleSummaryPayload>,
+    total_items: usize,
+    page: usize,
+    page_size: usize,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct PayrollDisputesListQuery {
+    status: Option<PayrollDisputeStatusQuery>,
+    page: Option<usize>,
+    page_size: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PayrollDisputeStatusQuery {
+    Open,
+    InReview,
+    ResolvedRefundApproved,
+    ResolvedRejected,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollDisputePagePayload {
+    items: Vec<PayrollDisputePayload>,
+    total_items: usize,
+    page: usize,
+    page_size: usize,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PayrollRetentionPurgeRequest {
@@ -2343,6 +2402,14 @@ fn build_http_app(state: AppState, rush_reminder_runtime_enabled: bool) -> Route
         .route(
             "/api/v1/admin/payroll/monthly-settlements/:cycleKey/unlock",
             post(unlock_payroll_settlement_cycle),
+        )
+        .route(
+            "/api/v1/admin/payroll/monthly-settlements",
+            get(list_payroll_settlement_cycles),
+        )
+        .route(
+            "/api/v1/admin/payroll/disputes",
+            get(list_payroll_disputes),
         )
         .route(
             "/api/v1/integrations/payroll/deductions",
@@ -13053,6 +13120,192 @@ fn handle_lock_payroll_settlement_cycle(
 
     Ok(PayrollSettlementCycleLockResponse {
         settlement_cycle: to_payroll_settlement_cycle_lock_payload(&receipt),
+    })
+}
+
+async fn list_payroll_settlement_cycles(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<PayrollSettlementCyclesListQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "listPayrollSettlementCycles",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_list_payroll_settlement_cycles(&state, &committee_actor, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("settlement cycle page payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("settlement cycle page error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_list_payroll_settlement_cycles(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    query: PayrollSettlementCyclesListQuery,
+) -> Result<PayrollSettlementCyclePagePayload, (StatusCode, ErrorPayload)> {
+    let page = query.page.unwrap_or(1).max(1);
+    let page_size = query.page_size.unwrap_or(50);
+    if page_size == 0 || page_size > 200 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "pageSize must be between 1 and 200".to_owned(),
+        ));
+    }
+    let result = with_payroll_ledger_service(state, |service| {
+        service.list_monthly_settlement_cycles(committee_actor, page, page_size)
+    })?;
+
+    Ok(PayrollSettlementCyclePagePayload {
+        items: result
+            .items()
+            .iter()
+            .map(|summary| PayrollSettlementCycleSummaryPayload {
+                cycle_key: summary.cycle_key().to_owned(),
+                batch_id: summary.batch_id().as_str().to_owned(),
+                pay_period: summary.pay_period().to_owned(),
+                lock_state: summary.lock_state().as_str().to_owned(),
+                generated_at: audit_timestamp_to_iso_datetime(summary.generated_at()),
+                total_records: summary.total_records(),
+                disputed_records: summary.disputed_records(),
+                deduction_failed_records: summary.deduction_failed_records(),
+                refunded_records: summary.refunded_records(),
+                hr_sync_status: summary.hr_sync_status().map(|s| s.as_str().to_owned()),
+            })
+            .collect(),
+        total_items: result.total_items(),
+        page: result.page(),
+        page_size: result.page_size(),
+    })
+}
+
+async fn list_payroll_disputes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<PayrollDisputesListQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let telemetry = TelemetryService::HttpApi.begin_operation(
+        "listPayrollDisputes",
+        None::<&str>,
+        Some(state.plant_id.as_str()),
+    );
+    let request_id = telemetry.correlation_context().request_id().to_owned();
+    let committee_actor = match require_corporate_actor_for_role_in_runtime_plant(
+        &state,
+        &headers,
+        Role::CommitteeAdmin,
+    ) {
+        Ok(actor) => actor,
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            return (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("authorization error payload serialization should succeed"),
+                ),
+            );
+        }
+    };
+
+    let response = match handle_list_payroll_disputes(&state, &committee_actor, query) {
+        Ok(payload) => {
+            telemetry.finish_with_http_status(StatusCode::OK.as_u16());
+            (
+                StatusCode::OK,
+                Json(
+                    serde_json::to_value(payload)
+                        .expect("payroll dispute page payload serialization should succeed"),
+                ),
+            )
+        }
+        Err((status, error)) => {
+            telemetry.finish_with_http_status(status.as_u16());
+            (
+                status,
+                Json(
+                    serde_json::to_value(error.with_request_id(request_id.as_str()))
+                        .expect("payroll dispute page error payload serialization should succeed"),
+                ),
+            )
+        }
+    };
+
+    response
+}
+
+fn handle_list_payroll_disputes(
+    state: &AppState,
+    committee_actor: &AuthenticatedActorContext,
+    query: PayrollDisputesListQuery,
+) -> Result<PayrollDisputePagePayload, (StatusCode, ErrorPayload)> {
+    let page = query.page.unwrap_or(1).max(1);
+    let page_size = query.page_size.unwrap_or(50);
+    if page_size == 0 || page_size > 200 {
+        return Err(domain_error(
+            StatusCode::BAD_REQUEST,
+            "BAD_REQUEST",
+            "pageSize must be between 1 and 200".to_owned(),
+        ));
+    }
+    let status_filter = query.status.map(|q| match q {
+        PayrollDisputeStatusQuery::Open => PayrollDisputeStatus::Open,
+        PayrollDisputeStatusQuery::InReview => PayrollDisputeStatus::InReview,
+        PayrollDisputeStatusQuery::ResolvedRefundApproved => {
+            PayrollDisputeStatus::ResolvedRefundApproved
+        }
+        PayrollDisputeStatusQuery::ResolvedRejected => PayrollDisputeStatus::ResolvedRejected,
+    });
+
+    let result = with_payroll_ledger_service(state, |service| {
+        service.list_payroll_disputes(committee_actor, status_filter, page, page_size)
+    })?;
+
+    Ok(PayrollDisputePagePayload {
+        items: result.items().iter().map(to_payroll_dispute_payload).collect(),
+        total_items: result.total_items(),
+        page: result.page(),
+        page_size: result.page_size(),
     })
 }
 
