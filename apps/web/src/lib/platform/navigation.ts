@@ -85,13 +85,6 @@ export const NAV_TREES: Record<PortalRole, RoleNavigationTree> = {
       descriptionKey: "nav.employee.ordersDesc",
       href: "/employee/orders",
       icon: "bag"
-    },
-    {
-      id: "wallet",
-      labelKey: "nav.employee.wallet",
-      descriptionKey: "nav.employee.walletDesc",
-      href: "/employee/wallet",
-      icon: "wallet"
     }
   ],
   vendor: [
@@ -168,11 +161,11 @@ export const NAV_TREES: Record<PortalRole, RoleNavigationTree> = {
       icon: "shield"
     },
     {
-      id: "settlement",
-      labelKey: "nav.admin.settlement",
-      descriptionKey: "nav.admin.settlementDesc",
-      href: "/admin/settlement",
-      icon: "cash"
+      id: "reports",
+      labelKey: "額度報表",
+      descriptionKey: "匯出額度使用報表",
+      href: "/admin/reports",
+      icon: "document"
     },
     {
       id: "anomalies",

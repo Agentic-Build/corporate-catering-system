@@ -273,7 +273,6 @@
             {/each}
             <div class="flex flex-wrap gap-2">
               <Button href="/employee/orders" variant="secondary">查看所有訂單</Button>
-              <Button href="/employee/wallet" variant="ghost">查看扣款</Button>
             </div>
           </div>
         {/if}

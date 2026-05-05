@@ -213,9 +213,6 @@
         >
           提交申訴
         </Button>
-        <Button href={`/employee/wallet/${order.orderId}`} variant="ghost">
-          查看扣款明細
-        </Button>
       </div>
     </Card>
   {/if}

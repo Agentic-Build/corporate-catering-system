@@ -18,12 +18,7 @@
     maskIdentifier
   } from "$lib/platform/labels";
 
-  type CycleSummary = Awaited<
-    ReturnType<typeof apiClient.admin.listPayrollSettlementCycles>
-  >["items"][number];
-  type Dispute = Awaited<
-    ReturnType<typeof apiClient.admin.listPayrollDisputes>
-  >["items"][number];
+
 
   import type { PageData } from "./$types";
 
@@ -37,20 +32,12 @@
   let pendingVendors = $state<VendorView[]>([]);
   let openAlerts = $state<AnomalyAlertView[]>([]);
   let breachedAlerts = $state<AnomalyAlertView[]>([]);
-  let recentSettlement = $state<CycleSummary | null>(null);
-  let openDisputes = $state<Dispute[]>([]);
+
 
   const pendingCount = $derived(pendingVendors.length);
   const openAlertCount = $derived(openAlerts.length);
   const breachedCount = $derived(breachedAlerts.length);
-  const payrollExceptionCount = $derived(
-    recentSettlement
-      ? recentSettlement.disputedRecords +
-          recentSettlement.deductionFailedRecords +
-          recentSettlement.refundedRecords
-      : null
-  );
-  const disputeCount = $derived(openDisputes.length);
+
 
   type QueueTone = "warning" | "danger" | "info" | "pending" | "success" | "neutral";
 
@@ -74,15 +61,7 @@
         href: string;
         breached: boolean;
       }
-    | {
-        kind: "dispute";
-        key: string;
-        title: string;
-        subtitle: string;
-        tone: QueueTone;
-        toneLabel: string;
-        href: string;
-      };
+
 
   const queue = $derived.by<QueueItem[]>(() => {
     const items: QueueItem[] = [];
@@ -123,17 +102,7 @@
         href: `/admin/vendors/${vendor.vendorId}`
       });
     }
-    for (const dispute of openDisputes) {
-      items.push({
-        kind: "dispute",
-        key: `dispute-${dispute.disputeId}`,
-        title: `爭議 ${maskIdentifier(dispute.disputeId, 6)}`,
-        subtitle: `訂單 ${maskIdentifier(dispute.orderId, 6)} · 員工 ${maskIdentifier(dispute.employeeActorId, 6)}`,
-        tone: "warning",
-        toneLabel: "待處理",
-        href: `/admin/settlement/disputes/${encodeURIComponent(dispute.disputeId)}`
-      });
-    }
+
     return items;
   });
 
@@ -143,8 +112,7 @@
         return "🏪";
       case "alert":
         return "⚠️";
-      case "dispute":
-        return "⚖️";
+
     }
   }
 
@@ -161,20 +129,16 @@
     loadError = null;
     try {
       configureAdminApi(bearerToken);
-      const [pendingPage, openPage, breachedPage, cyclePage, disputePage] =
+      const [pendingPage, openPage, breachedPage] =
         await Promise.allSettled([
           apiClient.admin.listAdminVendors(1, 50, "createdAt", "desc", "PENDING_REVIEW"),
           apiClient.admin.listAnomalyAlerts(undefined, undefined, "OPEN"),
-          apiClient.admin.listAnomalyAlerts(undefined, undefined, undefined, undefined, "BREACHED"),
-          apiClient.admin.listPayrollSettlementCycles(1, 1),
-          apiClient.admin.listPayrollDisputes("OPEN", 1, 50)
+          apiClient.admin.listAnomalyAlerts(undefined, undefined, undefined, undefined, "BREACHED")
         ]);
 
       pendingVendors = pendingPage.status === "fulfilled" ? pendingPage.value.items : [];
       openAlerts = openPage.status === "fulfilled" ? openPage.value.items : [];
       breachedAlerts = breachedPage.status === "fulfilled" ? breachedPage.value.items : [];
-      recentSettlement = cyclePage.status === "fulfilled" ? cyclePage.value.items[0] ?? null : null;
-      openDisputes = disputePage.status === "fulfilled" ? disputePage.value.items : [];
     } catch (error) {
       loadError = describeApiError(error);
     } finally {
@@ -200,7 +164,7 @@
 {:else}
   <!-- Compact status ribbon (5 KPI chips) -->
   <section
-    class="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm md:grid-cols-5"
+    class="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm md:grid-cols-3"
     aria-label="KPI 狀態列"
   >
     <div class="flex items-baseline justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
@@ -221,18 +185,7 @@
         {loading ? "—" : breachedCount}
       </span>
     </div>
-    <div class="flex items-baseline justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
-      <span class="text-xs text-slate-500">月結例外</span>
-      <span class="text-base font-semibold text-cyan-700">
-        {payrollExceptionCount === null ? "—" : payrollExceptionCount}
-      </span>
-    </div>
-    <div class="flex items-baseline justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
-      <span class="text-xs text-slate-500">爭議</span>
-      <span class="text-base font-semibold text-violet-700">
-        {disputeCount === null ? "—" : disputeCount}
-      </span>
-    </div>
+
   </section>
 
   <Card
@@ -246,7 +199,7 @@
     {:else if queue.length === 0}
       <EmptyState
         title="今天沒有待辦"
-        description="沒有待審商家、開放告警或未處理爭議。可前往下方快捷動作維運系統。"
+        description="沒有待審商家或開放告警。可前往下方快捷動作維運系統。"
       />
     {:else}
       <ul class="grid gap-2">
@@ -273,9 +226,9 @@
 
   <section class="grid gap-3 md:grid-cols-3" aria-label="常用動作">
     <article class="grid gap-2 rounded-xl border border-slate-200 bg-white p-4">
-      <h3 class="text-sm font-semibold text-slate-900">執行月結關帳</h3>
-      <p class="text-xs text-slate-600">需 ISS-003 簽核，會建立 HR SFTP 批次。</p>
-      <Button href="/admin/settlement/close" variant="secondary" size="sm">前往</Button>
+      <h3 class="text-sm font-semibold text-slate-900">匯出額度報表</h3>
+      <p class="text-xs text-slate-600">產出並匯出各週期員工使用額度的報表。</p>
+      <Button href="/admin/reports" variant="secondary" size="sm">前往</Button>
     </article>
     <article class="grid gap-2 rounded-xl border border-slate-200 bg-white p-4">
       <h3 class="text-sm font-semibold text-slate-900">執行合規生命週期</h3>
@@ -289,32 +242,5 @@
     </article>
   </section>
 
-  {#if recentSettlement}
-    <Card title="最近關帳摘要" description="由伺服器返回的最新已關帳週期。">
-      <dl class="grid gap-2 text-sm text-slate-700 md:grid-cols-4">
-        <div>
-          <dt class="text-xs text-slate-500">週期</dt>
-          <dd class="font-medium">{recentSettlement.cycleKey}</dd>
-        </div>
-        <div>
-          <dt class="text-xs text-slate-500">關帳時間</dt>
-          <dd>
-            {formatTaipeiDateTime(recentSettlement.generatedAt)}
-          </dd>
-        </div>
-        <div>
-          <dt class="text-xs text-slate-500">總筆數</dt>
-          <dd class="font-medium">{recentSettlement.totalRecords}</dd>
-        </div>
-        <div>
-          <dt class="text-xs text-slate-500">例外筆數</dt>
-          <dd class="font-medium">
-            {recentSettlement.disputedRecords +
-              recentSettlement.deductionFailedRecords +
-              recentSettlement.refundedRecords}
-          </dd>
-        </div>
-      </dl>
-    </Card>
-  {/if}
+
 {/if}
