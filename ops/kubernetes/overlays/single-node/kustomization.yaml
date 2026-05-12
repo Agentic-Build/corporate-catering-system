@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Single-node overlay (k3d / kind / Docker Desktop K8s).
+# Adds self-hosted single-pod Postgres / Redis / NATS / MinIO + a dev Secret
+# + patches the base ConfigMap with in-cluster connection strings.
+# HA / clustered variants land in P8.
+
+namespace: tbite
+
+resources:
+  - ../../base
+  - secrets-bootstrap.yaml
+  - postgres.yaml
+  - redis.yaml
+  - nats.yaml
+  - minio.yaml
+  - nginx-ingress.yaml
+
+# Merge dev URLs into the base ConfigMap.
+patches:
+  - path: configmap-patch.yaml
+    target:
+      kind: ConfigMap
+      name: tbite-config
+
+# Pin app images to the local :dev tag built by `make dev-up` (Task 14).
+images:
+  - name: tbite/api
+    newTag: dev
+  - name: tbite/web-employee
+    newTag: dev
+  - name: tbite/web-merchant
+    newTag: dev
+  - name: tbite/web-admin
+    newTag: dev

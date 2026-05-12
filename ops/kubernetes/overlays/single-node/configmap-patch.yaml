@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tbite-config
+  namespace: tbite
+data:
+  # Single-node overlay: RW and RO point at the same Postgres pod (no replica in dev).
+  DATABASE_RW_URL: "postgres://tbite:tbite@postgres:5432/tbite?sslmode=disable"
+  DATABASE_RO_URL: "postgres://tbite:tbite@postgres:5432/tbite?sslmode=disable"
+  REDIS_URL: "redis://redis:6379/0"
+  NATS_URL: "nats://nats:4222"
+  S3_ENDPOINT: "http://minio:9000"
+  S3_BUCKET: "tbite"
