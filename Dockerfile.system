@@ -8,6 +8,8 @@ ENV DATABASE_URL=${DATABASE_URL}
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY migrations ./migrations
+COPY .sqlx ./.sqlx
+ENV SQLX_OFFLINE=true
 
 RUN cargo build --locked --release --bin observability_runtime_service
 

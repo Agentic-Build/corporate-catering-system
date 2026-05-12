@@ -25,5 +25,10 @@
   },
   "dependencies": {
     "qrcode": "^1.5.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

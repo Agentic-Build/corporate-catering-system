@@ -1,0 +1,44 @@
+include:
+  - ops/local/docker-compose.dev.yml
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.system
+      args:
+        DATABASE_URL: ${DATABASE_RW_URL:-postgres://app:app_password@postgres:5432/app_db}
+    env_file:
+      - .env.development
+      - .env.local
+    environment:
+      DATABASE_RW_URL: postgresql://corporate_catering:corporate_catering@postgres:5432/corporate_catering
+      DATABASE_RO_URL: postgresql://corporate_catering:corporate_catering@postgres:5432/corporate_catering
+      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        MOCK_AUTH_SIGNING_SECRET: ${MOCK_AUTH_SIGNING_SECRET:-secret}
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.development
+      - .env.local
+    environment:
+      PUBLIC_API_URL: http://backend:8080
+      MOCK_AUTH_SIGNING_SECRET: ${MOCK_AUTH_SIGNING_SECRET:-secret}
+    depends_on:
+      - backend
