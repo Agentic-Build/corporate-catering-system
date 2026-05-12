@@ -52,7 +52,7 @@ Note: `apps/web/node_modules/` and `apps/web/.svelte-kit/` are not currently pre
 
 The following will be deleted later in P0; they remain untouched by Task 1 so we can reference them while building the replacement:
 
-- [ ] `ops/kubernetes/base/**` (20 tracked files) — deleted in **Task 10** when the new dual-overlay K8s layout (`ops/k8s/base`, `ops/k8s/overlays/{single,multi}`) is written.
+- [ ] `ops/kubernetes/base/**` (20 tracked files) — deleted in **Task 10** when the new dual-overlay K8s layout (`ops/kubernetes/base`, `ops/kubernetes/overlays/single-node`, `ops/kubernetes/overlays/gcp`) is written.
 - [ ] `ops/kubernetes/components/**` (10 tracked files) — deleted in **Task 10**.
 - [ ] `ops/kubernetes/overlays/**` (14 tracked files) — deleted in **Task 10**.
 - [ ] `docs/plans/2026-05-13-p0-deletion-manifest.md` (this file) — deleted in **Task 16** at P0 end via `git rm`.
