@@ -90,6 +90,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/employee/menu": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the employee's available menu for a plant + day */
+        get: operations["listEmployeeMenu"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the merchant's menu categories */
+        get: operations["listMerchantCategories"];
+        put?: never;
+        /** Create a menu category for the merchant */
+        post: operations["createMerchantCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/menu-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the merchant's menu items */
+        get: operations["listMerchantMenuItems"];
+        put?: never;
+        /** Create a draft menu item */
+        post: operations["createMerchantMenuItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/menu-items/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update a menu item */
+        patch: operations["updateMerchantMenuItem"];
+        trace?: never;
+    };
+    "/api/merchant/menu-items/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a menu item */
+        post: operations["archiveMerchantMenuItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/menu-items/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish a draft/archived menu item (status=active) */
+        post: operations["publishMerchantMenuItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/{provider}/callback": {
         parameters: {
             query?: never;
@@ -171,6 +275,47 @@ export interface components {
             readonly $schema?: string;
             plants: string[] | null;
         };
+        CategoryDTO: {
+            id: string;
+            name: string;
+            /** Format: int64 */
+            sort_order: number;
+        };
+        CreateCategoryInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateCategoryInputBody.json
+             */
+            readonly $schema?: string;
+            name: string;
+            /** Format: int64 */
+            sort_order: number;
+        };
+        CreateCategoryOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateCategoryOutputBody.json
+             */
+            readonly $schema?: string;
+            category: components["schemas"]["CategoryDTO"];
+        };
+        CreateItemInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateItemInputBody.json
+             */
+            readonly $schema?: string;
+            badges: string[] | null;
+            category_id?: string;
+            description: string;
+            name: string;
+            /** Format: int64 */
+            price_minor: number;
+            tags: string[] | null;
+        };
         CreateVendorInputBody: {
             /**
              * Format: uri
@@ -191,6 +336,25 @@ export interface components {
              */
             readonly $schema?: string;
             vendor: components["schemas"]["VendorDTO"];
+        };
+        EmployeeMenuItemDTO: {
+            badges: string[] | null;
+            /** Format: int64 */
+            capacity: number;
+            description: string;
+            eta_label: string;
+            id: string;
+            images?: string[] | null;
+            name: string;
+            pickup_window: string;
+            /** Format: int64 */
+            price_minor: number;
+            /** Format: int64 */
+            remain: number;
+            sold_out: boolean;
+            tags: string[] | null;
+            vendor: string;
+            vendor_id: string;
         };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
@@ -248,6 +412,55 @@ export interface components {
             readonly $schema?: string;
             code: string;
         };
+        ItemDTO: {
+            badges: string[] | null;
+            category_id?: string;
+            description: string;
+            id: string;
+            images?: string[] | null;
+            name: string;
+            /** Format: int64 */
+            price_minor: number;
+            status: string;
+            tags: string[] | null;
+            vendor_id: string;
+        };
+        ItemOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ItemOutputBody.json
+             */
+            readonly $schema?: string;
+            item: components["schemas"]["ItemDTO"];
+        };
+        ListCategoriesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListCategoriesOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["CategoryDTO"][] | null;
+        };
+        ListEmployeeMenuOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListEmployeeMenuOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["EmployeeMenuItemDTO"][] | null;
+        };
+        ListItemsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListItemsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["ItemDTO"][] | null;
+        };
         ListVendorsOutputBody: {
             /**
              * Format: uri
@@ -293,6 +506,21 @@ export interface components {
             readonly $schema?: string;
             auth_url: string;
             state: string;
+        };
+        UpdateItemInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateItemInputBody.json
+             */
+            readonly $schema?: string;
+            badges: string[] | null;
+            category_id?: string;
+            description: string;
+            name: string;
+            /** Format: int64 */
+            price_minor: number;
+            tags: string[] | null;
         };
         VendorDTO: {
             approved_at?: string;
@@ -471,6 +699,260 @@ export interface operations {
         };
     };
     suspendVendor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listEmployeeMenu: {
+        parameters: {
+            query?: {
+                /** @description Plant code; defaults to caller's plant */
+                plant?: string;
+                /** @description YYYY-MM-DD; defaults to today UTC */
+                day?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListEmployeeMenuOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listMerchantCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListCategoriesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    createMerchantCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCategoryInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateCategoryOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listMerchantMenuItems: {
+        parameters: {
+            query?: {
+                /** @description Include archived items in the result */
+                include_archived?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListItemsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    createMerchantMenuItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateItemInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    updateMerchantMenuItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateItemInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    archiveMerchantMenuItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    publishMerchantMenuItem: {
         parameters: {
             query?: never;
             header?: never;

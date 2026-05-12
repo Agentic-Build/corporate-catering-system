@@ -20,6 +20,9 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
 	pgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/identity/postgres"
 	idredis "github.com/takalawang/corporate-catering-system/services/api/internal/identity/redis"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
+	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
+	mpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/db"
@@ -129,6 +132,14 @@ func main() {
 		}
 		vendorAPI := &vhttp.API{Svc: vendorService}
 
+		// 7c. Menu service + merchant/employee handlers
+		menuService := &menu.Service{
+			Categories: mpgrepo.NewCategoryRepo(pool),
+			Items:      mpgrepo.NewItemRepo(pool),
+			Images:     mpgrepo.NewImageRepo(pool),
+		}
+		menuAPI := &mhttp.API{Svc: menuService}
+
 		// 8. HTTP server. When FAKE_OIDC=1, swap the google provider for a
 		// deterministic fake and mount its auto-redirect handler. Used for
 		// local dev and Playwright e2e — never enable in production.
@@ -161,7 +172,7 @@ func main() {
 			}
 		}
 
-		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes, vendorAPI.Register)
+		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes, vendorAPI.Register, menuAPI.Register)
 		if err := srv.Run(ctx); err != nil {
 			logger.Error("api shutdown", "err", err)
 			os.Exit(1)
