@@ -1,0 +1,30 @@
+run:
+  timeout: 5m
+  go: "1.23"
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - gofmt
+    - goimports
+    - misspell
+    - revive
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+        arguments: ["disableStutteringCheck"]
+
+issues:
+  exclude-dirs:
+    - .svelte-kit
+    - build
+    - node_modules
