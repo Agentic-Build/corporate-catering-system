@@ -105,12 +105,12 @@ pnpm --filter @tbite/employee dev
 
 ## Phases
 
-本 repo 採分 phase 推進。P0 為骨架，P1+ 逐步補業務功能：
+本 repo 採分 phase 推進：
 
-- **P0**：monorepo skeleton（本 phase）—— [`docs/plans/2026-05-13-p0-skeleton.md`](docs/plans/2026-05-13-p0-skeleton.md)
-- **P1**：identity + OIDC + 員工登入流
-- **P2**：Postgres schema 第一波 + menu / quota / vendor
-- **P3–P8**：見設計文件 §15
+- **P0** ✅ monorepo skeleton — [`docs/plans/2026-05-13-p0-skeleton.md`](docs/plans/2026-05-13-p0-skeleton.md)
+- **P1** ✅ identity + OIDC + 三端登入流 — [`docs/plans/2026-05-13-p1-identity.md`](docs/plans/2026-05-13-p1-identity.md)
+- **P2** Postgres schema 第二波 + menu / quota / vendor
+- **P3–P8** 見設計文件 §15
 
 ## Contributing
 
