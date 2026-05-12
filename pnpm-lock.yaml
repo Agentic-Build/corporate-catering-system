@@ -18,7 +18,93 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  apps/admin:
+    dependencies:
+      '@sveltejs/adapter-node':
+        specifier: ^5.2.0
+        version: 5.5.4(@sveltejs/kit@2.59.1(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.55.5)(vite@5.4.21))(svelte@5.55.5)(typescript@5.9.3)(vite@5.4.21))
+      '@tbite/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
+      '@tbite/tokens':
+        specifier: workspace:*
+        version: link:../../packages/tokens
+      '@tbite/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+    devDependencies:
+      '@sveltejs/kit':
+        specifier: ^2.7.0
+        version: 2.59.1(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.55.5)(vite@5.4.21))(svelte@5.55.5)(typescript@5.9.3)(vite@5.4.21)
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^4.0.0
+        version: 4.0.4(svelte@5.55.5)(vite@5.4.21)
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.5.0(postcss@8.5.14)
+      postcss:
+        specifier: ^8.4.47
+        version: 8.5.14
+      svelte:
+        specifier: ^5.0.0
+        version: 5.55.5
+      svelte-check:
+        specifier: ^4.0.0
+        version: 4.4.8(picomatch@4.0.4)(svelte@5.55.5)(typescript@5.9.3)
+      tailwindcss:
+        specifier: ^3.4.13
+        version: 3.4.19
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21
+
   apps/employee:
+    dependencies:
+      '@sveltejs/adapter-node':
+        specifier: ^5.2.0
+        version: 5.5.4(@sveltejs/kit@2.59.1(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.55.5)(vite@5.4.21))(svelte@5.55.5)(typescript@5.9.3)(vite@5.4.21))
+      '@tbite/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
+      '@tbite/tokens':
+        specifier: workspace:*
+        version: link:../../packages/tokens
+      '@tbite/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+    devDependencies:
+      '@sveltejs/kit':
+        specifier: ^2.7.0
+        version: 2.59.1(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.55.5)(vite@5.4.21))(svelte@5.55.5)(typescript@5.9.3)(vite@5.4.21)
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^4.0.0
+        version: 4.0.4(svelte@5.55.5)(vite@5.4.21)
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.5.0(postcss@8.5.14)
+      postcss:
+        specifier: ^8.4.47
+        version: 8.5.14
+      svelte:
+        specifier: ^5.0.0
+        version: 5.55.5
+      svelte-check:
+        specifier: ^4.0.0
+        version: 4.4.8(picomatch@4.0.4)(svelte@5.55.5)(typescript@5.9.3)
+      tailwindcss:
+        specifier: ^3.4.13
+        version: 3.4.19
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21
+
+  apps/merchant:
     dependencies:
       '@sveltejs/adapter-node':
         specifier: ^5.2.0
