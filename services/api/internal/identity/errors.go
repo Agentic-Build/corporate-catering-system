@@ -13,4 +13,5 @@ var (
 	ErrAccountSuspended    = errors.New("identity: account suspended")
 	ErrInvalidProvider     = errors.New("identity: invalid provider")
 	ErrInvalidRole         = errors.New("identity: invalid role")
+	ErrSessionNotFound     = errors.New("identity: session not found")
 )
