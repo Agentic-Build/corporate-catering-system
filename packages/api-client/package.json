@@ -1,0 +1,9 @@
+{
+  "name": "@tbite/api-client",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "files": ["src"],
+  "scripts": { "check": "tsc --noEmit -p tsconfig.json" },
+  "devDependencies": { "typescript": "^5.6.0" }
+}
