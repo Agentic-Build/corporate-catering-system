@@ -23,6 +23,9 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/db"
+	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
+	vhttp "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/http"
+	vpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/postgres"
 )
 
 func main() {
@@ -116,6 +119,16 @@ func main() {
 			},
 		}
 
+		// 7b. Vendor service + admin handlers
+		vendorService := &vendor.Service{
+			Vendors:   vpgrepo.NewVendorRepo(pool),
+			Plants:    vpgrepo.NewPlantMappingRepo(pool),
+			Invites:   invRepo,
+			Clock:     clock.SystemClock{},
+			InviteTTL: 7 * 24 * time.Hour,
+		}
+		vendorAPI := &vhttp.API{Svc: vendorService}
+
 		// 8. HTTP server. When FAKE_OIDC=1, swap the google provider for a
 		// deterministic fake and mount its auto-redirect handler. Used for
 		// local dev and Playwright e2e — never enable in production.
@@ -148,7 +161,7 @@ func main() {
 			}
 		}
 
-		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes)
+		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes, vendorAPI.Register)
 		if err := srv.Run(ctx); err != nil {
 			logger.Error("api shutdown", "err", err)
 			os.Exit(1)

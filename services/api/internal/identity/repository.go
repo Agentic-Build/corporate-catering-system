@@ -21,6 +21,7 @@ type EmployeeDirectoryRepository interface {
 
 type VendorInviteRepository interface {
 	Get(ctx context.Context, code string) (*VendorInvite, error)
+	Put(ctx context.Context, inv *VendorInvite) error
 	Consume(ctx context.Context, code string, userID string) error
 }
 

@@ -24,7 +24,10 @@ type Server struct {
 // New constructs the HTTP server. The optional extraRoutes callback runs after
 // the standard routes are registered, letting callers attach additional chi
 // handlers (e.g. the FAKE_OIDC auto-redirect endpoint). Pass nil in production.
-func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(chi.Router)) *Server {
+// Additional huma API modules can be registered via apiBuilders; each is
+// invoked with the shared huma.API so their operations land on the same
+// router and OpenAPI document.
+func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(chi.Router), apiBuilders ...func(huma.API)) *Server {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -45,6 +48,10 @@ func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(c
 		"bearer": {Type: "http", Scheme: "bearer"},
 	}
 	idAPI.Register(api)
+
+	for _, build := range apiBuilders {
+		build(api)
+	}
 
 	if extraRoutes != nil {
 		extraRoutes(r)

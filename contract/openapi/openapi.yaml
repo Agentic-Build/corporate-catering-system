@@ -1,5 +1,63 @@
 components:
     schemas:
+        ApproveInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ApproveInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                plants:
+                    items:
+                        type: string
+                    type:
+                        - array
+                        - "null"
+            required:
+                - plants
+            type: object
+        CreateVendorInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/CreateVendorInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                contact_email:
+                    format: email
+                    type: string
+                display_name:
+                    minLength: 1
+                    type: string
+                legal_name:
+                    minLength: 1
+                    type: string
+            required:
+                - display_name
+                - legal_name
+                - contact_email
+            type: object
+        CreateVendorOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/CreateVendorOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                vendor:
+                    $ref: '#/components/schemas/VendorDTO'
+            required:
+                - vendor
+            type: object
         ErrorDetail:
             additionalProperties: false
             properties:
@@ -58,6 +116,40 @@ components:
                         - https://example.com/errors/example
                     format: uri
                     type: string
+            type: object
+        InviteOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/InviteOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                code:
+                    type: string
+            required:
+                - code
+            type: object
+        ListVendorsOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ListVendorsOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/VendorDTO'
+                    type:
+                        - array
+                        - "null"
+            required:
+                - items
             type: object
         MeOutputBody:
             additionalProperties: false
@@ -130,6 +222,34 @@ components:
                 - auth_url
                 - state
             type: object
+        VendorDTO:
+            additionalProperties: false
+            properties:
+                approved_at:
+                    type: string
+                contact_email:
+                    type: string
+                display_name:
+                    type: string
+                id:
+                    type: string
+                legal_name:
+                    type: string
+                plants:
+                    items:
+                        type: string
+                    type:
+                        - array
+                        - "null"
+                status:
+                    type: string
+            required:
+                - id
+                - display_name
+                - legal_name
+                - contact_email
+                - status
+            type: object
     securitySchemes:
         bearer:
             scheme: bearer
@@ -139,6 +259,179 @@ info:
     version: 0.1.0
 openapi: 3.1.0
 paths:
+    /api/admin/vendors:
+        get:
+            operationId: listVendors
+            parameters:
+                - description: Optional status filter
+                  explode: false
+                  in: query
+                  name: status
+                  schema:
+                    description: Optional status filter
+                    enum:
+                        - pending
+                        - approved
+                        - suspended
+                        - terminated
+                        - ""
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListVendorsOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: List vendors (admin)
+            tags:
+                - admin
+                - vendor
+        post:
+            operationId: createPendingVendor
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateVendorInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateVendorOutputBody'
+                    description: Created
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Create a pending vendor
+            tags:
+                - admin
+                - vendor
+    /api/admin/vendors/{id}/approve:
+        post:
+            operationId: approveVendor
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApproveInputBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Approve vendor + set plants
+            tags:
+                - admin
+                - vendor
+    /api/admin/vendors/{id}/invite:
+        post:
+            operationId: issueVendorInvite
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InviteOutputBody'
+                    description: Created
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Issue a single-use invite code for a vendor
+            tags:
+                - admin
+                - vendor
+    /api/admin/vendors/{id}/reinstate:
+        post:
+            operationId: reinstateVendor
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Reinstate a suspended vendor
+            tags:
+                - admin
+                - vendor
+    /api/admin/vendors/{id}/suspend:
+        post:
+            operationId: suspendVendor
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Suspend an approved vendor
+            tags:
+                - admin
+                - vendor
     /auth/{provider}/callback:
         get:
             operationId: completeLogin

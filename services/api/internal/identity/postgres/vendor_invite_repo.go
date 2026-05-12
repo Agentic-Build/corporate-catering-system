@@ -31,6 +31,18 @@ WHERE code = $1`, code,
 	return &inv, nil
 }
 
+func (r *VendorInviteRepo) Put(ctx context.Context, inv *identity.VendorInvite) error {
+	_, err := r.pool.Exec(ctx, `
+INSERT INTO vendor_invite (code, vendor_id, email_hint, expires_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (code) DO NOTHING`,
+		inv.Code, inv.VendorID, inv.EmailHint, inv.ExpiresAt)
+	if err != nil {
+		return fmt.Errorf("vendor_invite put: %w", err)
+	}
+	return nil
+}
+
 func (r *VendorInviteRepo) Consume(ctx context.Context, code string, userID string) error {
 	tag, err := r.pool.Exec(ctx, `
 UPDATE vendor_invite

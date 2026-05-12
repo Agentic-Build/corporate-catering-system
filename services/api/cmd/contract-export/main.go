@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
+	vhttp "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/http"
 )
 
 func main() {
@@ -21,6 +22,7 @@ func main() {
 	}
 	// Register all routes; handlers must not be invoked during registration.
 	(&idhttp.API{}).Register(api)
+	(&vhttp.API{}).Register(api)
 
 	j, err := api.OpenAPI().MarshalJSON()
 	if err != nil {

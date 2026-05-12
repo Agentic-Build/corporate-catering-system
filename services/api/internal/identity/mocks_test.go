@@ -121,6 +121,8 @@ func (fakeInvites) Get(context.Context, string) (*identity.VendorInvite, error) 
 	return nil, identity.ErrInviteNotFound
 }
 
+func (fakeInvites) Put(context.Context, *identity.VendorInvite) error { return nil }
+
 func (fakeInvites) Consume(context.Context, string, string) error {
 	return identity.ErrInviteNotFound
 }
