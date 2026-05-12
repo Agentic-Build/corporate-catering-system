@@ -16,3 +16,6 @@
   </span>
 </p>
 <div class="mt-6"><Button>送出預訂 · 由本月薪資代扣</Button></div>
+{#if data.user}
+  <p class="mt-4 text-sm text-tb-slate-500">已登入：{data.user.display_name}（{data.user.email}）</p>
+{/if}
