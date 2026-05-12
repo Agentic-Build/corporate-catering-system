@@ -1,55 +1,48 @@
-# =========================
-# Rust
-# =========================
-debug/
-target/
-**/*.rs.bk
-*.pdb
+# Node
+node_modules
+apps/*/node_modules
+packages/*/node_modules
+.pnpm-store
 
-# =========================
-# Node.js / SvelteKit
-# =========================
-node_modules/
-build/
-.svelte-kit/
+# SvelteKit
+apps/*/.svelte-kit
+apps/*/build
+apps/*/dist
 .output/
-dist/
-package/
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Go
+target
+/tmp/tbite
+*.test
+*.out
+
+# OS
+.DS_Store
+**/.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Env
 .env
 .env.*
 !.env.example
 !.env.development
 .env.local
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
 
-# =========================
 # Docker
-# =========================
 .docker/
 docker-compose.override.yml
 
-# =========================
-# OS files
-# =========================
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# =========================
-# IDE / Editor
-# =========================
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-*.sublime-project
-*.sublime-workspace
-
-# =========================
 # Logs & temp
-# =========================
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -57,29 +50,13 @@ yarn-error.log*
 pnpm-debug.log*
 tmp/
 temp/
-artifacts/
-generated/
-!contract/
-!contract/openapi/
-!contract/openapi/**
-!contract/generated/
-!contract/generated/ts-client/
-!contract/generated/ts-client/**
 
-# =========================
 # Coverage & test
-# =========================
 coverage/
 *.lcov
 .nyc_output/
 
-# =========================
 # Misc
-# =========================
 *.bak
 *.tmp
 *.orig
-
-!.agents/build
-.playwright-cli
-/output
