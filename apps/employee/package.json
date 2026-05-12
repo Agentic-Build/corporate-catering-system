@@ -14,6 +14,7 @@
     "@tbite/api-client": "workspace:*",
     "@tbite/tokens": "workspace:*",
     "@tbite/ui": "workspace:*",
+    "@tbite/web-auth": "workspace:*",
     "openapi-fetch": "^0.13.8"
   },
   "devDependencies": {
