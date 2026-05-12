@@ -1,1 +1,9 @@
-SELECT 1;
+DROP TABLE IF EXISTS admin_email_whitelist;
+DROP TABLE IF EXISTS vendor_invite;
+DROP TABLE IF EXISTS employee_directory;
+DROP TABLE IF EXISTS user_identity;
+DROP TABLE IF EXISTS "user";
+DROP TYPE IF EXISTS identity_provider;
+DROP TYPE IF EXISTS user_status;
+DROP TYPE IF EXISTS user_role;
+DROP EXTENSION IF EXISTS "pgcrypto";
