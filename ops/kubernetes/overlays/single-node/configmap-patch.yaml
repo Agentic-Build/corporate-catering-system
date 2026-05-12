@@ -11,3 +11,7 @@ data:
   NATS_URL: "nats://nats:4222"
   S3_ENDPOINT: "http://minio:9000"
   S3_BUCKET: "tbite"
+  OIDC_CALLBACK_BASE_URL: "http://api.tbite.test"
+  APP_BASE_URL_EMPLOYEE: "http://app.tbite.test"
+  APP_BASE_URL_MERCHANT: "http://merchant.tbite.test"
+  APP_BASE_URL_ADMIN:    "http://admin.tbite.test"
