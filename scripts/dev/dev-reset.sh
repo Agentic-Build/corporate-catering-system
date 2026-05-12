@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-echo "dev-reset: placeholder (Task 14 will implement)"
-exit 1
+SCRIPT_DIR="$(dirname "$0")"
+"${SCRIPT_DIR}/dev-down.sh" || true
+"${SCRIPT_DIR}/dev-up.sh"
