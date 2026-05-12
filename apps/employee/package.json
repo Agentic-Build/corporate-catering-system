@@ -13,7 +13,8 @@
     "@sveltejs/adapter-node": "^5.2.0",
     "@tbite/api-client": "workspace:*",
     "@tbite/tokens": "workspace:*",
-    "@tbite/ui": "workspace:*"
+    "@tbite/ui": "workspace:*",
+    "openapi-fetch": "^0.13.8"
   },
   "devDependencies": {
     "@sveltejs/kit": "^2.7.0",
