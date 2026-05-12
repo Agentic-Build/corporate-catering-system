@@ -27,9 +27,10 @@ type Service struct {
 type Clock interface{ Now() time.Time }
 
 type StartLoginInput struct {
-	App      string
-	Provider string
-	ReturnTo string
+	App        string
+	Provider   string
+	ReturnTo   string
+	InviteCode string
 }
 
 type StartLoginOutput struct {
@@ -68,6 +69,7 @@ func (s *Service) StartLogin(ctx context.Context, in StartLoginInput) (*StartLog
 		ReturnTo:     safeReturnTo(in.ReturnTo),
 		PKCEVerifier: au.PKCEVerifier,
 		Nonce:        au.Nonce,
+		InviteCode:   in.InviteCode,
 	}
 	if err := s.States.Put(ctx, state, payload); err != nil {
 		return nil, err
@@ -105,7 +107,7 @@ func (s *Service) CompleteLogin(ctx context.Context, in CompleteLoginInput) (*Co
 
 	role := roleForApp(in.App)
 	if user == nil {
-		u, err := s.bootstrapUser(ctx, role, email, ui.DisplayName)
+		u, err := s.bootstrapUser(ctx, role, email, ui.DisplayName, sp.InviteCode)
 		if err != nil {
 			return nil, err
 		}
@@ -142,7 +144,7 @@ func (s *Service) CompleteLogin(ctx context.Context, in CompleteLoginInput) (*Co
 	return &CompleteLoginOutput{User: user, Session: sess, ReturnTo: sp.ReturnTo}, nil
 }
 
-func (s *Service) bootstrapUser(ctx context.Context, role Role, email, name string) (*User, error) {
+func (s *Service) bootstrapUser(ctx context.Context, role Role, email, name, inviteCode string) (*User, error) {
 	switch role {
 	case RoleEmployee:
 		entry, err := s.Directory.GetByEmail(ctx, email)
@@ -186,8 +188,36 @@ func (s *Service) bootstrapUser(ctx context.Context, role Role, email, name stri
 		return u, nil
 
 	case RoleVendorOperator:
-		// P1 simplification: invite-flow UI lives in P2; reject here
-		return nil, ErrInviteNotFound
+		if inviteCode == "" {
+			return nil, ErrInviteNotFound
+		}
+		inv, err := s.Invites.Get(ctx, inviteCode)
+		if err != nil {
+			return nil, err
+		}
+		if inv.ConsumedAt != nil {
+			return nil, ErrInviteAlreadyUsed
+		}
+		if inv.ExpiresAt.Before(s.Clock.Now()) {
+			return nil, ErrInviteExpired
+		}
+		// NOTE: P2 does this in 3 separate calls (no transaction). A failure between
+		// Users.Create and Invites.Consume leaves an orphaned user. Acceptable for P2.
+		// P3+ should wrap in a transaction via a unit-of-work pattern.
+		u := &User{
+			PrimaryEmail: email,
+			DisplayName:  name,
+			Role:         RoleVendorOperator,
+			Status:       StatusActive,
+			VendorID:     &inv.VendorID,
+		}
+		if err := s.Users.Create(ctx, u); err != nil {
+			return nil, err
+		}
+		if err := s.Invites.Consume(ctx, inviteCode, u.ID); err != nil {
+			return nil, err
+		}
+		return u, nil
 
 	default:
 		return nil, ErrInvalidRole

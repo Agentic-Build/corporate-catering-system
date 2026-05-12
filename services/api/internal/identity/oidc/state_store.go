@@ -18,6 +18,7 @@ type StatePayload struct {
 	ReturnTo     string `json:"return_to"`
 	PKCEVerifier string `json:"pkce_verifier"`
 	Nonce        string `json:"nonce"`
+	InviteCode   string `json:"invite_code,omitempty"`
 }
 
 type StateStore interface {

@@ -553,6 +553,7 @@ export interface components {
             readonly $schema?: string;
             /** @enum {string} */
             app: "employee" | "merchant" | "admin";
+            invite_code?: string;
             return_to?: string;
         };
         StartLoginOutputBody: {

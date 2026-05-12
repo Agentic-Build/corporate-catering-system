@@ -114,17 +114,46 @@ func (r *fakeDir) GetByEmail(ctx context.Context, email string) (*identity.Emplo
 	return nil, identity.ErrNotInDirectory
 }
 
-// ---- Vendor invite (unused in P1 happy paths) ----
-type fakeInvites struct{}
+// ---- Vendor invite ----
+type fakeInvites struct {
+	mu      sync.Mutex
+	byCode  map[string]*identity.VendorInvite
+}
 
-func (fakeInvites) Get(context.Context, string) (*identity.VendorInvite, error) {
+func newFakeInvites() *fakeInvites {
+	return &fakeInvites{byCode: map[string]*identity.VendorInvite{}}
+}
+
+func (r *fakeInvites) Get(_ context.Context, code string) (*identity.VendorInvite, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if inv, ok := r.byCode[code]; ok {
+		return inv, nil
+	}
 	return nil, identity.ErrInviteNotFound
 }
 
-func (fakeInvites) Put(context.Context, *identity.VendorInvite) error { return nil }
+func (r *fakeInvites) Put(_ context.Context, inv *identity.VendorInvite) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byCode[inv.Code] = inv
+	return nil
+}
 
-func (fakeInvites) Consume(context.Context, string, string) error {
-	return identity.ErrInviteNotFound
+func (r *fakeInvites) Consume(_ context.Context, code, userID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	inv, ok := r.byCode[code]
+	if !ok {
+		return identity.ErrInviteNotFound
+	}
+	if inv.ConsumedAt != nil {
+		return identity.ErrInviteAlreadyUsed
+	}
+	now := time.Now().UTC()
+	inv.ConsumedAt = &now
+	inv.ConsumedBy = &userID
+	return nil
 }
 
 // ---- Admin whitelist ----

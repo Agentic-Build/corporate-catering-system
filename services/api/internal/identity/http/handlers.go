@@ -27,8 +27,9 @@ type API struct {
 type startLoginInput struct {
 	Provider string `path:"provider" enum:"google,github" doc:"OIDC provider"`
 	Body     struct {
-		App      string `json:"app" enum:"employee,merchant,admin"`
-		ReturnTo string `json:"return_to,omitempty"`
+		App        string `json:"app" enum:"employee,merchant,admin"`
+		ReturnTo   string `json:"return_to,omitempty"`
+		InviteCode string `json:"invite_code,omitempty"`
 	}
 }
 type startLoginOutput struct {
@@ -104,6 +105,7 @@ func (a *API) Register(api huma.API) {
 func (a *API) startLogin(ctx context.Context, in *startLoginInput) (*startLoginOutput, error) {
 	out, err := a.Svc.StartLogin(ctx, identity.StartLoginInput{
 		App: in.Body.App, Provider: in.Provider, ReturnTo: in.Body.ReturnTo,
+		InviteCode: in.Body.InviteCode,
 	})
 	if err != nil {
 		return nil, mapErr(err)
