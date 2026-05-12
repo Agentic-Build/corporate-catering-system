@@ -1,0 +1,246 @@
+/* ============================================================
+   T-Bite Design System — Foundations
+   Source of truth: Tailwind palette as used in the T-Bite
+   prototype (台積電訂餐系統). Red-600 is the brand anchor;
+   slate is the neutral; amber + emerald + rose are semantic
+   accents (warning, success, danger). Noto Sans TC is the
+   primary face for Traditional-Chinese-first UI.
+   ============================================================ */
+
+/* ---------- Webfonts (CDN; codebase loads them too) ----------- */
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap");
+
+:root {
+  /* ───── Brand ───── */
+  --tb-red-50:  #fef2f2;
+  --tb-red-100: #fee2e2;
+  --tb-red-200: #fecaca;
+  --tb-red-300: #fca5a5;
+  --tb-red-400: #f87171;
+  --tb-red-500: #ef4444;
+  --tb-red-600: #dc2626;   /* PRIMARY — buttons, accents, brand */
+  --tb-red-700: #b91c1c;   /* Hover / pressed primary */
+  --tb-red-800: #991b1b;
+  --tb-red-900: #7f1d1d;
+
+  --tb-rose-100: #ffe4e6;
+  --tb-rose-500: #f43f5e;
+  --tb-rose-600: #e11d48;  /* "Critical" alt — danger button, low-stock */
+  --tb-rose-700: #be123c;
+
+  /* Amber is the "highlight / signal / pro-tip" accent ---------- */
+  --tb-amber-50:  #fffbeb;
+  --tb-amber-100: #fef3c7;
+  --tb-amber-200: #fde68a;
+  --tb-amber-300: #fcd34d;
+  --tb-amber-400: #fbbf24;  /* logo dot, glow indicator */
+  --tb-amber-500: #f59e0b;
+  --tb-amber-700: #b45309;
+  --tb-amber-800: #92400e;
+  --tb-amber-900: #78350f;
+
+  /* Semantic — success / warning / danger / info ---------------- */
+  --tb-emerald-50:  #ecfdf5;
+  --tb-emerald-100: #d1fae5;
+  --tb-emerald-300: #6ee7b7;
+  --tb-emerald-500: #10b981;
+  --tb-emerald-700: #047857;
+  --tb-emerald-900: #064e3b;
+
+  --tb-sky-100: #e0f2fe;
+  --tb-sky-500: #0ea5e9;
+  --tb-sky-700: #0369a1;
+
+  /* ───── Neutrals (Slate) ───── */
+  --tb-slate-50:  #f8fafc;   /* page surface */
+  --tb-slate-100: #f1f5f9;   /* chip / hover */
+  --tb-slate-200: #e2e8f0;   /* hairline border */
+  --tb-slate-300: #cbd5e1;
+  --tb-slate-400: #94a3b8;
+  --tb-slate-500: #64748b;   /* secondary text */
+  --tb-slate-600: #475569;
+  --tb-slate-700: #334155;   /* body text */
+  --tb-slate-800: #1e293b;   /* role-switcher bar / floating CTA bg */
+  --tb-slate-900: #0f172a;   /* primary text + footer dark */
+
+  /* ───── Semantic surfaces / text ───── */
+  --tb-bg:        #ffffff;
+  --tb-surface-0: var(--tb-slate-50);     /* app background */
+  --tb-surface-1: #ffffff;                /* card */
+  --tb-surface-2: var(--tb-slate-100);    /* chip / inactive pill */
+  --tb-surface-inv: var(--tb-slate-900);  /* inverted: floating bars, top role switcher */
+
+  --tb-fg-1: var(--tb-slate-900);         /* primary text */
+  --tb-fg-2: var(--tb-slate-700);         /* body */
+  --tb-fg-3: var(--tb-slate-500);         /* secondary / meta */
+  --tb-fg-4: var(--tb-slate-400);         /* placeholder */
+  --tb-fg-on-red:  #ffffff;
+  --tb-fg-on-dark: #ffffff;
+
+  --tb-border:        var(--tb-slate-200);
+  --tb-border-strong: var(--tb-slate-300);
+  --tb-divider:       var(--tb-slate-100);
+
+  /* Brand accents in use --------------------------------------- */
+  --tb-accent-primary:    var(--tb-red-600);
+  --tb-accent-primary-hi: var(--tb-red-700);
+  --tb-accent-warm:       var(--tb-amber-400);   /* the "T-Bite dot" */
+  --tb-link:              var(--tb-red-700);
+
+  /* Status tones — match StateTag in ui.jsx --------------------- */
+  --tb-tone-info-bg:    var(--tb-red-100);
+  --tb-tone-info-fg:    var(--tb-red-900);
+  --tb-tone-success-bg: var(--tb-emerald-100);
+  --tb-tone-success-fg: var(--tb-emerald-900);
+  --tb-tone-warning-bg: var(--tb-amber-100);
+  --tb-tone-warning-fg: var(--tb-amber-900);
+  --tb-tone-danger-bg:  var(--tb-rose-100);
+  --tb-tone-danger-fg:  var(--tb-rose-700);
+  --tb-tone-neutral-bg: var(--tb-slate-100);
+  --tb-tone-neutral-fg: var(--tb-slate-700);
+
+  /* ───── Type ───── */
+  --tb-font-sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+                  system-ui, -apple-system, "Segoe UI", sans-serif;
+  --tb-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular,
+                  Menlo, Consolas, monospace;
+
+  --tb-fw-regular:  400;
+  --tb-fw-medium:   500;
+  --tb-fw-semibold: 600;
+  --tb-fw-bold:     700;
+  --tb-fw-extra:    800;
+  --tb-fw-black:    900;
+
+  /* Type scale (Tailwind-mirroring, px-based for clarity) */
+  --tb-text-2xs: 10px;   /* uppercase eyebrow / micro */
+  --tb-text-xs:  12px;   /* meta, badges */
+  --tb-text-sm:  14px;   /* body small, buttons */
+  --tb-text-md:  16px;   /* body */
+  --tb-text-lg:  18px;   /* card titles */
+  --tb-text-xl:  20px;   /* section h2 */
+  --tb-text-2xl: 24px;
+  --tb-text-3xl: 30px;   /* page H1 */
+  --tb-text-4xl: 36px;
+
+  /* Line heights */
+  --tb-lh-tight:  1.1;
+  --tb-lh-snug:   1.25;
+  --tb-lh-normal: 1.5;
+  --tb-lh-relaxed:1.65;
+
+  /* Letter spacing — the brand loves ultra-wide eyebrows --------- */
+  --tb-track-tight:    -0.02em;
+  --tb-track-normal:    0em;
+  --tb-track-eyebrow:   0.18em;
+  --tb-track-eyebrowHi: 0.22em;   /* T-Bite "CORPORATE CATERING" */
+
+  /* ───── Radii ───── */
+  --tb-radius-xs:  4px;
+  --tb-radius-sm:  6px;
+  --tb-radius-md:  8px;    /* inputs / buttons (rounded-lg in tw = 8px) */
+  --tb-radius-lg:  12px;   /* secondary cards, chips */
+  --tb-radius-xl:  16px;   /* meal cards, modals */
+  --tb-radius-2xl: 20px;   /* hero cards */
+  --tb-radius-pill: 9999px;/* pills, capsule CTAs, avatars */
+
+  /* ───── Spacing (8-pt with half-step) ───── */
+  --tb-space-0: 0;
+  --tb-space-1: 4px;
+  --tb-space-2: 8px;
+  --tb-space-3: 12px;
+  --tb-space-4: 16px;
+  --tb-space-5: 20px;
+  --tb-space-6: 24px;
+  --tb-space-8: 32px;
+  --tb-space-10: 40px;
+  --tb-space-12: 48px;
+  --tb-space-16: 64px;
+
+  /* ───── Shadows ───── */
+  --tb-shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06);
+  --tb-shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08),
+                  0 2px 4px -2px rgb(15 23 42 / 0.06);
+  --tb-shadow-lg: 0 12px 28px -8px rgb(15 23 42 / 0.18),
+                  0 4px 10px -4px rgb(15 23 42 / 0.10);
+  --tb-shadow-xl: 0 24px 60px -16px rgb(15 23 42 / 0.28);
+  --tb-shadow-inset: inset 0 0 0 1px rgb(15 23 42 / 0.04);
+  --tb-ring-focus: 0 0 0 4px rgb(220 38 38 / 0.18); /* red focus ring */
+
+  /* ───── Motion ───── */
+  --tb-ease:        cubic-bezier(.2, .0, .2, 1);
+  --tb-ease-out:    cubic-bezier(.16, 1, .3, 1);
+  --tb-dur-fast:    120ms;
+  --tb-dur-base:    220ms;
+  --tb-dur-slow:    320ms;
+}
+
+/* ───── Semantic role styles (drop-in tags) ─────
+   Use these directly: <h1>, <h2>, <p>, code, .eyebrow, etc.
+*/
+html, body {
+  font-family: var(--tb-font-sans);
+  color: var(--tb-fg-1);
+  background: var(--tb-surface-0);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, .tb-h1 {
+  font-size: var(--tb-text-3xl);
+  font-weight: var(--tb-fw-black);
+  line-height: var(--tb-lh-tight);
+  letter-spacing: var(--tb-track-tight);
+  color: var(--tb-fg-1);
+}
+h2, .tb-h2 {
+  font-size: var(--tb-text-xl);
+  font-weight: var(--tb-fw-extra);
+  line-height: var(--tb-lh-snug);
+  letter-spacing: var(--tb-track-tight);
+  color: var(--tb-fg-1);
+}
+h3, .tb-h3 {
+  font-size: var(--tb-text-lg);
+  font-weight: var(--tb-fw-bold);
+  line-height: var(--tb-lh-snug);
+  color: var(--tb-fg-1);
+}
+h4, .tb-h4 {
+  font-size: var(--tb-text-md);
+  font-weight: var(--tb-fw-bold);
+  line-height: var(--tb-lh-snug);
+  color: var(--tb-fg-1);
+}
+p, .tb-body {
+  font-size: var(--tb-text-sm);
+  line-height: var(--tb-lh-relaxed);
+  color: var(--tb-fg-2);
+}
+.tb-meta {
+  font-size: var(--tb-text-xs);
+  line-height: var(--tb-lh-normal);
+  color: var(--tb-fg-3);
+}
+.tb-eyebrow {
+  font-size: var(--tb-text-2xs);
+  font-weight: var(--tb-fw-bold);
+  letter-spacing: var(--tb-track-eyebrow);
+  text-transform: uppercase;
+  color: var(--tb-fg-3);
+}
+.tb-eyebrow--red    { color: var(--tb-red-600); }
+.tb-eyebrow--amber  { color: var(--tb-amber-700); }
+
+code, .tb-mono, .tb-tabular {
+  font-family: var(--tb-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.tb-price {
+  font-family: var(--tb-font-sans);
+  font-weight: var(--tb-fw-black);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tb-track-tight);
+}
