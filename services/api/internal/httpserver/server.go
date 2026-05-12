@@ -7,8 +7,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 )
 
 type Server struct {
@@ -17,18 +21,27 @@ type Server struct {
 	srv    *http.Server
 }
 
-func New(addr string, logger *slog.Logger) *Server {
+func New(addr string, logger *slog.Logger, idAPI *idhttp.API) *Server {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(idAPI.AuthMiddleware)
 
+	// native chi health endpoints
 	r.Get("/healthz", healthHandler)
 	r.Get("/readyz", readyHandler)
 	r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, `{"error":"not_found"}`, http.StatusNotFound)
 	})
+
+	// huma API mounted on same chi router
+	api := humachi.New(r, huma.DefaultConfig("T-Bite API", "0.1.0"))
+	api.OpenAPI().Components.SecuritySchemes = map[string]*huma.SecurityScheme{
+		"bearer": {Type: "http", Scheme: "bearer"},
+	}
+	idAPI.Register(api)
 
 	srv := &http.Server{
 		Addr:              addr,

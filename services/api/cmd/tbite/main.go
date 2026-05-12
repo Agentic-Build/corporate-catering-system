@@ -12,6 +12,7 @@ import (
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/config"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/httpserver"
+	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 )
 
 func main() {
@@ -40,7 +41,8 @@ func main() {
 
 	switch role {
 	case config.RoleAPI:
-		srv := httpserver.New(cfg.HTTPAddr, logger)
+		idAPI := &idhttp.API{} // wiring lands in Task 9
+		srv := httpserver.New(cfg.HTTPAddr, logger, idAPI)
 		if err := srv.Run(ctx); err != nil {
 			logger.Error("api shutdown", "err", err)
 			os.Exit(1)
