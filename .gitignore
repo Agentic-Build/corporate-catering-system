@@ -56,6 +56,11 @@ coverage/
 *.lcov
 .nyc_output/
 
+# Playwright artifacts
+test-results/
+playwright-report/
+.playwright/
+
 # Misc
 *.bak
 *.tmp

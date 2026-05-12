@@ -3,15 +3,19 @@
   "private": true,
   "version": "0.0.0",
   "packageManager": "pnpm@10.28.0",
-  "engines": { "node": ">=20.11" },
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
     "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
     "build": "pnpm -r --filter \"./packages/*\" build && pnpm -r --filter \"./apps/*\" build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
+    "test:e2e": "playwright test --config=tests/e2e/playwright.config.ts",
     "check": "pnpm -r check"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "prettier": "^3.3.3",
     "prettier-plugin-svelte": "^3.2.7",
     "typescript": "^5.6.0"

@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/spf13/pflag"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/config"
@@ -114,8 +116,39 @@ func main() {
 			},
 		}
 
-		// 8. HTTP server
-		srv := httpserver.New(cfg.HTTPAddr, logger, api)
+		// 8. HTTP server. When FAKE_OIDC=1, swap the google provider for a
+		// deterministic fake and mount its auto-redirect handler. Used for
+		// local dev and Playwright e2e — never enable in production.
+		var extraRoutes func(chi.Router)
+		if os.Getenv("FAKE_OIDC") == "1" {
+			logger.Warn("FAKE_OIDC enabled: swapping google provider for FakeProvider (dev/e2e only)")
+			fake := &oidc.FakeProvider{
+				ProviderName: "google",
+				BaseURL:      cfg.OIDCCallbackBaseURL,
+				Userinfo: &oidc.Userinfo{
+					Provider:        "google",
+					ExternalSubject: "fake-google-sub-001",
+					Email:           "e2e-employee@tbite.test",
+					EmailVerified:   true,
+					DisplayName:     "E2E 員工",
+					Raw:             map[string]any{"e2e": true},
+				},
+			}
+			svc.Providers["google"] = fake
+			callback := cfg.OIDCCallbackBaseURL + "/auth/google/callback"
+			extraRoutes = func(r chi.Router) {
+				// /test/oidc/google/authorize is the fake "consent screen" — it
+				// immediately bounces back to the real OIDC callback with a
+				// canned authorization code. The `app` query param is required
+				// by completeLogin; the FakeProvider only supports employee.
+				r.Get("/test/oidc/google/authorize", func(w http.ResponseWriter, req *http.Request) {
+					state := req.URL.Query().Get("state")
+					http.Redirect(w, req, fmt.Sprintf("%s?state=%s&code=fake&app=employee", callback, state), http.StatusFound)
+				})
+			}
+		}
+
+		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes)
 		if err := srv.Run(ctx); err != nil {
 			logger.Error("api shutdown", "err", err)
 			os.Exit(1)

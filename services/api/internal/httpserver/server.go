@@ -21,7 +21,10 @@ type Server struct {
 	srv    *http.Server
 }
 
-func New(addr string, logger *slog.Logger, idAPI *idhttp.API) *Server {
+// New constructs the HTTP server. The optional extraRoutes callback runs after
+// the standard routes are registered, letting callers attach additional chi
+// handlers (e.g. the FAKE_OIDC auto-redirect endpoint). Pass nil in production.
+func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(chi.Router)) *Server {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -42,6 +45,10 @@ func New(addr string, logger *slog.Logger, idAPI *idhttp.API) *Server {
 		"bearer": {Type: "http", Scheme: "bearer"},
 	}
 	idAPI.Register(api)
+
+	if extraRoutes != nil {
+		extraRoutes(r)
+	}
 
 	srv := &http.Server{
 		Addr:              addr,

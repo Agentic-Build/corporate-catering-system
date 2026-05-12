@@ -35,6 +35,11 @@ for d in api postgres redis nats minio; do
   kubectl -n "${NAMESPACE}" rollout status deploy/"${d}" --timeout=180s || true
 done
 
+# Apply e2e seed (idempotent). Best-effort — postgres may not yet be ready
+# on first cluster boot, in which case re-run dev-up.sh after a few seconds.
+kubectl -n "${NAMESPACE}" exec -i deploy/postgres -- psql -U tbite -d tbite \
+  < scripts/dev/seed-e2e.sql || true
+
 cat <<EOF
 
 Cluster up. Add these to /etc/hosts:
