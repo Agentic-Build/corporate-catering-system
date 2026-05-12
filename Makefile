@@ -33,7 +33,8 @@ migrate-new: ## Create new migration (name=xxx)
 	@scripts/db/migrate.sh create -ext sql -dir /migrations -seq $(name)
 
 contract-sync: ## Generate OpenAPI from Go and regenerate TS client
-	@echo "Placeholder for P1: contract-sync"
+	@go run ./services/api/cmd/contract-export
+	@pnpm --filter @tbite/api-client generate
 
 test-go: ## Go tests
 	@go test ./...
