@@ -401,6 +401,28 @@ components:
             required:
                 - items
             type: object
+        ListSupplyOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ListSupplyOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                date:
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/SupplyDTO'
+                    type:
+                        - array
+                        - "null"
+            required:
+                - date
+                - items
+            type: object
         ListVendorsOutputBody:
             additionalProperties: false
             properties:
@@ -452,6 +474,33 @@ components:
                 - display_name
                 - role
             type: object
+        SetCapacityInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/SetCapacityInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                capacity:
+                    format: int64
+                    minimum: 0
+                    type: integer
+                cutoff_at:
+                    format: date-time
+                    type: string
+                eta_label:
+                    type: string
+                pickup_window:
+                    type: string
+            required:
+                - capacity
+                - pickup_window
+                - eta_label
+                - cutoff_at
+            type: object
         StartLoginInputBody:
             additionalProperties: false
             properties:
@@ -490,6 +539,52 @@ components:
             required:
                 - auth_url
                 - state
+            type: object
+        SupplyDTO:
+            additionalProperties: false
+            properties:
+                capacity:
+                    format: int64
+                    type: integer
+                cutoff_at:
+                    type: string
+                eta_label:
+                    type: string
+                id:
+                    type: string
+                menu_item_id:
+                    type: string
+                pickup_window:
+                    type: string
+                remain:
+                    format: int64
+                    type: integer
+                supply_date:
+                    type: string
+            required:
+                - id
+                - menu_item_id
+                - supply_date
+                - capacity
+                - remain
+                - pickup_window
+                - eta_label
+                - cutoff_at
+            type: object
+        SupplyOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/SupplyOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                supply:
+                    $ref: '#/components/schemas/SupplyDTO'
+            required:
+                - supply
             type: object
         UpdateItemInputBody:
             additionalProperties: false
@@ -969,6 +1064,76 @@ paths:
             tags:
                 - merchant
                 - menu
+    /api/merchant/supply:
+        get:
+            operationId: listMerchantSupply
+            parameters:
+                - description: YYYY-MM-DD; defaults to today UTC
+                  explode: false
+                  in: query
+                  name: date
+                  schema:
+                    description: YYYY-MM-DD; defaults to today UTC
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSupplyOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: List supplies for the current vendor on a date
+            tags:
+                - merchant
+                - quota
+    /api/merchant/supply/{itemID}/{date}:
+        put:
+            operationId: setMerchantSupply
+            parameters:
+                - in: path
+                  name: itemID
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - in: path
+                  name: date
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetCapacityInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SupplyOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Set or update capacity for a menu item on a given date
+            tags:
+                - merchant
+                - quota
     /auth/{provider}/callback:
         get:
             operationId: completeLogin

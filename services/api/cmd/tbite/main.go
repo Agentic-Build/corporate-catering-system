@@ -26,6 +26,9 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/db"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
+	qhttp "github.com/takalawang/corporate-catering-system/services/api/internal/quota/http"
+	qpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 	vhttp "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/http"
 	vpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/postgres"
@@ -133,12 +136,20 @@ func main() {
 		vendorAPI := &vhttp.API{Svc: vendorService}
 
 		// 7c. Menu service + merchant/employee handlers
+		itemRepo := mpgrepo.NewItemRepo(pool)
 		menuService := &menu.Service{
 			Categories: mpgrepo.NewCategoryRepo(pool),
-			Items:      mpgrepo.NewItemRepo(pool),
+			Items:      itemRepo,
 			Images:     mpgrepo.NewImageRepo(pool),
 		}
 		menuAPI := &mhttp.API{Svc: menuService}
+
+		// 7d. Quota service + merchant handlers (vendor capacity management)
+		quotaService := &quota.Service{
+			Supplies: qpgrepo.NewSupplyRepo(pool),
+			Items:    itemRepo,
+		}
+		quotaAPI := &qhttp.API{Svc: quotaService}
 
 		// 8. HTTP server. When FAKE_OIDC=1, swap the google provider for a
 		// deterministic fake and mount its auto-redirect handler. Used for
@@ -172,7 +183,7 @@ func main() {
 			}
 		}
 
-		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes, vendorAPI.Register, menuAPI.Register)
+		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes, vendorAPI.Register, menuAPI.Register, quotaAPI.Register)
 		if err := srv.Run(ctx); err != nil {
 			logger.Error("api shutdown", "err", err)
 			os.Exit(1)

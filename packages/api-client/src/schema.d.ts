@@ -194,6 +194,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/supply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List supplies for the current vendor on a date */
+        get: operations["listMerchantSupply"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/supply/{itemID}/{date}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set or update capacity for a menu item on a given date */
+        put: operations["setMerchantSupply"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/{provider}/callback": {
         parameters: {
             query?: never;
@@ -461,6 +495,16 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["ItemDTO"][] | null;
         };
+        ListSupplyOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListSupplyOutputBody.json
+             */
+            readonly $schema?: string;
+            date: string;
+            items: components["schemas"]["SupplyDTO"][] | null;
+        };
         ListVendorsOutputBody: {
             /**
              * Format: uri
@@ -486,6 +530,20 @@ export interface components {
             user_id: string;
             vendor_id?: string;
         };
+        SetCapacityInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SetCapacityInputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            capacity: number;
+            /** Format: date-time */
+            cutoff_at: string;
+            eta_label: string;
+            pickup_window: string;
+        };
         StartLoginInputBody: {
             /**
              * Format: uri
@@ -506,6 +564,27 @@ export interface components {
             readonly $schema?: string;
             auth_url: string;
             state: string;
+        };
+        SupplyDTO: {
+            /** Format: int64 */
+            capacity: number;
+            cutoff_at: string;
+            eta_label: string;
+            id: string;
+            menu_item_id: string;
+            pickup_window: string;
+            /** Format: int64 */
+            remain: number;
+            supply_date: string;
+        };
+        SupplyOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SupplyOutputBody.json
+             */
+            readonly $schema?: string;
+            supply: components["schemas"]["SupplyDTO"];
         };
         UpdateItemInputBody: {
             /**
@@ -969,6 +1048,74 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listMerchantSupply: {
+        parameters: {
+            query?: {
+                /** @description YYYY-MM-DD; defaults to today UTC */
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListSupplyOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    setMerchantSupply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemID: string;
+                date: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetCapacityInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplyOutputBody"];
+                };
             };
             /** @description Error */
             default: {
