@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	mcpgo "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
 
@@ -57,7 +58,7 @@ import (
 
 func main() {
 	var roleStr string
-	pflag.StringVar(&roleStr, "role", "api", "binary role: api|worker|scheduler")
+	pflag.StringVar(&roleStr, "role", "api", "binary role: api|worker|scheduler|mcp-stdio")
 	pflag.Parse()
 
 	role, err := config.ParseRole(roleStr)
@@ -475,5 +476,123 @@ func main() {
 			os.Exit(1)
 		}
 		logger.Info("scheduler shutdown")
+	case config.RoleMCPStdio:
+		// mcp-stdio role: same MCPServer + tool wiring as the api role's /mcp
+		// mount, but transported over stdin/stdout for local MCP clients
+		// (Claude Code, Cursor, etc.). The user is resolved once at boot from
+		// MCP_BEARER_TOKEN and attached to every request's context via
+		// StdioServer.SetContextFunc — stdio is single-client so this is safe.
+		token := os.Getenv("MCP_BEARER_TOKEN")
+		if token == "" {
+			logger.Error("MCP_BEARER_TOKEN required for mcp-stdio role")
+			os.Exit(2)
+		}
+
+		pool, err := db.NewPool(ctx, cfg.DatabaseRW)
+		if err != nil {
+			logger.Error("pg pool", "err", err)
+			os.Exit(1)
+		}
+		defer pool.Close()
+		rdb, err := cache.NewClient(ctx, cfg.RedisURL)
+		if err != nil {
+			logger.Error("redis", "err", err)
+			os.Exit(1)
+		}
+		defer rdb.Close()
+
+		userRepo := pgrepo.NewUserRepo(pool)
+		sessStore := idredis.NewSessionStore(rdb, 7*24*time.Hour)
+
+		// Resolve the user that owns the bearer token. We do this once at boot
+		// rather than per-request because stdio is single-client.
+		sess, err := sessStore.Get(ctx, token)
+		if err != nil {
+			logger.Error("invalid MCP_BEARER_TOKEN", "err", err)
+			os.Exit(1)
+		}
+		user, err := userRepo.GetByID(ctx, sess.UserID)
+		if err != nil {
+			logger.Error("user lookup", "err", err)
+			os.Exit(1)
+		}
+
+		// Wire the same services the api role uses for MCP. Compliance.Storage
+		// is intentionally nil — no MCP tool currently exercises the document
+		// upload path, only audit.query (which uses AuditQry).
+		auditRepo := opgrepo.NewAuditRepo(pool)
+		outboxRepo := opgrepo.NewOutboxRepo(pool)
+		stateRepo := opgrepo.NewStateEventRepo(pool)
+		orderRepo := opgrepo.NewOrderRepo(pool)
+		supplyRepo := qpgrepo.NewSupplyRepo(pool)
+		itemRepo := mpgrepo.NewItemRepo(pool)
+		plantRepo := vpgrepo.NewPlantMappingRepo(pool)
+
+		orderService := &order.Service{
+			Pool:        pool,
+			Orders:      orderRepo,
+			OrdersTx:    orderRepo,
+			StateEvents: stateRepo,
+			StateTx:     stateRepo,
+			Audit:       auditRepo,
+			AuditTx:     auditRepo,
+			Outbox:      outboxRepo,
+			OutboxTx:    outboxRepo,
+			QuotaTx:     supplyRepo,
+			Items:       itemRepo,
+			Plants:      plantRepo,
+			Clock:       clock.SystemClock{},
+		}
+		vendorService := &vendor.Service{
+			Vendors:   vpgrepo.NewVendorRepo(pool),
+			Plants:    plantRepo,
+			Invites:   pgrepo.NewVendorInviteRepo(pool),
+			Clock:     clock.SystemClock{},
+			InviteTTL: 7 * 24 * time.Hour,
+		}
+		payrollService := &payroll.Service{
+			Pool:     pool,
+			Batches:  payrollpgrepo.NewBatchRepo(pool),
+			Entries:  payrollpgrepo.NewEntryRepo(pool),
+			Disputes: payrollpgrepo.NewDisputeRepo(pool),
+			Orders:   orderRepo,
+			OrderTx:  orderRepo,
+			Audit:    auditRepo,
+			Outbox:   outboxRepo,
+			Clock:    clock.SystemClock{},
+		}
+		complianceService := &compliance.Service{
+			Pool:     pool,
+			Docs:     cpgrepo.NewDocumentRepo(pool),
+			Anomaly:  cpgrepo.NewAnomalyRepo(pool),
+			Storage:  nil, // not needed for read-only MCP tools
+			Audit:    auditRepo,
+			Outbox:   outboxRepo,
+			AuditQry: auditRepo,
+			Clock:    clock.SystemClock{},
+		}
+
+		mcpSrv := mcpserver.New(mcpserver.Deps{
+			Pool:       pool,
+			Audit:      auditRepo,
+			Order:      orderService,
+			Vendor:     vendorService,
+			Payroll:    payrollService,
+			Compliance: complianceService,
+			Users:      userRepo,
+			Sessions:   sessStore,
+		})
+
+		stdioSrv := mcpgo.NewStdioServer(mcpSrv)
+		stdioSrv.SetContextFunc(func(c context.Context) context.Context {
+			return idhttp.ContextWithUser(c, user)
+		})
+
+		logger.Info("mcp-stdio starting", "user_email", user.PrimaryEmail, "user_role", string(user.Role))
+		if err := stdioSrv.Listen(ctx, os.Stdin, os.Stdout); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("mcp stdio", "err", err)
+			os.Exit(1)
+		}
+		logger.Info("mcp stdio shutdown")
 	}
 }

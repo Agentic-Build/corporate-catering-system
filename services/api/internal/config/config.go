@@ -12,6 +12,7 @@ const (
 	RoleAPI       Role = "api"
 	RoleWorker    Role = "worker"
 	RoleScheduler Role = "scheduler"
+	RoleMCPStdio  Role = "mcp-stdio"
 )
 
 type Config struct {
@@ -94,10 +95,10 @@ func getenv(k, def string) string {
 
 func ParseRole(s string) (Role, error) {
 	switch Role(s) {
-	case RoleAPI, RoleWorker, RoleScheduler:
+	case RoleAPI, RoleWorker, RoleScheduler, RoleMCPStdio:
 		return Role(s), nil
 	default:
-		return "", fmt.Errorf("invalid role %q (want api|worker|scheduler)", s)
+		return "", fmt.Errorf("invalid role %q (want api|worker|scheduler|mcp-stdio)", s)
 	}
 }
 
