@@ -28,6 +28,7 @@ import (
 	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
 	opgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
 	relay "github.com/takalawang/corporate-catering-system/services/api/internal/order/relay"
+	scheduler "github.com/takalawang/corporate-catering-system/services/api/internal/order/scheduler"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/db"
@@ -261,8 +262,38 @@ func main() {
 		}
 		logger.Info("worker shutdown")
 	case config.RoleScheduler:
-		logger.Info("scheduler placeholder, waiting for shutdown signal (P0)")
-		<-ctx.Done()
-		logger.Info("scheduler shutting down")
+		// P3 ships a single-replica scheduler — no leader election. If we ever
+		// scale to >1 replica, wrap sched.Run() with a K8s coordination.k8s.io
+		// Lease so only the holder runs RunOnce. Documented as future work.
+		pool, err := db.NewPool(ctx, cfg.DatabaseRW)
+		if err != nil {
+			logger.Error("pg pool", "err", err)
+			os.Exit(1)
+		}
+		defer pool.Close()
+
+		orderRepo := opgrepo.NewOrderRepo(pool)
+		sched := &scheduler.Cutoff{
+			Pool:     pool,
+			Orders:   orderRepo,
+			OrdersTx: orderRepo,
+			StateTx:  opgrepo.NewStateEventRepo(pool),
+			AuditTx:  opgrepo.NewAuditRepo(pool),
+			OutboxTx: opgrepo.NewOutboxRepo(pool),
+			Clock:    clock.SystemClock{},
+			Logger:   logger.With("component", "cutoff"),
+		}
+		interval := 60 * time.Second
+		if v := os.Getenv("CUTOFF_INTERVAL"); v != "" {
+			if d, err := time.ParseDuration(v); err == nil {
+				interval = d
+			}
+		}
+		logger.Info("scheduler starting", "interval", interval)
+		if err := sched.Run(ctx, interval); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			logger.Error("scheduler shutdown", "err", err)
+			os.Exit(1)
+		}
+		logger.Info("scheduler shutdown")
 	}
 }
