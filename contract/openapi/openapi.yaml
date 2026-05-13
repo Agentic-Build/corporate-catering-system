@@ -1027,9 +1027,6 @@ components:
                     format: uri
                     readOnly: true
                     type: string
-                entry_id:
-                    format: uuid
-                    type: string
                 order_id:
                     format: uuid
                     type: string
@@ -1037,7 +1034,6 @@ components:
                     minLength: 1
                     type: string
             required:
-                - entry_id
                 - order_id
                 - reason
             type: object

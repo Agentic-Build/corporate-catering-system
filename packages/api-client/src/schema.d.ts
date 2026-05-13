@@ -1156,8 +1156,6 @@ export interface components {
              */
             readonly $schema?: string;
             /** Format: uuid */
-            entry_id: string;
-            /** Format: uuid */
             order_id: string;
             reason: string;
         };

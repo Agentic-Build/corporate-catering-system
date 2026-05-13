@@ -113,7 +113,7 @@ pnpm --filter @tbite/employee dev
 - **P3** ✅ order lifecycle + audit + outbox + cutoff scheduler — [`docs/plans/2026-05-13-p3-order-lifecycle.md`](docs/plans/2026-05-13-p3-order-lifecycle.md)
 - **P4** ✅ TOTP pickup + 商家備餐 + ready/picked_up/no_show — [`docs/plans/2026-05-13-p4-pickup-totp.md`](docs/plans/2026-05-13-p4-pickup-totp.md)
 - **P5** ✅ payroll batches + HR CSV export + dispute / refund flow — [`docs/plans/2026-05-13-p5-payroll.md`](docs/plans/2026-05-13-p5-payroll.md)
-- **P6** vendor governance + anomaly alerts + DLQ admin
+- **P6** ✅ vendor governance + anomaly alerts + DLQ admin — [`docs/plans/2026-05-13-p6-governance.md`](docs/plans/2026-05-13-p6-governance.md)
 - **P7** MCP server for AI agents
 - **P8** hardening + load gate + chaos drill
 

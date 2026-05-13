@@ -92,4 +92,13 @@
       出示領餐碼 →
     </a>
   {/if}
+
+  {#if o.status === "picked_up" || o.status === "no_show"}
+    <a
+      href={`/orders/${o.id}/dispute`}
+      class="inline-flex items-center gap-2 rounded-lg border border-tb-slate-300 px-3.5 py-2 text-sm font-semibold text-tb-slate-800 hover:border-tb-slate-500"
+    >
+      申訴
+    </a>
+  {/if}
 </section>

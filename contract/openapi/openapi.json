@@ -1434,10 +1434,6 @@
             "readOnly": true,
             "type": "string"
           },
-          "entry_id": {
-            "format": "uuid",
-            "type": "string"
-          },
           "order_id": {
             "format": "uuid",
             "type": "string"
@@ -1448,7 +1444,6 @@
           }
         },
         "required": [
-          "entry_id",
           "order_id",
           "reason"
         ],
