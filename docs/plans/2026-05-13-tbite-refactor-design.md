@@ -852,7 +852,7 @@ make render-overlay env=single-node|gcp
 | **P1 - Identity** | OIDC (Google+GitHub) × 3 端、employee_directory、vendor 邀請碼、session、refresh | 三 app 都能登入登出；福委會白名單擋住非授權 | ✅ Done |
 | **P2 - Menu & Quota** | 商家 CRUD 菜單、員工瀏覽、Postgres-anchored quota 扣減、Redis cache | 員工能瀏覽今日菜單；併發測試證明不會超賣 | ✅ Done |
 | **P3 - Order Lifecycle** | 下單、改單、取消、狀態機、audit_event、outbox、NATS streams | 訂單可走到 PLACED，cutoff scheduler 能鎖單 | ✅ Done |
-| **P4 - Pickup & Fulfillment** | TOTP 核銷、商家備餐匯總、廠區分區表、標籤列印 | 模擬尖峰 1000 並發 verify p95<100ms | — |
+| **P4 - Pickup & Fulfillment** | TOTP 核銷、商家備餐匯總、廠區分區表、標籤列印 | 模擬尖峰 1000 並發 verify p95<100ms | ✅ Done |
 | **P5 - Payroll** | 月結批次、HR CSV、爭議流程、退款 | 一個完整月結 cycle 跑通並產出 evidence | — |
 | **P6 - Governance** | 商家文件生命週期、anomaly_alert、Admin DLQ、稽核查詢 | 文件到期觸發推播 + admin 可重送 DLQ | — |
 | **P7 - MCP** | MCP server + tools + parity CI gate | MCP 能查單、下單、發起退款、查稽核 | — |
