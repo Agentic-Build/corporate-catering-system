@@ -1,7 +1,6 @@
 // Package chttp wires the compliance Service to huma admin endpoints:
 // vendor document upload/list/review, anomaly list/triage/close, and audit
-// query. The DLQ admin surface used to live here as a 501 stub; it now has
-// its own package (services/api/internal/dlq/http).
+// query.
 package chttp
 
 import (
