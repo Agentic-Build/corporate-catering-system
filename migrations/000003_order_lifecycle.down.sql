@@ -1,0 +1,12 @@
+DROP TABLE IF EXISTS outbox_event;
+DROP TRIGGER IF EXISTS audit_event_no_delete ON audit_event;
+DROP TRIGGER IF EXISTS audit_event_no_update ON audit_event;
+DROP TABLE IF EXISTS audit_event;
+DROP FUNCTION IF EXISTS audit_event_append_only();
+DROP TRIGGER IF EXISTS order_state_event_no_delete ON order_state_event;
+DROP TRIGGER IF EXISTS order_state_event_no_update ON order_state_event;
+DROP TABLE IF EXISTS order_state_event;
+DROP FUNCTION IF EXISTS order_state_event_append_only();
+DROP TABLE IF EXISTS order_item;
+DROP TABLE IF EXISTS "order";
+DROP TYPE IF EXISTS order_status;
