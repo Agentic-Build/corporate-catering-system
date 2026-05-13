@@ -263,6 +263,12 @@ func (s *Service) Get(ctx context.Context, id, userID string) (*Order, error) {
 	return o, nil
 }
 
+// ListByVendorDay returns the vendor's orders on a given supply_date, optionally
+// filtered by status. Used by the merchant prep-board.
+func (s *Service) ListByVendorDay(ctx context.Context, vendorID string, day time.Time, statuses []Status) ([]*Order, error) {
+	return s.Orders.ListByVendorDay(ctx, vendorID, day, statuses)
+}
+
 // MarkReady transitions orders from cutoff/placed → ready (vendor side).
 // All orders must belong to vendorID; any forbidden / invalid-state order
 // aborts the whole batch (transaction rolls back).

@@ -415,6 +415,28 @@ components:
             required:
                 - items
             type: object
+        ListMerchantOrdersOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ListMerchantOrdersOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                date:
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/MerchantOrderDTO'
+                    type:
+                        - array
+                        - "null"
+            required:
+                - date
+                - items
+            type: object
         ListOrdersOutputBody:
             additionalProperties: false
             properties:
@@ -475,6 +497,26 @@ components:
             required:
                 - items
             type: object
+        MarkReadyInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/MarkReadyInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                order_ids:
+                    items:
+                        type: string
+                    minItems: 1
+                    type:
+                        - array
+                        - "null"
+            required:
+                - order_ids
+            type: object
         MeOutputBody:
             additionalProperties: false
             properties:
@@ -506,6 +548,37 @@ components:
                 - email
                 - display_name
                 - role
+            type: object
+        MerchantOrderDTO:
+            additionalProperties: false
+            properties:
+                id:
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/OrderItemDTO'
+                    type:
+                        - array
+                        - "null"
+                picked_up_at:
+                    type: string
+                placed_at:
+                    type: string
+                plant:
+                    type: string
+                ready_at:
+                    type: string
+                status:
+                    type: string
+                total_price_minor:
+                    format: int64
+                    type: integer
+            required:
+                - id
+                - plant
+                - status
+                - total_price_minor
+                - items
             type: object
         OrderDTO:
             additionalProperties: false
@@ -578,6 +651,28 @@ components:
                     $ref: '#/components/schemas/OrderDTO'
             required:
                 - order
+            type: object
+        PickupCodeOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/PickupCodeOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                code:
+                    type: string
+                expires_in_seconds:
+                    format: int64
+                    type: integer
+                order_id:
+                    type: string
+            required:
+                - order_id
+                - code
+                - expires_in_seconds
             type: object
         PlaceOrderInputBody:
             additionalProperties: false
@@ -800,6 +895,23 @@ components:
                 - legal_name
                 - contact_email
                 - status
+            type: object
+        VerifyPickupInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/VerifyPickupInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                code:
+                    maxLength: 6
+                    minLength: 6
+                    type: string
+            required:
+                - code
             type: object
     securitySchemes:
         bearer:
@@ -1123,6 +1235,35 @@ paths:
             tags:
                 - employee
                 - order
+    /api/employee/orders/{id}/pickup-code:
+        get:
+            operationId: getPickupCode
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PickupCodeOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Get current TOTP pickup code for an order (owner, ready only)
+            tags:
+                - employee
+                - order
     /api/merchant/categories:
         get:
             operationId: listMerchantCategories
@@ -1314,6 +1455,107 @@ paths:
             tags:
                 - merchant
                 - menu
+    /api/merchant/orders:
+        get:
+            operationId: listMerchantOrders
+            parameters:
+                - explode: false
+                  in: query
+                  name: date
+                  schema:
+                    type: string
+                - explode: false
+                  in: query
+                  name: status
+                  schema:
+                    enum:
+                        - placed
+                        - cutoff
+                        - ready
+                        - picked_up
+                        - no_show
+                        - cancelled
+                        - ""
+                    type: string
+                - explode: false
+                  in: query
+                  name: plant
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMerchantOrdersOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: List orders for the vendor on a given date
+            tags:
+                - merchant
+                - order
+    /api/merchant/orders/{id}/verify-pickup:
+        post:
+            operationId: verifyPickup
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/VerifyPickupInputBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Verify TOTP code and mark order picked up
+            tags:
+                - merchant
+                - order
+    /api/merchant/orders/mark-ready:
+        post:
+            operationId: markOrdersReady
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MarkReadyInputBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Mark one or more orders as ready for pickup
+            tags:
+                - merchant
+                - order
     /api/merchant/supply:
         get:
             operationId: listMerchantSupply

@@ -159,6 +159,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/employee/orders/{id}/pickup-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current TOTP pickup code for an order (owner, ready only) */
+        get: operations["getPickupCode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/categories": {
         parameters: {
             query?: never;
@@ -240,6 +257,57 @@ export interface paths {
         put?: never;
         /** Publish a draft/archived menu item (status=active) */
         post: operations["publishMerchantMenuItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List orders for the vendor on a given date */
+        get: operations["listMerchantOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/orders/{id}/verify-pickup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify TOTP code and mark order picked up */
+        post: operations["verifyPickup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/orders/mark-ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark one or more orders as ready for pickup */
+        post: operations["markOrdersReady"];
         delete?: never;
         options?: never;
         head?: never;
@@ -553,6 +621,16 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["ItemDTO"][] | null;
         };
+        ListMerchantOrdersOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListMerchantOrdersOutputBody.json
+             */
+            readonly $schema?: string;
+            date: string;
+            items: components["schemas"]["MerchantOrderDTO"][] | null;
+        };
         ListOrdersOutputBody: {
             /**
              * Format: uri
@@ -581,6 +659,15 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["VendorDTO"][] | null;
         };
+        MarkReadyInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MarkReadyInputBody.json
+             */
+            readonly $schema?: string;
+            order_ids: string[] | null;
+        };
         MeOutputBody: {
             /**
              * Format: uri
@@ -596,6 +683,17 @@ export interface components {
             role: string;
             user_id: string;
             vendor_id?: string;
+        };
+        MerchantOrderDTO: {
+            id: string;
+            items: components["schemas"]["OrderItemDTO"][] | null;
+            picked_up_at?: string;
+            placed_at?: string;
+            plant: string;
+            ready_at?: string;
+            status: string;
+            /** Format: int64 */
+            total_price_minor: number;
         };
         OrderDTO: {
             cancelled_at?: string;
@@ -626,6 +724,18 @@ export interface components {
              */
             readonly $schema?: string;
             order: components["schemas"]["OrderDTO"];
+        };
+        PickupCodeOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PickupCodeOutputBody.json
+             */
+            readonly $schema?: string;
+            code: string;
+            /** Format: int64 */
+            expires_in_seconds: number;
+            order_id: string;
         };
         PlaceOrderInputBody: {
             /**
@@ -727,6 +837,15 @@ export interface components {
             legal_name: string;
             plants?: string[] | null;
             status: string;
+        };
+        VerifyPickupInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/VerifyPickupInputBody.json
+             */
+            readonly $schema?: string;
+            code: string;
         };
     };
     responses: never;
@@ -1080,6 +1199,37 @@ export interface operations {
             };
         };
     };
+    getPickupCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupCodeOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     listMerchantCategories: {
         parameters: {
             query?: never;
@@ -1281,6 +1431,103 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listMerchantOrders: {
+        parameters: {
+            query?: {
+                date?: string;
+                status?: "placed" | "cutoff" | "ready" | "picked_up" | "no_show" | "cancelled" | "";
+                plant?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListMerchantOrdersOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    verifyPickup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyPickupInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    markOrdersReady: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkReadyInputBody"];
+            };
+        };
         responses: {
             /** @description No Content */
             204: {
