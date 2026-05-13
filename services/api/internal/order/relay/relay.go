@@ -7,14 +7,13 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/nats-io/nats.go/jetstream"
-
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
 )
 
 type Relay struct {
 	Outbox order.OutboxRepository
-	JS     jetstream.JetStream
+	NATS   *messaging.Client
 	Logger *slog.Logger
 	Batch  int
 	Sleep  time.Duration
@@ -58,7 +57,7 @@ func (r *Relay) cycle(ctx context.Context) (int, error) {
 	successIDs := make([]int64, 0, len(events))
 	for _, ev := range events {
 		payload, _ := json.Marshal(ev.Payload)
-		if _, err := r.JS.Publish(ctx, ev.Subject, payload); err != nil {
+		if err := r.NATS.PublishTraced(ctx, ev.Subject, payload); err != nil {
 			r.Logger.Warn("publish failed", "event_id", ev.ID, "subject", ev.Subject, "err", err)
 			// Mark this one failed but don't kill the batch; the tx still
 			// commits via MarkPublished below — but the failed event remains

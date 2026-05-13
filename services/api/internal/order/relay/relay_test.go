@@ -84,7 +84,7 @@ VALUES
 
 	r := &relay.Relay{
 		Outbox: outbox,
-		JS:     nats.JS,
+		NATS:   nats,
 		Logger: slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})),
 		Batch:  10,
 		Sleep:  10 * time.Millisecond,
@@ -125,7 +125,7 @@ func TestRelay_CycleEmptyOutbox(t *testing.T) {
 	nats, cleanupNATS := setupNATS(t)
 	defer cleanupNATS()
 	outbox := postgres.NewOutboxRepo(pool)
-	r := &relay.Relay{Outbox: outbox, JS: nats.JS, Logger: slog.New(slog.NewTextHandler(os.Stderr, nil)), Batch: 100}
+	r := &relay.Relay{Outbox: outbox, NATS: nats, Logger: slog.New(slog.NewTextHandler(os.Stderr, nil)), Batch: 100}
 
 	runCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()

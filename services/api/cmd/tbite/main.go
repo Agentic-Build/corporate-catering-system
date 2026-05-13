@@ -47,6 +47,7 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/db"
 	messaging "github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
 	qhttp "github.com/takalawang/corporate-catering-system/services/api/internal/quota/http"
@@ -79,6 +80,17 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	shutdownTracer, err := observability.Init(ctx, "tbite-"+string(role), "0.1.0")
+	if err != nil {
+		logger.Warn("otel init failed; continuing without tracing", "err", err)
+	} else {
+		defer func() {
+			sd, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = shutdownTracer(sd)
+		}()
+	}
 
 	switch role {
 	case config.RoleAPI:
@@ -341,7 +353,7 @@ func main() {
 		outbox := opgrepo.NewOutboxRepo(pool)
 		r := &relay.Relay{
 			Outbox: outbox,
-			JS:     natsClient.JS,
+			NATS:   natsClient,
 			Logger: logger.With("component", "outbox-relay"),
 			Batch:  100,
 			Sleep:  500 * time.Millisecond,

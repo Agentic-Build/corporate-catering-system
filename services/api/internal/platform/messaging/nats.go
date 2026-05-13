@@ -7,6 +7,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type Client struct {
@@ -62,4 +64,22 @@ func (c *Client) Close() {
 	if c.NC != nil {
 		c.NC.Close()
 	}
+}
+
+// PublishTraced publishes a JetStream message and emits an OpenTelemetry span
+// around the publish. When no tracer provider is configured (OTel disabled),
+// the global no-op tracer makes this effectively free.
+func (c *Client) PublishTraced(ctx context.Context, subject string, data []byte) error {
+	tracer := otel.Tracer("tbite.nats")
+	ctx, span := tracer.Start(ctx, "nats.publish")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("subject", subject),
+		attribute.Int("size", len(data)),
+	)
+	_, err := c.JS.Publish(ctx, subject, data)
+	if err != nil {
+		span.RecordError(err)
+	}
+	return err
 }

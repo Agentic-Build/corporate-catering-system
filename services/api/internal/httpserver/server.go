@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	mcpsrv "github.com/mark3labs/mcp-go/server"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 )
@@ -36,6 +37,9 @@ type Server struct {
 // idhttp.UserFromContext just like REST handlers.
 func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(chi.Router), mcp *mcpsrv.MCPServer, apiBuilders ...func(huma.API)) *Server {
 	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return otelhttp.NewHandler(next, "tbite.http")
+	})
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
