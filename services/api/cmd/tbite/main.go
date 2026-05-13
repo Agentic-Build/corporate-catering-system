@@ -30,6 +30,9 @@ import (
 	opgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
 	relay "github.com/takalawang/corporate-catering-system/services/api/internal/order/relay"
 	scheduler "github.com/takalawang/corporate-catering-system/services/api/internal/order/scheduler"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
+	payrollhttp "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/http"
+	payrollpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/postgres"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/db"
@@ -183,6 +186,20 @@ func main() {
 		}
 		orderAPI := &ohttp.API{Svc: orderService}
 
+		// 7f. Payroll service + admin/employee handlers
+		payrollService := &payroll.Service{
+			Pool:     pool,
+			Batches:  payrollpgrepo.NewBatchRepo(pool),
+			Entries:  payrollpgrepo.NewEntryRepo(pool),
+			Disputes: payrollpgrepo.NewDisputeRepo(pool),
+			Orders:   orderRepo,
+			OrderTx:  orderRepo,
+			Audit:    auditRepo,
+			Outbox:   outboxRepo,
+			Clock:    clock.SystemClock{},
+		}
+		payrollAPI := &payrollhttp.API{Svc: payrollService}
+
 		// 8. HTTP server. When FAKE_OIDC=1, swap the google provider for a
 		// deterministic fake and mount its auto-redirect handler. Used for
 		// local dev and Playwright e2e — never enable in production.
@@ -220,6 +237,7 @@ func main() {
 			menuAPI.Register,
 			quotaAPI.Register,
 			orderAPI.Register,
+			payrollAPI.Register,
 		)
 		if err := srv.Run(ctx); err != nil {
 			logger.Error("api shutdown", "err", err)

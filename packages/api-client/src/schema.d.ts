@@ -4,6 +4,92 @@
  */
 
 export interface paths {
+    "/api/admin/payroll/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List payroll batches */
+        get: operations["listPayrollBatches"];
+        put?: never;
+        /** Build a draft payroll batch for a period */
+        post: operations["createPayrollBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/payroll/batches/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a payroll batch with its entries */
+        get: operations["getPayrollBatch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/payroll/batches/{id}/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Lock a draft batch and emit settlement event */
+        post: operations["lockPayrollBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/payroll/disputes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List payroll disputes (admin) */
+        get: operations["listPayrollDisputes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/payroll/disputes/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve a payroll dispute (refund or reject) */
+        post: operations["resolvePayrollDispute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/vendors": {
         parameters: {
             query?: never;
@@ -84,6 +170,24 @@ export interface paths {
         put?: never;
         /** Suspend an approved vendor */
         post: operations["suspendVendor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/employee/disputes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List my payroll disputes */
+        get: operations["listMyDisputes"];
+        put?: never;
+        /** Open a dispute against an entry order */
+        post: operations["openMyDispute"];
         delete?: never;
         options?: never;
         head?: never;
@@ -429,11 +533,50 @@ export interface components {
             readonly $schema?: string;
             plants: string[] | null;
         };
+        BatchDTO: {
+            export_uri?: string;
+            exported_at?: string;
+            id: string;
+            locked_at?: string;
+            locked_by?: string;
+            period_end: string;
+            period_start: string;
+            status: string;
+        };
+        BatchOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/BatchOutputBody.json
+             */
+            readonly $schema?: string;
+            batch: components["schemas"]["BatchDTO"];
+        };
+        BatchWithEntriesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/BatchWithEntriesOutputBody.json
+             */
+            readonly $schema?: string;
+            batch: components["schemas"]["BatchDTO"];
+            entries: components["schemas"]["EntryDTO"][] | null;
+        };
         CategoryDTO: {
             id: string;
             name: string;
             /** Format: int64 */
             sort_order: number;
+        };
+        CreateBatchInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateBatchInputBody.json
+             */
+            readonly $schema?: string;
+            period_end: string;
+            period_start: string;
         };
         CreateCategoryInputBody: {
             /**
@@ -491,6 +634,28 @@ export interface components {
             readonly $schema?: string;
             vendor: components["schemas"]["VendorDTO"];
         };
+        DisputeDTO: {
+            entry_id: string;
+            id: string;
+            opened_by: string;
+            order_id: string;
+            reason: string;
+            /** Format: int64 */
+            refund_minor: number;
+            resolution: string;
+            resolved_at?: string;
+            resolved_by?: string;
+            status: string;
+        };
+        DisputeOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DisputeOutputBody.json
+             */
+            readonly $schema?: string;
+            dispute: components["schemas"]["DisputeDTO"];
+        };
         EmployeeMenuItemDTO: {
             badges: string[] | null;
             /** Format: int64 */
@@ -509,6 +674,16 @@ export interface components {
             tags: string[] | null;
             vendor: string;
             vendor_id: string;
+        };
+        EntryDTO: {
+            /** Format: int64 */
+            amount_minor: number;
+            batch_id: string;
+            id: string;
+            order_ids: string[] | null;
+            /** Format: int64 */
+            refunded_minor: number;
+            user_id: string;
         };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
@@ -594,6 +769,15 @@ export interface components {
             readonly $schema?: string;
             item: components["schemas"]["ItemDTO"];
         };
+        ListBatchesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListBatchesOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["BatchDTO"][] | null;
+        };
         ListCategoriesOutputBody: {
             /**
              * Format: uri
@@ -602,6 +786,15 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["CategoryDTO"][] | null;
+        };
+        ListDisputesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListDisputesOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["DisputeDTO"][] | null;
         };
         ListEmployeeMenuOutputBody: {
             /**
@@ -695,6 +888,19 @@ export interface components {
             /** Format: int64 */
             total_price_minor: number;
         };
+        OpenDisputeInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OpenDisputeInputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: uuid */
+            entry_id: string;
+            /** Format: uuid */
+            order_id: string;
+            reason: string;
+        };
         OrderDTO: {
             cancelled_at?: string;
             cutoff_at: string;
@@ -756,6 +962,19 @@ export interface components {
              */
             readonly $schema?: string;
             order: components["schemas"]["OrderDTO"];
+        };
+        ResolveDisputeInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ResolveDisputeInputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            refund_minor: number;
+            resolution: string;
+            /** @enum {string} */
+            status: "resolved_refund" | "resolved_reject";
         };
         SetCapacityInputBody: {
             /**
@@ -856,6 +1075,194 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listPayrollBatches: {
+        parameters: {
+            query?: {
+                status?: "draft" | "locked" | "exported" | "closed" | "";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListBatchesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    createPayrollBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBatchInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getPayrollBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchWithEntriesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    lockPayrollBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listPayrollDisputes: {
+        parameters: {
+            query?: {
+                status?: "open" | "resolved_refund" | "resolved_reject" | "cancelled" | "";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDisputesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    resolvePayrollDispute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveDisputeInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     listVendors: {
         parameters: {
             query?: {
@@ -1031,6 +1438,68 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listMyDisputes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDisputesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    openMyDispute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenDisputeInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisputeOutputBody"];
+                };
             };
             /** @description Error */
             default: {

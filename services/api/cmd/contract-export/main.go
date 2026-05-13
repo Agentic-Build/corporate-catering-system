@@ -13,6 +13,7 @@ import (
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
 	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
+	payrollhttp "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/http"
 	qhttp "github.com/takalawang/corporate-catering-system/services/api/internal/quota/http"
 	vhttp "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/http"
 )
@@ -29,6 +30,7 @@ func main() {
 	(&mhttp.API{}).Register(api)
 	(&qhttp.API{}).Register(api)
 	(&ohttp.API{}).Register(api)
+	(&payrollhttp.API{}).Register(api)
 
 	j, err := api.OpenAPI().MarshalJSON()
 	if err != nil {
