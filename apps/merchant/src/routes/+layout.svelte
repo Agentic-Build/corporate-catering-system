@@ -9,6 +9,11 @@
 >
   <TBiteLogo />
   {#if data.user}
+    <nav class="flex items-center gap-3 text-sm">
+      <a href="/orders" class="text-tb-slate-700 hover:text-tb-slate-950">備餐看板</a>
+      <a href="/menus" class="text-tb-slate-700 hover:text-tb-slate-950">菜單管理</a>
+      <a href="/supply" class="text-tb-slate-700 hover:text-tb-slate-950">份數設定</a>
+    </nav>
     <div class="flex items-center gap-3 text-sm">
       <span class="text-tb-slate-500">{data.user.display_name}</span>
       <form method="POST" action="/auth/logout">
