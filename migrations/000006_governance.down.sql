@@ -1,0 +1,13 @@
+DROP INDEX IF EXISTS anomaly_alert_dedup_idx;
+DROP INDEX IF EXISTS anomaly_alert_open_severity_idx;
+DROP INDEX IF EXISTS anomaly_alert_status_idx;
+DROP INDEX IF EXISTS anomaly_alert_target_idx;
+DROP INDEX IF EXISTS vendor_document_expiring_idx;
+DROP INDEX IF EXISTS vendor_document_status_idx;
+DROP INDEX IF EXISTS vendor_document_vendor_idx;
+DROP TABLE IF EXISTS anomaly_alert;
+DROP TABLE IF EXISTS vendor_document;
+DROP TYPE IF EXISTS anomaly_status;
+DROP TYPE IF EXISTS anomaly_severity;
+DROP TYPE IF EXISTS vendor_document_status;
+DROP TYPE IF EXISTS vendor_document_kind;
