@@ -30,16 +30,20 @@ type Deps struct {
 
 // New constructs the MCP server with all tools registered.
 //
-// Task 1 (this commit) registers zero tools — just the skeleton. P7 Tasks 2-4
-// will hang tool registrations off the returned *server.MCPServer here.
+// P7 Task 2/3 registers 5 read-only + 3 employee write tools (8 total). Each
+// tool handler parses arguments, enforces the same role rules used by HTTP
+// handlers, then delegates to the underlying Service so business semantics
+// stay identical across transports.
 func New(deps Deps) *server.MCPServer {
 	s := server.NewMCPServer(
 		"T-Bite MCP",
 		"0.1.0",
 		server.WithToolCapabilities(true),
 	)
-	// deps is referenced once tools are registered (P7 Tasks 2-4).
-	_ = deps
+	registerOrderTools(s, deps)
+	registerVendorTools(s, deps)
+	registerPayrollTools(s, deps)
+	registerAuditTools(s, deps)
 	return s
 }
 
