@@ -83,4 +83,13 @@
       </button>
     </form>
   {/if}
+
+  {#if o.status === "ready"}
+    <a
+      href={`/orders/${o.id}/pickup`}
+      class="inline-flex items-center gap-2 rounded-lg bg-tb-red-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-tb-red-700"
+    >
+      出示領餐碼 →
+    </a>
+  {/if}
 </section>
