@@ -1,0 +1,162 @@
+name: ci-load-gate
+
+on:
+  schedule:
+    - cron: "0 18 * * *"  # 02:00 UTC+8 (off-peak)
+  workflow_dispatch:
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tbite
+          POSTGRES_PASSWORD: tbite
+          POSTGRES_DB: tbite
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tbite"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      nats:
+        image: nats:2.10-alpine
+        ports:
+          - 4222:4222
+        options: >-
+          --health-cmd "nc -z 127.0.0.1 4222"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Install migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
+          sudo mv migrate /usr/local/bin/migrate
+
+      - name: Apply migrations
+        env:
+          DATABASE_URL: postgres://tbite:tbite@localhost:5432/tbite?sslmode=disable
+        run: migrate -path migrations -database "$DATABASE_URL" up
+
+      - name: Seed P2 baseline data
+        env:
+          PGPASSWORD: tbite
+        run: |
+          psql -h localhost -U tbite -d tbite -f scripts/dev/seed-p2.sql
+
+      - name: Build Go binary
+        run: go build -o /tmp/tbite ./services/api/cmd/tbite
+
+      - name: Start API + Worker + Scheduler
+        env:
+          DATABASE_RW_URL: postgres://tbite:tbite@localhost:5432/tbite?sslmode=disable
+          REDIS_URL: redis://localhost:6379/0
+          NATS_URL: nats://localhost:4222
+          OIDC_GOOGLE_CLIENT_ID: x
+          OIDC_GOOGLE_CLIENT_SECRET: x
+          OIDC_GITHUB_CLIENT_ID: x
+          OIDC_GITHUB_CLIENT_SECRET: x
+          OIDC_CALLBACK_BASE_URL: http://localhost:8080
+          APP_BASE_URL_EMPLOYEE: http://localhost:5173
+          APP_BASE_URL_MERCHANT: http://localhost:5174
+          APP_BASE_URL_ADMIN: http://localhost:5175
+          S3_ENDPOINT: http://localhost:9000
+          S3_ACCESS_KEY_ID: x
+          S3_SECRET_ACCESS_KEY: x
+          S3_BUCKET: tbite
+        run: |
+          /tmp/tbite --role=api > /tmp/api.log 2>&1 &
+          /tmp/tbite --role=worker > /tmp/worker.log 2>&1 &
+          /tmp/tbite --role=scheduler > /tmp/scheduler.log 2>&1 &
+          # Wait for API
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8080/healthz; then break; fi
+            sleep 1
+          done
+          echo "api ready"
+
+      - name: Mint k6 session + seed ready orders
+        env:
+          PGPASSWORD: tbite
+        run: |
+          psql -h localhost -U tbite -d tbite -c "
+          INSERT INTO \"user\" (id, primary_email, display_name, role, status, plant)
+          VALUES ('22222222-2222-2222-2222-222222222222', 'load@tbite.test', 'Load', 'employee', 'active', 'F12B-3F')
+          ON CONFLICT (id) DO NOTHING;"
+          redis-cli SET "sess:tb_load" '{"user_id":"22222222-2222-2222-2222-222222222222","role":"employee","created_at":"2026-05-13T00:00:00Z","last_seen_at":"2026-05-13T00:00:00Z"}' EX 86400
+
+          MENU_ITEM_ID=$(psql -h localhost -U tbite -d tbite -tAc "SELECT id FROM menu_item WHERE status='active' LIMIT 1")
+          echo "MENU_ITEM_ID=$MENU_ITEM_ID" >> $GITHUB_ENV
+
+          psql -h localhost -U tbite -d tbite -c "
+          INSERT INTO \"order\" (id, user_id, vendor_id, plant, supply_date, status, total_price_minor, placed_at, cutoff_at, ready_at, totp_secret)
+          SELECT
+            gen_random_uuid(),
+            '22222222-2222-2222-2222-222222222222',
+            (SELECT vendor_id FROM menu_item WHERE id='${MENU_ITEM_ID}'),
+            'F12B-3F',
+            CURRENT_DATE,
+            'ready',
+            110,
+            now() - interval '1 hour',
+            now() + interval '6 hours',
+            now() - interval '30 minutes',
+            decode('00','hex')
+          FROM generate_series(1, 5);"
+
+          READY_ORDER_IDS=$(psql -h localhost -U tbite -d tbite -tAc "SELECT string_agg(id::text, ',') FROM \"order\" WHERE status='ready'")
+          echo "READY_ORDER_IDS=$READY_ORDER_IDS" >> $GITHUB_ENV
+
+      - name: Run k6 lunch-peak
+        env:
+          API_BASE_URL: http://localhost:8080
+          K6_TOKEN_EMPLOYEE: tb_load
+          K6_PLANT: F12B-3F
+        run: |
+          K6_DAY=$(date -u +%Y-%m-%d) \
+          K6_MENU_ITEM_ID="$MENU_ITEM_ID" \
+          K6_READY_ORDER_IDS="$READY_ORDER_IDS" \
+          k6 run --summary-export=k6-summary.json ops/load/k6-lunch-peak.js
+
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summary
+          path: k6-summary.json
+
+      - name: Upload api/worker/scheduler logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-logs
+          path: /tmp/*.log
