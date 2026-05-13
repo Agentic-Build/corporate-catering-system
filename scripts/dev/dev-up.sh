@@ -40,6 +40,10 @@ done
 kubectl -n "${NAMESPACE}" exec -i deploy/postgres -- psql -U tbite -d tbite \
   < scripts/dev/seed-e2e.sql || true
 
+# Apply P2 dev seed (idempotent: 3 vendors + 12 items + 7 days of supply)
+kubectl -n "${NAMESPACE}" exec -i deploy/postgres -- psql -U tbite -d tbite \
+  < scripts/dev/seed-p2.sql || true
+
 cat <<EOF
 
 Cluster up. Add these to /etc/hosts:
