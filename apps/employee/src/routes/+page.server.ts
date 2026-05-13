@@ -1,5 +1,5 @@
-import type { PageServerLoad } from "./$types";
-import { redirect } from "@sveltejs/kit";
+import type { Actions, PageServerLoad } from "./$types";
+import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
 
@@ -62,4 +62,30 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     items,
     error,
   };
+};
+
+export const actions: Actions = {
+  placeOrder: async ({ request, locals }) => {
+    if (!locals.user) throw redirect(303, "/login");
+    const fd = await request.formData();
+    const plant = String(fd.get("plant") ?? "");
+    const supplyDate = String(fd.get("supply_date") ?? "");
+    const itemIDs = fd.getAll("item_id").map(String);
+    const qtys = fd.getAll("qty").map((q) => parseInt(String(q), 10));
+    if (itemIDs.length === 0) return fail(400, { error: "cart is empty" });
+
+    const items = itemIDs
+      .map((id, i) => ({ menu_item_id: id, qty: qtys[i] ?? 0 }))
+      .filter((it) => it.qty > 0);
+    if (items.length === 0) return fail(400, { error: "no items selected" });
+
+    const client = createApiClient(API_BASE_URL, locals.apiToken);
+    const r = await client.POST("/api/employee/orders", {
+      body: { plant, supply_date: supplyDate, items } as any,
+    });
+    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    const orderID = (r.data as any)?.order?.id;
+    if (!orderID) return fail(500, { error: "no order id in response" });
+    throw redirect(303, `/orders/${orderID}`);
+  },
 };
