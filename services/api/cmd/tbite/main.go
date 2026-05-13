@@ -291,6 +291,8 @@ func main() {
 		// Bearer auth middleware as the REST API. Tools are registered in
 		// subsequent P7 tasks; Task 1 mounts the skeleton at /mcp.
 		mcpSrv := mcpserver.New(mcpserver.Deps{
+			Pool:       pool,
+			Audit:      auditRepo,
 			Order:      orderService,
 			Vendor:     vendorService,
 			Payroll:    payrollService,

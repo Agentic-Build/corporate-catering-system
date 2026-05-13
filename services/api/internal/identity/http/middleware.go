@@ -21,6 +21,14 @@ func UserFromContext(ctx context.Context) (*identity.User, bool) {
 	return u, ok
 }
 
+// ContextWithUser attaches an authenticated user to ctx under the same
+// unexported key AuthMiddleware uses, so non-HTTP entrypoints (MCP stdio,
+// tests, etc.) can populate the request context the same way the middleware
+// does on the HTTP path.
+func ContextWithUser(ctx context.Context, u *identity.User) context.Context {
+	return context.WithValue(ctx, userCtxKey, u)
+}
+
 func TokenFromContext(ctx context.Context) (string, bool) {
 	t, ok := ctx.Value(tokenCtxKey).(string)
 	return t, ok

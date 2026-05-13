@@ -7,6 +7,8 @@ package mcpserver
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
@@ -17,9 +19,22 @@ import (
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
+// AuditTx is the minimal interface mcpserver depends on for audit_event writes.
+// The concrete *order/postgres.AuditRepo (re-used by every other Service)
+// satisfies it. Kept tiny so tests can stub without dragging in pgxpool.
+type AuditTx interface {
+	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
+}
+
 // Deps carries the underlying services the MCP layer reuses. MCP tools call
 // these Services directly so business rules stay identical to the HTTP path.
+//
+// Pool + Audit are used by auditAfter to write the per-tool audit_event row
+// with request_id="mcp:<tool>". They're optional: when nil, audit is skipped
+// (the business operation itself already succeeded).
 type Deps struct {
+	Pool       *pgxpool.Pool
+	Audit      AuditTx
 	Order      *order.Service
 	Vendor     *vendor.Service
 	Payroll    *payroll.Service
@@ -30,10 +45,10 @@ type Deps struct {
 
 // New constructs the MCP server with all tools registered.
 //
-// P7 Task 2/3 registers 5 read-only + 3 employee write tools (8 total). Each
-// tool handler parses arguments, enforces the same role rules used by HTTP
-// handlers, then delegates to the underlying Service so business semantics
-// stay identical across transports.
+// P7 Tasks 2-4 register 12 tools total: 5 read-only + 3 employee write +
+// 4 admin write. Each handler parses arguments, enforces the same role rules
+// used by HTTP handlers, delegates to the underlying Service, and then writes
+// an audit_event row via auditAfter (request_id="mcp:<tool>").
 func New(deps Deps) *server.MCPServer {
 	s := server.NewMCPServer(
 		"T-Bite MCP",
@@ -52,4 +67,22 @@ func New(deps Deps) *server.MCPServer {
 // way before invoking tool handlers, so handlers can call this uniformly.
 func userFromCtx(ctx context.Context) (*identity.User, bool) {
 	return idhttp.UserFromContext(ctx)
+}
+
+// auditAfter writes an audit_event row attributing the MCP tool invocation
+// to the authenticated user. Failures are best-effort: the business operation
+// has already succeeded, so we never fail the tool because of an audit miss.
+//
+// action     = "mcp.<toolName>"
+// request_id = "mcp:<toolName>"  (lets admins filter MCP-originated actions)
+func auditAfter(ctx context.Context, deps Deps, toolName, targetKind, targetID string, payload map[string]any, user *identity.User) {
+	if deps.Pool == nil || deps.Audit == nil || user == nil {
+		return
+	}
+	actorID := user.ID
+	actorRole := string(user.Role)
+	_ = pgx.BeginFunc(ctx, deps.Pool, func(tx pgx.Tx) error {
+		return deps.Audit.WriteTx(ctx, tx, &actorID, &actorRole,
+			"mcp."+toolName, targetKind, targetID, payload, "mcp:"+toolName)
+	})
 }

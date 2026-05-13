@@ -42,6 +42,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("list orders: %v", err)), nil
 			}
+			auditAfter(ctx, deps, "order.list_mine", "order", "list", nil, u)
 			data, _ := json.Marshal(map[string]any{
 				"count":  len(orders),
 				"orders": orders,
@@ -78,6 +79,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
+			auditAfter(ctx, deps, "order.get", "order", o.ID, nil, u)
 			data, _ := json.Marshal(o)
 			return mcp.NewToolResultText(string(data)), nil
 		},
@@ -158,6 +160,11 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
+			auditAfter(ctx, deps, "order.place", "order", o.ID, map[string]any{
+				"plant":       plant,
+				"supply_date": dayStr,
+				"items_count": len(items),
+			}, u)
 			data, _ := json.Marshal(o)
 			return mcp.NewToolResultText(string(data)), nil
 		},
@@ -190,6 +197,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 			if err := deps.Order.Cancel(ctx, orderID, u.ID); err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
+			auditAfter(ctx, deps, "order.cancel", "order", orderID, nil, u)
 			return mcp.NewToolResultText(`{"status":"cancelled"}`), nil
 		},
 	)
@@ -228,6 +236,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 			now := time.Now()
 			code := totp.Generate(o.TOTPSecret, now)
 			expiresIn := totp.StepSeconds - int(now.Unix()%int64(totp.StepSeconds))
+			auditAfter(ctx, deps, "order.get_pickup_code", "order", o.ID, nil, u)
 			data, _ := json.Marshal(map[string]any{
 				"order_id":           o.ID,
 				"code":               code,

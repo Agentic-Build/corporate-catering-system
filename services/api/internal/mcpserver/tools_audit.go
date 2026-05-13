@@ -60,6 +60,7 @@ func registerAuditTools(s *server.MCPServer, deps Deps) {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
+			auditAfter(ctx, deps, "audit.query", "audit_event", "list", nil, u)
 			data, _ := json.Marshal(map[string]any{"count": len(rows), "events": rows})
 			return mcp.NewToolResultText(string(data)), nil
 		},
