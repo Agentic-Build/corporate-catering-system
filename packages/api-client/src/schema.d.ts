@@ -72,7 +72,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/dlq/replay": {
+    "/api/admin/dlq": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List pending DLQ messages */
+        get: operations["listDLQ"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/dlq/{id}/replay": {
         parameters: {
             query?: never;
             header?: never;
@@ -81,8 +98,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replay messages from the DLQ (stub — P6 Task 6 wires the table) */
-        post: operations["replayDLQ"];
+        /** Re-publish a DLQ message to its original subject */
+        post: operations["replayDLQMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/dlq/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark a DLQ message resolved without replay */
+        post: operations["resolveDLQMessage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -815,25 +849,6 @@ export interface components {
             readonly $schema?: string;
             dispute: components["schemas"]["DisputeDTO"];
         };
-        DlqReplayInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/DlqReplayInputBody.json
-             */
-            readonly $schema?: string;
-            ids: string[] | null;
-        };
-        DlqReplayOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/DlqReplayOutputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: int64 */
-            replayed_count: number;
-        };
         DocumentDTO: {
             blob_uri: string;
             created_at: string;
@@ -1052,6 +1067,15 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["OrderDTO"][] | null;
         };
+        ListOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["MessageDTO"][] | null;
+        };
         ListSupplyOutputBody: {
             /**
              * Format: uri
@@ -1106,6 +1130,23 @@ export interface components {
             status: string;
             /** Format: int64 */
             total_price_minor: number;
+        };
+        MessageDTO: {
+            first_seen_at: string;
+            headers: {
+                [key: string]: unknown;
+            };
+            id: string;
+            last_error: string;
+            payload: {
+                [key: string]: unknown;
+            };
+            replayed_at?: string;
+            resolved_at?: string;
+            resolved_notes?: string;
+            source_consumer: string;
+            source_stream: string;
+            source_subject: string;
         };
         OpenDisputeInputBody: {
             /**
@@ -1182,6 +1223,15 @@ export interface components {
             readonly $schema?: string;
             order: components["schemas"]["OrderDTO"];
         };
+        ReplayOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReplayOutputBody.json
+             */
+            readonly $schema?: string;
+            replayed: boolean;
+        };
         ResolveDisputeInputBody: {
             /**
              * Format: uri
@@ -1194,6 +1244,15 @@ export interface components {
             resolution: string;
             /** @enum {string} */
             status: "resolved_refund" | "resolved_reject";
+        };
+        ResolveInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ResolveInputBody.json
+             */
+            readonly $schema?: string;
+            notes: string;
         };
         ReviewDocumentInputBody: {
             /**
@@ -1459,18 +1518,17 @@ export interface operations {
             };
         };
     };
-    replayDLQ: {
+    listDLQ: {
         parameters: {
-            query?: never;
+            query?: {
+                stream?: string;
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DlqReplayInputBody"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description OK */
             200: {
@@ -1478,8 +1536,72 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DlqReplayOutputBody"];
+                    "application/json": components["schemas"]["ListOutputBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    replayDLQMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    resolveDLQMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

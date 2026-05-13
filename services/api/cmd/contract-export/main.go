@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	chttp "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/http"
+	dlqhttp "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/http"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
 	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
@@ -33,6 +34,7 @@ func main() {
 	(&ohttp.API{}).Register(api)
 	(&payrollhttp.API{}).Register(api)
 	(&chttp.API{}).Register(api)
+	(&dlqhttp.API{}).Register(api)
 
 	j, err := api.OpenAPI().MarshalJSON()
 	if err != nil {

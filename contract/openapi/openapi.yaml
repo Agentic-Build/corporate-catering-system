@@ -368,41 +368,6 @@ components:
             required:
                 - dispute
             type: object
-        DlqReplayInputBody:
-            additionalProperties: false
-            properties:
-                $schema:
-                    description: A URL to the JSON Schema for this object.
-                    examples:
-                        - https://example.com/schemas/DlqReplayInputBody.json
-                    format: uri
-                    readOnly: true
-                    type: string
-                ids:
-                    items:
-                        type: string
-                    type:
-                        - array
-                        - "null"
-            required:
-                - ids
-            type: object
-        DlqReplayOutputBody:
-            additionalProperties: false
-            properties:
-                $schema:
-                    description: A URL to the JSON Schema for this object.
-                    examples:
-                        - https://example.com/schemas/DlqReplayOutputBody.json
-                    format: uri
-                    readOnly: true
-                    type: string
-                replayed_count:
-                    format: int64
-                    type: integer
-            required:
-                - replayed_count
-            type: object
         DocumentDTO:
             additionalProperties: false
             properties:
@@ -872,6 +837,25 @@ components:
             required:
                 - items
             type: object
+        ListOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ListOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/MessageDTO'
+                    type:
+                        - array
+                        - "null"
+            required:
+                - items
+            type: object
         ListSupplyOutputBody:
             additionalProperties: false
             properties:
@@ -995,6 +979,43 @@ components:
                 - status
                 - total_price_minor
                 - items
+            type: object
+        MessageDTO:
+            additionalProperties: false
+            properties:
+                first_seen_at:
+                    type: string
+                headers:
+                    additionalProperties: {}
+                    type: object
+                id:
+                    type: string
+                last_error:
+                    type: string
+                payload:
+                    additionalProperties: {}
+                    type: object
+                replayed_at:
+                    type: string
+                resolved_at:
+                    type: string
+                resolved_notes:
+                    type: string
+                source_consumer:
+                    type: string
+                source_stream:
+                    type: string
+                source_subject:
+                    type: string
+            required:
+                - id
+                - source_stream
+                - source_subject
+                - source_consumer
+                - payload
+                - headers
+                - last_error
+                - first_seen_at
             type: object
         OpenDisputeInputBody:
             additionalProperties: false
@@ -1154,6 +1175,21 @@ components:
             required:
                 - order
             type: object
+        ReplayOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ReplayOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                replayed:
+                    type: boolean
+            required:
+                - replayed
+            type: object
         ResolveDisputeInputBody:
             additionalProperties: false
             properties:
@@ -1178,6 +1214,21 @@ components:
                 - status
                 - resolution
                 - refund_minor
+            type: object
+        ResolveInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ResolveInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                notes:
+                    type: string
+            required:
+                - notes
             type: object
         ReviewDocumentInputBody:
             additionalProperties: false
@@ -1604,21 +1655,27 @@ paths:
             tags:
                 - admin
                 - compliance
-    /api/admin/dlq/replay:
-        post:
-            operationId: replayDLQ
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/DlqReplayInputBody'
-                required: true
+    /api/admin/dlq:
+        get:
+            operationId: listDLQ
+            parameters:
+                - explode: false
+                  in: query
+                  name: stream
+                  schema:
+                    type: string
+                - explode: false
+                  in: query
+                  name: limit
+                  schema:
+                    format: int64
+                    type: integer
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/DlqReplayOutputBody'
+                                $ref: '#/components/schemas/ListOutputBody'
                     description: OK
                 default:
                     content:
@@ -1628,10 +1685,70 @@ paths:
                     description: Error
             security:
                 - bearer: []
-            summary: Replay messages from the DLQ (stub — P6 Task 6 wires the table)
+            summary: List pending DLQ messages
             tags:
                 - admin
-                - compliance
+                - dlq
+    /api/admin/dlq/{id}/replay:
+        post:
+            operationId: replayDLQMessage
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ReplayOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Re-publish a DLQ message to its original subject
+            tags:
+                - admin
+                - dlq
+    /api/admin/dlq/{id}/resolve:
+        post:
+            operationId: resolveDLQMessage
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ResolveInputBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Mark a DLQ message resolved without replay
+            tags:
+                - admin
+                - dlq
     /api/admin/documents/{id}/review:
         post:
             operationId: reviewVendorDocument

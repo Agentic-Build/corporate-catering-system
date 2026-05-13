@@ -1,8 +1,7 @@
 // Package chttp wires the compliance Service to huma admin endpoints:
-// vendor document upload/list/review, anomaly list/triage/close, audit query,
-// and a DLQ replay stub. The actual DLQ table + repo lands in P6 Task 6;
-// here the endpoint returns 501 so it appears in OpenAPI and the SPA can
-// pin to the final URL shape.
+// vendor document upload/list/review, anomaly list/triage/close, and audit
+// query. The DLQ admin surface used to live here as a 501 stub; it now has
+// its own package (services/api/internal/dlq/http).
 package chttp
 
 import (
@@ -219,18 +218,6 @@ type listAuditOutput struct {
 	}
 }
 
-type dlqReplayInput struct {
-	Body struct {
-		IDs []string `json:"ids"`
-	}
-}
-
-type dlqReplayOutput struct {
-	Body struct {
-		ReplayedCount int `json:"replayed_count"`
-	}
-}
-
 // ----- Registration -----
 
 func (a *API) Register(api huma.API) {
@@ -300,15 +287,6 @@ func (a *API) Register(api huma.API) {
 		Tags:        []string{"admin", "compliance"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.audit)
-
-	huma.Register(api, huma.Operation{
-		OperationID: "replayDLQ",
-		Method:      http.MethodPost,
-		Path:        "/api/admin/dlq/replay",
-		Summary:     "Replay messages from the DLQ (stub — P6 Task 6 wires the table)",
-		Tags:        []string{"admin", "compliance"},
-		Security:    []map[string][]string{{"bearer": {}}},
-	}, a.dlqReplay)
 }
 
 // ----- Auth -----
@@ -458,16 +436,6 @@ func (a *API) audit(ctx context.Context, in *listAuditInput) (*listAuditOutput, 
 		resp.Body.Items = append(resp.Body.Items, auditRowToDTO(r))
 	}
 	return &resp, nil
-}
-
-// dlqReplay is a P6 Task 3 stub — the synthetic DLQ table + repo lands in
-// P6 Task 6. We still register the endpoint so the OpenAPI surface is stable
-// and the admin UI can wire to the final path.
-func (a *API) dlqReplay(ctx context.Context, _ *dlqReplayInput) (*dlqReplayOutput, error) {
-	if _, err := a.requireAdmin(ctx); err != nil {
-		return nil, err
-	}
-	return nil, huma.Error501NotImplemented("dlq replay not yet implemented (P6 Task 6)")
 }
 
 // mapErr translates compliance sentinels to huma HTTP errors.

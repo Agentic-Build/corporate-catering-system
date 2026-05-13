@@ -21,6 +21,8 @@ import (
 	cpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/postgres"
 	cscanner "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/scanner"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/config"
+	dlqhttp "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/http"
+	dlqpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/postgres"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
@@ -238,6 +240,20 @@ func main() {
 		}
 		complianceAPI := &chttp.API{Svc: complianceService}
 
+		// 7h. DLQ admin handlers (list/replay/resolve). NATS is optional: when
+		// NATS_URL is set we wire JetStream so /replay can re-publish; otherwise
+		// /replay returns 503 and only list/resolve work.
+		dlqRepo := dlqpgrepo.NewDLQRepo(pool)
+		dlqAPI := &dlqhttp.API{Repo: dlqRepo}
+		if cfg.NATSURL != "" {
+			if natsClient, err := messaging.New(ctx, cfg.NATSURL); err == nil {
+				dlqAPI.JS = natsClient.JS
+				defer natsClient.Close()
+			} else {
+				logger.Warn("nats unavailable for dlq replay; /replay will return 503", "err", err)
+			}
+		}
+
 		// 8. HTTP server. When FAKE_OIDC=1, swap the google provider for a
 		// deterministic fake and mount its auto-redirect handler. Used for
 		// local dev and Playwright e2e — never enable in production.
@@ -277,6 +293,7 @@ func main() {
 			orderAPI.Register,
 			payrollAPI.Register,
 			complianceAPI.Register,
+			dlqAPI.Register,
 		)
 		if err := srv.Run(ctx); err != nil {
 			logger.Error("api shutdown", "err", err)
