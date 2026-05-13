@@ -18,6 +18,7 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
 	chttp "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/http"
 	cpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/postgres"
+	cscanner "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/scanner"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/config"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
@@ -409,10 +410,26 @@ func main() {
 			}
 		}
 
-		logger.Info("scheduler starting", "cutoff_interval", cutoffInterval, "noshow_interval", noShow.Interval, "noshow_max_age", noShow.MaxAge)
+		docScanner := &cscanner.DocumentExpiryScanner{
+			Pool:       pool,
+			Docs:       cpgrepo.NewDocumentRepo(pool),
+			Anomaly:    cpgrepo.NewAnomalyRepo(pool),
+			Interval:   1 * time.Hour,
+			DaysWindow: 14,
+			Logger:     logger.With("component", "doc-expiry"),
+			Clock:      clock.SystemClock{},
+		}
+		if v := os.Getenv("DOC_EXPIRY_INTERVAL"); v != "" {
+			if d, err := time.ParseDuration(v); err == nil {
+				docScanner.Interval = d
+			}
+		}
+
+		logger.Info("scheduler starting", "cutoff_interval", cutoffInterval, "noshow_interval", noShow.Interval, "noshow_max_age", noShow.MaxAge, "doc_expiry_interval", docScanner.Interval)
 		eg, egctx := errgroup.WithContext(ctx)
 		eg.Go(func() error { return cutoff.Run(egctx, cutoffInterval) })
 		eg.Go(func() error { return noShow.Run(egctx) })
+		eg.Go(func() error { return docScanner.Run(egctx) })
 		if err := eg.Wait(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			logger.Error("scheduler shutdown", "err", err)
 			os.Exit(1)
