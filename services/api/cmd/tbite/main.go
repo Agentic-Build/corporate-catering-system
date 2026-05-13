@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -23,9 +24,12 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
 	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
 	mpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
+	opgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
+	relay "github.com/takalawang/corporate-catering-system/services/api/internal/order/relay"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/db"
+	messaging "github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
 	qhttp "github.com/takalawang/corporate-catering-system/services/api/internal/quota/http"
 	qpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
@@ -189,9 +193,42 @@ func main() {
 			os.Exit(1)
 		}
 	case config.RoleWorker:
-		logger.Info("worker placeholder, waiting for shutdown signal (P0)")
-		<-ctx.Done()
-		logger.Info("worker shutting down")
+		pool, err := db.NewPool(ctx, cfg.DatabaseRW)
+		if err != nil {
+			logger.Error("pg pool", "err", err)
+			os.Exit(1)
+		}
+		defer pool.Close()
+
+		if cfg.NATSURL == "" {
+			logger.Error("NATS_URL is required for worker role")
+			os.Exit(2)
+		}
+		natsClient, err := messaging.New(ctx, cfg.NATSURL)
+		if err != nil {
+			logger.Error("nats connect", "err", err)
+			os.Exit(1)
+		}
+		defer natsClient.Close()
+		if err := natsClient.ProvisionStreams(ctx); err != nil {
+			logger.Error("provision streams", "err", err)
+			os.Exit(1)
+		}
+
+		outbox := opgrepo.NewOutboxRepo(pool)
+		r := &relay.Relay{
+			Outbox: outbox,
+			JS:     natsClient.JS,
+			Logger: logger.With("component", "outbox-relay"),
+			Batch:  100,
+			Sleep:  500 * time.Millisecond,
+		}
+		logger.Info("outbox relay starting")
+		if err := r.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("relay shutdown", "err", err)
+			os.Exit(1)
+		}
+		logger.Info("worker shutdown")
 	case config.RoleScheduler:
 		logger.Info("scheduler placeholder, waiting for shutdown signal (P0)")
 		<-ctx.Done()
