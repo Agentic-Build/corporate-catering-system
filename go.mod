@@ -9,10 +9,12 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.18.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.2
+	github.com/nats-io/nats.go v1.37.0
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.34.0
+	github.com/testcontainers/testcontainers-go/modules/nats v0.34.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.34.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.34.0
 	golang.org/x/oauth2 v0.24.0
@@ -58,6 +60,8 @@ require (
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
+	github.com/nats-io/nkeys v0.4.7 // indirect
+	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

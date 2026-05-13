@@ -21,6 +21,7 @@ type Config struct {
 
 	DatabaseRW string
 	RedisURL   string
+	NATSURL    string
 
 	GoogleClientID     string
 	GoogleClientSecret string
@@ -44,6 +45,7 @@ func FromEnv() (Config, error) {
 
 		DatabaseRW: os.Getenv("DATABASE_RW_URL"),
 		RedisURL:   os.Getenv("REDIS_URL"),
+		NATSURL:    os.Getenv("NATS_URL"),
 
 		GoogleClientID:     os.Getenv("OIDC_GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: os.Getenv("OIDC_GOOGLE_CLIENT_SECRET"),
