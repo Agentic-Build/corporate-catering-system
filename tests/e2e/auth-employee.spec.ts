@@ -11,7 +11,7 @@ test("employee can login via fake google provider", async ({ page }) => {
   //   -> 303 to http://localhost:5173/auth/landing?token=...&return_to=/
   //   -> 303 to /
   await page.waitForURL(/\/$/, { timeout: 15_000 });
-  // The display name renders both in the topbar and the body "已登入" line.
-  // Anchor on the body line to avoid strict-mode "multiple matches".
-  await expect(page.getByText("已登入：E2E 員工")).toBeVisible();
+  // P2 replaced the simple landing with the menu UI. The display name now
+  // appears in the greeting heading "哈囉，{name} 👋".
+  await expect(page.getByText("哈囉，E2E 員工")).toBeVisible();
 });
