@@ -1,0 +1,70 @@
+# Changelog
+
+All notable changes to T-Bite, by phase.
+
+## P8 — Hardening (2026-05-13)
+- k6 lunch-peak load test (3 scenarios) + run-loadtest.sh harness
+- Hard-SLO CI load gate workflow (nightly + manual_dispatch)
+- OpenTelemetry instrumentation (HTTP, DB via otelpgx, NATS via manual spans)
+- Scheduler K8s Lease leader election (multi-replica HA, with local fallback)
+- Security baseline checklist + chaos drill runbook
+- Trivy scan added to ci-build-images workflow
+- Final README rewrite + CHANGELOG covering P0-P8
+
+## P7 — MCP Server (2026-05-13)
+- MCP server mounted at `/mcp` with auth middleware
+- 12 MCP tools (8 employee + 4 admin write): order / vendor / payroll / audit
+- HTTP /mcp/sse + `--role=mcp-stdio` entry points
+- `request_id="mcp:<tool>"` audit trail for every MCP call
+- `docs/mcp.md` reference doc
+
+## P6 — Vendor Governance (2026-05-13)
+- `vendor_document` lifecycle + expiry scanner generating `anomaly_alert`
+- Rolling-window on-time-rate evaluator (anomaly dedup constraint)
+- `dlq_event` table + admin replay / resolve endpoints
+- Admin compliance UIs (documents, anomalies, audit, DLQ)
+- Employee dispute submission flow
+
+## P5 — Payroll (2026-05-13)
+- `payroll_batch` / `payroll_entry` / `payroll_dispute` schema (append-only entries)
+- Build / Lock / OpenDispute / ResolveRefund service
+- payroll-settler worker exporting HR CSV to S3
+- S3 storage abstraction (MinIO single-node + GCS production)
+- Admin payroll UI + employee dispute list
+- payroll_entry no-delete trigger
+
+## P4 — Pickup TOTP (2026-05-13)
+- `order.totp_secret` column + ready / picked_up / no_show transitions
+- Per-order TOTP (HMAC-SHA256, 30s window)
+- Merchant 備餐看板 (mark-ready + verify pickup)
+- Employee pickup QR page
+- NoShowSweep scheduler job
+- 1000-concurrent VerifyPickup atomicity proof
+
+## P3 — Order Lifecycle (2026-05-13)
+- `order` / `order_item` / `order_state_event` / `audit_event` / `outbox_event` tables
+- State machine + conditional UPDATE for atomic transitions
+- NATS JetStream `ORDERS_V1` stream + outbox-relay worker
+- Cutoff scheduler job
+- Employee cart submit + orders list + cancel
+- audit_event append-only triggers
+
+## P2 — Menu / Vendor / Quota (2026-05-13)
+- `vendor` / `vendor_plant_mapping` / `menu_item` / `meal_supply` schema
+- Postgres-anchored conditional decrement (500-concurrent atomicity proof)
+- Employee menu aggregation + merchant CRUD + admin vendor approval
+- 4 UI ports (MealCard, StateTag, StatCard, LocationBar)
+
+## P1 — Identity + OIDC (2026-05-13)
+- `user` / `user_identity` / `employee_directory` / `vendor_invite` schema
+- Google + GitHub OIDC + role-aware bootstrap
+- Redis session store + OIDC state store
+- Three SvelteKit apps share `@tbite/web-auth` hooks
+- OpenAPI + TS client auto-generation (`make contract-sync`)
+
+## P0 — Skeleton (2026-05-13)
+- pnpm workspace with 3 SvelteKit apps + shared packages (`ui`, `tokens`, `api-client`, `web-auth`)
+- Go module + multi-role binary (`api` / `worker` / `scheduler`)
+- K8s base + `overlays/single-node` + `overlays/gcp`
+- Makefile + dev scripts (`dev-up` / `dev-app` / `dev-down` / `dev-reset`)
+- 3 CI workflows (lint-test / render-overlay / build-images)
