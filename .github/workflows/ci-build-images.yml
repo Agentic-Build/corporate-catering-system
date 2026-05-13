@@ -24,6 +24,15 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           push: false
+          load: true
           tags: tbite/${{ matrix.name }}:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Run Trivy on built image
+        if: ${{ matrix.name == 'api' }}
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: tbite/${{ matrix.name }}:ci
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '0'   # Don't fail on findings yet; just report
