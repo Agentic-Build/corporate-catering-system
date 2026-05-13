@@ -44,6 +44,17 @@ func (c *Client) ProvisionStreams(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("provision ORDERS_V1: %w", err)
 	}
+	_, err = c.JS.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:        "PAYROLL_V1",
+		Description: "Payroll domain events (batch_locked / export_ready / dispute_resolved)",
+		Subjects:    []string{"payroll.>"},
+		Storage:     jetstream.FileStorage,
+		Replicas:    1,
+		MaxAge:      90 * 24 * time.Hour,
+	})
+	if err != nil {
+		return fmt.Errorf("provision PAYROLL_V1: %w", err)
+	}
 	return nil
 }
 

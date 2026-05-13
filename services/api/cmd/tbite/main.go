@@ -33,10 +33,12 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
 	payrollhttp "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/http"
 	payrollpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/postgres"
+	payrollsettler "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/settler"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/db"
 	messaging "github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
 	qhttp "github.com/takalawang/corporate-catering-system/services/api/internal/quota/http"
 	qpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
@@ -274,9 +276,45 @@ func main() {
 			Batch:  100,
 			Sleep:  500 * time.Millisecond,
 		}
-		logger.Info("outbox relay starting")
-		if err := r.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			logger.Error("relay shutdown", "err", err)
+
+		// S3 client for the payroll settler. We construct + EnsureBucket at
+		// boot so the worker fails fast if object storage is misconfigured,
+		// rather than blowing up on the first batch_locked event.
+		s3Client, err := storage.NewS3(ctx, storage.S3Config{
+			Endpoint:        cfg.S3Endpoint,
+			Region:          cfg.S3Region,
+			AccessKeyID:     cfg.S3AccessKeyID,
+			SecretAccessKey: cfg.S3SecretAccessKey,
+			Bucket:          cfg.S3Bucket,
+			UsePathStyle:    cfg.S3UsePathStyle,
+		})
+		if err != nil {
+			logger.Error("s3", "err", err)
+			os.Exit(1)
+		}
+		if err := s3Client.EnsureBucket(ctx); err != nil {
+			logger.Error("ensure bucket", "err", err)
+			os.Exit(1)
+		}
+
+		settler := &payrollsettler.Settler{
+			JS:      natsClient.JS,
+			Pool:    pool,
+			Batches: payrollpgrepo.NewBatchRepo(pool),
+			Entries: payrollpgrepo.NewEntryRepo(pool),
+			Users:   payrollsettler.NewPgUserLookup(pool),
+			Storage: s3Client,
+			Logger:  logger.With("component", "payroll-settler"),
+			Audit:   opgrepo.NewAuditRepo(pool),
+			Outbox:  outbox,
+		}
+
+		logger.Info("worker starting (outbox-relay + payroll-settler)")
+		eg, egctx := errgroup.WithContext(ctx)
+		eg.Go(func() error { return r.Run(egctx) })
+		eg.Go(func() error { return settler.Run(egctx) })
+		if err := eg.Wait(); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("worker shutdown", "err", err)
 			os.Exit(1)
 		}
 		logger.Info("worker shutdown")

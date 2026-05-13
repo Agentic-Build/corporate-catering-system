@@ -36,6 +36,16 @@ type Config struct {
 	AppBaseURLEmployee string
 	AppBaseURLMerchant string
 	AppBaseURLAdmin    string
+
+	// S3-compatible object storage (MinIO local / AWS S3 / GCS HMAC). Used by
+	// the payroll settler worker. Optional at boot — only the worker role
+	// actually requires it, so we don't validate here.
+	S3Endpoint        string
+	S3Region          string
+	S3AccessKeyID     string
+	S3SecretAccessKey string
+	S3Bucket          string
+	S3UsePathStyle    bool
 }
 
 func FromEnv() (Config, error) {
@@ -57,6 +67,13 @@ func FromEnv() (Config, error) {
 		AppBaseURLEmployee: getenv("APP_BASE_URL_EMPLOYEE", "http://app.tbite.test"),
 		AppBaseURLMerchant: getenv("APP_BASE_URL_MERCHANT", "http://merchant.tbite.test"),
 		AppBaseURLAdmin:    getenv("APP_BASE_URL_ADMIN", "http://admin.tbite.test"),
+
+		S3Endpoint:        os.Getenv("S3_ENDPOINT"),
+		S3Region:          os.Getenv("S3_REGION"),
+		S3AccessKeyID:     os.Getenv("S3_ACCESS_KEY_ID"),
+		S3SecretAccessKey: os.Getenv("S3_SECRET_ACCESS_KEY"),
+		S3Bucket:          getenv("S3_BUCKET", "tbite"),
+		S3UsePathStyle:    os.Getenv("S3_USE_PATH_STYLE") == "1",
 	}
 	if c.DatabaseRW == "" {
 		return c, fmt.Errorf("config: DATABASE_RW_URL is required")
