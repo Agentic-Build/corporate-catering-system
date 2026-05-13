@@ -29,6 +29,7 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
 	pgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/identity/postgres"
 	idredis "github.com/takalawang/corporate-catering-system/services/api/internal/identity/redis"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/mcpserver"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
 	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
 	mpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
@@ -286,7 +287,19 @@ func main() {
 			}
 		}
 
-		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes,
+		// 9. MCP server (P7). Reuses the same service instances and the same
+		// Bearer auth middleware as the REST API. Tools are registered in
+		// subsequent P7 tasks; Task 1 mounts the skeleton at /mcp.
+		mcpSrv := mcpserver.New(mcpserver.Deps{
+			Order:      orderService,
+			Vendor:     vendorService,
+			Payroll:    payrollService,
+			Compliance: complianceService,
+			Users:      userRepo,
+			Sessions:   sessStore,
+		})
+
+		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes, mcpSrv,
 			vendorAPI.Register,
 			menuAPI.Register,
 			quotaAPI.Register,
