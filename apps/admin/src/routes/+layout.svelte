@@ -9,7 +9,9 @@
 >
   <TBiteLogo />
   {#if data.user}
-    <div class="flex items-center gap-3 text-sm">
+    <div class="flex items-center gap-4 text-sm">
+      <a href="/vendors" class="text-tb-slate-700 hover:text-tb-slate-950">商家管理</a>
+      <a href="/payroll" class="text-tb-slate-700 hover:text-tb-slate-950">月結</a>
       <span class="text-tb-slate-500">{data.user.display_name}</span>
       <form method="POST" action="/auth/logout">
         <button class="text-tb-red-600 hover:text-tb-red-700" type="submit">登出</button>
