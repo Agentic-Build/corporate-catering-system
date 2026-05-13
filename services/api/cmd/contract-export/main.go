@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 
+	chttp "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/http"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
 	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
@@ -31,6 +32,7 @@ func main() {
 	(&qhttp.API{}).Register(api)
 	(&ohttp.API{}).Register(api)
 	(&payrollhttp.API{}).Register(api)
+	(&chttp.API{}).Register(api)
 
 	j, err := api.OpenAPI().MarshalJSON()
 	if err != nil {

@@ -15,6 +15,9 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
+	chttp "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/http"
+	cpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/postgres"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/config"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
@@ -202,6 +205,37 @@ func main() {
 		}
 		payrollAPI := &payrollhttp.API{Svc: payrollService}
 
+		// 7g. Compliance service + admin handlers (vendor docs / anomalies /
+		// audit query / dlq stub). S3 is constructed here as well as in worker
+		// so document uploads have somewhere to land. If S3 is misconfigured we
+		// fail fast — the api role now hard-depends on object storage.
+		s3API, err := storage.NewS3(ctx, storage.S3Config{
+			Endpoint:        cfg.S3Endpoint,
+			Region:          cfg.S3Region,
+			AccessKeyID:     cfg.S3AccessKeyID,
+			SecretAccessKey: cfg.S3SecretAccessKey,
+			Bucket:          cfg.S3Bucket,
+			UsePathStyle:    cfg.S3UsePathStyle,
+		})
+		if err != nil {
+			logger.Error("s3", "err", err)
+			os.Exit(1)
+		}
+		if err := s3API.EnsureBucket(ctx); err != nil {
+			logger.Warn("ensure bucket failed; uploads will fail until storage is reachable", "err", err)
+		}
+		complianceService := &compliance.Service{
+			Pool:     pool,
+			Docs:     cpgrepo.NewDocumentRepo(pool),
+			Anomaly:  cpgrepo.NewAnomalyRepo(pool),
+			Storage:  s3API,
+			Audit:    auditRepo,
+			Outbox:   outboxRepo,
+			AuditQry: auditRepo,
+			Clock:    clock.SystemClock{},
+		}
+		complianceAPI := &chttp.API{Svc: complianceService}
+
 		// 8. HTTP server. When FAKE_OIDC=1, swap the google provider for a
 		// deterministic fake and mount its auto-redirect handler. Used for
 		// local dev and Playwright e2e — never enable in production.
@@ -240,6 +274,7 @@ func main() {
 			quotaAPI.Register,
 			orderAPI.Register,
 			payrollAPI.Register,
+			complianceAPI.Register,
 		)
 		if err := srv.Run(ctx); err != nil {
 			logger.Error("api shutdown", "err", err)

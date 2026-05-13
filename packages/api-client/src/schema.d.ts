@@ -4,6 +4,108 @@
  */
 
 export interface paths {
+    "/api/admin/anomalies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List anomaly alerts filtered by status/severity */
+        get: operations["listAnomalies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/anomalies/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close an open/triaged anomaly */
+        post: operations["closeAnomaly"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/anomalies/{id}/triage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark an open anomaly as triaged */
+        post: operations["triageAnomaly"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Query the append-only audit log */
+        get: operations["listAuditEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/dlq/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replay messages from the DLQ (stub — P6 Task 6 wires the table) */
+        post: operations["replayDLQ"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/documents/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve or reject a pending vendor document */
+        post: operations["reviewVendorDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/payroll/batches": {
         parameters: {
             query?: never;
@@ -170,6 +272,24 @@ export interface paths {
         put?: never;
         /** Suspend an approved vendor */
         post: operations["suspendVendor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/vendors/{vendor_id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a vendor's compliance documents */
+        get: operations["listVendorDocuments"];
+        put?: never;
+        /** Upload a vendor compliance document (base64-in-JSON) */
+        post: operations["uploadVendorDocument"];
         delete?: never;
         options?: never;
         head?: never;
@@ -524,6 +644,31 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AnomalyActionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AnomalyActionInputBody.json
+             */
+            readonly $schema?: string;
+            notes: string;
+        };
+        AnomalyDTO: {
+            closed_at?: string;
+            created_at: string;
+            evidence_uri: string[] | null;
+            id: string;
+            kind: string;
+            notes: string;
+            payload: {
+                [key: string]: unknown;
+            };
+            severity: string;
+            status: string;
+            target_id: string;
+            target_kind: string;
+            triaged_at?: string;
+        };
         ApproveInputBody: {
             /**
              * Format: uri
@@ -532,6 +677,20 @@ export interface components {
              */
             readonly $schema?: string;
             plants: string[] | null;
+        };
+        AuditRowDTO: {
+            action: string;
+            actor_id?: string;
+            actor_role?: string;
+            at: string;
+            /** Format: int64 */
+            id: number;
+            payload: {
+                [key: string]: unknown;
+            };
+            request_id: string;
+            target_id: string;
+            target_kind: string;
         };
         BatchDTO: {
             export_uri?: string;
@@ -656,6 +815,39 @@ export interface components {
             readonly $schema?: string;
             dispute: components["schemas"]["DisputeDTO"];
         };
+        DlqReplayInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DlqReplayInputBody.json
+             */
+            readonly $schema?: string;
+            ids: string[] | null;
+        };
+        DlqReplayOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DlqReplayOutputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            replayed_count: number;
+        };
+        DocumentDTO: {
+            blob_uri: string;
+            created_at: string;
+            expires_at?: string;
+            filename: string;
+            id: string;
+            kind: string;
+            notes: string;
+            reviewed_at?: string;
+            reviewed_by?: string;
+            status: string;
+            uploaded_by?: string;
+            vendor_id: string;
+        };
         EmployeeMenuItemDTO: {
             badges: string[] | null;
             /** Format: int64 */
@@ -769,6 +961,24 @@ export interface components {
             readonly $schema?: string;
             item: components["schemas"]["ItemDTO"];
         };
+        ListAnomaliesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListAnomaliesOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["AnomalyDTO"][] | null;
+        };
+        ListAuditOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListAuditOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["AuditRowDTO"][] | null;
+        };
         ListBatchesOutputBody: {
             /**
              * Format: uri
@@ -795,6 +1005,15 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["DisputeDTO"][] | null;
+        };
+        ListDocumentsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListDocumentsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["DocumentDTO"][] | null;
         };
         ListEmployeeMenuOutputBody: {
             /**
@@ -976,6 +1195,17 @@ export interface components {
             /** @enum {string} */
             status: "resolved_refund" | "resolved_reject";
         };
+        ReviewDocumentInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReviewDocumentInputBody.json
+             */
+            readonly $schema?: string;
+            notes: string;
+            /** @enum {string} */
+            status: "approved" | "rejected";
+        };
         SetCapacityInputBody: {
             /**
              * Format: uri
@@ -1048,6 +1278,28 @@ export interface components {
             price_minor: number;
             tags: string[] | null;
         };
+        UploadDocumentInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UploadDocumentInputBody.json
+             */
+            readonly $schema?: string;
+            content_base64: string;
+            expires_at?: string;
+            filename: string;
+            /** @enum {string} */
+            kind: "business_license" | "food_safety_permit" | "tax_registration" | "insurance" | "other";
+        };
+        UploadDocumentOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UploadDocumentOutputBody.json
+             */
+            readonly $schema?: string;
+            document: components["schemas"]["DocumentDTO"];
+        };
         VendorDTO: {
             approved_at?: string;
             contact_email: string;
@@ -1075,6 +1327,204 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listAnomalies: {
+        parameters: {
+            query?: {
+                status?: "open" | "triaged" | "closed" | "";
+                severity?: "low" | "medium" | "high" | "critical" | "";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListAnomaliesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    closeAnomaly: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnomalyActionInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    triageAnomaly: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnomalyActionInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listAuditEvents: {
+        parameters: {
+            query?: {
+                target_kind?: string;
+                target_id?: string;
+                since?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListAuditOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    replayDLQ: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DlqReplayInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DlqReplayOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    reviewVendorDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewDocumentInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     listPayrollBatches: {
         parameters: {
             query?: {
@@ -1438,6 +1888,74 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listVendorDocuments: {
+        parameters: {
+            query?: {
+                include_all?: boolean;
+            };
+            header?: never;
+            path: {
+                vendor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDocumentsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    uploadVendorDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vendor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadDocumentInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadDocumentOutputBody"];
+                };
             };
             /** @description Error */
             default: {
