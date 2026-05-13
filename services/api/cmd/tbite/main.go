@@ -24,6 +24,8 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
 	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
 	mpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
+	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
 	opgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
 	relay "github.com/takalawang/corporate-catering-system/services/api/internal/order/relay"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
@@ -149,11 +151,35 @@ func main() {
 		menuAPI := &mhttp.API{Svc: menuService}
 
 		// 7d. Quota service + merchant handlers (vendor capacity management)
+		supplyRepo := qpgrepo.NewSupplyRepo(pool)
 		quotaService := &quota.Service{
-			Supplies: qpgrepo.NewSupplyRepo(pool),
+			Supplies: supplyRepo,
 			Items:    itemRepo,
 		}
 		quotaAPI := &qhttp.API{Svc: quotaService}
+
+		// 7e. Order service + employee handlers (place / list / get / cancel)
+		orderRepo := opgrepo.NewOrderRepo(pool)
+		stateEventRepo := opgrepo.NewStateEventRepo(pool)
+		auditRepo := opgrepo.NewAuditRepo(pool)
+		outboxRepo := opgrepo.NewOutboxRepo(pool)
+		plantRepo := vpgrepo.NewPlantMappingRepo(pool)
+		orderService := &order.Service{
+			Pool:        pool,
+			Orders:      orderRepo,
+			OrdersTx:    orderRepo,
+			StateEvents: stateEventRepo,
+			StateTx:     stateEventRepo,
+			Audit:       auditRepo,
+			AuditTx:     auditRepo,
+			Outbox:      outboxRepo,
+			OutboxTx:    outboxRepo,
+			QuotaTx:     supplyRepo,
+			Items:       itemRepo,
+			Plants:      plantRepo,
+			Clock:       clock.SystemClock{},
+		}
+		orderAPI := &ohttp.API{Svc: orderService}
 
 		// 8. HTTP server. When FAKE_OIDC=1, swap the google provider for a
 		// deterministic fake and mount its auto-redirect handler. Used for
@@ -187,7 +213,12 @@ func main() {
 			}
 		}
 
-		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes, vendorAPI.Register, menuAPI.Register, quotaAPI.Register)
+		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes,
+			vendorAPI.Register,
+			menuAPI.Register,
+			quotaAPI.Register,
+			orderAPI.Register,
+		)
 		if err := srv.Run(ctx); err != nil {
 			logger.Error("api shutdown", "err", err)
 			os.Exit(1)

@@ -107,6 +107,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/employee/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List my orders */
+        get: operations["listMyOrders"];
+        put?: never;
+        /** Place a new order */
+        post: operations["placeOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/employee/orders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an order by ID (owner only) */
+        get: operations["getMyOrder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/employee/orders/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel my order */
+        post: operations["cancelMyOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/categories": {
         parameters: {
             query?: never;
@@ -446,6 +498,12 @@ export interface components {
             readonly $schema?: string;
             code: string;
         };
+        Item: {
+            /** Format: uuid */
+            menu_item_id: string;
+            /** Format: int64 */
+            qty: number;
+        };
         ItemDTO: {
             badges: string[] | null;
             category_id?: string;
@@ -495,6 +553,15 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["ItemDTO"][] | null;
         };
+        ListOrdersOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListOrdersOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["OrderDTO"][] | null;
+        };
         ListSupplyOutputBody: {
             /**
              * Format: uri
@@ -529,6 +596,56 @@ export interface components {
             role: string;
             user_id: string;
             vendor_id?: string;
+        };
+        OrderDTO: {
+            cancelled_at?: string;
+            cutoff_at: string;
+            id: string;
+            items: components["schemas"]["OrderItemDTO"][] | null;
+            placed_at?: string;
+            plant: string;
+            status: string;
+            supply_date: string;
+            /** Format: int64 */
+            total_price_minor: number;
+            vendor_id: string;
+        };
+        OrderItemDTO: {
+            id: string;
+            menu_item_id: string;
+            /** Format: int64 */
+            qty: number;
+            /** Format: int64 */
+            unit_price_minor: number;
+        };
+        OrderOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OrderOutputBody.json
+             */
+            readonly $schema?: string;
+            order: components["schemas"]["OrderDTO"];
+        };
+        PlaceOrderInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PlaceOrderInputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["Item"][] | null;
+            plant: string;
+            supply_date: string;
+        };
+        PlaceOrderOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PlaceOrderOutputBody.json
+             */
+            readonly $schema?: string;
+            order: components["schemas"]["OrderDTO"];
         };
         SetCapacityInputBody: {
             /**
@@ -829,6 +946,128 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ListEmployeeMenuOutputBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listMyOrders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListOrdersOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    placeOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaceOrderInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceOrderOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getMyOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    cancelMyOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {
