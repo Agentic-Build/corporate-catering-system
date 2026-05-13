@@ -110,8 +110,9 @@ pnpm --filter @tbite/employee dev
 - **P0** ✅ monorepo skeleton — [`docs/plans/2026-05-13-p0-skeleton.md`](docs/plans/2026-05-13-p0-skeleton.md)
 - **P1** ✅ identity + OIDC + 三端登入流 — [`docs/plans/2026-05-13-p1-identity.md`](docs/plans/2026-05-13-p1-identity.md)
 - **P2** ✅ menu / vendor / quota + 員工瀏覽今日菜單 — [`docs/plans/2026-05-13-p2-menu-vendor-quota.md`](docs/plans/2026-05-13-p2-menu-vendor-quota.md)
-- **P3** 員工下單 + order lifecycle + audit_event + outbox
-- **P4–P8** 見設計文件 §15
+- **P3** ✅ order lifecycle + audit + outbox + cutoff scheduler — [`docs/plans/2026-05-13-p3-order-lifecycle.md`](docs/plans/2026-05-13-p3-order-lifecycle.md)
+- **P4** READY/PICKED_UP/NO_SHOW/REFUNDED + TOTP + 商家備餐
+- **P5–P8** 見設計文件 §15
 
 ## Contributing
 
