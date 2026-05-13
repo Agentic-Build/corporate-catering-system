@@ -41,6 +41,29 @@ RETURNING id, created_at, updated_at`,
 	return nil
 }
 
+// CreateTx inserts a batch row using the caller's transaction so the batch and
+// the entries derived from it commit (or roll back) atomically.
+func (r *BatchRepo) CreateTx(ctx context.Context, tx pgx.Tx, b *payroll.Batch) error {
+	status := b.Status
+	if status == "" {
+		status = payroll.BatchStatusDraft
+	}
+	err := tx.QueryRow(ctx, `
+INSERT INTO payroll_batch (period_start, period_end, status)
+VALUES ($1, $2, $3)
+RETURNING id, created_at, updated_at`,
+		b.PeriodStart, b.PeriodEnd, string(status),
+	).Scan(&b.ID, &b.CreatedAt, &b.UpdatedAt)
+	if err != nil {
+		if strings.Contains(err.Error(), "payroll_batch_period_idx") {
+			return payroll.ErrBatchPeriodExists
+		}
+		return fmt.Errorf("create batch tx: %w", err)
+	}
+	b.Status = status
+	return nil
+}
+
 func (r *BatchRepo) GetByID(ctx context.Context, id string) (*payroll.Batch, error) {
 	return r.scanOne(ctx, `WHERE id=$1`, id)
 }

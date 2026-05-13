@@ -244,6 +244,21 @@ SELECT ` + orderSelectCols + `
 	return collectOrders(rows)
 }
 
+// ListPickedOrNoShowInPeriod returns orders in {picked_up, no_show} whose
+// supply_date falls within [from, to] inclusive. Used by the payroll Build step.
+func (r *OrderRepo) ListPickedOrNoShowInPeriod(ctx context.Context, from, to time.Time) ([]*order.Order, error) {
+	rows, err := r.pool.Query(ctx, `
+SELECT `+orderSelectCols+`
+  FROM "order"
+ WHERE status IN ('picked_up','no_show')
+   AND supply_date >= $1 AND supply_date <= $2
+ ORDER BY user_id, supply_date`, from, to)
+	if err != nil {
+		return nil, err
+	}
+	return collectOrders(rows)
+}
+
 func collectOrders(rows pgx.Rows) ([]*order.Order, error) {
 	defer rows.Close()
 	var out []*order.Order

@@ -13,6 +13,10 @@ type Repository interface {
 	ListPlacedDueForCutoff(ctx context.Context, before time.Time) ([]*Order, error)
 	ListReadyOlderThan(ctx context.Context, threshold time.Time) ([]*Order, error)
 	ListByVendorDay(ctx context.Context, vendorID string, day time.Time, statuses []Status) ([]*Order, error)
+	// ListPickedOrNoShowInPeriod returns all orders in {picked_up, no_show} whose
+	// supply_date falls within [from, to] inclusive. Used by the payroll Build step
+	// to aggregate per-user entries for a monthly batch.
+	ListPickedOrNoShowInPeriod(ctx context.Context, from, to time.Time) ([]*Order, error)
 }
 
 type StateEventRepository interface {

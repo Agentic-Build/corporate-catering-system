@@ -9,6 +9,9 @@ import (
 
 type BatchRepository interface {
 	Create(ctx context.Context, b *Batch) error
+	// CreateTx inserts a batch row inside an existing transaction so the batch
+	// insert and downstream entry inserts succeed or fail together.
+	CreateTx(ctx context.Context, tx pgx.Tx, b *Batch) error
 	GetByID(ctx context.Context, id string) (*Batch, error)
 	GetByPeriod(ctx context.Context, start, end time.Time) (*Batch, error)
 	UpdateStatusTx(ctx context.Context, tx pgx.Tx, id string, from, to BatchStatus, lockedBy *string) error
