@@ -119,3 +119,51 @@ UPDATE meal_supply
 		itemID, date, n)
 	return err
 }
+
+// DecrementTx is the transactional variant of Decrement. The caller owns the
+// pgx.Tx so the quota update participates in a larger order-write transaction;
+// on tx rollback the decrement is also reverted.
+func (r *SupplyRepo) DecrementTx(ctx context.Context, tx pgx.Tx, itemID string, date time.Time, n int) (int, error) {
+	if n <= 0 {
+		return 0, fmt.Errorf("quota: n must be positive (got %d)", n)
+	}
+	var newRemain int
+	err := tx.QueryRow(ctx, `
+UPDATE meal_supply
+   SET remain = remain - $3,
+       updated_at = now()
+ WHERE menu_item_id = $1
+   AND supply_date  = $2
+   AND remain >= $3
+RETURNING remain`, itemID, date, n).Scan(&newRemain)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var exists bool
+		if err2 := tx.QueryRow(ctx, `
+SELECT EXISTS (SELECT 1 FROM meal_supply WHERE menu_item_id=$1 AND supply_date=$2)`,
+			itemID, date).Scan(&exists); err2 != nil {
+			return 0, err2
+		}
+		if !exists {
+			return 0, quota.ErrSupplyNotFound
+		}
+		return 0, quota.ErrOutOfStock
+	}
+	if err != nil {
+		return 0, fmt.Errorf("decrement: %w", err)
+	}
+	return newRemain, nil
+}
+
+// RestoreTx is the transactional variant of Restore.
+func (r *SupplyRepo) RestoreTx(ctx context.Context, tx pgx.Tx, itemID string, date time.Time, n int) error {
+	if n <= 0 {
+		return fmt.Errorf("quota: n must be positive (got %d)", n)
+	}
+	_, err := tx.Exec(ctx, `
+UPDATE meal_supply
+   SET remain = LEAST(remain + $3, capacity),
+       updated_at = now()
+ WHERE menu_item_id = $1 AND supply_date = $2`,
+		itemID, date, n)
+	return err
+}
