@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance/evaluator"
 	chttp "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/http"
 	cpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/postgres"
 	cscanner "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/scanner"
@@ -345,10 +346,17 @@ func main() {
 			Outbox:  outbox,
 		}
 
-		logger.Info("worker starting (outbox-relay + payroll-settler)")
+		onTimeEval := &evaluator.OnTimeRateEvaluator{
+			JS:      natsClient.JS,
+			Anomaly: cpgrepo.NewAnomalyRepo(pool),
+			Logger:  logger.With("component", "on-time-evaluator"),
+		}
+
+		logger.Info("worker starting (outbox-relay + payroll-settler + on-time-evaluator)")
 		eg, egctx := errgroup.WithContext(ctx)
 		eg.Go(func() error { return r.Run(egctx) })
 		eg.Go(func() error { return settler.Run(egctx) })
+		eg.Go(func() error { return onTimeEval.Run(egctx) })
 		if err := eg.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("worker shutdown", "err", err)
 			os.Exit(1)
