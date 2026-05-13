@@ -11,6 +11,8 @@ type Repository interface {
 	UpdateStatus(ctx context.Context, id string, from, to Status, actorID *string, actorRole *string, reason string) error
 	ListByUser(ctx context.Context, userID string, sinceDate time.Time) ([]*Order, error)
 	ListPlacedDueForCutoff(ctx context.Context, before time.Time) ([]*Order, error)
+	ListReadyOlderThan(ctx context.Context, threshold time.Time) ([]*Order, error)
+	ListByVendorDay(ctx context.Context, vendorID string, day time.Time, statuses []Status) ([]*Order, error)
 }
 
 type StateEventRepository interface {

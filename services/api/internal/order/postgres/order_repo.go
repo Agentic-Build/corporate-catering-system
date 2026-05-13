@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -16,6 +17,26 @@ type OrderRepo struct{ pool *pgxpool.Pool }
 
 func NewOrderRepo(p *pgxpool.Pool) *OrderRepo { return &OrderRepo{pool: p} }
 
+// orderSelectCols is the canonical SELECT projection for the "order" table.
+// Keep the column order in lock-step with the Scan calls below.
+const orderSelectCols = `id, user_id, vendor_id, plant, supply_date, status, total_price_minor,
+       totp_secret, placed_at, cutoff_at, ready_at, picked_up_at, no_show_at,
+       cancelled_at, created_at, updated_at`
+
+// scanOrder reads one row using the orderSelectCols projection.
+func scanOrder(row pgx.Row, o *order.Order) error {
+	var status string
+	if err := row.Scan(
+		&o.ID, &o.UserID, &o.VendorID, &o.Plant, &o.SupplyDate, &status, &o.TotalPriceMinor,
+		&o.TOTPSecret, &o.PlacedAt, &o.CutoffAt, &o.ReadyAt, &o.PickedUpAt, &o.NoShowAt,
+		&o.CancelledAt, &o.CreatedAt, &o.UpdatedAt,
+	); err != nil {
+		return err
+	}
+	o.Status = order.Status(status)
+	return nil
+}
+
 // CreateTx inserts the order + items inside the provided transaction. Service
 // callers wrap this in a larger tx that also touches quota, state events, and
 // outbox; pass nil tx via Create() if a standalone insert is desired.
@@ -25,11 +46,11 @@ func (r *OrderRepo) CreateTx(ctx context.Context, tx pgx.Tx, o *order.Order) err
 	}
 	err := tx.QueryRow(ctx, `
 INSERT INTO "order"
-  (user_id, vendor_id, plant, supply_date, status, total_price_minor, placed_at, cutoff_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+  (user_id, vendor_id, plant, supply_date, status, total_price_minor, placed_at, cutoff_at, totp_secret)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 RETURNING id, created_at, updated_at`,
 		o.UserID, o.VendorID, o.Plant, o.SupplyDate, string(o.Status),
-		o.TotalPriceMinor, o.PlacedAt, o.CutoffAt,
+		o.TotalPriceMinor, o.PlacedAt, o.CutoffAt, o.TOTPSecret,
 	).Scan(&o.ID, &o.CreatedAt, &o.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert order: %w", err)
@@ -57,21 +78,14 @@ func (r *OrderRepo) Create(ctx context.Context, o *order.Order) error {
 
 func (r *OrderRepo) GetByID(ctx context.Context, id string) (*order.Order, error) {
 	var o order.Order
-	var status string
-	err := r.pool.QueryRow(ctx, `
-SELECT id, user_id, vendor_id, plant, supply_date, status, total_price_minor,
-       placed_at, cutoff_at, cancelled_at, created_at, updated_at
-  FROM "order" WHERE id=$1`, id).Scan(
-		&o.ID, &o.UserID, &o.VendorID, &o.Plant, &o.SupplyDate, &status, &o.TotalPriceMinor,
-		&o.PlacedAt, &o.CutoffAt, &o.CancelledAt, &o.CreatedAt, &o.UpdatedAt,
-	)
+	err := scanOrder(r.pool.QueryRow(ctx,
+		`SELECT `+orderSelectCols+` FROM "order" WHERE id=$1`, id), &o)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, order.ErrOrderNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get order: %w", err)
 	}
-	o.Status = order.Status(status)
 
 	rows, err := r.pool.Query(ctx, `
 SELECT id, order_id, menu_item_id, qty, unit_price_minor FROM order_item WHERE order_id=$1`, id)
@@ -115,51 +129,129 @@ func (r *OrderRepo) UpdateStatus(ctx context.Context, id string, from, to order.
 	})
 }
 
+// MarkReadyTx flips a placed/cutoff order to ready, stamping ready_at.
+func (r *OrderRepo) MarkReadyTx(ctx context.Context, tx pgx.Tx, id string) error {
+	tag, err := tx.Exec(ctx, `
+UPDATE "order"
+   SET status='ready', ready_at=now(), updated_at=now()
+ WHERE id=$1 AND status IN ('cutoff','placed')`, id)
+	if err != nil {
+		return fmt.Errorf("mark ready: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return order.ErrInvalidTransition
+	}
+	return nil
+}
+
+// MarkPickedUpTx atomically flips a ready order to picked_up.
+func (r *OrderRepo) MarkPickedUpTx(ctx context.Context, tx pgx.Tx, id string) error {
+	tag, err := tx.Exec(ctx, `
+UPDATE "order"
+   SET status='picked_up', picked_up_at=now(), updated_at=now()
+ WHERE id=$1 AND status='ready'`, id)
+	if err != nil {
+		return fmt.Errorf("mark picked_up: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return order.ErrInvalidTransition
+	}
+	return nil
+}
+
+// MarkNoShowTx flips a stale ready order to no_show.
+func (r *OrderRepo) MarkNoShowTx(ctx context.Context, tx pgx.Tx, id string) error {
+	tag, err := tx.Exec(ctx, `
+UPDATE "order"
+   SET status='no_show', no_show_at=now(), updated_at=now()
+ WHERE id=$1 AND status='ready'`, id)
+	if err != nil {
+		return fmt.Errorf("mark no_show: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return order.ErrInvalidTransition
+	}
+	return nil
+}
+
 func (r *OrderRepo) ListByUser(ctx context.Context, userID string, sinceDate time.Time) ([]*order.Order, error) {
 	rows, err := r.pool.Query(ctx, `
-SELECT id, user_id, vendor_id, plant, supply_date, status, total_price_minor,
-       placed_at, cutoff_at, cancelled_at, created_at, updated_at
+SELECT `+orderSelectCols+`
   FROM "order"
  WHERE user_id=$1 AND supply_date >= $2
  ORDER BY supply_date DESC, created_at DESC`, userID, sinceDate)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []*order.Order
-	for rows.Next() {
-		var o order.Order
-		var status string
-		if err := rows.Scan(&o.ID, &o.UserID, &o.VendorID, &o.Plant, &o.SupplyDate, &status,
-			&o.TotalPriceMinor, &o.PlacedAt, &o.CutoffAt, &o.CancelledAt, &o.CreatedAt, &o.UpdatedAt); err != nil {
-			return nil, err
-		}
-		o.Status = order.Status(status)
-		out = append(out, &o)
-	}
-	return out, rows.Err()
+	return collectOrders(rows)
 }
 
 func (r *OrderRepo) ListPlacedDueForCutoff(ctx context.Context, before time.Time) ([]*order.Order, error) {
 	rows, err := r.pool.Query(ctx, `
-SELECT id, user_id, vendor_id, plant, supply_date, status, total_price_minor,
-       placed_at, cutoff_at, cancelled_at, created_at, updated_at
+SELECT `+orderSelectCols+`
   FROM "order"
  WHERE status='placed' AND cutoff_at <= $1
  ORDER BY cutoff_at`, before)
 	if err != nil {
 		return nil, err
 	}
+	return collectOrders(rows)
+}
+
+// ListReadyOlderThan returns READY orders whose ready_at is older than threshold.
+// Used by the NoShow sweeper.
+func (r *OrderRepo) ListReadyOlderThan(ctx context.Context, threshold time.Time) ([]*order.Order, error) {
+	rows, err := r.pool.Query(ctx, `
+SELECT `+orderSelectCols+`
+  FROM "order"
+ WHERE status='ready' AND ready_at IS NOT NULL AND ready_at < $1
+ ORDER BY ready_at`, threshold)
+	if err != nil {
+		return nil, err
+	}
+	return collectOrders(rows)
+}
+
+// ListByVendorDay returns the vendor's orders on a given supply_date, optionally
+// filtered by status. Used by the merchant board.
+func (r *OrderRepo) ListByVendorDay(ctx context.Context, vendorID string, day time.Time, statuses []order.Status) ([]*order.Order, error) {
+	if len(statuses) == 0 {
+		rows, err := r.pool.Query(ctx, `
+SELECT `+orderSelectCols+`
+  FROM "order"
+ WHERE vendor_id=$1 AND supply_date=$2
+ ORDER BY created_at`, vendorID, day)
+		if err != nil {
+			return nil, err
+		}
+		return collectOrders(rows)
+	}
+	args := []any{vendorID, day}
+	placeholders := make([]string, len(statuses))
+	for i, s := range statuses {
+		placeholders[i] = fmt.Sprintf("$%d::order_status", i+3)
+		args = append(args, string(s))
+	}
+	q := `
+SELECT ` + orderSelectCols + `
+  FROM "order"
+ WHERE vendor_id=$1 AND supply_date=$2 AND status IN (` + strings.Join(placeholders, ",") + `)
+ ORDER BY created_at`
+	rows, err := r.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	return collectOrders(rows)
+}
+
+func collectOrders(rows pgx.Rows) ([]*order.Order, error) {
 	defer rows.Close()
 	var out []*order.Order
 	for rows.Next() {
 		var o order.Order
-		var status string
-		if err := rows.Scan(&o.ID, &o.UserID, &o.VendorID, &o.Plant, &o.SupplyDate, &status,
-			&o.TotalPriceMinor, &o.PlacedAt, &o.CutoffAt, &o.CancelledAt, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		if err := scanOrder(rows, &o); err != nil {
 			return nil, err
 		}
-		o.Status = order.Status(status)
 		out = append(out, &o)
 	}
 	return out, rows.Err()

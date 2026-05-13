@@ -14,6 +14,12 @@ import (
 
 func newOrder(t *testing.T, userID, vendorID, itemID string, supplyDate time.Time) *order.Order {
 	t.Helper()
+	// totp_secret is NOT NULL on the order table; tests that build orders manually
+	// need a placeholder secret so CreateTx's $9 param is valid.
+	secret := make([]byte, 32)
+	for i := range secret {
+		secret[i] = 0xab
+	}
 	return &order.Order{
 		UserID:          userID,
 		VendorID:        vendorID,
@@ -21,6 +27,7 @@ func newOrder(t *testing.T, userID, vendorID, itemID string, supplyDate time.Tim
 		SupplyDate:      supplyDate,
 		Status:          order.StatusDraft,
 		TotalPriceMinor: 24000,
+		TOTPSecret:      secret,
 		CutoffAt:        supplyDate.Add(10 * time.Hour),
 		Items: []order.Item{
 			{MenuItemID: itemID, Qty: 2, UnitPriceMinor: 12000},

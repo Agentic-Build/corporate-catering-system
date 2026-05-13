@@ -10,4 +10,5 @@ var (
 	ErrPlantMismatch       = errors.New("order: plant does not match user")
 	ErrVendorPlantMismatch = errors.New("order: vendor does not serve this plant")
 	ErrForbidden           = errors.New("order: forbidden")
+	ErrInvalidPickupCode   = errors.New("order: invalid pickup code")
 )

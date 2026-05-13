@@ -1,9 +1,12 @@
 package order_test
 
 import (
+	"bytes"
 	"context"
 	"path/filepath"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +23,7 @@ import (
 	mpg "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 	opg "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/pickup/totp"
 	qmod "github.com/takalawang/corporate-catering-system/services/api/internal/quota"
 	qpg "github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
 	vpg "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/postgres"
@@ -284,4 +288,254 @@ RETURNING id`, testPlant).Scan(&otherID))
 
 	err = svc.Cancel(context.Background(), o.ID, otherID)
 	assert.ErrorIs(t, err, order.ErrForbidden)
+}
+
+// forceStatus rewrites the order's status (and optionally totp_secret) directly
+// in the DB so tests can land an order in a state that normally requires a
+// scheduler tick (cutoff, ready) without having to mock time.
+func forceStatus(t *testing.T, pool *pgxpool.Pool, orderID string, status order.Status, totpSecret []byte) {
+	t.Helper()
+	ctx := context.Background()
+	if totpSecret == nil {
+		_, err := pool.Exec(ctx, `
+UPDATE "order"
+   SET status=$2::order_status,
+       ready_at = CASE WHEN $2::text = 'ready' THEN now() ELSE ready_at END,
+       updated_at = now()
+ WHERE id=$1`, orderID, string(status))
+		require.NoError(t, err)
+		return
+	}
+	_, err := pool.Exec(ctx, `
+UPDATE "order"
+   SET status=$2::order_status,
+       totp_secret=$3,
+       ready_at = CASE WHEN $2::text = 'ready' THEN now() ELSE ready_at END,
+       updated_at = now()
+ WHERE id=$1`, orderID, string(status), totpSecret)
+	require.NoError(t, err)
+}
+
+func TestService_Place_GeneratesTOTPSecret(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemID, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
+	})
+	require.NoError(t, err)
+
+	got, err := svc.Get(context.Background(), o.ID, userID)
+	require.NoError(t, err)
+	require.Len(t, got.TOTPSecret, totp.SecretBytes)
+	zeros := make([]byte, totp.SecretBytes)
+	assert.False(t, bytes.Equal(got.TOTPSecret, zeros), "TOTP secret must not be all zeros")
+}
+
+func TestService_MarkReady_Happy(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	vendorID, itemID, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
+	})
+	require.NoError(t, err)
+
+	actorID := userID // any UUID works as the vendor operator for the audit row
+	require.NoError(t, svc.MarkReady(context.Background(), vendorID, []string{o.ID}, actorID))
+
+	after, err := svc.Get(context.Background(), o.ID, userID)
+	require.NoError(t, err)
+	assert.Equal(t, order.StatusReady, after.Status)
+	require.NotNil(t, after.ReadyAt)
+
+	// state event written (placed → ready) on top of the initial placement event.
+	var seCount int
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM order_state_event WHERE order_id=$1 AND to_state='ready'`, o.ID).Scan(&seCount))
+	assert.Equal(t, 1, seCount)
+}
+
+func TestService_MarkReady_WrongVendor(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemID, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
+	})
+	require.NoError(t, err)
+
+	// A different vendor must not be able to mark the order ready.
+	var otherVendor string
+	require.NoError(t, pool.QueryRow(context.Background(), `
+INSERT INTO vendor (display_name, legal_name, contact_email, status)
+VALUES ('Other', 'Other Ltd', 'other@vendor.com', 'approved')
+RETURNING id`).Scan(&otherVendor))
+
+	err = svc.MarkReady(context.Background(), otherVendor, []string{o.ID}, userID)
+	assert.ErrorIs(t, err, order.ErrForbidden)
+}
+
+func TestService_MarkReady_WrongStatus(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	vendorID, itemID, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
+	})
+	require.NoError(t, err)
+
+	// User cancels first, then vendor tries to mark ready → cancelled cannot go to ready.
+	require.NoError(t, svc.Cancel(context.Background(), o.ID, userID))
+
+	err = svc.MarkReady(context.Background(), vendorID, []string{o.ID}, userID)
+	assert.ErrorIs(t, err, order.ErrInvalidTransition)
+}
+
+func TestService_VerifyPickup_Happy(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemID, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
+	})
+	require.NoError(t, err)
+
+	secret, err := totp.NewSecret()
+	require.NoError(t, err)
+	forceStatus(t, pool, o.ID, order.StatusReady, secret)
+
+	code := totp.Generate(secret, testClockTime)
+	require.NoError(t, svc.VerifyPickup(context.Background(), o.ID, code, userID))
+
+	after, err := svc.Get(context.Background(), o.ID, userID)
+	require.NoError(t, err)
+	assert.Equal(t, order.StatusPickedUp, after.Status)
+	require.NotNil(t, after.PickedUpAt)
+}
+
+func TestService_VerifyPickup_InvalidCode(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemID, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
+	})
+	require.NoError(t, err)
+
+	secret, err := totp.NewSecret()
+	require.NoError(t, err)
+	forceStatus(t, pool, o.ID, order.StatusReady, secret)
+
+	err = svc.VerifyPickup(context.Background(), o.ID, "000000", userID)
+	assert.ErrorIs(t, err, order.ErrInvalidPickupCode)
+}
+
+func TestService_VerifyPickup_WrongStatus(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemID, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
+	})
+	require.NoError(t, err)
+
+	// Order is still in PLACED. Even a valid code must fail with ErrInvalidTransition.
+	code := totp.Generate(o.TOTPSecret, testClockTime)
+	err = svc.VerifyPickup(context.Background(), o.ID, code, userID)
+	assert.ErrorIs(t, err, order.ErrInvalidTransition)
+}
+
+// TestService_VerifyPickup_AtomicNoDouble_1000 fires 1000 goroutines against
+// one READY order with a valid code. The conditional UPDATE inside
+// MarkPickedUpTx must guarantee exactly one winner.
+func TestService_VerifyPickup_AtomicNoDouble_1000(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemID, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
+	})
+	require.NoError(t, err)
+
+	secret, err := totp.NewSecret()
+	require.NoError(t, err)
+	forceStatus(t, pool, o.ID, order.StatusReady, secret)
+	code := totp.Generate(secret, testClockTime)
+
+	const N = 1000
+	var (
+		succeeded     atomic.Int64
+		invalidTrans  atomic.Int64
+		otherErr      atomic.Int64
+		start         = make(chan struct{})
+		wg            sync.WaitGroup
+	)
+	wg.Add(N)
+	for i := 0; i < N; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			err := svc.VerifyPickup(context.Background(), o.ID, code, userID)
+			switch {
+			case err == nil:
+				succeeded.Add(1)
+			case err == order.ErrInvalidTransition:
+				invalidTrans.Add(1)
+			default:
+				otherErr.Add(1)
+				t.Logf("unexpected error: %v", err)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	assert.Equal(t, int64(1), succeeded.Load(), "exactly one goroutine must succeed")
+	assert.Equal(t, int64(N-1), invalidTrans.Load(), "all losers must see ErrInvalidTransition")
+	assert.Equal(t, int64(0), otherErr.Load(), "no other errors allowed")
+
+	after, err := svc.Get(context.Background(), o.ID, userID)
+	require.NoError(t, err)
+	assert.Equal(t, order.StatusPickedUp, after.Status)
 }

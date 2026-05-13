@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
+	totp "github.com/takalawang/corporate-catering-system/services/api/internal/pickup/totp"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
@@ -22,6 +23,9 @@ type QuotaTx interface {
 type OrderTx interface {
 	CreateTx(ctx context.Context, tx pgx.Tx, o *Order) error
 	UpdateStatusTx(ctx context.Context, tx pgx.Tx, id string, from, to Status) error
+	MarkReadyTx(ctx context.Context, tx pgx.Tx, id string) error
+	MarkPickedUpTx(ctx context.Context, tx pgx.Tx, id string) error
+	MarkNoShowTx(ctx context.Context, tx pgx.Tx, id string) error
 }
 
 // StateEventTx is the state-event repo subset used inside a transaction.
@@ -133,6 +137,14 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		return nil, ErrCutoffPassed
 	}
 
+	// Generate the per-order TOTP secret once, before the tx. The secret is
+	// persisted as part of the order row (Step 3 in CreateTx) and used later
+	// by VerifyPickup.
+	secret, err := totp.NewSecret()
+	if err != nil {
+		return nil, fmt.Errorf("generate totp: %w", err)
+	}
+
 	placedAt := now
 	o := &Order{
 		UserID:          in.UserID,
@@ -141,6 +153,7 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		SupplyDate:      in.SupplyDate,
 		Status:          StatusPlaced,
 		TotalPriceMinor: totalPrice,
+		TOTPSecret:      secret,
 		PlacedAt:        &placedAt,
 		CutoffAt:        cutoffAt,
 		Items:           domainItems,
@@ -248,6 +261,132 @@ func (s *Service) Get(ctx context.Context, id, userID string) (*Order, error) {
 		return nil, ErrForbidden
 	}
 	return o, nil
+}
+
+// MarkReady transitions orders from cutoff/placed → ready (vendor side).
+// All orders must belong to vendorID; any forbidden / invalid-state order
+// aborts the whole batch (transaction rolls back).
+func (s *Service) MarkReady(ctx context.Context, vendorID string, orderIDs []string, actorID string) error {
+	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		for _, id := range orderIDs {
+			o, err := s.Orders.GetByID(ctx, id)
+			if err != nil {
+				return err
+			}
+			if o.VendorID != vendorID {
+				return ErrForbidden
+			}
+			if !CanTransition(o.Status, StatusReady) {
+				return ErrInvalidTransition
+			}
+			if err := s.OrdersTx.MarkReadyTx(ctx, tx, id); err != nil {
+				return err
+			}
+			from := o.Status
+			evRole := "vendor_operator"
+			if err := s.StateTx.AppendTx(ctx, tx, &StateEvent{
+				OrderID:   id,
+				FromState: &from,
+				ToState:   StatusReady,
+				ActorID:   &actorID,
+				ActorRole: &evRole,
+				Reason:    "vendor_ready",
+				Payload:   map[string]any{},
+			}); err != nil {
+				return err
+			}
+			payload := map[string]any{"order_id": id, "vendor_id": vendorID}
+			if err := s.OutboxTx.AppendTx(ctx, tx, "order", id, "order.ready.v1", payload, map[string]any{}); err != nil {
+				return err
+			}
+			if err := s.AuditTx.WriteTx(ctx, tx, &actorID, &evRole, "order.ready", "order", id, payload, ""); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// VerifyPickup atomically transitions an order from READY → PICKED_UP.
+// The conditional UPDATE inside MarkPickedUpTx guarantees that exactly one
+// concurrent call wins even if many goroutines submit the same valid code
+// (proven by the 1000-racer test).
+func (s *Service) VerifyPickup(ctx context.Context, orderID, code, vendorActorID string) error {
+	o, err := s.Orders.GetByID(ctx, orderID)
+	if err != nil {
+		return err
+	}
+	if o.Status != StatusReady {
+		return ErrInvalidTransition
+	}
+	if !totp.Verify(o.TOTPSecret, code, s.Clock.Now()) {
+		return ErrInvalidPickupCode
+	}
+
+	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := s.OrdersTx.MarkPickedUpTx(ctx, tx, orderID); err != nil {
+			return err
+		}
+		from := StatusReady
+		evRole := "vendor_operator"
+		if err := s.StateTx.AppendTx(ctx, tx, &StateEvent{
+			OrderID:   orderID,
+			FromState: &from,
+			ToState:   StatusPickedUp,
+			ActorID:   &vendorActorID,
+			ActorRole: &evRole,
+			Reason:    "totp_verify",
+			Payload:   map[string]any{},
+		}); err != nil {
+			return err
+		}
+		payload := map[string]any{"order_id": orderID, "vendor_id": o.VendorID}
+		if err := s.OutboxTx.AppendTx(ctx, tx, "order", orderID, "order.picked_up.v1", payload, map[string]any{}); err != nil {
+			return err
+		}
+		return s.AuditTx.WriteTx(ctx, tx, &vendorActorID, &evRole, "order.picked_up", "order", orderID, payload, "")
+	})
+}
+
+// MarkNoShow transitions READY orders whose ready_at is older than cutoffAge
+// to NO_SHOW. Each order's transition happens in its own transaction; errors
+// on individual orders are skipped so a single bad row never stalls the sweep.
+// Returns the number of orders successfully transitioned.
+func (s *Service) MarkNoShow(ctx context.Context, cutoffAge time.Duration) (int, error) {
+	threshold := s.Clock.Now().Add(-cutoffAge)
+	pending, err := s.Orders.ListReadyOlderThan(ctx, threshold)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, o := range pending {
+		err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+			if err := s.OrdersTx.MarkNoShowTx(ctx, tx, o.ID); err != nil {
+				return err
+			}
+			from := StatusReady
+			sysRole := "welfare_admin"
+			if err := s.StateTx.AppendTx(ctx, tx, &StateEvent{
+				OrderID:   o.ID,
+				FromState: &from,
+				ToState:   StatusNoShow,
+				ActorRole: &sysRole,
+				Reason:    "no_show_timeout",
+				Payload:   map[string]any{},
+			}); err != nil {
+				return err
+			}
+			payload := map[string]any{"order_id": o.ID}
+			if err := s.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.no_show.v1", payload, map[string]any{}); err != nil {
+				return err
+			}
+			return s.AuditTx.WriteTx(ctx, tx, nil, &sysRole, "order.no_show", "order", o.ID, payload, "")
+		})
+		if err == nil {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // buildOrderPayload renders the order.placed.v1 JSON payload.
