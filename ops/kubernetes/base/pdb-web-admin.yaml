@@ -1,0 +1,16 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web-admin
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: web-admin
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web-admin
+      app.kubernetes.io/component: web

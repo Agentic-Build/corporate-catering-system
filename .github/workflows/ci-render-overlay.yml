@@ -1,0 +1,29 @@
+name: ci-render-overlay
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        overlay: [single-node, gcp]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubectl
+        run: |
+          curl -fsSL -o /tmp/kubectl https://dl.k8s.io/release/v1.30.4/bin/linux/amd64/kubectl
+          chmod +x /tmp/kubectl
+          sudo mv /tmp/kubectl /usr/local/bin/kubectl
+      - name: Kustomize render
+        env:
+          OVERLAY: ${{ matrix.overlay }}
+        run: kubectl kustomize "ops/kubernetes/overlays/${OVERLAY}" > /tmp/render.yaml
+      - name: Quick sanity grep
+        run: |
+          grep -q "^kind: Deployment" /tmp/render.yaml
+          grep -q "^kind: Service" /tmp/render.yaml
+          echo "render OK ($(wc -l </tmp/render.yaml) lines)"

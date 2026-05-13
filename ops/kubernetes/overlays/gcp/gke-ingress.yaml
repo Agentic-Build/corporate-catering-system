@@ -1,0 +1,44 @@
+# GKE Ingress (external HTTPS load balancer)
+# ------------------------------------------
+# This file declares the GCP-specific resources that pair with the
+# strategic-merge patch in ingress-patch.yaml (which rewrites the base
+# Ingress to use the GCE controller, the reserved static IP, and the
+# ManagedCertificate).
+#
+# Resources declared here:
+#   - ManagedCertificate covering 4 hostnames
+#   - FrontendConfig that forces HTTP -> HTTPS redirect
+#
+# PLACEHOLDER values to replace before apply:
+#   - domains app.tbite.com / merchant.tbite.com / admin.tbite.com / api.tbite.com
+#   - DNS A records for those hostnames pointing at the reserved IP
+#   - Reserved global static IP `tbite-prod-ip`
+#     (`gcloud compute addresses create tbite-prod-ip --global`)
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: tbite-prod-cert
+  namespace: tbite
+  labels:
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  domains:
+    - app.tbite.com
+    - merchant.tbite.com
+    - admin.tbite.com
+    - api.tbite.com
+---
+# FrontendConfig enforces HTTPS redirect for the external LB.
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: tbite-prod-frontend
+  namespace: tbite
+  labels:
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT

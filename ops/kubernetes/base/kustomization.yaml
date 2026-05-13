@@ -1,23 +1,33 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: catering-prod
+
+namespace: tbite
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: tbite
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+
 resources:
   - namespace.yaml
-  - external-secrets.yaml
-  - postgres-topology.yaml
-  - pgbouncer.yaml
-  - deployment.yaml
-  - deployment-mcp.yaml
-  - deployment-compliance-worker.yaml
-  - deployment-web.yaml
-  - job-object-storage-provision.yaml
-  - service.yaml
-  - service-web.yaml
-  - gateway.yaml
+  - configmap.yaml
+  - serviceaccount-api.yaml
+  - serviceaccount-scheduler.yaml
+  - deployment-api.yaml
+  - deployment-worker.yaml
+  - deployment-scheduler.yaml
+  - deployment-web-employee.yaml
+  - deployment-web-merchant.yaml
+  - deployment-web-admin.yaml
+  - service-api.yaml
+  - service-web-employee.yaml
+  - service-web-merchant.yaml
+  - service-web-admin.yaml
+  - ingress.yaml
+  - hpa-api.yaml
+  - pdb-api.yaml
+  - pdb-web-employee.yaml
+  - pdb-web-merchant.yaml
+  - pdb-web-admin.yaml
   - networkpolicy-default-deny.yaml
-  - networkpolicy-runtime-allow.yaml
-  - hpa.yaml
-  - hpa-mcp.yaml
-  - hpa-compliance-worker.yaml
-  - hpa-web.yaml
-  - poddisruptionbudget.yaml

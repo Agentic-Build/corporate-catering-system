@@ -1,28 +1,23 @@
 {
-  "name": "corporate-catering-system-contract-tooling",
+  "name": "@tbite/root",
   "private": true,
-  "version": "0.1.0",
-  "description": "OpenAPI contract generation and typed client validation tooling",
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
-    "db:migrate": "sqlx migrate run --source migrations",
-    "db:migrate:revert": "sqlx migrate revert --source migrations",
-    "db:migrate:verify": "./scripts/check-sqlx-migrations.sh",
-    "contract:export": "cargo run --quiet --bin export_openapi_contract -- contract/openapi",
-    "contract:generate-client": "openapi --input contract/openapi/openapi.json --output contract/generated/ts-client --client fetch --useUnionTypes",
-    "contract:sync": "pnpm run contract:export && pnpm run contract:generate-client",
-    "contract:check-client": "tsc --project tsconfig.contract.json",
-    "contract:check-drift": "./scripts/check-contract-drift.sh",
-    "contract:verify": "pnpm run contract:sync && pnpm run contract:check-client && pnpm run contract:check-drift",
-    "observability:verify": "./scripts/check-observability-slo-baseline.sh",
-    "release:verify": "pnpm run contract:verify && pnpm run observability:verify"
+    "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm -r --filter \"./packages/*\" build && pnpm -r --filter \"./apps/*\" build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "test:e2e": "playwright test --config=tests/e2e/playwright.config.ts",
+    "check": "pnpm -r check"
   },
   "devDependencies": {
-    "openapi-typescript-codegen": "0.29.0",
-    "typescript": "5.9.3"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
+    "@playwright/test": "^1.60.0",
+    "prettier": "^3.3.3",
+    "prettier-plugin-svelte": "^3.2.7",
+    "typescript": "^5.6.0"
   }
 }

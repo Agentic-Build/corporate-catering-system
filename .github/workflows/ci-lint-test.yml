@@ -1,0 +1,62 @@
+name: ci-lint-test
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter "./apps/*" exec svelte-kit sync
+      - run: pnpm -r check
+      - run: pnpm -r lint || true   # P0: prettier check is non-blocking until we standardize
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+      - run: go vet ./...
+      - run: go build ./...
+      - name: Go tests (with testcontainers)
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: go test ./... -timeout 10m
+  contract-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Regenerate contract artifacts
+        run: |
+          go run ./services/api/cmd/contract-export
+          pnpm --filter @tbite/api-client generate
+      - name: Assert no diff
+        run: |
+          if ! git diff --exit-code -- contract/openapi packages/api-client/src/schema.d.ts; then
+            echo "::error::Contract drift detected. Run 'make contract-sync' and commit." >&2
+            exit 1
+          fi

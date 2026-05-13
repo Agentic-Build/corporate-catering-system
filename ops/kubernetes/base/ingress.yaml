@@ -1,0 +1,51 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tbite
+  namespace: tbite
+  labels:
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: app.tbite.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-employee
+                port:
+                  number: 80
+    - host: merchant.tbite.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-merchant
+                port:
+                  number: 80
+    - host: admin.tbite.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-admin
+                port:
+                  number: 80
+    - host: api.tbite.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8080

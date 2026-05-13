@@ -1,0 +1,14 @@
+name: ci-e2e-smoke
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    if: false   # P1: disabled. Re-enable once docker-in-docker for k3d is wired up.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder
+        run: echo "e2e smoke deferred"

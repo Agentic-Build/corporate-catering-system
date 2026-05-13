@@ -1,128 +1,126 @@
-# corporate-catering-system
+# T-Bite Corporate Catering System
 
-## Local Dev Stack and Seed Baseline
+> 企業合作訂餐平台 · 員工 / 商家 / 福委會三端 + Go modular monolith API + 雙 K8s overlay (single-node / GCP)
 
-Canonical local development entrypoints:
+A monorepo refactor of the T-Bite platform: 3 SvelteKit frontends + Go modular monolith + dual K8s deployment + MCP server for AI agents.
 
-- `make dev` starts core stateful dependencies and runs the runtime service.
-- `make dev-up` starts dependencies only.
-- `make dev-app` runs the runtime service only.
-- `make dev-down` stops dependencies.
-- `make dev-reset` tears down dependencies, removes dependency volumes, and clears runtime state.
-- `make dev-logs service=<name>` tails dependency logs (`service` is optional).
-- `make dev-ps` shows dependency status.
+## Status
 
-Environment baseline:
+**Refactor complete (P0-P8 all delivered).** See [`docs/plans/2026-05-13-tbite-refactor-design.md`](docs/plans/2026-05-13-tbite-refactor-design.md) for the full design.
 
-- `.env.development` is committed and is the default local baseline.
-- `.env.local` is local-only (gitignored) and overrides `.env.development`.
+| Phase | Scope |
+|---|---|
+| P0 | monorepo skeleton + Go API multi-role binary + dual K8s overlay |
+| P1 | identity + OIDC (Google/GitHub) + 三端登入流 |
+| P2 | menu / vendor / quota + 員工瀏覽今日菜單 + Postgres-anchored decrement |
+| P3 | order lifecycle + audit + outbox + cutoff scheduler |
+| P4 | TOTP pickup + 商家備餐 + ready/picked_up/no_show |
+| P5 | payroll batches + HR CSV export + dispute / refund flow |
+| P6 | vendor governance + anomaly alerts + DLQ admin + employee disputes |
+| P7 | MCP server for AI agents (12 tools, HTTP/SSE + stdio) |
+| P8 | hardening + k6 load gate + OTel + scheduler leader election + chaos runbook |
 
-Compose local stack (`ops/local/docker-compose.dev.yml`) includes core stateful dependencies:
+## Architecture
 
-- `postgres`
-- `redis` (Valkey-compatible cache backend)
-- `nats` (JetStream event backbone)
-- `minio`
-- `otel-collector`
-- all service images are pinned to immutable digests for deterministic startup
+```
+3 SvelteKit apps        <-->  Go API (chi + huma)  <-->  Postgres / Redis / NATS / S3
+employee/merchant/admin       same binary as
+                              worker / scheduler / mcp-stdio
+```
 
-Runtime bootstrap seeds deterministic scenarios for:
+- **Frontend**: SvelteKit 2 + Svelte 5 + Tailwind 3 (adapter-node, SSR)
+- **Backend**: Go 1.23, modular monolith, single binary 4 roles (`api`/`worker`/`scheduler`/`mcp-stdio`)
+- **Data**: Postgres (orders/menu/vendor/payroll), Redis (sessions/state/cache), NATS JetStream (events), S3-compat (HR CSV / vendor docs)
+- **Observability**: OTel traces (HTTP/DB/NATS) via OTLP HTTP collector
+- **Deployment**: dual K8s overlay (`single-node` for k3d, `gcp` for managed services)
 
-- lifecycle/compliance: approved baseline vendor plus lifecycle reminder/suspension/reinstatement transitions
-- dispute: seeded payroll dispute opened, assigned, and refund-resolved
-- anomaly: seeded anomaly alert triggered, triaged, and closed with evidence
-- mapping: seeded delivery allow + deny mapping rules
+## Quick start (local dev)
 
-## PostgreSQL Schema and Migration Lifecycle
+Pre-reqs: Node 20.11+, `pnpm` 9, Go 1.23, Docker. Full K8s mode also needs `k3d`, `kubectl`, `kustomize`.
 
-Database schema is managed only via `sqlx migrate` migrations under `migrations/`.
+### Option A: `make dev-app` — host processes (fastest)
 
-- Global PK standard: `UUID` (`global_pk`) on application tables, with an explicit natural-key projection exception at `order_state_event_projection(order_id TEXT PRIMARY KEY)`.
-- Monetary values: `BIGINT` minor units (`money_minor` domain), never float/double.
-- State enums: PostgreSQL `ENUM` types.
-- Append-only protections: trigger-enforced guards on `audit_event` and `payroll_ledger_entry` for `UPDATE`/`DELETE`/`TRUNCATE`.
+Starts the Go API plus the three SvelteKit dev servers without K8s:
 
-Canonical commands:
+```bash
+pnpm install
+( cd services/api && go mod download )
+make dev-app
+```
 
-- `pnpm run db:migrate` applies pending migrations.
-- `pnpm run db:migrate:revert` reverts the latest migration.
-- `pnpm run db:migrate:verify` runs clean-database up/down validation and invariant checks.
+URLs:
+- `http://localhost:8080/healthz` — Go API
+- `http://localhost:5173` — 員工 app
+- `http://localhost:5174` — 商家 app
+- `http://localhost:5175` — 福委會 app
 
-Default startup behavior:
+### Option B: `make dev-up` — k3d cluster (closer to prod)
 
-- `make dev` and `make dev-app` automatically run `sqlx migrate run` before starting the runtime service.
+```bash
+make dev-up        # k3d cluster + single-node overlay applied
+make dev-down      # tear down
+make dev-reset     # dev-down + clean volumes + restart
+```
 
-CI gate:
+The single-node overlay bundles Postgres / Redis / NATS / MinIO as
+single-pod deployments. Seeded test users:
 
-- Workflow `migration-check` (`.github/workflows/postgresql-migration-foundation.yml`) runs the real-PostgreSQL migration up/down and invariant verifier on pull requests and `main`.
+- Employee: `e2e-employee@tbite.test` (via fake OIDC provider)
+- Admin: `e2e-admin@tbite.test` (whitelisted)
 
-## OpenAPI Contract Platform
+See [`docs/mcp.md`](docs/mcp.md) for MCP setup.
 
-Canonical HTTP contract artifacts are generated from the Rust contract module and committed under `contract/`.
+## Operations
 
-- Sync committed spec/docs + generated TS client: `pnpm run contract:sync`
-- Output artifacts:
-  - `contract/openapi/openapi.json` (machine-readable)
-  - `contract/openapi/openapi.yaml` (machine-readable)
-  - `contract/openapi/index.html` (browsable Redoc docs)
-  - `contract/generated/ts-client/**` (OpenAPI-generated TypeScript client/types)
-- Generate and type-check TS client/types from OpenAPI:
-  - `pnpm run contract:verify`
-  - This command fails if regeneration changes committed contract artifacts.
+| Area | Entry point |
+| --- | --- |
+| Migrations | `make migrate-up` (golang-migrate wrapper), SQL in `migrations/` |
+| Load testing | `ops/load/run-loadtest.sh` (k6 lunch-peak, 3 scenarios) |
+| Load-gate CI | `.github/workflows/ci-load-gate.yml` (nightly + manual_dispatch) |
+| Security scan | `scripts/security-scan.sh` (trivy on images + kubesec on manifests) |
+| Chaos drill | [`ops/chaos/drill-runbook.md`](ops/chaos/drill-runbook.md) |
+| Security baseline | [`ops/security/checklist.md`](ops/security/checklist.md) |
+| Render overlay | `make render-overlay env=single-node` / `env=gcp` |
 
-CI (`.github/workflows/openapi-contract.yml`) enforces:
-- runtime HTTP route parity vs OpenAPI contract
-- generated artifact drift detection
-- MCP contract parity checks (auto-activated once runtime MCP tools are declared)
+## Repository layout
 
-## Observability and Kubernetes SLO Baseline
+```
+apps/{employee,merchant,admin}/   SvelteKit frontends
+packages/{ui,tokens,api-client,web-auth}/   shared
+services/api/                     Go API + worker + scheduler + mcp-stdio
+migrations/                       golang-migrate SQL
+ops/kubernetes/{base,overlays}/   K8s manifests
+ops/{load,chaos,security}/        runbooks + scripts
+ops/observability/                OTel collector config
+contract/openapi/                 generated OpenAPI artifacts
+docs/plans/                       phase plans + design doc
+docs/mcp.md                       MCP server reference
+```
 
-Baseline artifacts are committed and release-gated under `ops/`:
+## Common make targets
 
-- OpenTelemetry + Victoria stack wiring:
-  - `ops/observability/otel/collector.yaml`
-  - `ops/observability/otel/instrumentation-baseline.yaml`
-  - Runtime instrumentation hooks are implemented in `src/observability.rs` and wired into HTTP/MCP/compliance execution paths, including OTLP traces, metrics, and logs export bootstrap.
-- Hard-SLO policy, dashboard, and alerts:
-  - `ops/observability/slo/hard-slo-policy.yaml`
-  - `ops/observability/slo/grafana-dashboard-hard-slo.json`
-  - `ops/observability/slo/alerts.yaml`
-- Pre-launch load-test thresholds:
-  - `ops/observability/load/prelaunch-thresholds.yaml`
-  - `ops/observability/load/staged-capacity-policy.json` (CLAR-008 staged ramp + split + autoscaling convergence policy)
-  - `ops/observability/load/k6-prelaunch.js`
-  - `src/bin/observability_runtime_service.rs` (runtime service used by the hard-SLO load gate)
-  - `scripts/check-observability-slo-baseline.sh` enforces thresholds from `hard-slo-policy.yaml`, staged policy from `staged-capacity-policy.json`, and emits retained evidence:
-    - `ops/observability/load/reports/prelaunch-k6-summary.json`
-    - `ops/observability/load/reports/prelaunch-slo-report.json`
-    - `ops/observability/load/reports/staged-capacity-report.json`
-- Kubernetes baseline with health/scaling signals:
-  - `ops/kubernetes/base/*.yaml`
-  - `ops/kubernetes/components/**` (multi-AZ topology + KEDA worker autoscaling strategy)
-  - `ops/kubernetes/overlays/{dev,staging,production}` (environment-promotion overlays)
-  - runtime infrastructure security and access baseline:
-    - PostgreSQL topology + PgBouncer transaction pools (`ops/kubernetes/base/postgres-topology.yaml`, `ops/kubernetes/base/pgbouncer.yaml`)
-    - pooled runtime DB endpoints (`DATABASE_RW_URL` / `DATABASE_RO_URL`) in all runtime deployments
-    - edge + network isolation + secret externalization controls (`ops/kubernetes/base/gateway.yaml`, `ops/kubernetes/base/networkpolicy-*.yaml`, `ops/kubernetes/base/external-secrets.yaml`)
-    - SvelteKit adapter-node frontend runtime deployment/service (`ops/kubernetes/base/deployment-web.yaml`, `ops/kubernetes/base/service-web.yaml`)
-    - environment-specific autoscaling/topology policy rendered through overlays (`kustomize build ops/kubernetes/overlays/<env>`)
-    - least-privilege pod/container security controls (`runAsNonRoot`, `RuntimeDefault` seccomp, dropped Linux capabilities, `allowPrivilegeEscalation: false`, token automount disabled)
+| Target | Description |
+| --- | --- |
+| `make dev-up` | k3d cluster + apply single-node overlay |
+| `make dev-down` | Tear down k3d cluster |
+| `make dev-app` | Parallel run Go API + 3 SvelteKit dev servers |
+| `make migrate-up` | Apply pending migrations |
+| `make contract-sync` | Regenerate OpenAPI + TS client from Go (gated in CI) |
+| `make test-go` | `go test ./...` |
+| `make test-web` | `pnpm -r check && pnpm -r lint` |
+| `make render-overlay env=single-node` | `kustomize build` the overlay |
+| `make render-overlay env=gcp` | Same, GCP overlay |
 
-Verification commands:
+Full list: `make help`.
 
-- `pnpm run observability:verify` (runs baseline gate checks + integration tests)
-- `pnpm run release:verify` (contract conformance + observability hard-SLO gates)
+## Contributing
 
-CI (`.github/workflows/observability-slo-gate.yml`, workflow name `load-gate`) blocks merges if hard-SLO release-gate assets are missing or weakened.
+1. Pick a P0-P8 plan in `docs/plans/`.
+2. `git checkout -b feat/<scope>-<topic>` (e.g. `feat/identity-oidc`).
+3. Match existing patterns: Service + Repo + huma handlers (Go), SvelteKit form actions (web).
+4. Run `make contract-sync` before pushing — CI fails on drift.
+5. Commit messages follow Conventional Commits.
 
-## CI/CD Expansion and Release Gates
+## License
 
-Release gating now includes dedicated workflows for build correctness, migration safety, smoke coverage, deploy promotion, and pre-launch load verification:
-
-- `image-build` (`.github/workflows/image-build.yml`)
-- `migration-check` (`.github/workflows/postgresql-migration-foundation.yml`)
-- `e2e-smoke` (`.github/workflows/e2e-smoke.yml`)
-- `load-gate` (`.github/workflows/observability-slo-gate.yml`)
-- `deploy` (`.github/workflows/deploy.yml`)
-
-`deploy` enforces non-skippable promotion gates (`image-build`, `migration-check`, `e2e-smoke`, `load-gate`), consumes rendered production overlay artifacts, and emits machine-readable release evidence (`ISS-005`) that also fingerprints retained load benchmark artifacts (`prelaunch-slo-report.json`, `staged-capacity-report.json`).
+Internal. (c) Agentic-Build.

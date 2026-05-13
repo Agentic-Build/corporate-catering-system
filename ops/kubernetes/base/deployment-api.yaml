@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api
+        app.kubernetes.io/component: api
+        app.kubernetes.io/part-of: tbite
+        app.kubernetes.io/managed-by: kustomize
+    spec:
+      serviceAccountName: tbite-api
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: tbite/api:dev
+          args: ["--role=api"]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: tbite-config
+          env:
+            - name: OIDC_GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tbite-dev-secrets
+                  key: OIDC_GOOGLE_CLIENT_ID
+            - name: OIDC_GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: tbite-dev-secrets
+                  key: OIDC_GOOGLE_CLIENT_SECRET
+            - name: OIDC_GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tbite-dev-secrets
+                  key: OIDC_GITHUB_CLIENT_ID
+            - name: OIDC_GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: tbite-dev-secrets
+                  key: OIDC_GITHUB_CLIENT_SECRET
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

@@ -1,0 +1,10 @@
+ALTER TABLE "user" DROP CONSTRAINT IF EXISTS user_vendor_fk;
+ALTER TABLE vendor_invite DROP CONSTRAINT IF EXISTS vendor_invite_vendor_fk;
+DROP TABLE IF EXISTS meal_supply;
+DROP TABLE IF EXISTS menu_item_image;
+DROP TABLE IF EXISTS menu_item;
+DROP TABLE IF EXISTS menu_category;
+DROP TABLE IF EXISTS vendor_plant_mapping;
+DROP TABLE IF EXISTS vendor;
+DROP TYPE IF EXISTS menu_item_status;
+DROP TYPE IF EXISTS vendor_status;
