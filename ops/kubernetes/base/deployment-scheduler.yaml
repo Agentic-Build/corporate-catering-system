@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/part-of: tbite
     app.kubernetes.io/managed-by: kustomize
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app.kubernetes.io/name: scheduler
@@ -22,8 +22,8 @@ spec:
         app.kubernetes.io/part-of: tbite
         app.kubernetes.io/managed-by: kustomize
     spec:
-      serviceAccountName: tbite-api
-      automountServiceAccountToken: false
+      serviceAccountName: tbite-scheduler
+      automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -37,6 +37,17 @@ spec:
           envFrom:
             - configMapRef:
                 name: tbite-config
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SCHEDULER_LEASE_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SCHEDULER_LEASE_NAME
+              value: tbite-scheduler
           resources:
             requests:
               cpu: 100m

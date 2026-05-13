@@ -13,6 +13,7 @@ resources:
   - namespace.yaml
   - configmap.yaml
   - serviceaccount-api.yaml
+  - serviceaccount-scheduler.yaml
   - deployment-api.yaml
   - deployment-worker.yaml
   - deployment-scheduler.yaml

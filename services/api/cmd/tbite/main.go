@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -46,6 +47,7 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/db"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/leader"
 	messaging "github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
@@ -479,11 +481,28 @@ func main() {
 		}
 
 		logger.Info("scheduler starting", "cutoff_interval", cutoffInterval, "noshow_interval", noShow.Interval, "noshow_max_age", noShow.MaxAge, "doc_expiry_interval", docScanner.Interval)
-		eg, egctx := errgroup.WithContext(ctx)
-		eg.Go(func() error { return cutoff.Run(egctx, cutoffInterval) })
-		eg.Go(func() error { return noShow.Run(egctx) })
-		eg.Go(func() error { return docScanner.Run(egctx) })
-		if err := eg.Wait(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+
+		leaseName := getenv("SCHEDULER_LEASE_NAME", "tbite-scheduler")
+		leaseNS := getenv("SCHEDULER_LEASE_NAMESPACE", "tbite")
+		identity := getenv("POD_NAME", "local-"+uuid.NewString())
+
+		onLeading := func(leadCtx context.Context) error {
+			eg, egctx := errgroup.WithContext(leadCtx)
+			eg.Go(func() error { return cutoff.Run(egctx, cutoffInterval) })
+			eg.Go(func() error { return noShow.Run(egctx) })
+			eg.Go(func() error { return docScanner.Run(egctx) })
+			if err := eg.Wait(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				return err
+			}
+			return nil
+		}
+
+		if err := leader.RunWithLease(ctx, leader.Config{
+			Namespace: leaseNS,
+			LeaseName: leaseName,
+			Identity:  identity,
+			Logger:    logger.With("component", "leader"),
+		}, onLeading); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			logger.Error("scheduler shutdown", "err", err)
 			os.Exit(1)
 		}
@@ -607,4 +626,12 @@ func main() {
 		}
 		logger.Info("mcp stdio shutdown")
 	}
+}
+
+// getenv returns the value of the named env var, or def when unset/empty.
+func getenv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }
