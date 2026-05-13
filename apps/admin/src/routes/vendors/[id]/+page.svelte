@@ -10,11 +10,12 @@
     <a href="/vendors" class="text-xs text-tb-slate-500 hover:text-tb-slate-700">← 返回列表</a>
     <h1 class="mt-1 text-2xl font-black text-tb-slate-900">{v.display_name}</h1>
     <p class="mt-1 text-sm text-tb-slate-500 font-jetbrains-mono">{v.contact_email}</p>
-    <div class="mt-2">
+    <div class="mt-2 flex items-center gap-3">
       {#if v.status === "approved"}<StateTag tone="success">已核准</StateTag>
       {:else if v.status === "pending"}<StateTag tone="warning">待審</StateTag>
       {:else if v.status === "suspended"}<StateTag tone="danger">停權</StateTag>
       {:else}<StateTag tone="neutral">{v.status}</StateTag>{/if}
+      <a href="/vendors/{v.id}/documents" class="text-sm text-tb-red-600 hover:text-tb-red-700">→ 合規文件</a>
     </div>
   </header>
 

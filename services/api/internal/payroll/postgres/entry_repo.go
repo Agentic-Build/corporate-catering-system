@@ -65,6 +65,25 @@ SELECT `+entryCols+` FROM payroll_entry WHERE batch_id=$1 ORDER BY created_at, i
 	return out, rows.Err()
 }
 
+// FindByOrderForUser locates the entry that aggregated orderID for userID.
+// payroll_entry.order_ids is a uuid[]; `$2 = ANY(order_ids)` is index-scannable
+// when a GIN index exists but works without it for the small N we expect per
+// user. Returns ErrEntryNotFound when no matching row exists.
+func (r *EntryRepo) FindByOrderForUser(ctx context.Context, userID, orderID string) (string, error) {
+	var id string
+	err := r.pool.QueryRow(ctx, `
+SELECT id FROM payroll_entry WHERE user_id=$1 AND $2 = ANY(order_ids) LIMIT 1`,
+		userID, orderID,
+	).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", payroll.ErrEntryNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("find entry by order: %w", err)
+	}
+	return id, nil
+}
+
 func (r *EntryRepo) IncrementRefundedTx(ctx context.Context, tx pgx.Tx, id string, refund int64) error {
 	if tx == nil {
 		return errors.New("EntryRepo.IncrementRefundedTx requires a tx")

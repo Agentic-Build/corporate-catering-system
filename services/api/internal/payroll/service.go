@@ -198,6 +198,23 @@ func (s *Service) OpenDispute(ctx context.Context, in OpenDisputeInput) (*Disput
 	return d, nil
 }
 
+// OpenDisputeByOrder is the employee-friendly entry point: callers don't need
+// to know the entry_id — we look it up from the order. This keeps the public
+// API surface (POST /api/employee/disputes) minimal at the cost of one extra
+// indexable query per submission.
+func (s *Service) OpenDisputeByOrder(ctx context.Context, orderID, openedBy, reason string) (*Dispute, error) {
+	entryID, err := s.Entries.FindByOrderForUser(ctx, openedBy, orderID)
+	if err != nil {
+		return nil, err
+	}
+	return s.OpenDispute(ctx, OpenDisputeInput{
+		EntryID:  entryID,
+		OrderID:  orderID,
+		OpenedBy: openedBy,
+		Reason:   reason,
+	})
+}
+
 // ResolveDisputeInput captures the resolution path: refund or reject.
 type ResolveDisputeInput struct {
 	DisputeID   string

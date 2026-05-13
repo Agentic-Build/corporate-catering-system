@@ -139,6 +139,47 @@ func TestEntryRepo_IncrementRefunded(t *testing.T) {
 	assert.Equal(t, int64(5000), got.RefundedMinor)
 }
 
+func TestEntryRepo_FindByOrderForUser(t *testing.T) {
+	pool, cleanup := setupPostgres(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := pgrepo.NewEntryRepo(pool)
+
+	batch := makeBatch(t, pool, 2027, time.May)
+	user := seedEmployeeUser(t, pool)
+	other := seedEmployeeUser(t, pool)
+	vendor := seedApprovedVendor(t, pool)
+	o1 := seedOrder(t, pool, user, vendor)
+	o2 := seedOrder(t, pool, user, vendor)
+	oOther := seedOrder(t, pool, other, vendor)
+
+	entry := &payroll.Entry{
+		BatchID:     batch.ID,
+		UserID:      user,
+		OrderIDs:    []string{o1, o2},
+		AmountMinor: 24000,
+	}
+	require.NoError(t, pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		return repo.CreateTx(ctx, tx, entry)
+	}))
+
+	// Happy: each of user's orders maps back to the same entry.
+	got, err := repo.FindByOrderForUser(ctx, user, o1)
+	require.NoError(t, err)
+	assert.Equal(t, entry.ID, got)
+	got, err = repo.FindByOrderForUser(ctx, user, o2)
+	require.NoError(t, err)
+	assert.Equal(t, entry.ID, got)
+
+	// Other user cannot match user's entry.
+	_, err = repo.FindByOrderForUser(ctx, other, o1)
+	assert.ErrorIs(t, err, payroll.ErrEntryNotFound)
+
+	// Order that isn't aggregated into any entry yields not-found.
+	_, err = repo.FindByOrderForUser(ctx, other, oOther)
+	assert.ErrorIs(t, err, payroll.ErrEntryNotFound)
+}
+
 func TestEntryRepo_NoDelete(t *testing.T) {
 	pool, cleanup := setupPostgres(t)
 	defer cleanup()

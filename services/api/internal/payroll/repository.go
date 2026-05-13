@@ -24,6 +24,10 @@ type EntryRepository interface {
 	GetByID(ctx context.Context, id string) (*Entry, error)
 	ListByBatch(ctx context.Context, batchID string) ([]*Entry, error)
 	IncrementRefundedTx(ctx context.Context, tx pgx.Tx, id string, refund int64) error
+	// FindByOrderForUser returns the entry id whose order_ids array contains
+	// orderID and whose user_id matches userID. Returns ErrEntryNotFound when
+	// no row matches.
+	FindByOrderForUser(ctx context.Context, userID, orderID string) (string, error)
 }
 
 type DisputeRepository interface {

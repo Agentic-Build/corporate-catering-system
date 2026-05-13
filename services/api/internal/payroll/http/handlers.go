@@ -175,7 +175,6 @@ type resolveDisputeInput struct {
 
 type openDisputeInput struct {
 	Body struct {
-		EntryID string `json:"entry_id" format:"uuid"`
 		OrderID string `json:"order_id" format:"uuid"`
 		Reason  string `json:"reason" minLength:"1"`
 	}
@@ -413,12 +412,7 @@ func (a *API) openDispute(ctx context.Context, in *openDisputeInput) (*disputeOu
 	if err != nil {
 		return nil, err
 	}
-	d, err := a.Svc.OpenDispute(ctx, payroll.OpenDisputeInput{
-		EntryID:  in.Body.EntryID,
-		OrderID:  in.Body.OrderID,
-		OpenedBy: u.ID,
-		Reason:   in.Body.Reason,
-	})
+	d, err := a.Svc.OpenDisputeByOrder(ctx, in.Body.OrderID, u.ID, in.Body.Reason)
 	if err != nil {
 		return nil, mapErr(err)
 	}

@@ -12,6 +12,9 @@
     <div class="flex items-center gap-4 text-sm">
       <a href="/vendors" class="text-tb-slate-700 hover:text-tb-slate-950">商家管理</a>
       <a href="/payroll" class="text-tb-slate-700 hover:text-tb-slate-950">月結</a>
+      <a href="/anomalies" class="text-tb-slate-700 hover:text-tb-slate-950">告警</a>
+      <a href="/dlq" class="text-tb-slate-700 hover:text-tb-slate-950">死信</a>
+      <a href="/audit" class="text-tb-slate-700 hover:text-tb-slate-950">稽核</a>
       <span class="text-tb-slate-500">{data.user.display_name}</span>
       <form method="POST" action="/auth/logout">
         <button class="text-tb-red-600 hover:text-tb-red-700" type="submit">登出</button>
