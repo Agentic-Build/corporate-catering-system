@@ -57,8 +57,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y k6
 
-      - name: Install migrate
+      - name: Install migrate + redis-cli
         run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-tools
           curl -L https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
           sudo mv migrate /usr/local/bin/migrate
 
