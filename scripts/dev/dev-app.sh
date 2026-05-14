@@ -14,12 +14,17 @@ echo "==> deps"
 $COMPOSE up -d
 
 echo "==> waiting for postgres"
+ready=
 for i in {1..40}; do
   if $COMPOSE exec -T postgres pg_isready -U tbite -d tbite >/dev/null 2>&1; then
-    break
+    ready=1; break
   fi
   sleep 0.5
 done
+if [ -z "$ready" ]; then
+  echo "postgres did not become ready in 20s — check 'make dev-logs svc=postgres'" >&2
+  exit 1
+fi
 
 echo "==> migrate"
 DATABASE_URL="$DB_DSN" scripts/db/migrate.sh up
@@ -53,6 +58,13 @@ export S3_ACCESS_KEY_ID="tbite"
 export S3_SECRET_ACCESS_KEY="tbite-dev-secret"
 export S3_BUCKET="tbite"
 export S3_USE_PATH_STYLE=1
+
+# Override the *.tbite.test defaults so the FAKE_OIDC redirect chain stays
+# on localhost (otherwise post-login lands on a host without a DNS entry).
+export OIDC_CALLBACK_BASE_URL="http://localhost:8080"
+export APP_BASE_URL_EMPLOYEE="http://localhost:5173"
+export APP_BASE_URL_MERCHANT="http://localhost:5174"
+export APP_BASE_URL_ADMIN="http://localhost:5175"
 
 go run ./services/api/cmd/tbite --role=api &
 pnpm --filter @tbite/employee dev &
