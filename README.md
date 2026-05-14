@@ -1,125 +1,127 @@
 # T-Bite
 
-> 員工 / 商家 / 福委會三端 + Go modular monolith API + 雙 K8s overlay (single-node / GCP)
+> 員工 / 商家 / 福委會三端 + Go modular monolith API
 
-A monorepo refactor of the T-Bite platform: 3 SvelteKit frontends + Go modular monolith + dual K8s deployment + MCP server for AI agents.
-
-## Status
-
-**Refactor complete (P0-P8 all delivered).** See [`docs/plans/2026-05-13-tbite-refactor-design.md`](docs/plans/2026-05-13-tbite-refactor-design.md) for the full design.
-
-| Phase | Scope |
-|---|---|
-| P0 | monorepo skeleton + Go API multi-role binary + dual K8s overlay |
-| P1 | identity + OIDC (Google/GitHub) + 三端登入流 |
-| P2 | menu / vendor / quota + 員工瀏覽今日菜單 + Postgres-anchored decrement |
-| P3 | order lifecycle + audit + outbox + cutoff scheduler |
-| P4 | TOTP pickup + 商家備餐 + ready/picked_up/no_show |
-| P5 | payroll batches + HR CSV export + dispute / refund flow |
-| P6 | vendor governance + anomaly alerts + DLQ admin + employee disputes |
-| P7 | MCP server for AI agents (12 tools, HTTP/SSE + stdio) |
-| P8 | hardening + k6 load gate + OTel + scheduler leader election + chaos runbook |
+A monorepo: 3 SvelteKit frontends + a Go modular monolith + dual K8s overlays (single-node / GCP) + an MCP server for AI agents.
 
 ## Architecture
 
 ```
-3 SvelteKit apps        <-->  Go API (chi + huma)  <-->  Postgres / Redis / NATS / S3
-employee/merchant/admin       same binary as
-                              worker / scheduler / mcp-stdio
+3 SvelteKit apps         <-->  Go API (chi + huma)  <-->  Postgres / Redis / NATS / S3
+employee/merchant/admin        same binary, 4 roles:
+                               api / worker / scheduler / mcp-stdio
 ```
 
 - **Frontend**: SvelteKit 2 + Svelte 5 + Tailwind 3 (adapter-node, SSR)
-- **Backend**: Go 1.23, modular monolith, single binary 4 roles (`api`/`worker`/`scheduler`/`mcp-stdio`)
-- **Data**: Postgres (orders/menu/vendor/payroll), Redis (sessions/state/cache), NATS JetStream (events), S3-compat (HR CSV / vendor docs)
-- **Observability**: OTel traces (HTTP/DB/NATS) via OTLP HTTP collector
-- **Deployment**: dual K8s overlay (`single-node` for k3d, `gcp` for managed services)
+- **Backend**: Go 1.23 modular monolith
+- **Data**: Postgres (state of record), Redis (sessions / cache), NATS JetStream (events), S3-compatible object storage (HR CSV / vendor docs)
+- **Observability**: OpenTelemetry traces via OTLP HTTP
+- **Deployment**: dual kustomize overlay — `single-node` for any self-managed cluster, `gcp` for GKE + Cloud SQL + Memorystore + GCS
 
-## Quick start (local dev)
+## Local development
 
-Pre-reqs: Node 20.11+, `pnpm` 9, Go 1.23, Docker. Full K8s mode also needs `k3d`, `kubectl`, `kustomize`.
-
-### Option A: `make dev-app` — host processes (fastest)
-
-Starts the Go API plus the three SvelteKit dev servers without K8s:
+Pre-reqs: Node 20.11+, pnpm 9, Go 1.23, Docker.
 
 ```bash
 pnpm install
 ( cd services/api && go mod download )
-make dev-app
+make dev
 ```
+
+`make dev` starts Postgres / Redis / NATS / MinIO via `docker compose`, applies migrations, seeds e2e + p2 fixtures, then runs the Go API and the three SvelteKit dev servers on the host. Ctrl-C stops the host processes; deps stay up.
 
 URLs:
-- `http://localhost:8080/healthz` — Go API
-- `http://localhost:5173` — 員工 app
-- `http://localhost:5174` — 商家 app
-- `http://localhost:5175` — 福委會 app
 
-### Option B: `make dev-up` — k3d cluster (closer to prod)
+- http://localhost:5173 — 員工
+- http://localhost:5174 — 商家
+- http://localhost:5175 — 福委會
+- http://localhost:8080/healthz — Go API
+- http://localhost:9001 — MinIO console (`tbite` / `tbite-dev-secret`)
+
+Seeded test identities (via `FAKE_OIDC=1`):
+
+- Employee: `e2e-employee@tbite.test`
+- Admin (福委會): `e2e-admin@tbite.test`
+
+Stop / reset deps:
 
 ```bash
-make dev-up        # k3d cluster + single-node overlay applied
-make dev-down      # tear down
-make dev-reset     # dev-down + clean volumes + restart
+make dev-down      # stop deps; volumes persisted
+make dev-reset     # stop deps and wipe volumes
+make dev-logs svc=postgres
 ```
 
-The single-node overlay bundles Postgres / Redis / NATS / MinIO as
-single-pod deployments. Seeded test users:
+## Production deployment
 
-- Employee: `e2e-employee@tbite.test` (via fake OIDC provider)
-- Admin: `e2e-admin@tbite.test` (whitelisted)
+Two overlays, same `make` interface:
 
-See [`docs/mcp.md`](docs/mcp.md) for MCP setup.
+```bash
+make prod-up env=single-node    # any reachable k8s cluster
+make prod-up env=gcp            # GKE + Cloud SQL + Memorystore + GCS
+```
+
+Both targets print the active `kubectl` context and require interactive confirmation before applying.
+
+- [`docs/deployment/single-node.md`](docs/deployment/single-node.md) — self-managed k8s
+- [`docs/deployment/gcp.md`](docs/deployment/gcp.md) — GCP runbook (Workload Identity, External Secrets, Cloud Armor, managed certs)
+
+To check what kustomize will produce without applying:
+
+```bash
+make render-overlay env=single-node
+make render-overlay env=gcp
+```
 
 ## Operations
 
 | Area | Entry point |
 | --- | --- |
-| Migrations | `make migrate-up` (golang-migrate wrapper), SQL in `migrations/` |
+| Migrations | `make migrate-up` (golang-migrate), SQL in `migrations/` |
 | Load testing | `ops/load/run-loadtest.sh` (k6 lunch-peak, 3 scenarios) |
 | Load-gate CI | `.github/workflows/ci-load-gate.yml` (nightly + manual_dispatch) |
-| Security scan | `scripts/security-scan.sh` (trivy on images + kubesec on manifests) |
+| Security scan | `scripts/security-scan.sh` (trivy + kubesec) |
+| SQL-injection guard | `scripts/security/check-sql-strings.sh` (runs in `ci-lint-test`) |
 | Chaos drill | [`ops/chaos/drill-runbook.md`](ops/chaos/drill-runbook.md) |
 | Security baseline | [`ops/security/checklist.md`](ops/security/checklist.md) |
-| Render overlay | `make render-overlay env=single-node` / `env=gcp` |
+| MCP server | [`docs/mcp.md`](docs/mcp.md) |
+| Branding policy | [`docs/branding.md`](docs/branding.md) |
 
 ## Repository layout
 
 ```
-apps/{employee,merchant,admin}/   SvelteKit frontends
+apps/{employee,merchant,admin}/      SvelteKit frontends
 packages/{ui,tokens,api-client,web-auth}/   shared
-services/api/                     Go API + worker + scheduler + mcp-stdio
-migrations/                       golang-migrate SQL
-ops/kubernetes/{base,overlays}/   K8s manifests
-ops/{load,chaos,security}/        runbooks + scripts
-ops/observability/                OTel collector config
-contract/openapi/                 generated OpenAPI artifacts
-docs/plans/                       phase plans + design doc
-docs/mcp.md                       MCP server reference
+services/api/                        Go API + worker + scheduler + mcp-stdio
+migrations/                          golang-migrate SQL
+ops/local/                           docker-compose dev stack
+ops/kubernetes/{base,overlays}/      K8s manifests
+ops/{load,chaos,security}/           runbooks + scripts
+contract/openapi/                    generated OpenAPI artifacts
+docs/                                deployment runbooks, MCP, branding, plans
 ```
 
 ## Common make targets
 
 | Target | Description |
 | --- | --- |
-| `make dev-up` | k3d cluster + apply single-node overlay |
-| `make dev-down` | Tear down k3d cluster |
-| `make dev-app` | Parallel run Go API + 3 SvelteKit dev servers |
-| `make migrate-up` | Apply pending migrations |
-| `make contract-sync` | Regenerate OpenAPI + TS client from Go (gated in CI) |
-| `make test-go` | `go test ./...` |
-| `make test-web` | `pnpm -r check && pnpm -r lint` |
-| `make render-overlay env=single-node` | `kustomize build` the overlay |
-| `make render-overlay env=gcp` | Same, GCP overlay |
+| `make dev` | One-stop dev — compose deps + migrate + seed + host processes |
+| `make dev-down` / `make dev-reset` | Stop deps (keep / wipe volumes) |
+| `make migrate-up` / `migrate-down` / `migrate-new name=xxx` | Schema |
+| `make contract-sync` | Regenerate OpenAPI + TS client from Go |
+| `make test-go` / `make test-web` / `make test-e2e` | Tests |
+| `make render-overlay env=…` | Dry-render a kustomize overlay |
+| `make prod-up env=…` / `prod-status env=…` / `prod-down env=…` | Apply / inspect / remove overlay |
+| `make build` / `make clean` | Bundle + binary / wipe artifacts |
 
 Full list: `make help`.
 
 ## Contributing
 
-1. Pick a P0-P8 plan in `docs/plans/`.
-2. `git checkout -b feat/<scope>-<topic>` (e.g. `feat/identity-oidc`).
-3. Match existing patterns: Service + Repo + huma handlers (Go), SvelteKit form actions (web).
-4. Run `make contract-sync` before pushing — CI fails on drift.
-5. Commit messages follow Conventional Commits.
+1. Branch as `feat/<scope>-<topic>` or `fix/<scope>-<topic>`.
+2. Match existing patterns: Service + Repo + huma handlers (Go); SvelteKit form actions (web); raw `pgx` with `$N` parameterized binding (SQL — CI grep guards against `fmt.Sprintf("SELECT…")`).
+3. Run `make contract-sync` after touching Go HTTP handlers — CI fails on drift.
+4. Commit messages follow Conventional Commits.
+5. See [`docs/branding.md`](docs/branding.md) before introducing new product-name strings.
 
 ## License
 

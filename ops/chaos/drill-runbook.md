@@ -11,11 +11,12 @@ runs. Automated chaos is a future hardening item.
 
 ## Pre-conditions
 
-1. k3d cluster up with the `tbite` namespace populated by the
-   `ops/kubernetes/overlays/single-node` overlay.
+1. A k8s cluster with the `tbite` namespace populated by the
+   `ops/kubernetes/overlays/single-node` overlay. Bring it up against your
+   current kubectl context (e.g. a k3s box or a throwaway GKE cluster):
 
    ```bash
-   make dev-up
+   make prod-up env=single-node
    kubectl -n tbite get pods
    ```
 
@@ -41,7 +42,7 @@ runs. Automated chaos is a future hardening item.
 ```bash
 # Terminal 1 — start the 3-scenario lunch-peak script in the background.
 # run-loadtest.sh assumes the API + workers + scheduler are already up
-# (either via `make dev-up` or as separate processes).
+# (via `make prod-up env=single-node` or as separate processes).
 ops/load/run-loadtest.sh &
 LOAD_PID=$!
 
