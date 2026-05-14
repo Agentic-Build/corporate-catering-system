@@ -14,6 +14,8 @@
     onIncrement?: () => void;
     onDecrement?: () => void;
     onClick?: () => void;
+    isFavorite?: boolean;
+    onToggleFavorite?: () => void;
   }
   let {
     name,
@@ -30,6 +32,8 @@
     onIncrement,
     onDecrement,
     onClick,
+    isFavorite = false,
+    onToggleFavorite,
   }: Props = $props();
 
   const isLowStock = !soldOut && remain > 0 && remain <= lowStockThreshold;
@@ -76,10 +80,26 @@
       <span class="inline-flex items-center rounded-full bg-tb-slate-900/85 px-3 py-1 text-xs font-semibold text-white">本日已售罄</span>
     </div>
   {:else if isLowStock}
-    <span class="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-tb-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+    <span
+      class="absolute top-2 inline-flex items-center gap-1 rounded-full bg-tb-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white
+        {onToggleFavorite ? 'left-2' : 'right-2'}"
+    >
       <span class="h-1.5 w-1.5 rounded-full bg-tb-amber-300 animate-pulse" aria-hidden="true"></span>
       僅剩 {remain} 份
     </span>
+  {/if}
+
+  {#if onToggleFavorite}
+    <button
+      type="button"
+      class="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-base shadow-tb-sm transition hover:bg-white active:scale-95
+        {isFavorite ? 'text-tb-amber-400' : 'text-tb-slate-400 hover:text-tb-amber-400'}"
+      onclick={onToggleFavorite}
+      aria-label={isFavorite ? "取消最愛" : "加入最愛"}
+      aria-pressed={isFavorite}
+    >
+      <span aria-hidden="true">{isFavorite ? "★" : "☆"}</span>
+    </button>
   {/if}
 
   {#if !isSoldOut}

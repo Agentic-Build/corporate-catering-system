@@ -10,7 +10,7 @@ const PLANTS = [
   { id: "F18-RF", label: "F18 · RF" },
 ];
 
-function buildDays(today: Date) {
+function buildDays(today: Date, selectedISO?: string) {
   const wk = ["日", "一", "二", "三", "四", "五", "六"];
   const labels = ["今天", "明天"];
   const out: { id: string; head: string; sub?: string }[] = [];
@@ -24,6 +24,10 @@ function buildDays(today: Date) {
     const id = `${d.getFullYear()}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     out.push({ id, head, sub: i < 2 ? `${m}/${day}(${w})` : undefined });
   }
+  // If the server-derived target_day isn't in the next 7 days, prepend it.
+  if (selectedISO && !out.find((d) => d.id === selectedISO)) {
+    out.unshift({ id: selectedISO, head: selectedISO });
+  }
   return out;
 }
 
@@ -32,20 +36,50 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname + url.search));
   }
 
-  const today = new Date();
-  const days = buildDays(today);
-  const selectedDay = url.searchParams.get("day") ?? days[0].id;
   const selectedPlant = url.searchParams.get("plant") ?? locals.user.plant ?? PLANTS[0].id;
+  const dayOverride = url.searchParams.get("day") ?? undefined;
 
-  let items: any[] = [];
+  let home: {
+    target_day: string;
+    has_ordered: boolean;
+    order_summary?: {
+      order_id: string;
+      vendor_id: string;
+      status: string;
+      cutoff_at: string;
+      total_price_minor: number;
+    };
+    reorder_chips: NonNullable<unknown>[];
+    favorite_chips: NonNullable<unknown>[];
+    recommend_chips: NonNullable<unknown>[];
+    day_menu: NonNullable<unknown>[];
+  } = {
+    target_day: dayOverride ?? new Date().toISOString().slice(0, 10),
+    has_ordered: false,
+    order_summary: undefined,
+    reorder_chips: [],
+    favorite_chips: [],
+    recommend_chips: [],
+    day_menu: [],
+  };
   let error: string | undefined;
+
   try {
     const client = createApiClient(API_BASE_URL, locals.apiToken);
-    const res = await client.GET("/api/employee/menu", {
-      params: { query: { plant: selectedPlant, day: selectedDay } },
+    const res = await client.GET("/api/employee/home", {
+      params: { query: dayOverride ? { day: dayOverride } : {} },
     });
     if (res.data) {
-      items = (res.data as any).items ?? [];
+      const d = res.data;
+      home = {
+        target_day: d.target_day,
+        has_ordered: d.has_ordered,
+        order_summary: d.order_summary,
+        reorder_chips: (d.reorder_chips ?? []) as NonNullable<unknown>[],
+        favorite_chips: (d.favorite_chips ?? []) as NonNullable<unknown>[],
+        recommend_chips: (d.recommend_chips ?? []) as NonNullable<unknown>[],
+        day_menu: (d.day_menu ?? []) as NonNullable<unknown>[],
+      };
     } else if (res.error) {
       error = JSON.stringify(res.error);
     }
@@ -53,13 +87,22 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     error = e instanceof Error ? e.message : String(e);
   }
 
+  // Build favoriteIds set so MealCards can highlight ⭐.
+  const favoriteIds = new Set(
+    (home.favorite_chips as Array<{ menu_item_id: string }>).map((c) => c.menu_item_id),
+  );
+
+  const today = new Date();
+  const days = buildDays(today, home.target_day);
+
   return {
     user: locals.user,
     plants: PLANTS,
     days,
     selectedPlant,
-    selectedDay,
-    items,
+    selectedDay: home.target_day,
+    home,
+    favoriteIds: Array.from(favoriteIds),
     error,
   };
 };
@@ -81,11 +124,118 @@ export const actions: Actions = {
 
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.POST("/api/employee/orders", {
-      body: { plant, supply_date: supplyDate, items } as any,
+      body: { plant, supply_date: supplyDate, items } as never,
     });
     if (r.error) return fail(400, { error: JSON.stringify(r.error) });
-    const orderID = (r.data as any)?.order?.id;
+    const orderID = (r.data as { order?: { id?: string } } | undefined)?.order?.id;
     if (!orderID) return fail(500, { error: "no order id in response" });
     throw redirect(303, `/orders/${orderID}`);
+  },
+
+  // Quick-add a single menu item (1 qty) to a fresh order. Used by FavoriteChip / RecommendChip.
+  addFavoriteChipToCart: async ({ request, locals, url }) => {
+    if (!locals.user) throw redirect(303, "/login");
+    const fd = await request.formData();
+    const menuItemId = String(fd.get("menu_item_id") ?? "");
+    if (!menuItemId) return fail(400, { error: "menu_item_id required" });
+
+    const selectedPlant = url.searchParams.get("plant") ?? locals.user.plant ?? PLANTS[0].id;
+    const dayOverride = url.searchParams.get("day") ?? undefined;
+
+    const client = createApiClient(API_BASE_URL, locals.apiToken);
+    // Determine target day via /home unless overridden.
+    let supplyDate = dayOverride;
+    if (!supplyDate) {
+      const h = await client.GET("/api/employee/home", { params: { query: {} } });
+      supplyDate = h.data?.target_day ?? new Date().toISOString().slice(0, 10);
+    }
+
+    const r = await client.POST("/api/employee/orders", {
+      body: {
+        plant: selectedPlant,
+        supply_date: supplyDate,
+        items: [{ menu_item_id: menuItemId, qty: 1 }],
+      } as never,
+    });
+    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    const orderID = (r.data as { order?: { id?: string } } | undefined)?.order?.id;
+    if (!orderID) return fail(500, { error: "no order id in response" });
+    throw redirect(303, `/orders/${orderID}`);
+  },
+
+  // Reorder an entire past order. May produce partial result with unavailable_items[].
+  reorderPast: async ({ request, locals }) => {
+    if (!locals.user) throw redirect(303, "/login");
+    const fd = await request.formData();
+    const sourceOrderId = String(fd.get("source_order_id") ?? "");
+    const supplyDate = String(fd.get("supply_date") ?? "");
+    if (!sourceOrderId || !supplyDate)
+      return fail(400, { error: "source_order_id and supply_date required" });
+
+    const client = createApiClient(API_BASE_URL, locals.apiToken);
+    const r = await client.POST("/api/employee/orders/reorder", {
+      body: { source_order_id: sourceOrderId, supply_date: supplyDate } as never,
+    });
+
+    if (r.error) {
+      // 409 case: huma RFC 9457 problem-details; backend embeds unavailable_items in error body.
+      const err = r.error as { unavailable_items?: Array<{ name: string }>; detail?: string };
+      const items = err.unavailable_items ?? [];
+      const names = items.map((i) => i.name).join("、");
+      return fail(409, {
+        error: err.detail ?? "reorder failed",
+        unavailable_items: items,
+        reorderToast: names ? `今日皆無供應：${names}` : (err.detail ?? "今日皆無供應"),
+      });
+    }
+
+    const data = r.data as
+      | { new_order_id?: string; unavailable_items?: Array<{ name: string }> | null }
+      | undefined;
+    const newOrderId = data?.new_order_id;
+    if (!newOrderId) return fail(500, { error: "no new_order_id in response" });
+    const unavailable = data?.unavailable_items ?? [];
+
+    if (unavailable.length > 0) {
+      const names = unavailable.map((i) => i.name).join("、");
+      const qs = new URLSearchParams({
+        reorder: "partial",
+        order_id: newOrderId,
+        unavailable: names,
+        unavailable_count: String(unavailable.length),
+      });
+      throw redirect(303, `/orders/${newOrderId}?${qs.toString()}`);
+    }
+    throw redirect(303, `/orders/${newOrderId}`);
+  },
+
+  // Add a menu_item to favorites (idempotent).
+  addFavorite: async ({ request, locals }) => {
+    if (!locals.user) return fail(401, { error: "unauthenticated" });
+    const fd = await request.formData();
+    const menuItemId = String(fd.get("menu_item_id") ?? "");
+    if (!menuItemId) return fail(400, { error: "menu_item_id required" });
+
+    const client = createApiClient(API_BASE_URL, locals.apiToken);
+    const r = await client.POST("/api/employee/favorites", {
+      body: { menu_item_id: menuItemId } as never,
+    });
+    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    return { ok: true };
+  },
+
+  // Remove a favorite (idempotent — 204 even if missing).
+  removeFavorite: async ({ request, locals }) => {
+    if (!locals.user) return fail(401, { error: "unauthenticated" });
+    const fd = await request.formData();
+    const menuItemId = String(fd.get("menu_item_id") ?? "");
+    if (!menuItemId) return fail(400, { error: "menu_item_id required" });
+
+    const client = createApiClient(API_BASE_URL, locals.apiToken);
+    const r = await client.DELETE("/api/employee/favorites/{menu_item_id}", {
+      params: { path: { menu_item_id: menuItemId } },
+    });
+    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    return { ok: true };
   },
 };
