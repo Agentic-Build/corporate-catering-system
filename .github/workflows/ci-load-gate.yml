@@ -143,6 +143,11 @@ jobs:
           API_BASE_URL: http://localhost:8080
           K6_TOKEN_EMPLOYEE: tb_load
           K6_PLANT: F12B-3F
+          # CI thresholds relaxed vs production SLO — ubuntu-latest is 2-vCPU
+          # and runs Postgres/Redis/NATS/API/k6 on the same box. Regression
+          # detection still works because runs share the same runner class.
+          SLO_BROWSE_MS: "600"
+          SLO_PICKUP_MS: "200"
         run: |
           K6_DAY=$(date -u +%Y-%m-%d) \
           K6_MENU_ITEM_ID="$MENU_ITEM_ID" \
