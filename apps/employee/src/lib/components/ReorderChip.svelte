@@ -27,6 +27,7 @@
 <form
   method="POST"
   {action}
+  role="listitem"
   class="shrink-0 snap-start {disabled ? 'pointer-events-none opacity-50' : ''}"
 >
   <input type="hidden" name="source_order_id" value={sourceOrderId} />
@@ -34,7 +35,7 @@
   <button
     type="submit"
     {disabled}
-    class="flex w-44 flex-col items-start gap-1 rounded-tb-2xl border border-tb-slate-200 bg-white p-3 text-left shadow-tb-sm transition hover:-translate-y-0.5 hover:shadow-tb-md disabled:cursor-not-allowed"
+    class="flex w-44 flex-col items-start gap-1 rounded-tb-2xl border border-tb-slate-200 bg-white p-3 text-left shadow-tb-sm transition hover:-translate-y-0.5 hover:shadow-tb-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tb-amber-400 disabled:cursor-not-allowed"
     aria-label={disabled ? `${vendorName} 今日無供應` : `再點 ${vendorName}`}
   >
     <div class="flex w-full items-center justify-between gap-1">

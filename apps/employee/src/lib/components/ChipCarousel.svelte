@@ -21,14 +21,16 @@
   }: Props = $props();
 </script>
 
-<section class="space-y-2">
+<section class="space-y-2" aria-label={title}>
   <header class="flex items-center justify-between px-1">
     <h2 class="flex items-center gap-2 text-sm font-bold text-tb-slate-900">
       {#if icon}<span aria-hidden="true">{icon}</span>{/if}
       <span>{title}</span>
     </h2>
     {#if moreHref}
-      <a href={moreHref} class="text-xs font-semibold text-tb-slate-500 hover:text-tb-slate-900"
+      <a
+        href={moreHref}
+        class="rounded-tb text-xs font-semibold text-tb-slate-500 hover:text-tb-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tb-amber-400"
         >《{moreLabel}》</a
       >
     {/if}
@@ -41,7 +43,10 @@
       {emptyHint ?? ""}
     </div>
   {:else}
-    <div class="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 [scrollbar-width:thin]">
+    <div
+      role="list"
+      class="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 [scrollbar-width:thin]"
+    >
       {@render children?.()}
     </div>
   {/if}

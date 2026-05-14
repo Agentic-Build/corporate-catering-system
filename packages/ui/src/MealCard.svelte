@@ -92,7 +92,7 @@
   {#if onToggleFavorite}
     <button
       type="button"
-      class="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-base shadow-tb-sm transition hover:bg-white active:scale-95
+      class="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-base shadow-tb-sm transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tb-amber-400 active:scale-95
         {isFavorite ? 'text-tb-amber-400' : 'text-tb-slate-400 hover:text-tb-amber-400'}"
       onclick={onToggleFavorite}
       aria-label={isFavorite ? "取消最愛" : "加入最愛"}
