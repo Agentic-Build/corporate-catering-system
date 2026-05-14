@@ -140,7 +140,7 @@ func TestOnTimeRateEvaluator_OpensHighAnomalyOnDrop(t *testing.T) {
 		publish("order.no_show.v1")
 	}
 
-	// Poll up to 5s for the anomaly to appear.
+	// Open() upserts: wait for total=12 to avoid racing event-10 snapshot.
 	deadline := time.Now().Add(5 * time.Second)
 	var found *compliance.Anomaly
 	for time.Now().Before(deadline) {
@@ -148,7 +148,10 @@ func TestOnTimeRateEvaluator_OpensHighAnomalyOnDrop(t *testing.T) {
 			[]compliance.AnomalyStatus{compliance.AnomalyOpen}, nil)
 		require.NoError(t, err)
 		for _, a := range anomalies {
-			if a.Kind == "on_time_rate_drop" && a.TargetID == vendorID {
+			if a.Kind != "on_time_rate_drop" || a.TargetID != vendorID {
+				continue
+			}
+			if total, ok := a.Payload["total"].(float64); ok && total == 12 {
 				found = a
 				break
 			}
@@ -158,7 +161,7 @@ func TestOnTimeRateEvaluator_OpensHighAnomalyOnDrop(t *testing.T) {
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
-	require.NotNil(t, found, "expected on_time_rate_drop anomaly for vendor")
+	require.NotNil(t, found, "expected on_time_rate_drop anomaly with total=12 for vendor")
 	assert.Equal(t, compliance.SeverityHigh, found.Severity)
 	assert.Equal(t, "vendor", found.TargetKind)
 	require.NotNil(t, found.Payload)
