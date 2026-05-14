@@ -29,6 +29,8 @@ jobs:
           go-version: "1.25"
           cache: true
       - run: go vet ./...
+      - name: SQL injection guard (fmt.Sprintf with SQL keywords)
+        run: scripts/security/check-sql-strings.sh
       - run: go build ./...
       - name: Go tests (with testcontainers)
         env:
