@@ -1,6 +1,6 @@
-# T-Bite Corporate Catering System
+# T-Bite
 
-> 企業合作訂餐平台 · 員工 / 商家 / 福委會三端 + Go modular monolith API + 雙 K8s overlay (single-node / GCP)
+> 員工 / 商家 / 福委會三端 + Go modular monolith API + 雙 K8s overlay (single-node / GCP)
 
 A monorepo refactor of the T-Bite platform: 3 SvelteKit frontends + Go modular monolith + dual K8s deployment + MCP server for AI agents.
 

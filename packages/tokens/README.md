@@ -1,6 +1,6 @@
 # @tbite/tokens
 
-Canonical design tokens for the T-Bite corporate catering system. Sourced from the T-Bite Design System (`colors_and_type.css`).
+Canonical design tokens for the T-Bite platform. Sourced from the T-Bite Design System (`colors_and_type.css`).
 
 ## Exports
 

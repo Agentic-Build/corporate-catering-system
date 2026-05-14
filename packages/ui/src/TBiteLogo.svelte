@@ -6,9 +6,8 @@
   // onboard) stay unchanged.
   interface Props {
     size?: number;
-    eyebrow?: boolean;
   }
-  let { size = 28, eyebrow = true }: Props = $props();
+  let { size = 28 }: Props = $props();
 
   // Stable id per instance so multiple <TBiteLogo /> on the same page don't
   // clash on the gradient / mask defs. Math.random is fine — not security
@@ -57,12 +56,5 @@
     <path d="M 11 17 H 33 V 22 H 25 V 39 H 19 V 22 H 11 Z" fill="white" />
   </svg>
 
-  <span class="flex flex-col leading-tight">
-    <span class="text-[15px] font-black text-tb-slate-900">T-Bite.</span>
-    {#if eyebrow}
-      <span class="text-[9px] uppercase tracking-eyebrow-wide text-tb-slate-500">
-        Corporate Catering
-      </span>
-    {/if}
-  </span>
+  <span class="text-[15px] font-black leading-tight text-tb-slate-900">T-Bite.</span>
 </a>

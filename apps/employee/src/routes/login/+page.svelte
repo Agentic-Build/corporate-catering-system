@@ -19,6 +19,6 @@
     </div>
   </Card>
   <p class="mt-6 text-center text-xs uppercase tracking-eyebrow-wide text-tb-slate-500">
-    Corporate Catering · Employee
+    T-Bite · Employee
   </p>
 </div>

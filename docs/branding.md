@@ -1,7 +1,7 @@
 # T-Bite Branding Policy
 
-The product is **T-Bite Corporate Catering**. The brand mark is `T-Bite` —
-capital T, hyphen, capital B, lowercase i-t-e, full stop optional. The repo,
+The product is **T-Bite**. The brand mark is `T-Bite` — capital T, hyphen,
+capital B, lowercase i-t-e, full stop optional. The repo,
 Go module, and most technical identifiers use the lowercase form `tbite`
 because external systems (npm, Kubernetes, Docker, S3) require it.
 
@@ -13,7 +13,7 @@ technical form is intentional rather than accidental.
 
 | Form | Where it appears | Examples |
 |------|------------------|----------|
-| **`T-Bite`** | Anywhere a human reads it as a brand: README headings, page titles, doc prose, marketing copy, OpenAPI `title`, log banners, error messages | `# T-Bite Corporate Catering System`, `<title>T-Bite · Employee</title>`, `huma.DefaultConfig("T-Bite API", "0.1.0")` |
+| **`T-Bite`** | Anywhere a human reads it as a brand: README headings, page titles, doc prose, marketing copy, OpenAPI `title`, log banners, error messages | `# T-Bite`, `<title>T-Bite · Employee</title>`, `huma.DefaultConfig("T-Bite API", "0.1.0")` |
 | **`tbite`** | Technical identifiers governed by external naming rules | npm namespace `@tbite/*`, K8s namespace `tbite`, Postgres database `tbite`, S3 bucket `tbite`, test fixtures `e2e-employee@tbite.test`, Tailwind CSS prefix `tb-*` (abbreviated further), Docker image tags |
 
 ## Why we don't unify to `T-Bite` everywhere
