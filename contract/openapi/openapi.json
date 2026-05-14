@@ -1,6 +1,28 @@
 {
   "components": {
     "schemas": {
+      "AddFavoriteInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/AddFavoriteInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "menu_item_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "menu_item_id"
+        ],
+        "type": "object"
+      },
       "AnomalyActionInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -769,6 +791,103 @@
         },
         "type": "object"
       },
+      "FavoriteChipDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "available_today": {
+            "type": "boolean"
+          },
+          "menu_item_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "unit_price": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "vendor_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "menu_item_id",
+          "name",
+          "unit_price",
+          "vendor_id",
+          "available_today"
+        ],
+        "type": "object"
+      },
+      "HomeOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/HomeOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "day_menu": {
+            "items": {
+              "$ref": "#/components/schemas/EmployeeMenuItemDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "favorite_chips": {
+            "items": {
+              "$ref": "#/components/schemas/FavoriteChipDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "has_ordered": {
+            "type": "boolean"
+          },
+          "order_summary": {
+            "$ref": "#/components/schemas/OrderSummaryDTO"
+          },
+          "recommend_chips": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendChipDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "reorder_chips": {
+            "items": {
+              "$ref": "#/components/schemas/ReorderChipDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "target_day": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_day",
+          "has_ordered",
+          "reorder_chips",
+          "favorite_chips",
+          "recommend_chips",
+          "day_menu"
+        ],
+        "type": "object"
+      },
       "InviteOutputBody": {
         "additionalProperties": false,
         "properties": {
@@ -1081,6 +1200,36 @@
         },
         "required": [
           "items"
+        ],
+        "type": "object"
+      },
+      "ListFavoritesOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ListFavoritesOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "chips": {
+            "items": {
+              "$ref": "#/components/schemas/FavoriteChipDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "chips"
         ],
         "type": "object"
       },
@@ -1549,6 +1698,35 @@
         ],
         "type": "object"
       },
+      "OrderSummaryDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "cutoff_at": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "total_price_minor": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "vendor_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "vendor_id",
+          "status",
+          "total_price_minor",
+          "cutoff_at"
+        ],
+        "type": "object"
+      },
       "PickupCodeOutputBody": {
         "additionalProperties": false,
         "properties": {
@@ -1632,6 +1810,203 @@
         },
         "required": [
           "order"
+        ],
+        "type": "object"
+      },
+      "RecommendChipDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "menu_item_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "score": {
+            "format": "double",
+            "type": "number"
+          },
+          "unit_price": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "vendor_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "menu_item_id",
+          "name",
+          "unit_price",
+          "vendor_id",
+          "score",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "RecommendationsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/RecommendationsOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "chips": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendChipDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chips"
+        ],
+        "type": "object"
+      },
+      "ReorderChipDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "available_today": {
+            "type": "boolean"
+          },
+          "freq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "items_preview": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source_order_id": {
+            "type": "string"
+          },
+          "total_price_minor": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "vendor_id": {
+            "type": "string"
+          },
+          "vendor_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_order_id",
+          "vendor_id",
+          "vendor_name",
+          "items_preview",
+          "total_price_minor",
+          "freq",
+          "available_today"
+        ],
+        "type": "object"
+      },
+      "ReorderInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ReorderInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "source_order_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "supply_date": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_order_id",
+          "supply_date"
+        ],
+        "type": "object"
+      },
+      "ReorderOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ReorderOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "new_order_id": {
+            "type": "string"
+          },
+          "unavailable_items": {
+            "items": {
+              "$ref": "#/components/schemas/UnavailableItemDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "new_order_id",
+          "unavailable_items"
+        ],
+        "type": "object"
+      },
+      "ReordersOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ReordersOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "chips": {
+            "items": {
+              "$ref": "#/components/schemas/ReorderChipDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next_cursor": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chips"
         ],
         "type": "object"
       },
@@ -1893,6 +2268,26 @@
         },
         "required": [
           "supply"
+        ],
+        "type": "object"
+      },
+      "UnavailableItemDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "menu_item_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "menu_item_id",
+          "name",
+          "reason"
         ],
         "type": "object"
       },
@@ -3307,6 +3702,204 @@
         ]
       }
     },
+    "/api/employee/favorites": {
+      "get": {
+        "operationId": "listEmployeeFavorites",
+        "parameters": [
+          {
+            "description": "YYYY-MM-DD target day; required (controller will add defaulting)",
+            "explode": false,
+            "in": "query",
+            "name": "day",
+            "schema": {
+              "description": "YYYY-MM-DD target day; required (controller will add defaulting)",
+              "type": "string"
+            }
+          },
+          {
+            "description": "RFC3339Nano created_at returned as next_cursor from a previous page",
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "description": "RFC3339Nano created_at returned as next_cursor from a previous page",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size, clamped to 1..50",
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "description": "Page size, clamped to 1..50",
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListFavoritesOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the employee's favorites with target-day availability",
+        "tags": [
+          "employee",
+          "favorites"
+        ]
+      },
+      "post": {
+        "operationId": "addEmployeeFavorite",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddFavoriteInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mark a menu item as a favorite (idempotent)",
+        "tags": [
+          "employee",
+          "favorites"
+        ]
+      }
+    },
+    "/api/employee/favorites/{menu_item_id}": {
+      "delete": {
+        "operationId": "removeEmployeeFavorite",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "menu_item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove a favorite (idempotent — 204 even if missing)",
+        "tags": [
+          "employee",
+          "favorites"
+        ]
+      }
+    },
+    "/api/employee/home": {
+      "get": {
+        "operationId": "getEmployeeHome",
+        "parameters": [
+          {
+            "description": "YYYY-MM-DD; overrides server-derived target_day",
+            "explode": false,
+            "in": "query",
+            "name": "day",
+            "schema": {
+              "description": "YYYY-MM-DD; overrides server-derived target_day",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Aggregate landing page (target_day + 3 chips + day_menu)",
+        "tags": [
+          "employee",
+          "menu"
+        ]
+      }
+    },
     "/api/employee/menu": {
       "get": {
         "operationId": "listEmployeeMenu",
@@ -3448,6 +4041,53 @@
         ]
       }
     },
+    "/api/employee/orders/reorder": {
+      "post": {
+        "operationId": "reorderMyOrder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReorderOutputBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Clone a past order onto a new supply date (partial fallback)",
+        "tags": [
+          "employee",
+          "order"
+        ]
+      }
+    },
     "/api/employee/orders/{id}": {
       "get": {
         "operationId": "getMyOrder",
@@ -3582,6 +4222,142 @@
         "tags": [
           "employee",
           "order"
+        ]
+      }
+    },
+    "/api/employee/recommendations": {
+      "get": {
+        "operationId": "listEmployeeRecommendations",
+        "parameters": [
+          {
+            "description": "YYYY-MM-DD target day; defaults to server-derived target_day",
+            "explode": false,
+            "in": "query",
+            "name": "day",
+            "schema": {
+              "description": "YYYY-MM-DD target day; defaults to server-derived target_day",
+              "type": "string"
+            }
+          },
+          {
+            "description": "opaque integer offset (0 to start)",
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "description": "opaque integer offset (0 to start)",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "page size; defaults to 5",
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "description": "page size; defaults to 5",
+              "format": "int64",
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Paginated recommendation chips (推薦你今天)",
+        "tags": [
+          "employee",
+          "menu"
+        ]
+      }
+    },
+    "/api/employee/reorders": {
+      "get": {
+        "operationId": "listEmployeeReorders",
+        "parameters": [
+          {
+            "description": "opaque integer offset returned by a previous response (0 to start)",
+            "explode": false,
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "description": "opaque integer offset returned by a previous response (0 to start)",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "page size; defaults to 5",
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "description": "page size; defaults to 5",
+              "format": "int64",
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReordersOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Paginated reorder chips (再點一次)",
+        "tags": [
+          "employee",
+          "menu"
         ]
       }
     },

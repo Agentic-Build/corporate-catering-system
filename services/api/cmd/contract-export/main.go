@@ -35,6 +35,9 @@ func main() {
 	(&payrollhttp.API{}).Register(api)
 	(&chttp.API{}).Register(api)
 	(&dlqhttp.API{}).Register(api)
+	(&mhttp.FavoritesAPI{}).Register(api)
+	(&ohttp.ReorderAPI{}).Register(api)
+	(&mhttp.HomeAPI{}).Register(api)
 
 	j, err := api.OpenAPI().MarshalJSON()
 	if err != nil {

@@ -196,7 +196,7 @@ Three thin queries (each ~5-7 lines):
 SELECT oi.menu_item_id, SUM(oi.qty)::float AS popularity
 FROM "order" o JOIN order_item oi ON oi.order_id = o.id
 WHERE o.supply_date = $1 AND o.plant_id = $2
-  AND o.status IN ('confirmed','ready','picked_up')
+  AND o.status IN ('cutoff','ready','picked_up')
 GROUP BY oi.menu_item_id;
 
 -- (b) UserVendorAffinity(user_id, since): vendor_id, COUNT(*)
@@ -204,7 +204,7 @@ SELECT mi.vendor_id, COUNT(*)::float AS cnt
 FROM "order" o JOIN order_item oi ON oi.order_id = o.id
 JOIN menu_item mi ON mi.id = oi.menu_item_id
 WHERE o.user_id = $1 AND o.supply_date >= CURRENT_DATE - INTERVAL '30 days'
-  AND o.status IN ('confirmed','ready','picked_up')
+  AND o.status IN ('cutoff','ready','picked_up')
 GROUP BY mi.vendor_id;
 
 -- (c) MenuItemMeta(ids): id, name, unit_price, vendor_id
@@ -224,7 +224,7 @@ WITH ranked AS (
     ROW_NUMBER() OVER (PARTITION BY o.vendor_id ORDER BY o.supply_date DESC) AS rn
   FROM "order" o
   WHERE o.user_id = $1
-    AND o.status IN ('confirmed','ready','picked_up')
+    AND o.status IN ('cutoff','ready','picked_up')
     AND o.supply_date >= CURRENT_DATE - INTERVAL '30 days'
 )
 SELECT id, vendor_id, supply_date, total_amount, freq
