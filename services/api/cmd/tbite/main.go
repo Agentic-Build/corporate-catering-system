@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -270,6 +271,65 @@ func main() {
 			}
 		}
 
+		// 7i. P9 personalisation: favorites, reorder, home aggregate. All three
+		// share the existing repos; only favorites needs a new table (000008).
+		favoriteRepo := mpgrepo.NewFavoriteRepo(pool)
+		favoritesSvc := menu.NewFavoritesService(favoriteRepo)
+		favoritesAPI := &mhttp.FavoritesAPI{Svc: favoritesSvc}
+
+		reorderSvc := order.NewReorderService(
+			pool,
+			orderRepo,
+			p9SupplyRepoAdapter{inner: supplyRepo},
+			p9ItemRepoAdapter{inner: itemRepo},
+			stateEventRepo,
+			auditRepo,
+			outboxRepo,
+			clock.SystemClock{},
+		)
+		reorderAPI := &ohttp.ReorderAPI{Svc: reorderSvc}
+
+		alpha := 1.0
+		if raw := os.Getenv("RECOMMENDATION_ALPHA"); raw != "" {
+			if v, err := strconv.ParseFloat(raw, 64); err == nil {
+				alpha = v
+			} else {
+				logger.Warn("invalid RECOMMENDATION_ALPHA; defaulting to 1.0", "raw", raw)
+			}
+		}
+		popularityRepo := mpgrepo.NewPopularityRepo(pool)
+		affinityRepo := mpgrepo.NewAffinityRepo(pool)
+		recentOrdersRepo := opgrepo.NewRecentOrdersRepo(pool)
+		homeSvc := &menu.HomeService{
+			Clock:         clock.SystemClock{},
+			ServerTZ:      time.Local,
+			RecentOrders:  recentOrdersRepo,
+			Popularity:    popularityRepo,
+			Affinity:      affinityRepo,
+			FavoritesRepo: favoriteRepo,
+			Alpha:         alpha,
+			VendorNames: func(ctx context.Context, ids []string) (map[string]string, error) {
+				out := map[string]string{}
+				if len(ids) == 0 {
+					return out, nil
+				}
+				rows, err := pool.Query(ctx, `SELECT id, display_name FROM vendor WHERE id = ANY($1)`, ids)
+				if err != nil {
+					return nil, err
+				}
+				defer rows.Close()
+				for rows.Next() {
+					var id, name string
+					if err := rows.Scan(&id, &name); err != nil {
+						return nil, err
+					}
+					out[id] = name
+				}
+				return out, rows.Err()
+			},
+		}
+		homeAPI := &mhttp.HomeAPI{Home: homeSvc, MenuSvc: menuService}
+
 		// 8. HTTP server. When FAKE_OIDC=1, swap the google provider for a
 		// deterministic fake and mount its auto-redirect handler. Used for
 		// local dev and Playwright e2e — never enable in production.
@@ -324,6 +384,9 @@ func main() {
 			payrollAPI.Register,
 			complianceAPI.Register,
 			dlqAPI.Register,
+			favoritesAPI.Register,
+			reorderAPI.Register,
+			homeAPI.Register,
 		)
 		if err := srv.Run(ctx); err != nil {
 			logger.Error("api shutdown", "err", err)
