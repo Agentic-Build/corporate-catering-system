@@ -2,7 +2,6 @@ package menu
 
 import (
 	"context"
-	"time"
 )
 
 // Service orchestrates menu CRUD with vendor-ownership enforcement.
@@ -158,11 +157,14 @@ type EmployeeMenuItem struct {
 	ETALabel     string
 }
 
-// ListForEmployee returns active menu items available at the given plant on
-// the given day, including supply data and images. The plant filter ensures
-// employees only see vendors that serve their plant (per vendor_plant_mapping).
-func (s *Service) ListForEmployee(ctx context.Context, plant string, day time.Time) ([]EmployeeMenuItem, error) {
-	rows, err := s.Items.ListActiveByPlant(ctx, plant, day)
+// ListForEmployee returns active menu items available at the plant/day in the
+// filter, including supply data and images. The plant filter ensures employees
+// only see vendors that serve their plant (per vendor_plant_mapping). The
+// optional search/filter/sort criteria on the filter are pushed down to the
+// repository SQL; a filter carrying only Plant/Day behaves identically to the
+// historical unfiltered listing.
+func (s *Service) ListForEmployee(ctx context.Context, f EmployeeMenuFilter) ([]EmployeeMenuItem, error) {
+	rows, err := s.Items.ListActiveByPlant(ctx, f)
 	if err != nil {
 		return nil, err
 	}

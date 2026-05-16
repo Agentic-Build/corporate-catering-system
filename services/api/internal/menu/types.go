@@ -42,6 +42,34 @@ type Image struct {
 	CreatedAt time.Time
 }
 
+// EmployeeMenuSort enumerates the supported sort orders for the employee menu.
+// An empty value preserves the historical default ordering (vendor, then name).
+type EmployeeMenuSort string
+
+const (
+	EmployeeMenuSortDefault   EmployeeMenuSort = ""
+	EmployeeMenuSortName      EmployeeMenuSort = "name"
+	EmployeeMenuSortPriceAsc  EmployeeMenuSort = "price_asc"
+	EmployeeMenuSortPriceDesc EmployeeMenuSort = "price_desc"
+	EmployeeMenuSortRemain    EmployeeMenuSort = "remain"
+)
+
+// EmployeeMenuFilter carries the plant/day selectors plus the optional
+// search/filter/sort criteria for the employee menu listing. Every optional
+// field has a zero value meaning "not supplied"; a zero-valued filter (apart
+// from Plant/Day) yields behaviour identical to the unfiltered listing.
+type EmployeeMenuFilter struct {
+	Plant string
+	Day   time.Time
+
+	Q        string           // keyword matched against name/description
+	Tags     []string         // health tags; item matches if it has ANY of these
+	PriceMin *int64           // inclusive lower price bound (minor units)
+	PriceMax *int64           // inclusive upper price bound (minor units)
+	InStock  *bool            // when true, exclude sold-out items
+	Sort     EmployeeMenuSort // result ordering
+}
+
 // ActiveItemRow is the join result returned by ListActiveByPlant.
 // Captures item + vendor display name + supply fields the employee menu view needs.
 type ActiveItemRow struct {

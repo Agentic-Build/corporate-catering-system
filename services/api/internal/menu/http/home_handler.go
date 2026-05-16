@@ -171,7 +171,7 @@ func (a *HomeAPI) getHome(ctx context.Context, in *homeInput) (*homeOutput, erro
 	if err != nil {
 		return nil, huma.Error500InternalServerError("recommendation chips", err)
 	}
-	dayMenu, err := a.MenuSvc.ListForEmployee(ctx, plant, dayT)
+	dayMenu, err := a.MenuSvc.ListForEmployee(ctx, menu.EmployeeMenuFilter{Plant: plant, Day: dayT})
 	if err != nil {
 		return nil, mapErr(err)
 	}

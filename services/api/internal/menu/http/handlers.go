@@ -140,8 +140,14 @@ type listItemsOutput struct {
 }
 
 type listEmployeeMenuInput struct {
-	Plant string `query:"plant" doc:"Plant code; defaults to caller's plant"`
-	Day   string `query:"day" doc:"YYYY-MM-DD; defaults to today UTC"`
+	Plant    string   `query:"plant" doc:"Plant code; defaults to caller's plant"`
+	Day      string   `query:"day" doc:"YYYY-MM-DD; defaults to today UTC"`
+	Q        string   `query:"q" doc:"Keyword matched against item name/description"`
+	Tags     []string `query:"tags" doc:"Health tags; an item matches if it carries ANY of these"`
+	PriceMin int64    `query:"price_min" minimum:"0" doc:"Inclusive minimum price in minor units; 0 = no lower bound"`
+	PriceMax int64    `query:"price_max" minimum:"0" doc:"Inclusive maximum price in minor units; 0 = no upper bound"`
+	InStock  bool     `query:"in_stock" doc:"When true, exclude sold-out items"`
+	Sort     string   `query:"sort" enum:"name,price_asc,price_desc,remain" doc:"Result ordering; defaults to vendor then name"`
 }
 
 type listEmployeeMenuOutput struct {
@@ -406,7 +412,26 @@ func (a *API) listEmployeeMenu(ctx context.Context, in *listEmployeeMenuInput) (
 		}
 		day = d.UTC()
 	}
-	items, err := a.Svc.ListForEmployee(ctx, plant, day)
+	// huma forbids pointer query params, so the wire struct uses value types;
+	// 0 / false means "not supplied" and maps to a nil filter field (no filter).
+	filter := menu.EmployeeMenuFilter{
+		Plant: plant,
+		Day:   day,
+		Q:     in.Q,
+		Tags:  in.Tags,
+		Sort:  menu.EmployeeMenuSort(in.Sort),
+	}
+	if in.PriceMin > 0 {
+		filter.PriceMin = &in.PriceMin
+	}
+	if in.PriceMax > 0 {
+		filter.PriceMax = &in.PriceMax
+	}
+	if in.InStock {
+		inStock := true
+		filter.InStock = &inStock
+	}
+	items, err := a.Svc.ListForEmployee(ctx, filter)
 	if err != nil {
 		return nil, mapErr(err)
 	}

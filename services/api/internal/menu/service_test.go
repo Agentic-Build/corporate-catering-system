@@ -81,6 +81,7 @@ type fakeItemRepo struct {
 	byID          map[string]*menu.Item
 	activeByPlant map[string][]*menu.ActiveItemRow
 	nextID        int
+	lastFilter    menu.EmployeeMenuFilter // captures the most recent ListActiveByPlant arg
 }
 
 func newFakeItemRepo() *fakeItemRepo {
@@ -151,16 +152,17 @@ func (r *fakeItemRepo) ListByVendor(_ context.Context, vendorID string, includeA
 	return out, nil
 }
 
-func (r *fakeItemRepo) ListActiveByPlant(_ context.Context, plant string, _ time.Time) ([]*menu.ActiveItemRow, error) {
+func (r *fakeItemRepo) ListActiveByPlant(_ context.Context, f menu.EmployeeMenuFilter) ([]*menu.ActiveItemRow, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.activeByPlant[plant], nil
+	r.lastFilter = f
+	return r.activeByPlant[f.Plant], nil
 }
 
 type fakeImageRepo struct {
-	mu      sync.Mutex
-	byItem  map[string][]*menu.Image
-	nextID  int
+	mu     sync.Mutex
+	byItem map[string][]*menu.Image
+	nextID int
 }
 
 func newFakeImageRepo() *fakeImageRepo {
@@ -293,7 +295,7 @@ func TestService_ListForEmployee_JoinsImagesAndMarksSoldOut(t *testing.T) {
 		},
 	}
 
-	out, err := svc.ListForEmployee(ctx, "F12B-3F", day)
+	out, err := svc.ListForEmployee(ctx, menu.EmployeeMenuFilter{Plant: "F12B-3F", Day: day})
 	require.NoError(t, err)
 	require.Len(t, out, 1)
 	got := out[0]
@@ -305,6 +307,30 @@ func TestService_ListForEmployee_JoinsImagesAndMarksSoldOut(t *testing.T) {
 	assert.Equal(t, []string{"blob://1", "blob://2"}, got.Images)
 	assert.Equal(t, []string{"招牌"}, got.Tags)
 	assert.Equal(t, "12:00-12:30", got.PickupWindow)
+}
+
+func TestService_ListForEmployee_PassesFilterToRepo(t *testing.T) {
+	svc, _, ir, _ := newSvc()
+	ctx := context.Background()
+	day := time.Date(2026, 5, 14, 0, 0, 0, 0, time.UTC)
+	priceMin := int64(8000)
+	inStock := true
+
+	f := menu.EmployeeMenuFilter{
+		Plant:    "F12B-3F",
+		Day:      day,
+		Q:        "雞腿",
+		Tags:     []string{"低卡", "高蛋白"},
+		PriceMin: &priceMin,
+		InStock:  &inStock,
+		Sort:     menu.EmployeeMenuSortPriceAsc,
+	}
+	_, err := svc.ListForEmployee(ctx, f)
+	require.NoError(t, err)
+
+	// The service must push the filter through to the repository untouched;
+	// all search/filter/sort work happens in repo SQL.
+	assert.Equal(t, f, ir.lastFilter)
 }
 
 func TestService_CreateCategory_And_List(t *testing.T) {
