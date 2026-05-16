@@ -12,11 +12,13 @@ import (
 
 	chttp "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/http"
 	dlqhttp "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/http"
+	feedbackhttp "github.com/takalawang/corporate-catering-system/services/api/internal/feedback/http"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
 	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
 	payrollhttp "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/http"
 	qhttp "github.com/takalawang/corporate-catering-system/services/api/internal/quota/http"
+	settlementhttp "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/http"
 	vhttp "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/http"
 )
 
@@ -38,6 +40,8 @@ func main() {
 	(&mhttp.FavoritesAPI{}).Register(api)
 	(&ohttp.ReorderAPI{}).Register(api)
 	(&mhttp.HomeAPI{}).Register(api)
+	(&feedbackhttp.API{}).Register(api)
+	(&settlementhttp.API{}).Register(api)
 
 	j, err := api.OpenAPI().MarshalJSON()
 	if err != nil {

@@ -72,6 +72,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/complaints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List complaints escalated to the welfare committee */
+        get: operations["listEscalatedComplaints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/complaints/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve an escalated complaint */
+        post: operations["adminResolveComplaint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/dlq": {
         parameters: {
             query?: never;
@@ -226,6 +260,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/vendor-settlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** All-vendor settlement overview for a period */
+        get: operations["listVendorSettlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/vendor-settlements/{id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void a closed settlement so the period can be re-closed */
+        post: operations["voidVendorSettlement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/vendor-settlements/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close a period: cut one settlement per vendor with orders */
+        post: operations["closeVendorSettlement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/vendors": {
         parameters: {
             query?: never;
@@ -324,6 +409,57 @@ export interface paths {
         put?: never;
         /** Upload a vendor compliance document (base64-in-JSON) */
         post: operations["uploadVendorDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/employee/complaints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List my filed complaints */
+        get: operations["listMyComplaints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/employee/complaints/{id}/escalate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Escalate a complaint to the welfare committee (24h gate) */
+        post: operations["escalateComplaint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/employee/complaints/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close my complaint as satisfied */
+        post: operations["resolveMyComplaint"];
         delete?: never;
         options?: never;
         head?: never;
@@ -469,6 +605,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/employee/orders/{id}/complaint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** File a complaint for a picked-up order */
+        post: operations["fileComplaint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/employee/orders/{id}/pickup-code": {
         parameters: {
             query?: never;
@@ -480,6 +633,23 @@ export interface paths {
         get: operations["getPickupCode"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/employee/orders/{id}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit a meal rating for a picked-up order */
+        post: operations["rateOrder"];
         delete?: never;
         options?: never;
         head?: never;
@@ -549,6 +719,57 @@ export interface paths {
         put?: never;
         /** Create a menu category for the merchant */
         post: operations["createMerchantCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/complaints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List complaints for my vendor (the complaint inbox) */
+        get: operations["listVendorComplaints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/complaints/{id}/respond": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Respond to an open complaint */
+        post: operations["respondToComplaint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/compliance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** View own vendor compliance status, documents, and warnings */
+        get: operations["getMerchantCompliance"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -675,6 +896,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live monthly reconciliation summary for the calling vendor */
+        get: operations["getMerchantReconciliation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/settlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the calling vendor's closed settlements */
+        get: operations["listMerchantSettlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/settlements/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one settlement with order-level detail */
+        get: operations["getMerchantSettlement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/supply": {
         parameters: {
             query?: never;
@@ -791,6 +1063,15 @@ export interface components {
             /** Format: uuid */
             menu_item_id: string;
         };
+        AdminResolveInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AdminResolveInputBody.json
+             */
+            readonly $schema?: string;
+            resolution: string;
+        };
         AnomalyActionInputBody: {
             /**
              * Format: uri
@@ -873,6 +1154,52 @@ export interface components {
             name: string;
             /** Format: int64 */
             sort_order: number;
+        };
+        CloseSettlementInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CloseSettlementInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description YYYY-MM-DD */
+            period_end: string;
+            /** @description YYYY-MM-DD */
+            period_start: string;
+        };
+        CloseSettlementOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CloseSettlementOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["SettlementDTO"][] | null;
+        };
+        ComplaintDTO: {
+            category: string;
+            created_at: string;
+            description: string;
+            escalated_at?: string;
+            id: string;
+            order_id: string;
+            resolution: string;
+            resolved_at?: string;
+            resolved_by?: string;
+            status: string;
+            user_id: string;
+            vendor_id: string;
+            vendor_responded_at?: string;
+            vendor_response: string;
+        };
+        ComplaintOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ComplaintOutputBody.json
+             */
+            readonly $schema?: string;
+            complaint: components["schemas"]["ComplaintDTO"];
         };
         CreateBatchInputBody: {
             /**
@@ -1060,6 +1387,17 @@ export interface components {
             unit_price: number;
             vendor_id: string;
         };
+        FileComplaintInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/FileComplaintInputBody.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            category: "wrong_item" | "missing_item" | "quality" | "portion" | "hygiene" | "other";
+            description: string;
+        };
         HomeOutputBody: {
             /**
              * Format: uri
@@ -1148,6 +1486,15 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["CategoryDTO"][] | null;
         };
+        ListComplaintsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListComplaintsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["ComplaintDTO"][] | null;
+        };
         ListDisputesOutputBody: {
             /**
              * Format: uri
@@ -1222,6 +1569,15 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["MessageDTO"][] | null;
         };
+        ListSettlementsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListSettlementsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["SettlementDTO"][] | null;
+        };
         ListSupplyOutputBody: {
             /**
              * Format: uri
@@ -1265,6 +1621,17 @@ export interface components {
             role: string;
             user_id: string;
             vendor_id?: string;
+        };
+        MerchantComplianceOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MerchantComplianceOutputBody.json
+             */
+            readonly $schema?: string;
+            documents: components["schemas"]["DocumentDTO"][] | null;
+            vendor: components["schemas"]["VendorInfoDTO"];
+            warnings: components["schemas"]["WarningDTO"][] | null;
         };
         MerchantItemDTO: {
             badges: string[] | null;
@@ -1346,6 +1713,15 @@ export interface components {
             /** Format: int64 */
             unit_price_minor: number;
         };
+        OrderLineDTO: {
+            order_id: string;
+            /** Format: int64 */
+            portion_count: number;
+            status: string;
+            supply_date: string;
+            /** Format: int64 */
+            total_price_minor: number;
+        };
         OrderOutputBody: {
             /**
              * Format: uri
@@ -1395,6 +1771,36 @@ export interface components {
             readonly $schema?: string;
             order: components["schemas"]["OrderDTO"];
         };
+        RateOrderInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RateOrderInputBody.json
+             */
+            readonly $schema?: string;
+            comment: string;
+            /** Format: int64 */
+            score: number;
+        };
+        RatingDTO: {
+            comment: string;
+            created_at: string;
+            id: string;
+            order_id: string;
+            /** Format: int64 */
+            score: number;
+            user_id: string;
+            vendor_id: string;
+        };
+        RatingOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RatingOutputBody.json
+             */
+            readonly $schema?: string;
+            rating: components["schemas"]["RatingDTO"];
+        };
         RecommendChipDTO: {
             menu_item_id: string;
             name: string;
@@ -1415,6 +1821,27 @@ export interface components {
             chips: components["schemas"]["RecommendChipDTO"][] | null;
             /** Format: int64 */
             next_cursor?: number;
+        };
+        ReconciliationDTO: {
+            breakdown: components["schemas"]["StatusBreakdownDTO"];
+            /** Format: int64 */
+            gross_minor: number;
+            /** Format: int64 */
+            order_count: number;
+            period_end: string;
+            period_start: string;
+            /** Format: int64 */
+            portion_count: number;
+            vendor_id: string;
+        };
+        ReconciliationOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReconciliationOutputBody.json
+             */
+            readonly $schema?: string;
+            reconciliation: components["schemas"]["ReconciliationDTO"];
         };
         ReorderChipDTO: {
             available_today: boolean;
@@ -1490,6 +1917,15 @@ export interface components {
             readonly $schema?: string;
             notes: string;
         };
+        RespondComplaintInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RespondComplaintInputBody.json
+             */
+            readonly $schema?: string;
+            response: string;
+        };
         ReviewDocumentInputBody: {
             /**
              * Format: uri
@@ -1515,6 +1951,31 @@ export interface components {
             eta_label: string;
             pickup_window: string;
         };
+        SettlementDTO: {
+            closed_at: string;
+            closed_by?: string;
+            /** Format: int64 */
+            gross_minor: number;
+            id: string;
+            /** Format: int64 */
+            order_count: number;
+            period_end: string;
+            period_start: string;
+            /** Format: int64 */
+            portion_count: number;
+            status: string;
+            vendor_id: string;
+        };
+        SettlementDetailOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SettlementDetailOutputBody.json
+             */
+            readonly $schema?: string;
+            orders: components["schemas"]["OrderLineDTO"][] | null;
+            settlement: components["schemas"]["SettlementDTO"];
+        };
         StartLoginInputBody: {
             /**
              * Format: uri
@@ -1536,6 +1997,16 @@ export interface components {
             readonly $schema?: string;
             auth_url: string;
             state: string;
+        };
+        StatusBreakdownDTO: {
+            /** Format: int64 */
+            cancelled: number;
+            /** Format: int64 */
+            no_show: number;
+            /** Format: int64 */
+            picked_up: number;
+            /** Format: int64 */
+            refunded: number;
         };
         SupplyDTO: {
             /** Format: int64 */
@@ -1609,6 +2080,11 @@ export interface components {
             plants?: string[] | null;
             status: string;
         };
+        VendorInfoDTO: {
+            display_name: string;
+            id: string;
+            status: string;
+        };
         VerifyPickupInputBody: {
             /**
              * Format: uri
@@ -1617,6 +2093,11 @@ export interface components {
              */
             readonly $schema?: string;
             code: string;
+        };
+        WarningDTO: {
+            kind: string;
+            message: string;
+            severity: string;
         };
     };
     responses: never;
@@ -1747,6 +2228,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ListAuditOutputBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listEscalatedComplaints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListComplaintsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    adminResolveComplaint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminResolveInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {
@@ -2076,6 +2619,103 @@ export interface operations {
             };
         };
     };
+    listVendorSettlements: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Month to summarise, YYYY-MM
+                 * @example 2026-04
+                 */
+                period?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListSettlementsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    voidVendorSettlement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    closeVendorSettlement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CloseSettlementInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloseSettlementOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     listVendors: {
         parameters: {
             query?: {
@@ -2331,6 +2971,93 @@ export interface operations {
             };
         };
     };
+    listMyComplaints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListComplaintsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    escalateComplaint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    resolveMyComplaint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     listMyDisputes: {
         parameters: {
             query?: never;
@@ -2528,6 +3255,18 @@ export interface operations {
                 plant?: string;
                 /** @description YYYY-MM-DD; defaults to today UTC */
                 day?: string;
+                /** @description Keyword matched against item name/description */
+                q?: string;
+                /** @description Health tags; an item matches if it carries ANY of these */
+                tags?: string[] | null;
+                /** @description Inclusive minimum price in minor units; 0 = no lower bound */
+                price_min?: number;
+                /** @description Inclusive maximum price in minor units; 0 = no upper bound */
+                price_max?: number;
+                /** @description When true, exclude sold-out items */
+                in_stock?: boolean;
+                /** @description Result ordering; defaults to vendor then name */
+                sort?: "name" | "price_asc" | "price_desc" | "remain";
             };
             header?: never;
             path?: never;
@@ -2677,6 +3416,41 @@ export interface operations {
             };
         };
     };
+    fileComplaint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileComplaintInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplaintOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     getPickupCode: {
         parameters: {
             query?: never;
@@ -2695,6 +3469,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PickupCodeOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    rateOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateOrderInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RatingOutputBody"];
                 };
             };
             /** @description Error */
@@ -2860,6 +3669,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreateCategoryOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listVendorComplaints: {
+        parameters: {
+            query?: {
+                status?: "open" | "vendor_responded" | "escalated" | "resolved" | "";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListComplaintsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    respondToComplaint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RespondComplaintInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getMerchantCompliance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantComplianceOutputBody"];
                 };
             };
             /** @description Error */
@@ -3116,6 +4018,101 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getMerchantReconciliation: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Month to summarise, YYYY-MM
+                 * @example 2026-04
+                 */
+                period?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReconciliationOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listMerchantSettlements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListSettlementsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getMerchantSettlement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementDetailOutputBody"];
+                };
             };
             /** @description Error */
             default: {

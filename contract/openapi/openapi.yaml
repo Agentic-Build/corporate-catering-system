@@ -16,6 +16,22 @@ components:
             required:
                 - menu_item_id
             type: object
+        AdminResolveInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/AdminResolveInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                resolution:
+                    minLength: 5
+                    type: string
+            required:
+                - resolution
+            type: object
         AnomalyActionInputBody:
             additionalProperties: false
             properties:
@@ -202,6 +218,103 @@ components:
                 - id
                 - name
                 - sort_order
+            type: object
+        CloseSettlementInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/CloseSettlementInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                period_end:
+                    description: YYYY-MM-DD
+                    type: string
+                period_start:
+                    description: YYYY-MM-DD
+                    type: string
+            required:
+                - period_start
+                - period_end
+            type: object
+        CloseSettlementOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/CloseSettlementOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/SettlementDTO'
+                    type:
+                        - array
+                        - "null"
+            required:
+                - items
+            type: object
+        ComplaintDTO:
+            additionalProperties: false
+            properties:
+                category:
+                    type: string
+                created_at:
+                    type: string
+                description:
+                    type: string
+                escalated_at:
+                    type: string
+                id:
+                    type: string
+                order_id:
+                    type: string
+                resolution:
+                    type: string
+                resolved_at:
+                    type: string
+                resolved_by:
+                    type: string
+                status:
+                    type: string
+                user_id:
+                    type: string
+                vendor_id:
+                    type: string
+                vendor_responded_at:
+                    type: string
+                vendor_response:
+                    type: string
+            required:
+                - id
+                - order_id
+                - user_id
+                - vendor_id
+                - category
+                - description
+                - status
+                - vendor_response
+                - resolution
+                - created_at
+            type: object
+        ComplaintOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ComplaintOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                complaint:
+                    $ref: '#/components/schemas/ComplaintDTO'
+            required:
+                - complaint
             type: object
         CreateBatchInputBody:
             additionalProperties: false
@@ -591,6 +704,33 @@ components:
                 - vendor_id
                 - available_today
             type: object
+        FileComplaintInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/FileComplaintInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                category:
+                    enum:
+                        - wrong_item
+                        - missing_item
+                        - quality
+                        - portion
+                        - hygiene
+                        - other
+                    type: string
+                description:
+                    maxLength: 1000
+                    minLength: 5
+                    type: string
+            required:
+                - category
+                - description
+            type: object
         HomeOutputBody:
             additionalProperties: false
             properties:
@@ -805,6 +945,25 @@ components:
             required:
                 - items
             type: object
+        ListComplaintsOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ListComplaintsOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/ComplaintDTO'
+                    type:
+                        - array
+                        - "null"
+            required:
+                - items
+            type: object
         ListDisputesOutputBody:
             additionalProperties: false
             properties:
@@ -962,6 +1121,25 @@ components:
             required:
                 - items
             type: object
+        ListSettlementsOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ListSettlementsOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/SettlementDTO'
+                    type:
+                        - array
+                        - "null"
+            required:
+                - items
+            type: object
         ListSupplyOutputBody:
             additionalProperties: false
             properties:
@@ -1054,6 +1232,35 @@ components:
                 - email
                 - display_name
                 - role
+            type: object
+        MerchantComplianceOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/MerchantComplianceOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                documents:
+                    items:
+                        $ref: '#/components/schemas/DocumentDTO'
+                    type:
+                        - array
+                        - "null"
+                vendor:
+                    $ref: '#/components/schemas/VendorInfoDTO'
+                warnings:
+                    items:
+                        $ref: '#/components/schemas/WarningDTO'
+                    type:
+                        - array
+                        - "null"
+            required:
+                - vendor
+                - documents
+                - warnings
             type: object
         MerchantItemDTO:
             additionalProperties: false
@@ -1257,6 +1464,28 @@ components:
                 - qty
                 - unit_price_minor
             type: object
+        OrderLineDTO:
+            additionalProperties: false
+            properties:
+                order_id:
+                    type: string
+                portion_count:
+                    format: int64
+                    type: integer
+                status:
+                    type: string
+                supply_date:
+                    type: string
+                total_price_minor:
+                    format: int64
+                    type: integer
+            required:
+                - order_id
+                - supply_date
+                - status
+                - total_price_minor
+                - portion_count
+            type: object
         OrderOutputBody:
             additionalProperties: false
             properties:
@@ -1355,6 +1584,70 @@ components:
             required:
                 - order
             type: object
+        RateOrderInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/RateOrderInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                comment:
+                    maxLength: 500
+                    type: string
+                score:
+                    format: int64
+                    maximum: 5
+                    minimum: 1
+                    type: integer
+            required:
+                - score
+                - comment
+            type: object
+        RatingDTO:
+            additionalProperties: false
+            properties:
+                comment:
+                    type: string
+                created_at:
+                    type: string
+                id:
+                    type: string
+                order_id:
+                    type: string
+                score:
+                    format: int64
+                    type: integer
+                user_id:
+                    type: string
+                vendor_id:
+                    type: string
+            required:
+                - id
+                - order_id
+                - user_id
+                - vendor_id
+                - score
+                - comment
+                - created_at
+            type: object
+        RatingOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/RatingOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                rating:
+                    $ref: '#/components/schemas/RatingDTO'
+            required:
+                - rating
+            type: object
         RecommendChipDTO:
             additionalProperties: false
             properties:
@@ -1401,6 +1694,50 @@ components:
                     type: integer
             required:
                 - chips
+            type: object
+        ReconciliationDTO:
+            additionalProperties: false
+            properties:
+                breakdown:
+                    $ref: '#/components/schemas/StatusBreakdownDTO'
+                gross_minor:
+                    format: int64
+                    type: integer
+                order_count:
+                    format: int64
+                    type: integer
+                period_end:
+                    type: string
+                period_start:
+                    type: string
+                portion_count:
+                    format: int64
+                    type: integer
+                vendor_id:
+                    type: string
+            required:
+                - vendor_id
+                - period_start
+                - period_end
+                - order_count
+                - portion_count
+                - gross_minor
+                - breakdown
+            type: object
+        ReconciliationOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ReconciliationOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                reconciliation:
+                    $ref: '#/components/schemas/ReconciliationDTO'
+            required:
+                - reconciliation
             type: object
         ReorderChipDTO:
             additionalProperties: false
@@ -1552,6 +1889,22 @@ components:
             required:
                 - notes
             type: object
+        RespondComplaintInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/RespondComplaintInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                response:
+                    minLength: 5
+                    type: string
+            required:
+                - response
+            type: object
         ReviewDocumentInputBody:
             additionalProperties: false
             properties:
@@ -1600,6 +1953,65 @@ components:
                 - eta_label
                 - cutoff_at
             type: object
+        SettlementDTO:
+            additionalProperties: false
+            properties:
+                closed_at:
+                    type: string
+                closed_by:
+                    type: string
+                gross_minor:
+                    format: int64
+                    type: integer
+                id:
+                    type: string
+                order_count:
+                    format: int64
+                    type: integer
+                period_end:
+                    type: string
+                period_start:
+                    type: string
+                portion_count:
+                    format: int64
+                    type: integer
+                status:
+                    type: string
+                vendor_id:
+                    type: string
+            required:
+                - id
+                - vendor_id
+                - period_start
+                - period_end
+                - order_count
+                - portion_count
+                - gross_minor
+                - status
+                - closed_at
+            type: object
+        SettlementDetailOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/SettlementDetailOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                orders:
+                    items:
+                        $ref: '#/components/schemas/OrderLineDTO'
+                    type:
+                        - array
+                        - "null"
+                settlement:
+                    $ref: '#/components/schemas/SettlementDTO'
+            required:
+                - settlement
+                - orders
+            type: object
         StartLoginInputBody:
             additionalProperties: false
             properties:
@@ -1640,6 +2052,27 @@ components:
             required:
                 - auth_url
                 - state
+            type: object
+        StatusBreakdownDTO:
+            additionalProperties: false
+            properties:
+                cancelled:
+                    format: int64
+                    type: integer
+                no_show:
+                    format: int64
+                    type: integer
+                picked_up:
+                    format: int64
+                    type: integer
+                refunded:
+                    format: int64
+                    type: integer
+            required:
+                - picked_up
+                - no_show
+                - cancelled
+                - refunded
             type: object
         SupplyDTO:
             additionalProperties: false
@@ -1815,6 +2248,20 @@ components:
                 - contact_email
                 - status
             type: object
+        VendorInfoDTO:
+            additionalProperties: false
+            properties:
+                display_name:
+                    type: string
+                id:
+                    type: string
+                status:
+                    type: string
+            required:
+                - id
+                - display_name
+                - status
+            type: object
         VerifyPickupInputBody:
             additionalProperties: false
             properties:
@@ -1831,6 +2278,20 @@ components:
                     type: string
             required:
                 - code
+            type: object
+        WarningDTO:
+            additionalProperties: false
+            properties:
+                kind:
+                    type: string
+                message:
+                    type: string
+                severity:
+                    type: string
+            required:
+                - kind
+                - message
+                - severity
             type: object
     securitySchemes:
         bearer:
@@ -1991,6 +2452,59 @@ paths:
             tags:
                 - admin
                 - compliance
+    /api/admin/complaints:
+        get:
+            operationId: listEscalatedComplaints
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListComplaintsOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: List complaints escalated to the welfare committee
+            tags:
+                - admin
+                - feedback
+    /api/admin/complaints/{id}/resolve:
+        post:
+            operationId: adminResolveComplaint
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AdminResolveInputBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Resolve an escalated complaint
+            tags:
+                - admin
+                - feedback
     /api/admin/dlq:
         get:
             operationId: listDLQ
@@ -2296,6 +2810,92 @@ paths:
             tags:
                 - admin
                 - payroll
+    /api/admin/vendor-settlements:
+        get:
+            operationId: listVendorSettlements
+            parameters:
+                - description: Month to summarise, YYYY-MM
+                  example: 2026-04
+                  explode: false
+                  in: query
+                  name: period
+                  schema:
+                    description: Month to summarise, YYYY-MM
+                    examples:
+                        - 2026-04
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSettlementsOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: All-vendor settlement overview for a period
+            tags:
+                - admin
+                - settlement
+    /api/admin/vendor-settlements/{id}/void:
+        post:
+            operationId: voidVendorSettlement
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Void a closed settlement so the period can be re-closed
+            tags:
+                - admin
+                - settlement
+    /api/admin/vendor-settlements/close:
+        post:
+            operationId: closeVendorSettlement
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CloseSettlementInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CloseSettlementOutputBody'
+                    description: Created
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: 'Close a period: cut one settlement per vendor with orders'
+            tags:
+                - admin
+                - settlement
     /api/admin/vendors:
         get:
             operationId: listVendors
@@ -2537,6 +3137,78 @@ paths:
             tags:
                 - admin
                 - compliance
+    /api/employee/complaints:
+        get:
+            operationId: listMyComplaints
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListComplaintsOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: List my filed complaints
+            tags:
+                - employee
+                - feedback
+    /api/employee/complaints/{id}/escalate:
+        post:
+            operationId: escalateComplaint
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Escalate a complaint to the welfare committee (24h gate)
+            tags:
+                - employee
+                - feedback
+    /api/employee/complaints/{id}/resolve:
+        post:
+            operationId: resolveMyComplaint
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Close my complaint as satisfied
+            tags:
+                - employee
+                - feedback
     /api/employee/disputes:
         get:
             operationId: listMyDisputes
@@ -2727,6 +3399,61 @@ paths:
                   schema:
                     description: YYYY-MM-DD; defaults to today UTC
                     type: string
+                - description: Keyword matched against item name/description
+                  explode: false
+                  in: query
+                  name: q
+                  schema:
+                    description: Keyword matched against item name/description
+                    type: string
+                - description: Health tags; an item matches if it carries ANY of these
+                  explode: false
+                  in: query
+                  name: tags
+                  schema:
+                    description: Health tags; an item matches if it carries ANY of these
+                    items:
+                        type: string
+                    type:
+                        - array
+                        - "null"
+                - description: Inclusive minimum price in minor units; 0 = no lower bound
+                  explode: false
+                  in: query
+                  name: price_min
+                  schema:
+                    description: Inclusive minimum price in minor units; 0 = no lower bound
+                    format: int64
+                    minimum: 0
+                    type: integer
+                - description: Inclusive maximum price in minor units; 0 = no upper bound
+                  explode: false
+                  in: query
+                  name: price_max
+                  schema:
+                    description: Inclusive maximum price in minor units; 0 = no upper bound
+                    format: int64
+                    minimum: 0
+                    type: integer
+                - description: When true, exclude sold-out items
+                  explode: false
+                  in: query
+                  name: in_stock
+                  schema:
+                    description: When true, exclude sold-out items
+                    type: boolean
+                - description: Result ordering; defaults to vendor then name
+                  explode: false
+                  in: query
+                  name: sort
+                  schema:
+                    description: Result ordering; defaults to vendor then name
+                    enum:
+                        - name
+                        - price_asc
+                        - price_desc
+                        - remain
+                    type: string
             responses:
                 "200":
                     content:
@@ -2849,6 +3576,41 @@ paths:
             tags:
                 - employee
                 - order
+    /api/employee/orders/{id}/complaint:
+        post:
+            operationId: fileComplaint
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FileComplaintInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ComplaintOutputBody'
+                    description: Created
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: File a complaint for a picked-up order
+            tags:
+                - employee
+                - feedback
     /api/employee/orders/{id}/pickup-code:
         get:
             operationId: getPickupCode
@@ -2878,6 +3640,41 @@ paths:
             tags:
                 - employee
                 - order
+    /api/employee/orders/{id}/rating:
+        post:
+            operationId: rateOrder
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RateOrderInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RatingOutputBody'
+                    description: Created
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Submit a meal rating for a picked-up order
+            tags:
+                - employee
+                - feedback
     /api/employee/orders/reorder:
         post:
             operationId: reorderMyOrder
@@ -3044,6 +3841,93 @@ paths:
             tags:
                 - merchant
                 - menu
+    /api/merchant/complaints:
+        get:
+            operationId: listVendorComplaints
+            parameters:
+                - explode: false
+                  in: query
+                  name: status
+                  schema:
+                    enum:
+                        - open
+                        - vendor_responded
+                        - escalated
+                        - resolved
+                        - ""
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListComplaintsOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: List complaints for my vendor (the complaint inbox)
+            tags:
+                - merchant
+                - feedback
+    /api/merchant/complaints/{id}/respond:
+        post:
+            operationId: respondToComplaint
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RespondComplaintInputBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Respond to an open complaint
+            tags:
+                - merchant
+                - feedback
+    /api/merchant/compliance:
+        get:
+            operationId: getMerchantCompliance
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MerchantComplianceOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: View own vendor compliance status, documents, and warnings
+            tags:
+                - merchant
+                - compliance
     /api/merchant/menu-items:
         get:
             operationId: listMerchantMenuItems
@@ -3287,6 +4171,90 @@ paths:
             tags:
                 - merchant
                 - order
+    /api/merchant/reconciliation:
+        get:
+            operationId: getMerchantReconciliation
+            parameters:
+                - description: Month to summarise, YYYY-MM
+                  example: 2026-04
+                  explode: false
+                  in: query
+                  name: period
+                  schema:
+                    description: Month to summarise, YYYY-MM
+                    examples:
+                        - 2026-04
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ReconciliationOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Live monthly reconciliation summary for the calling vendor
+            tags:
+                - merchant
+                - settlement
+    /api/merchant/settlements:
+        get:
+            operationId: listMerchantSettlements
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSettlementsOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: List the calling vendor's closed settlements
+            tags:
+                - merchant
+                - settlement
+    /api/merchant/settlements/{id}:
+        get:
+            operationId: getMerchantSettlement
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SettlementDetailOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Get one settlement with order-level detail
+            tags:
+                - merchant
+                - settlement
     /api/merchant/supply:
         get:
             operationId: listMerchantSupply

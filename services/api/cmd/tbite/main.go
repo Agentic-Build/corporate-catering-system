@@ -26,6 +26,9 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/config"
 	dlqhttp "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/http"
 	dlqpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/postgres"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/feedback"
+	feedbackhttp "github.com/takalawang/corporate-catering-system/services/api/internal/feedback/http"
+	fpg "github.com/takalawang/corporate-catering-system/services/api/internal/feedback/postgres"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
@@ -55,6 +58,9 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
 	qhttp "github.com/takalawang/corporate-catering-system/services/api/internal/quota/http"
 	qpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/settlement"
+	settlementhttp "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/http"
+	settlementpg "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/postgres"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 	vhttp "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/http"
 	vpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/postgres"
@@ -253,6 +259,7 @@ func main() {
 			Audit:    auditRepo,
 			Outbox:   outboxRepo,
 			AuditQry: auditRepo,
+			Vendors:  vpgrepo.NewVendorRepo(pool),
 			Clock:    clock.SystemClock{},
 		}
 		complianceAPI := &chttp.API{Svc: complianceService}
@@ -330,6 +337,27 @@ func main() {
 		}
 		homeAPI := &mhttp.HomeAPI{Home: homeSvc, MenuSvc: menuService}
 
+		// 7j. Feedback (F1): employee meal ratings + complaint workflow.
+		feedbackService := &feedback.Service{
+			Pool:       pool,
+			Ratings:    fpg.NewRatingRepo(pool),
+			Complaints: fpg.NewComplaintRepo(pool),
+			Orders:     fpg.NewOrderReader(pool),
+			Audit:      auditRepo,
+			Clock:      clock.SystemClock{},
+		}
+		feedbackAPI := &feedbackhttp.API{Svc: feedbackService}
+
+		// 7k. Vendor settlement (F2): monthly reconciliation + admin close.
+		settlementRepo := settlementpg.NewSettlementRepo(pool)
+		settlementService := &settlement.Service{
+			Pool:        pool,
+			Settlements: settlementRepo,
+			Orders:      settlementRepo,
+			Audit:       auditRepo,
+		}
+		settlementAPI := &settlementhttp.API{Svc: settlementService}
+
 		// 8. HTTP server. When FAKE_OIDC=1, swap the google provider for a
 		// deterministic fake and mount its auto-redirect handler. Used for
 		// local dev and Playwright e2e — never enable in production.
@@ -387,6 +415,8 @@ func main() {
 			favoritesAPI.Register,
 			reorderAPI.Register,
 			homeAPI.Register,
+			feedbackAPI.Register,
+			settlementAPI.Register,
 		)
 		if err := srv.Run(ctx); err != nil {
 			logger.Error("api shutdown", "err", err)
@@ -543,6 +573,29 @@ func main() {
 			}
 		}
 
+		// FeedbackScanner (F1): per-vendor rolling-window aggregation of meal
+		// ratings + complaints, opening satisfaction_drop / complaint_spike
+		// anomalies. Mirrors docScanner — single-replica under the same lease.
+		feedbackScanner := &feedback.FeedbackScanner{
+			Ratings:    fpg.NewRatingRepo(pool),
+			Complaints: fpg.NewComplaintRepo(pool),
+			Anomaly:    cpgrepo.NewAnomalyRepo(pool),
+			Clock:      clock.SystemClock{},
+			Logger:     logger.With("component", "feedback-scanner"),
+			Interval:   1 * time.Hour,
+			Window:     14 * 24 * time.Hour,
+		}
+		if v := os.Getenv("FEEDBACK_SCAN_INTERVAL"); v != "" {
+			if d, err := time.ParseDuration(v); err == nil {
+				feedbackScanner.Interval = d
+			}
+		}
+		if v := os.Getenv("FEEDBACK_SCAN_WINDOW"); v != "" {
+			if d, err := time.ParseDuration(v); err == nil {
+				feedbackScanner.Window = d
+			}
+		}
+
 		logger.Info("scheduler starting", "cutoff_interval", cutoffInterval, "noshow_interval", noShow.Interval, "noshow_max_age", noShow.MaxAge, "doc_expiry_interval", docScanner.Interval)
 
 		leaseName := getenv("SCHEDULER_LEASE_NAME", "tbite-scheduler")
@@ -554,6 +607,7 @@ func main() {
 			eg.Go(func() error { return cutoff.Run(egctx, cutoffInterval) })
 			eg.Go(func() error { return noShow.Run(egctx) })
 			eg.Go(func() error { return docScanner.Run(egctx) })
+			eg.Go(func() error { return feedbackScanner.Run(egctx) })
 			if err := eg.Wait(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 				return err
 			}
