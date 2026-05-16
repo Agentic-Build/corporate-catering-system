@@ -35,11 +35,7 @@
       </label>
       <label class="block text-sm font-semibold text-tb-slate-800">
         徽章（逗號分隔）
-        <input
-          name="badges"
-          placeholder="可薪資代扣, 低於 500 kcal"
-          class={fieldClass}
-        />
+        <input name="badges" placeholder="可薪資代扣, 低於 500 kcal" class={fieldClass} />
       </label>
 
       {#if form?.error}

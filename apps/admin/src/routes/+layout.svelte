@@ -8,12 +8,9 @@
 
 <div class="fade-up min-h-screen bg-tb-slate-50">
   <header class="sticky top-0 z-30 border-b border-tb-slate-200 bg-white/95 backdrop-blur">
-    <div
-      class="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 md:px-8"
-    >
+    <div class="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 md:px-8">
       <TBiteLogo />
-      <span
-        class="ml-2 rounded-full bg-tb-slate-100 px-3 py-1 text-xs font-bold text-tb-slate-700"
+      <span class="ml-2 rounded-full bg-tb-slate-100 px-3 py-1 text-xs font-bold text-tb-slate-700"
         >福委會後台 · 管理員</span
       >
       {#if data.user}
@@ -39,9 +36,7 @@
           </div>
         </div>
       {:else}
-        <a
-          href="/login"
-          class="ml-auto text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+        <a href="/login" class="ml-auto text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
           >登入</a
         >
       {/if}

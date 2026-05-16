@@ -13,11 +13,7 @@
   }
 </script>
 
-<PageHeader
-  eyebrow="合規"
-  title="稽核紀錄"
-  subtitle="append-only 系統稽核日誌 · 最近的事件在上"
-/>
+<PageHeader eyebrow="合規" title="稽核紀錄" subtitle="append-only 系統稽核日誌 · 最近的事件在上" />
 
 <Card title="篩選">
   <form method="GET" class="grid gap-3 sm:grid-cols-4">
@@ -56,9 +52,7 @@
       />
     </label>
     <label class="flex flex-col gap-1 text-sm">
-      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
-        >limit</span
-      >
+      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">limit</span>
       <input
         type="number"
         name="limit"

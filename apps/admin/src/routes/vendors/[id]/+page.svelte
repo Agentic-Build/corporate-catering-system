@@ -56,9 +56,7 @@
     <Card title={v.status === "pending" ? "核准入駐" : "復權"}>
       <form method="POST" action="?/approve" class="space-y-3">
         <fieldset>
-          <legend
-            class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
-          >
+          <legend class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
             服務廠區
           </legend>
           <div class="mt-2 flex flex-wrap gap-2">

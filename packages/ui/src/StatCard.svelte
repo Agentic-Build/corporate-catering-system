@@ -35,7 +35,9 @@
     <p class="text-sm text-tb-slate-500">{label}</p>
   {/if}
   <p class="mt-1.5 flex items-end gap-2">
-    <span class="font-jetbrains-mono text-3xl font-black tabular-nums text-tb-slate-900">{value}</span>
+    <span class="font-jetbrains-mono text-3xl font-black tabular-nums text-tb-slate-900"
+      >{value}</span
+    >
     {#if suffix}<span class="text-sm font-semibold text-tb-slate-500">{suffix}</span>{/if}
     {#if delta}<StateTag tone={deltaTone}>{delta}</StateTag>{/if}
   </p>

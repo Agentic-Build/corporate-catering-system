@@ -65,11 +65,7 @@
   <Icon name="chevron" class="h-3.5 w-3.5 rotate-90" />返回商家
 </a>
 
-<PageHeader
-  eyebrow="合規文件"
-  title="{v.display_name} · 合規文件"
-  subtitle={v.contact_email}
-/>
+<PageHeader eyebrow="合規文件" title="{v.display_name} · 合規文件" subtitle={v.contact_email} />
 
 <div class="grid max-w-3xl gap-6">
   {#if form?.error}
@@ -106,9 +102,7 @@
         />
       </label>
       <label class="flex flex-col gap-1 text-sm sm:col-span-2">
-        <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
-          >檔案</span
-        >
+        <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">檔案</span>
         <input
           type="file"
           onchange={onFileChange}

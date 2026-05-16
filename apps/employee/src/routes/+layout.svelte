@@ -66,9 +66,7 @@
 {#if data.user}
   <div class="min-h-screen bg-white">
     <header class="sticky top-0 z-40 border-b border-tb-slate-200 bg-white/95 backdrop-blur">
-      <div
-        class="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 md:px-8"
-      >
+      <div class="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 md:px-8">
         <TBiteLogo />
         <div class="ml-2 hidden md:block">
           <LocationBar

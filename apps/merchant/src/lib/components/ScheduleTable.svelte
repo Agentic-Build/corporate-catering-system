@@ -75,9 +75,7 @@
   }
 </script>
 
-<section
-  class="overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm"
->
+<section class="overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm">
   <header
     class="flex flex-wrap items-center justify-between gap-3 border-b border-tb-slate-100 px-5 py-4"
   >
@@ -204,9 +202,7 @@
             </td>
             <td class="px-5 py-3 text-right">
               {#if canEdit}
-                <Button variant="ghost" size="sm" onclick={() => remove(slot)}>
-                  移除
-                </Button>
+                <Button variant="ghost" size="sm" onclick={() => remove(slot)}>移除</Button>
               {/if}
             </td>
           </tr>
@@ -222,9 +218,7 @@
             {totalCap}
           </td>
           <td class="px-3 py-3">
-            <span
-              class="font-jetbrains-mono text-sm font-bold tabular-nums text-tb-red-700"
-            >
+            <span class="font-jetbrains-mono text-sm font-bold tabular-nums text-tb-red-700">
               共 {totalOrdered} 份已訂
             </span>
           </td>

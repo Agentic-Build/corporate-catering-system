@@ -115,8 +115,7 @@
                 <td class="px-4 py-3 text-right">
                   <a
                     href="/vendors/{v.id}"
-                    class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
-                    >詳細</a
+                    class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700">詳細</a
                   >
                 </td>
               </tr>

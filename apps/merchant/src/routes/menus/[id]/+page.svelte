@@ -8,9 +8,7 @@
     draft: { tone: "neutral", label: "草稿" },
     archived: { tone: "warning", label: "已封存" },
   } as Record<string, { tone: "success" | "neutral" | "warning"; label: string }>;
-  const meta = $derived(
-    statusMeta[item.status] ?? { tone: "neutral", label: item.status },
-  );
+  const meta = $derived(statusMeta[item.status] ?? { tone: "neutral", label: item.status });
 
   const fieldClass =
     "mt-1 w-full rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100";
@@ -31,9 +29,7 @@
       </label>
       <label class="block text-sm font-semibold text-tb-slate-800">
         敘述
-        <textarea name="description" rows="2" class={fieldClass}
-          >{item.description}</textarea
-        >
+        <textarea name="description" rows="2" class={fieldClass}>{item.description}</textarea>
       </label>
       <label class="block text-sm font-semibold text-tb-slate-800">
         價格（NTD）

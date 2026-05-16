@@ -80,10 +80,7 @@
                   {b.period_start} — {b.period_end}
                 </td>
                 <td class="px-4 py-3">
-                  <StateTag
-                    tone={statusTone[b.status] ?? "neutral"}
-                    pulse={b.status === "locked"}
-                  >
+                  <StateTag tone={statusTone[b.status] ?? "neutral"} pulse={b.status === "locked"}>
                     {statusLabel[b.status] ?? b.status}
                   </StateTag>
                 </td>
@@ -96,8 +93,7 @@
                 <td class="px-4 py-3 text-right">
                   <a
                     href="/payroll/{b.id}"
-                    class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
-                    >詳細</a
+                    class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700">詳細</a
                   >
                 </td>
               </tr>

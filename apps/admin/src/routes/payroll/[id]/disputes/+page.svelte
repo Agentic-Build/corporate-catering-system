@@ -100,9 +100,7 @@
                 class="space-y-2 rounded-xl border border-tb-emerald-200 bg-tb-emerald-50/40 p-3"
               >
                 <input type="hidden" name="dispute_id" value={d.id} />
-                <p
-                  class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-emerald-700"
-                >
+                <p class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-emerald-700">
                   同意退款
                 </p>
                 <label class="flex flex-col gap-1 text-xs text-tb-slate-700">
@@ -138,9 +136,7 @@
                 class="space-y-2 rounded-xl border border-tb-slate-300 bg-tb-slate-50/40 p-3"
               >
                 <input type="hidden" name="dispute_id" value={d.id} />
-                <p
-                  class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-700"
-                >
+                <p class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-700">
                   駁回
                 </p>
                 <label class="flex flex-col gap-1 text-xs text-tb-slate-700">

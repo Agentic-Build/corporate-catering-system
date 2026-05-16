@@ -112,7 +112,9 @@
           class="flex items-center gap-4 rounded-tb-2xl border border-tb-slate-200 bg-white p-3 transition hover:shadow-tb-md
             {f.available_today ? '' : 'opacity-60'}"
         >
-          <div class="grid h-16 w-16 flex-shrink-0 place-items-center rounded-tb-xl bg-tb-slate-100">
+          <div
+            class="grid h-16 w-16 flex-shrink-0 place-items-center rounded-tb-xl bg-tb-slate-100"
+          >
             <Icon name="heart" class="h-6 w-6 text-tb-amber-400" />
           </div>
           <div class="min-w-0 flex-1">

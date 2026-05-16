@@ -91,9 +91,7 @@
       </form>
     {/if}
     {#if b.status === "locked"}
-      <p class="text-xs text-tb-slate-500">
-        等待 settler worker 產生 CSV · 每 10 秒自動重新整理
-      </p>
+      <p class="text-xs text-tb-slate-500">等待 settler worker 產生 CSV · 每 10 秒自動重新整理</p>
     {/if}
     {#if b.status === "exported" && b.export_uri}
       <a href={b.export_uri}>

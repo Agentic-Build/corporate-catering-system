@@ -91,8 +91,7 @@
                         placeholder="解決備註"
                         class="rounded-lg border border-tb-slate-300 px-2 py-1 text-xs focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
                       />
-                      <Button variant="secondary" size="sm" type="submit" fullWidth
-                        >標記解決</Button
+                      <Button variant="secondary" size="sm" type="submit" fullWidth>標記解決</Button
                       >
                     </form>
                   </div>

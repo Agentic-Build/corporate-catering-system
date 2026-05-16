@@ -45,9 +45,7 @@
   {:else}
     <ul class="grid gap-3">
       {#each entries as [id, line] (id)}
-        <li
-          class="flex items-center gap-3 rounded-tb-2xl border border-tb-slate-200 bg-white p-3"
-        >
+        <li class="flex items-center gap-3 rounded-tb-2xl border border-tb-slate-200 bg-white p-3">
           {#if line.image}
             <img
               src={line.image}
@@ -64,7 +62,9 @@
           <div class="min-w-0 flex-1">
             <div class="truncate text-sm font-bold text-tb-slate-900">{line.name}</div>
             <div class="text-xs text-tb-slate-500">{line.vendor}</div>
-            <div class="mt-0.5 font-jetbrains-mono text-sm font-bold tabular-nums text-tb-slate-800">
+            <div
+              class="mt-0.5 font-jetbrains-mono text-sm font-bold tabular-nums text-tb-slate-800"
+            >
               ${line.price.toLocaleString()}
             </div>
           </div>
@@ -132,8 +132,6 @@
         送出預訂 · 由本月薪資代扣
       </Button>
     </form>
-    <p class="mt-2 text-center text-[11px] text-tb-slate-500">
-      截單前可至「我的訂單」修改或取消。
-    </p>
+    <p class="mt-2 text-center text-[11px] text-tb-slate-500">截單前可至「我的訂單」修改或取消。</p>
   {/snippet}
 </Drawer>

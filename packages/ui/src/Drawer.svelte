@@ -47,9 +47,7 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div
-  class="fixed inset-0 z-[70] transition {open ? 'pointer-events-auto' : 'pointer-events-none'}"
->
+<div class="fixed inset-0 z-[70] transition {open ? 'pointer-events-auto' : 'pointer-events-none'}">
   <button
     type="button"
     aria-label="關閉"

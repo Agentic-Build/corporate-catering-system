@@ -4,3322 +4,3322 @@
  */
 
 export interface paths {
-    "/api/admin/anomalies": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List anomaly alerts filtered by status/severity */
-        get: operations["listAnomalies"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+  "/api/admin/anomalies": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/anomalies/{id}/close": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Close an open/triaged anomaly */
-        post: operations["closeAnomaly"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List anomaly alerts filtered by status/severity */
+    get: operations["listAnomalies"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/anomalies/{id}/close": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/anomalies/{id}/triage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Mark an open anomaly as triaged */
-        post: operations["triageAnomaly"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Close an open/triaged anomaly */
+    post: operations["closeAnomaly"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/anomalies/{id}/triage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/audit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Query the append-only audit log */
-        get: operations["listAuditEvents"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Mark an open anomaly as triaged */
+    post: operations["triageAnomaly"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/audit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/dlq": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List pending DLQ messages */
-        get: operations["listDLQ"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Query the append-only audit log */
+    get: operations["listAuditEvents"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/dlq": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/dlq/{id}/replay": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Re-publish a DLQ message to its original subject */
-        post: operations["replayDLQMessage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List pending DLQ messages */
+    get: operations["listDLQ"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/dlq/{id}/replay": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/dlq/{id}/resolve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Mark a DLQ message resolved without replay */
-        post: operations["resolveDLQMessage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Re-publish a DLQ message to its original subject */
+    post: operations["replayDLQMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/dlq/{id}/resolve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/documents/{id}/review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Approve or reject a pending vendor document */
-        post: operations["reviewVendorDocument"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Mark a DLQ message resolved without replay */
+    post: operations["resolveDLQMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/documents/{id}/review": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/payroll/batches": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List payroll batches */
-        get: operations["listPayrollBatches"];
-        put?: never;
-        /** Build a draft payroll batch for a period */
-        post: operations["createPayrollBatch"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Approve or reject a pending vendor document */
+    post: operations["reviewVendorDocument"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/payroll/batches": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/payroll/batches/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get a payroll batch with its entries */
-        get: operations["getPayrollBatch"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List payroll batches */
+    get: operations["listPayrollBatches"];
+    put?: never;
+    /** Build a draft payroll batch for a period */
+    post: operations["createPayrollBatch"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/payroll/batches/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/payroll/batches/{id}/lock": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Lock a draft batch and emit settlement event */
-        post: operations["lockPayrollBatch"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get a payroll batch with its entries */
+    get: operations["getPayrollBatch"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/payroll/batches/{id}/lock": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/payroll/disputes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List payroll disputes (admin) */
-        get: operations["listPayrollDisputes"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Lock a draft batch and emit settlement event */
+    post: operations["lockPayrollBatch"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/payroll/disputes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/payroll/disputes/{id}/resolve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Resolve a payroll dispute (refund or reject) */
-        post: operations["resolvePayrollDispute"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List payroll disputes (admin) */
+    get: operations["listPayrollDisputes"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/payroll/disputes/{id}/resolve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/vendors": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List vendors (admin) */
-        get: operations["listVendors"];
-        put?: never;
-        /** Create a pending vendor */
-        post: operations["createPendingVendor"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Resolve a payroll dispute (refund or reject) */
+    post: operations["resolvePayrollDispute"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/vendors": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/vendors/{id}/approve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Approve vendor + set plants */
-        post: operations["approveVendor"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List vendors (admin) */
+    get: operations["listVendors"];
+    put?: never;
+    /** Create a pending vendor */
+    post: operations["createPendingVendor"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/vendors/{id}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/vendors/{id}/invite": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Issue a single-use invite code for a vendor */
-        post: operations["issueVendorInvite"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Approve vendor + set plants */
+    post: operations["approveVendor"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/vendors/{id}/invite": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/vendors/{id}/reinstate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Reinstate a suspended vendor */
-        post: operations["reinstateVendor"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Issue a single-use invite code for a vendor */
+    post: operations["issueVendorInvite"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/vendors/{id}/reinstate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/vendors/{id}/suspend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Suspend an approved vendor */
-        post: operations["suspendVendor"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Reinstate a suspended vendor */
+    post: operations["reinstateVendor"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/vendors/{id}/suspend": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/admin/vendors/{vendor_id}/documents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List a vendor's compliance documents */
-        get: operations["listVendorDocuments"];
-        put?: never;
-        /** Upload a vendor compliance document (base64-in-JSON) */
-        post: operations["uploadVendorDocument"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Suspend an approved vendor */
+    post: operations["suspendVendor"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/vendors/{vendor_id}/documents": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/disputes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List my payroll disputes */
-        get: operations["listMyDisputes"];
-        put?: never;
-        /** Open a dispute against an entry order */
-        post: operations["openMyDispute"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List a vendor's compliance documents */
+    get: operations["listVendorDocuments"];
+    put?: never;
+    /** Upload a vendor compliance document (base64-in-JSON) */
+    post: operations["uploadVendorDocument"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/disputes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/favorites": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List the employee's favorites with target-day availability */
-        get: operations["listEmployeeFavorites"];
-        put?: never;
-        /** Mark a menu item as a favorite (idempotent) */
-        post: operations["addEmployeeFavorite"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List my payroll disputes */
+    get: operations["listMyDisputes"];
+    put?: never;
+    /** Open a dispute against an entry order */
+    post: operations["openMyDispute"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/favorites": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/favorites/{menu_item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove a favorite (idempotent — 204 even if missing) */
-        delete: operations["removeEmployeeFavorite"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List the employee's favorites with target-day availability */
+    get: operations["listEmployeeFavorites"];
+    put?: never;
+    /** Mark a menu item as a favorite (idempotent) */
+    post: operations["addEmployeeFavorite"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/favorites/{menu_item_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/home": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Aggregate landing page (target_day + 3 chips + day_menu) */
-        get: operations["getEmployeeHome"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Remove a favorite (idempotent — 204 even if missing) */
+    delete: operations["removeEmployeeFavorite"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/home": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/menu": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List the employee's available menu for a plant + day */
-        get: operations["listEmployeeMenu"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Aggregate landing page (target_day + 3 chips + day_menu) */
+    get: operations["getEmployeeHome"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/menu": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/orders": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List my orders */
-        get: operations["listMyOrders"];
-        put?: never;
-        /** Place a new order */
-        post: operations["placeOrder"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List the employee's available menu for a plant + day */
+    get: operations["listEmployeeMenu"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/orders": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/orders/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get an order by ID (owner only) */
-        get: operations["getMyOrder"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List my orders */
+    get: operations["listMyOrders"];
+    put?: never;
+    /** Place a new order */
+    post: operations["placeOrder"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/orders/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/orders/{id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel my order */
-        post: operations["cancelMyOrder"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get an order by ID (owner only) */
+    get: operations["getMyOrder"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/orders/{id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/orders/{id}/pickup-code": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get current TOTP pickup code for an order (owner, ready only) */
-        get: operations["getPickupCode"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Cancel my order */
+    post: operations["cancelMyOrder"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/orders/{id}/pickup-code": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/orders/reorder": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Clone a past order onto a new supply date (partial fallback) */
-        post: operations["reorderMyOrder"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get current TOTP pickup code for an order (owner, ready only) */
+    get: operations["getPickupCode"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/orders/reorder": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/recommendations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Paginated recommendation chips (推薦你今天) */
-        get: operations["listEmployeeRecommendations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Clone a past order onto a new supply date (partial fallback) */
+    post: operations["reorderMyOrder"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/recommendations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/employee/reorders": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Paginated reorder chips (再點一次) */
-        get: operations["listEmployeeReorders"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Paginated recommendation chips (推薦你今天) */
+    get: operations["listEmployeeRecommendations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/employee/reorders": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/merchant/categories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List the merchant's menu categories */
-        get: operations["listMerchantCategories"];
-        put?: never;
-        /** Create a menu category for the merchant */
-        post: operations["createMerchantCategory"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Paginated reorder chips (再點一次) */
+    get: operations["listEmployeeReorders"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/merchant/categories": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/merchant/menu-items": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List the merchant's menu items */
-        get: operations["listMerchantMenuItems"];
-        put?: never;
-        /** Create a draft menu item */
-        post: operations["createMerchantMenuItem"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List the merchant's menu categories */
+    get: operations["listMerchantCategories"];
+    put?: never;
+    /** Create a menu category for the merchant */
+    post: operations["createMerchantCategory"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/merchant/menu-items": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/merchant/menu-items/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update a menu item */
-        patch: operations["updateMerchantMenuItem"];
-        trace?: never;
+    /** List the merchant's menu items */
+    get: operations["listMerchantMenuItems"];
+    put?: never;
+    /** Create a draft menu item */
+    post: operations["createMerchantMenuItem"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/merchant/menu-items/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/merchant/menu-items/{id}/archive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Archive a menu item */
-        post: operations["archiveMerchantMenuItem"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Update a menu item */
+    patch: operations["updateMerchantMenuItem"];
+    trace?: never;
+  };
+  "/api/merchant/menu-items/{id}/archive": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/merchant/menu-items/{id}/publish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Publish a draft/archived menu item (status=active) */
-        post: operations["publishMerchantMenuItem"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Archive a menu item */
+    post: operations["archiveMerchantMenuItem"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/merchant/menu-items/{id}/publish": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/merchant/orders": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List orders for the vendor on a given date */
-        get: operations["listMerchantOrders"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Publish a draft/archived menu item (status=active) */
+    post: operations["publishMerchantMenuItem"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/merchant/orders": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/merchant/orders/{id}/verify-pickup": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Verify TOTP code and mark order picked up */
-        post: operations["verifyPickup"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List orders for the vendor on a given date */
+    get: operations["listMerchantOrders"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/merchant/orders/{id}/verify-pickup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/merchant/orders/mark-ready": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Mark one or more orders as ready for pickup */
-        post: operations["markOrdersReady"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Verify TOTP code and mark order picked up */
+    post: operations["verifyPickup"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/merchant/orders/mark-ready": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/merchant/supply": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List supplies for the current vendor on a date */
-        get: operations["listMerchantSupply"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Mark one or more orders as ready for pickup */
+    post: operations["markOrdersReady"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/merchant/supply": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/merchant/supply/{itemID}/{date}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Set or update capacity for a menu item on a given date */
-        put: operations["setMerchantSupply"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List supplies for the current vendor on a date */
+    get: operations["listMerchantSupply"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/merchant/supply/{itemID}/{date}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/{provider}/callback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Complete OIDC login (redirects to app landing) */
-        get: operations["completeLogin"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    /** Set or update capacity for a menu item on a given date */
+    put: operations["setMerchantSupply"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/{provider}/callback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/{provider}/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start OIDC login */
-        post: operations["startLogin"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Complete OIDC login (redirects to app landing) */
+    get: operations["completeLogin"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/{provider}/start": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Revoke current session */
-        post: operations["logout"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Start OIDC login */
+    post: operations["startLogin"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/logout": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get current user */
-        get: operations["me"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Revoke current session */
+    post: operations["logout"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/me": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
+    /** Get current user */
+    get: operations["me"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: {
-        AddFavoriteInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AddFavoriteInputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: uuid */
-            menu_item_id: string;
-        };
-        AnomalyActionInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AnomalyActionInputBody.json
-             */
-            readonly $schema?: string;
-            notes: string;
-        };
-        AnomalyDTO: {
-            closed_at?: string;
-            created_at: string;
-            evidence_uri: string[] | null;
-            id: string;
-            kind: string;
-            notes: string;
-            payload: {
-                [key: string]: unknown;
-            };
-            severity: string;
-            status: string;
-            target_id: string;
-            target_kind: string;
-            triaged_at?: string;
-        };
-        ApproveInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ApproveInputBody.json
-             */
-            readonly $schema?: string;
-            plants: string[] | null;
-        };
-        AuditRowDTO: {
-            action: string;
-            actor_id?: string;
-            actor_role?: string;
-            at: string;
-            /** Format: int64 */
-            id: number;
-            payload: {
-                [key: string]: unknown;
-            };
-            request_id: string;
-            target_id: string;
-            target_kind: string;
-        };
-        BatchDTO: {
-            export_uri?: string;
-            exported_at?: string;
-            id: string;
-            locked_at?: string;
-            locked_by?: string;
-            period_end: string;
-            period_start: string;
-            status: string;
-        };
-        BatchOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/BatchOutputBody.json
-             */
-            readonly $schema?: string;
-            batch: components["schemas"]["BatchDTO"];
-        };
-        BatchWithEntriesOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/BatchWithEntriesOutputBody.json
-             */
-            readonly $schema?: string;
-            batch: components["schemas"]["BatchDTO"];
-            entries: components["schemas"]["EntryDTO"][] | null;
-        };
-        CategoryDTO: {
-            id: string;
-            name: string;
-            /** Format: int64 */
-            sort_order: number;
-        };
-        CreateBatchInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateBatchInputBody.json
-             */
-            readonly $schema?: string;
-            period_end: string;
-            period_start: string;
-        };
-        CreateCategoryInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateCategoryInputBody.json
-             */
-            readonly $schema?: string;
-            name: string;
-            /** Format: int64 */
-            sort_order: number;
-        };
-        CreateCategoryOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateCategoryOutputBody.json
-             */
-            readonly $schema?: string;
-            category: components["schemas"]["CategoryDTO"];
-        };
-        CreateItemInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateItemInputBody.json
-             */
-            readonly $schema?: string;
-            badges: string[] | null;
-            category_id?: string;
-            description: string;
-            name: string;
-            /** Format: int64 */
-            price_minor: number;
-            tags: string[] | null;
-        };
-        CreateVendorInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateVendorInputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: email */
-            contact_email: string;
-            display_name: string;
-            legal_name: string;
-        };
-        CreateVendorOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateVendorOutputBody.json
-             */
-            readonly $schema?: string;
-            vendor: components["schemas"]["VendorDTO"];
-        };
-        DisputeDTO: {
-            entry_id: string;
-            id: string;
-            opened_by: string;
-            order_id: string;
-            reason: string;
-            /** Format: int64 */
-            refund_minor: number;
-            resolution: string;
-            resolved_at?: string;
-            resolved_by?: string;
-            status: string;
-        };
-        DisputeOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/DisputeOutputBody.json
-             */
-            readonly $schema?: string;
-            dispute: components["schemas"]["DisputeDTO"];
-        };
-        DocumentDTO: {
-            blob_uri: string;
-            created_at: string;
-            expires_at?: string;
-            filename: string;
-            id: string;
-            kind: string;
-            notes: string;
-            reviewed_at?: string;
-            reviewed_by?: string;
-            status: string;
-            uploaded_by?: string;
-            vendor_id: string;
-        };
-        EmployeeMenuItemDTO: {
-            badges: string[] | null;
-            /** Format: int64 */
-            capacity: number;
-            description: string;
-            eta_label: string;
-            id: string;
-            images?: string[] | null;
-            name: string;
-            pickup_window: string;
-            /** Format: int64 */
-            price_minor: number;
-            /** Format: int64 */
-            remain: number;
-            sold_out: boolean;
-            tags: string[] | null;
-            vendor: string;
-            vendor_id: string;
-        };
-        EntryDTO: {
-            /** Format: int64 */
-            amount_minor: number;
-            batch_id: string;
-            id: string;
-            order_ids: string[] | null;
-            /** Format: int64 */
-            refunded_minor: number;
-            user_id: string;
-        };
-        ErrorDetail: {
-            /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
-            location?: string;
-            /** @description Error message text */
-            message?: string;
-            /** @description The value at the given location */
-            value?: unknown;
-        };
-        ErrorModel: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ErrorModel.json
-             */
-            readonly $schema?: string;
-            /**
-             * @description A human-readable explanation specific to this occurrence of the problem.
-             * @example Property foo is required but is missing.
-             */
-            detail?: string;
-            /** @description Optional list of individual error details */
-            errors?: components["schemas"]["ErrorDetail"][] | null;
-            /**
-             * Format: uri
-             * @description A URI reference that identifies the specific occurrence of the problem.
-             * @example https://example.com/error-log/abc123
-             */
-            instance?: string;
-            /**
-             * Format: int64
-             * @description HTTP status code
-             * @example 400
-             */
-            status?: number;
-            /**
-             * @description A short, human-readable summary of the problem type. This value should not change between occurrences of the error.
-             * @example Bad Request
-             */
-            title?: string;
-            /**
-             * Format: uri
-             * @description A URI reference to human-readable documentation for the error.
-             * @default about:blank
-             * @example https://example.com/errors/example
-             */
-            type: string;
-        };
-        FavoriteChipDTO: {
-            available_today: boolean;
-            menu_item_id: string;
-            name: string;
-            /** Format: int64 */
-            unit_price: number;
-            vendor_id: string;
-        };
-        HomeOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/HomeOutputBody.json
-             */
-            readonly $schema?: string;
-            day_menu: components["schemas"]["EmployeeMenuItemDTO"][] | null;
-            favorite_chips: components["schemas"]["FavoriteChipDTO"][] | null;
-            has_ordered: boolean;
-            order_summary?: components["schemas"]["OrderSummaryDTO"];
-            recommend_chips: components["schemas"]["RecommendChipDTO"][] | null;
-            reorder_chips: components["schemas"]["ReorderChipDTO"][] | null;
-            target_day: string;
-        };
-        InviteOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/InviteOutputBody.json
-             */
-            readonly $schema?: string;
-            code: string;
-        };
-        Item: {
-            /** Format: uuid */
-            menu_item_id: string;
-            /** Format: int64 */
-            qty: number;
-        };
-        ItemDTO: {
-            badges: string[] | null;
-            category_id?: string;
-            description: string;
-            id: string;
-            images?: string[] | null;
-            name: string;
-            /** Format: int64 */
-            price_minor: number;
-            status: string;
-            tags: string[] | null;
-            vendor_id: string;
-        };
-        ItemOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ItemOutputBody.json
-             */
-            readonly $schema?: string;
-            item: components["schemas"]["ItemDTO"];
-        };
-        ListAnomaliesOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListAnomaliesOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["AnomalyDTO"][] | null;
-        };
-        ListAuditOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListAuditOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["AuditRowDTO"][] | null;
-        };
-        ListBatchesOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListBatchesOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["BatchDTO"][] | null;
-        };
-        ListCategoriesOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListCategoriesOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["CategoryDTO"][] | null;
-        };
-        ListDisputesOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListDisputesOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["DisputeDTO"][] | null;
-        };
-        ListDocumentsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListDocumentsOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["DocumentDTO"][] | null;
-        };
-        ListEmployeeMenuOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListEmployeeMenuOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["EmployeeMenuItemDTO"][] | null;
-        };
-        ListFavoritesOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListFavoritesOutputBody.json
-             */
-            readonly $schema?: string;
-            chips: components["schemas"]["FavoriteChipDTO"][] | null;
-            next_cursor?: string;
-        };
-        ListItemsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListItemsOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["MerchantItemDTO"][] | null;
-        };
-        ListMerchantOrdersOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListMerchantOrdersOutputBody.json
-             */
-            readonly $schema?: string;
-            date: string;
-            items: components["schemas"]["MerchantOrderDTO"][] | null;
-        };
-        ListOrdersOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListOrdersOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["OrderDTO"][] | null;
-        };
-        ListOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["MessageDTO"][] | null;
-        };
-        ListSupplyOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListSupplyOutputBody.json
-             */
-            readonly $schema?: string;
-            date: string;
-            items: components["schemas"]["SupplyDTO"][] | null;
-        };
-        ListVendorsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListVendorsOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["VendorDTO"][] | null;
-        };
-        MarkReadyInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/MarkReadyInputBody.json
-             */
-            readonly $schema?: string;
-            order_ids: string[] | null;
-        };
-        MeOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/MeOutputBody.json
-             */
-            readonly $schema?: string;
-            department?: string;
-            display_name: string;
-            email: string;
-            employee_id?: string;
-            plant?: string;
-            role: string;
-            user_id: string;
-            vendor_id?: string;
-        };
-        MerchantItemDTO: {
-            badges: string[] | null;
-            category_id?: string;
-            description: string;
-            id: string;
-            images?: string[] | null;
-            /** @description Most recent supply date (YYYY-MM-DD), null if never scheduled */
-            last_used: string | null;
-            name: string;
-            /** Format: int64 */
-            price_minor: number;
-            status: string;
-            tags: string[] | null;
-            /**
-             * Format: int64
-             * @description Cumulative quantity sold across picked-up orders
-             */
-            total_sold: number;
-            vendor_id: string;
-        };
-        MerchantOrderDTO: {
-            id: string;
-            items: components["schemas"]["OrderItemDTO"][] | null;
-            picked_up_at?: string;
-            placed_at?: string;
-            plant: string;
-            ready_at?: string;
-            status: string;
-            /** Format: int64 */
-            total_price_minor: number;
-        };
-        MessageDTO: {
-            first_seen_at: string;
-            headers: {
-                [key: string]: unknown;
-            };
-            id: string;
-            last_error: string;
-            payload: {
-                [key: string]: unknown;
-            };
-            replayed_at?: string;
-            resolved_at?: string;
-            resolved_notes?: string;
-            source_consumer: string;
-            source_stream: string;
-            source_subject: string;
-        };
-        OpenDisputeInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/OpenDisputeInputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: uuid */
-            order_id: string;
-            reason: string;
-        };
-        OrderDTO: {
-            cancelled_at?: string;
-            cutoff_at: string;
-            id: string;
-            items: components["schemas"]["OrderItemDTO"][] | null;
-            placed_at?: string;
-            plant: string;
-            status: string;
-            supply_date: string;
-            /** Format: int64 */
-            total_price_minor: number;
-            vendor_id: string;
-        };
-        OrderItemDTO: {
-            id: string;
-            menu_item_id: string;
-            /** Format: int64 */
-            qty: number;
-            /** Format: int64 */
-            unit_price_minor: number;
-        };
-        OrderOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/OrderOutputBody.json
-             */
-            readonly $schema?: string;
-            order: components["schemas"]["OrderDTO"];
-        };
-        OrderSummaryDTO: {
-            cutoff_at: string;
-            order_id: string;
-            status: string;
-            /** Format: int64 */
-            total_price_minor: number;
-            vendor_id: string;
-        };
-        PickupCodeOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/PickupCodeOutputBody.json
-             */
-            readonly $schema?: string;
-            code: string;
-            /** Format: int64 */
-            expires_in_seconds: number;
-            order_id: string;
-        };
-        PlaceOrderInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/PlaceOrderInputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["Item"][] | null;
-            plant: string;
-            supply_date: string;
-        };
-        PlaceOrderOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/PlaceOrderOutputBody.json
-             */
-            readonly $schema?: string;
-            order: components["schemas"]["OrderDTO"];
-        };
-        RecommendChipDTO: {
-            menu_item_id: string;
-            name: string;
-            reason: string;
-            /** Format: double */
-            score: number;
-            /** Format: int64 */
-            unit_price: number;
-            vendor_id: string;
-        };
-        RecommendationsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RecommendationsOutputBody.json
-             */
-            readonly $schema?: string;
-            chips: components["schemas"]["RecommendChipDTO"][] | null;
-            /** Format: int64 */
-            next_cursor?: number;
-        };
-        ReorderChipDTO: {
-            available_today: boolean;
-            /** Format: int64 */
-            freq: number;
-            items_preview: string[] | null;
-            source_order_id: string;
-            /** Format: int64 */
-            total_price_minor: number;
-            vendor_id: string;
-            vendor_name: string;
-        };
-        ReorderInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ReorderInputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: uuid */
-            source_order_id: string;
-            supply_date: string;
-        };
-        ReorderOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ReorderOutputBody.json
-             */
-            readonly $schema?: string;
-            new_order_id: string;
-            unavailable_items: components["schemas"]["UnavailableItemDTO"][] | null;
-        };
-        ReordersOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ReordersOutputBody.json
-             */
-            readonly $schema?: string;
-            chips: components["schemas"]["ReorderChipDTO"][] | null;
-            /** Format: int64 */
-            next_cursor?: number;
-        };
-        ReplayOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ReplayOutputBody.json
-             */
-            readonly $schema?: string;
-            replayed: boolean;
-        };
-        ResolveDisputeInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ResolveDisputeInputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: int64 */
-            refund_minor: number;
-            resolution: string;
-            /** @enum {string} */
-            status: "resolved_refund" | "resolved_reject";
-        };
-        ResolveInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ResolveInputBody.json
-             */
-            readonly $schema?: string;
-            notes: string;
-        };
-        ReviewDocumentInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ReviewDocumentInputBody.json
-             */
-            readonly $schema?: string;
-            notes: string;
-            /** @enum {string} */
-            status: "approved" | "rejected";
-        };
-        SetCapacityInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/SetCapacityInputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: int64 */
-            capacity: number;
-            /** Format: date-time */
-            cutoff_at: string;
-            eta_label: string;
-            pickup_window: string;
-        };
-        StartLoginInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/StartLoginInputBody.json
-             */
-            readonly $schema?: string;
-            /** @enum {string} */
-            app: "employee" | "merchant" | "admin";
-            invite_code?: string;
-            return_to?: string;
-        };
-        StartLoginOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/StartLoginOutputBody.json
-             */
-            readonly $schema?: string;
-            auth_url: string;
-            state: string;
-        };
-        SupplyDTO: {
-            /** Format: int64 */
-            capacity: number;
-            cutoff_at: string;
-            eta_label: string;
-            id: string;
-            menu_item_id: string;
-            pickup_window: string;
-            /** Format: int64 */
-            remain: number;
-            supply_date: string;
-        };
-        SupplyOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/SupplyOutputBody.json
-             */
-            readonly $schema?: string;
-            supply: components["schemas"]["SupplyDTO"];
-        };
-        UnavailableItemDTO: {
-            menu_item_id: string;
-            name: string;
-            reason: string;
-        };
-        UpdateItemInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UpdateItemInputBody.json
-             */
-            readonly $schema?: string;
-            badges: string[] | null;
-            category_id?: string;
-            description: string;
-            name: string;
-            /** Format: int64 */
-            price_minor: number;
-            tags: string[] | null;
-        };
-        UploadDocumentInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UploadDocumentInputBody.json
-             */
-            readonly $schema?: string;
-            content_base64: string;
-            expires_at?: string;
-            filename: string;
-            /** @enum {string} */
-            kind: "business_license" | "food_safety_permit" | "tax_registration" | "insurance" | "other";
-        };
-        UploadDocumentOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UploadDocumentOutputBody.json
-             */
-            readonly $schema?: string;
-            document: components["schemas"]["DocumentDTO"];
-        };
-        VendorDTO: {
-            approved_at?: string;
-            contact_email: string;
-            display_name: string;
-            id: string;
-            legal_name: string;
-            plants?: string[] | null;
-            status: string;
-        };
-        VerifyPickupInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/VerifyPickupInputBody.json
-             */
-            readonly $schema?: string;
-            code: string;
-        };
+  schemas: {
+    AddFavoriteInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/AddFavoriteInputBody.json
+       */
+      readonly $schema?: string;
+      /** Format: uuid */
+      menu_item_id: string;
     };
-    responses: never;
-    parameters: never;
-    requestBodies: never;
-    headers: never;
-    pathItems: never;
+    AnomalyActionInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/AnomalyActionInputBody.json
+       */
+      readonly $schema?: string;
+      notes: string;
+    };
+    AnomalyDTO: {
+      closed_at?: string;
+      created_at: string;
+      evidence_uri: string[] | null;
+      id: string;
+      kind: string;
+      notes: string;
+      payload: {
+        [key: string]: unknown;
+      };
+      severity: string;
+      status: string;
+      target_id: string;
+      target_kind: string;
+      triaged_at?: string;
+    };
+    ApproveInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ApproveInputBody.json
+       */
+      readonly $schema?: string;
+      plants: string[] | null;
+    };
+    AuditRowDTO: {
+      action: string;
+      actor_id?: string;
+      actor_role?: string;
+      at: string;
+      /** Format: int64 */
+      id: number;
+      payload: {
+        [key: string]: unknown;
+      };
+      request_id: string;
+      target_id: string;
+      target_kind: string;
+    };
+    BatchDTO: {
+      export_uri?: string;
+      exported_at?: string;
+      id: string;
+      locked_at?: string;
+      locked_by?: string;
+      period_end: string;
+      period_start: string;
+      status: string;
+    };
+    BatchOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/BatchOutputBody.json
+       */
+      readonly $schema?: string;
+      batch: components["schemas"]["BatchDTO"];
+    };
+    BatchWithEntriesOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/BatchWithEntriesOutputBody.json
+       */
+      readonly $schema?: string;
+      batch: components["schemas"]["BatchDTO"];
+      entries: components["schemas"]["EntryDTO"][] | null;
+    };
+    CategoryDTO: {
+      id: string;
+      name: string;
+      /** Format: int64 */
+      sort_order: number;
+    };
+    CreateBatchInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/CreateBatchInputBody.json
+       */
+      readonly $schema?: string;
+      period_end: string;
+      period_start: string;
+    };
+    CreateCategoryInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/CreateCategoryInputBody.json
+       */
+      readonly $schema?: string;
+      name: string;
+      /** Format: int64 */
+      sort_order: number;
+    };
+    CreateCategoryOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/CreateCategoryOutputBody.json
+       */
+      readonly $schema?: string;
+      category: components["schemas"]["CategoryDTO"];
+    };
+    CreateItemInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/CreateItemInputBody.json
+       */
+      readonly $schema?: string;
+      badges: string[] | null;
+      category_id?: string;
+      description: string;
+      name: string;
+      /** Format: int64 */
+      price_minor: number;
+      tags: string[] | null;
+    };
+    CreateVendorInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/CreateVendorInputBody.json
+       */
+      readonly $schema?: string;
+      /** Format: email */
+      contact_email: string;
+      display_name: string;
+      legal_name: string;
+    };
+    CreateVendorOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/CreateVendorOutputBody.json
+       */
+      readonly $schema?: string;
+      vendor: components["schemas"]["VendorDTO"];
+    };
+    DisputeDTO: {
+      entry_id: string;
+      id: string;
+      opened_by: string;
+      order_id: string;
+      reason: string;
+      /** Format: int64 */
+      refund_minor: number;
+      resolution: string;
+      resolved_at?: string;
+      resolved_by?: string;
+      status: string;
+    };
+    DisputeOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/DisputeOutputBody.json
+       */
+      readonly $schema?: string;
+      dispute: components["schemas"]["DisputeDTO"];
+    };
+    DocumentDTO: {
+      blob_uri: string;
+      created_at: string;
+      expires_at?: string;
+      filename: string;
+      id: string;
+      kind: string;
+      notes: string;
+      reviewed_at?: string;
+      reviewed_by?: string;
+      status: string;
+      uploaded_by?: string;
+      vendor_id: string;
+    };
+    EmployeeMenuItemDTO: {
+      badges: string[] | null;
+      /** Format: int64 */
+      capacity: number;
+      description: string;
+      eta_label: string;
+      id: string;
+      images?: string[] | null;
+      name: string;
+      pickup_window: string;
+      /** Format: int64 */
+      price_minor: number;
+      /** Format: int64 */
+      remain: number;
+      sold_out: boolean;
+      tags: string[] | null;
+      vendor: string;
+      vendor_id: string;
+    };
+    EntryDTO: {
+      /** Format: int64 */
+      amount_minor: number;
+      batch_id: string;
+      id: string;
+      order_ids: string[] | null;
+      /** Format: int64 */
+      refunded_minor: number;
+      user_id: string;
+    };
+    ErrorDetail: {
+      /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
+      location?: string;
+      /** @description Error message text */
+      message?: string;
+      /** @description The value at the given location */
+      value?: unknown;
+    };
+    ErrorModel: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ErrorModel.json
+       */
+      readonly $schema?: string;
+      /**
+       * @description A human-readable explanation specific to this occurrence of the problem.
+       * @example Property foo is required but is missing.
+       */
+      detail?: string;
+      /** @description Optional list of individual error details */
+      errors?: components["schemas"]["ErrorDetail"][] | null;
+      /**
+       * Format: uri
+       * @description A URI reference that identifies the specific occurrence of the problem.
+       * @example https://example.com/error-log/abc123
+       */
+      instance?: string;
+      /**
+       * Format: int64
+       * @description HTTP status code
+       * @example 400
+       */
+      status?: number;
+      /**
+       * @description A short, human-readable summary of the problem type. This value should not change between occurrences of the error.
+       * @example Bad Request
+       */
+      title?: string;
+      /**
+       * Format: uri
+       * @description A URI reference to human-readable documentation for the error.
+       * @default about:blank
+       * @example https://example.com/errors/example
+       */
+      type: string;
+    };
+    FavoriteChipDTO: {
+      available_today: boolean;
+      menu_item_id: string;
+      name: string;
+      /** Format: int64 */
+      unit_price: number;
+      vendor_id: string;
+    };
+    HomeOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/HomeOutputBody.json
+       */
+      readonly $schema?: string;
+      day_menu: components["schemas"]["EmployeeMenuItemDTO"][] | null;
+      favorite_chips: components["schemas"]["FavoriteChipDTO"][] | null;
+      has_ordered: boolean;
+      order_summary?: components["schemas"]["OrderSummaryDTO"];
+      recommend_chips: components["schemas"]["RecommendChipDTO"][] | null;
+      reorder_chips: components["schemas"]["ReorderChipDTO"][] | null;
+      target_day: string;
+    };
+    InviteOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/InviteOutputBody.json
+       */
+      readonly $schema?: string;
+      code: string;
+    };
+    Item: {
+      /** Format: uuid */
+      menu_item_id: string;
+      /** Format: int64 */
+      qty: number;
+    };
+    ItemDTO: {
+      badges: string[] | null;
+      category_id?: string;
+      description: string;
+      id: string;
+      images?: string[] | null;
+      name: string;
+      /** Format: int64 */
+      price_minor: number;
+      status: string;
+      tags: string[] | null;
+      vendor_id: string;
+    };
+    ItemOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ItemOutputBody.json
+       */
+      readonly $schema?: string;
+      item: components["schemas"]["ItemDTO"];
+    };
+    ListAnomaliesOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListAnomaliesOutputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["AnomalyDTO"][] | null;
+    };
+    ListAuditOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListAuditOutputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["AuditRowDTO"][] | null;
+    };
+    ListBatchesOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListBatchesOutputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["BatchDTO"][] | null;
+    };
+    ListCategoriesOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListCategoriesOutputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["CategoryDTO"][] | null;
+    };
+    ListDisputesOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListDisputesOutputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["DisputeDTO"][] | null;
+    };
+    ListDocumentsOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListDocumentsOutputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["DocumentDTO"][] | null;
+    };
+    ListEmployeeMenuOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListEmployeeMenuOutputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["EmployeeMenuItemDTO"][] | null;
+    };
+    ListFavoritesOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListFavoritesOutputBody.json
+       */
+      readonly $schema?: string;
+      chips: components["schemas"]["FavoriteChipDTO"][] | null;
+      next_cursor?: string;
+    };
+    ListItemsOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListItemsOutputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["MerchantItemDTO"][] | null;
+    };
+    ListMerchantOrdersOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListMerchantOrdersOutputBody.json
+       */
+      readonly $schema?: string;
+      date: string;
+      items: components["schemas"]["MerchantOrderDTO"][] | null;
+    };
+    ListOrdersOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListOrdersOutputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["OrderDTO"][] | null;
+    };
+    ListOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListOutputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["MessageDTO"][] | null;
+    };
+    ListSupplyOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListSupplyOutputBody.json
+       */
+      readonly $schema?: string;
+      date: string;
+      items: components["schemas"]["SupplyDTO"][] | null;
+    };
+    ListVendorsOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ListVendorsOutputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["VendorDTO"][] | null;
+    };
+    MarkReadyInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/MarkReadyInputBody.json
+       */
+      readonly $schema?: string;
+      order_ids: string[] | null;
+    };
+    MeOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/MeOutputBody.json
+       */
+      readonly $schema?: string;
+      department?: string;
+      display_name: string;
+      email: string;
+      employee_id?: string;
+      plant?: string;
+      role: string;
+      user_id: string;
+      vendor_id?: string;
+    };
+    MerchantItemDTO: {
+      badges: string[] | null;
+      category_id?: string;
+      description: string;
+      id: string;
+      images?: string[] | null;
+      /** @description Most recent supply date (YYYY-MM-DD), null if never scheduled */
+      last_used: string | null;
+      name: string;
+      /** Format: int64 */
+      price_minor: number;
+      status: string;
+      tags: string[] | null;
+      /**
+       * Format: int64
+       * @description Cumulative quantity sold across picked-up orders
+       */
+      total_sold: number;
+      vendor_id: string;
+    };
+    MerchantOrderDTO: {
+      id: string;
+      items: components["schemas"]["OrderItemDTO"][] | null;
+      picked_up_at?: string;
+      placed_at?: string;
+      plant: string;
+      ready_at?: string;
+      status: string;
+      /** Format: int64 */
+      total_price_minor: number;
+    };
+    MessageDTO: {
+      first_seen_at: string;
+      headers: {
+        [key: string]: unknown;
+      };
+      id: string;
+      last_error: string;
+      payload: {
+        [key: string]: unknown;
+      };
+      replayed_at?: string;
+      resolved_at?: string;
+      resolved_notes?: string;
+      source_consumer: string;
+      source_stream: string;
+      source_subject: string;
+    };
+    OpenDisputeInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/OpenDisputeInputBody.json
+       */
+      readonly $schema?: string;
+      /** Format: uuid */
+      order_id: string;
+      reason: string;
+    };
+    OrderDTO: {
+      cancelled_at?: string;
+      cutoff_at: string;
+      id: string;
+      items: components["schemas"]["OrderItemDTO"][] | null;
+      placed_at?: string;
+      plant: string;
+      status: string;
+      supply_date: string;
+      /** Format: int64 */
+      total_price_minor: number;
+      vendor_id: string;
+    };
+    OrderItemDTO: {
+      id: string;
+      menu_item_id: string;
+      /** Format: int64 */
+      qty: number;
+      /** Format: int64 */
+      unit_price_minor: number;
+    };
+    OrderOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/OrderOutputBody.json
+       */
+      readonly $schema?: string;
+      order: components["schemas"]["OrderDTO"];
+    };
+    OrderSummaryDTO: {
+      cutoff_at: string;
+      order_id: string;
+      status: string;
+      /** Format: int64 */
+      total_price_minor: number;
+      vendor_id: string;
+    };
+    PickupCodeOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/PickupCodeOutputBody.json
+       */
+      readonly $schema?: string;
+      code: string;
+      /** Format: int64 */
+      expires_in_seconds: number;
+      order_id: string;
+    };
+    PlaceOrderInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/PlaceOrderInputBody.json
+       */
+      readonly $schema?: string;
+      items: components["schemas"]["Item"][] | null;
+      plant: string;
+      supply_date: string;
+    };
+    PlaceOrderOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/PlaceOrderOutputBody.json
+       */
+      readonly $schema?: string;
+      order: components["schemas"]["OrderDTO"];
+    };
+    RecommendChipDTO: {
+      menu_item_id: string;
+      name: string;
+      reason: string;
+      /** Format: double */
+      score: number;
+      /** Format: int64 */
+      unit_price: number;
+      vendor_id: string;
+    };
+    RecommendationsOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/RecommendationsOutputBody.json
+       */
+      readonly $schema?: string;
+      chips: components["schemas"]["RecommendChipDTO"][] | null;
+      /** Format: int64 */
+      next_cursor?: number;
+    };
+    ReorderChipDTO: {
+      available_today: boolean;
+      /** Format: int64 */
+      freq: number;
+      items_preview: string[] | null;
+      source_order_id: string;
+      /** Format: int64 */
+      total_price_minor: number;
+      vendor_id: string;
+      vendor_name: string;
+    };
+    ReorderInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ReorderInputBody.json
+       */
+      readonly $schema?: string;
+      /** Format: uuid */
+      source_order_id: string;
+      supply_date: string;
+    };
+    ReorderOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ReorderOutputBody.json
+       */
+      readonly $schema?: string;
+      new_order_id: string;
+      unavailable_items: components["schemas"]["UnavailableItemDTO"][] | null;
+    };
+    ReordersOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ReordersOutputBody.json
+       */
+      readonly $schema?: string;
+      chips: components["schemas"]["ReorderChipDTO"][] | null;
+      /** Format: int64 */
+      next_cursor?: number;
+    };
+    ReplayOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ReplayOutputBody.json
+       */
+      readonly $schema?: string;
+      replayed: boolean;
+    };
+    ResolveDisputeInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ResolveDisputeInputBody.json
+       */
+      readonly $schema?: string;
+      /** Format: int64 */
+      refund_minor: number;
+      resolution: string;
+      /** @enum {string} */
+      status: "resolved_refund" | "resolved_reject";
+    };
+    ResolveInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ResolveInputBody.json
+       */
+      readonly $schema?: string;
+      notes: string;
+    };
+    ReviewDocumentInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/ReviewDocumentInputBody.json
+       */
+      readonly $schema?: string;
+      notes: string;
+      /** @enum {string} */
+      status: "approved" | "rejected";
+    };
+    SetCapacityInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/SetCapacityInputBody.json
+       */
+      readonly $schema?: string;
+      /** Format: int64 */
+      capacity: number;
+      /** Format: date-time */
+      cutoff_at: string;
+      eta_label: string;
+      pickup_window: string;
+    };
+    StartLoginInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/StartLoginInputBody.json
+       */
+      readonly $schema?: string;
+      /** @enum {string} */
+      app: "employee" | "merchant" | "admin";
+      invite_code?: string;
+      return_to?: string;
+    };
+    StartLoginOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/StartLoginOutputBody.json
+       */
+      readonly $schema?: string;
+      auth_url: string;
+      state: string;
+    };
+    SupplyDTO: {
+      /** Format: int64 */
+      capacity: number;
+      cutoff_at: string;
+      eta_label: string;
+      id: string;
+      menu_item_id: string;
+      pickup_window: string;
+      /** Format: int64 */
+      remain: number;
+      supply_date: string;
+    };
+    SupplyOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/SupplyOutputBody.json
+       */
+      readonly $schema?: string;
+      supply: components["schemas"]["SupplyDTO"];
+    };
+    UnavailableItemDTO: {
+      menu_item_id: string;
+      name: string;
+      reason: string;
+    };
+    UpdateItemInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/UpdateItemInputBody.json
+       */
+      readonly $schema?: string;
+      badges: string[] | null;
+      category_id?: string;
+      description: string;
+      name: string;
+      /** Format: int64 */
+      price_minor: number;
+      tags: string[] | null;
+    };
+    UploadDocumentInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/UploadDocumentInputBody.json
+       */
+      readonly $schema?: string;
+      content_base64: string;
+      expires_at?: string;
+      filename: string;
+      /** @enum {string} */
+      kind: "business_license" | "food_safety_permit" | "tax_registration" | "insurance" | "other";
+    };
+    UploadDocumentOutputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/UploadDocumentOutputBody.json
+       */
+      readonly $schema?: string;
+      document: components["schemas"]["DocumentDTO"];
+    };
+    VendorDTO: {
+      approved_at?: string;
+      contact_email: string;
+      display_name: string;
+      id: string;
+      legal_name: string;
+      plants?: string[] | null;
+      status: string;
+    };
+    VerifyPickupInputBody: {
+      /**
+       * Format: uri
+       * @description A URL to the JSON Schema for this object.
+       * @example https://example.com/schemas/VerifyPickupInputBody.json
+       */
+      readonly $schema?: string;
+      code: string;
+    };
+  };
+  responses: never;
+  parameters: never;
+  requestBodies: never;
+  headers: never;
+  pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    listAnomalies: {
-        parameters: {
-            query?: {
-                status?: "open" | "triaged" | "closed" | "";
-                severity?: "low" | "medium" | "high" | "critical" | "";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListAnomaliesOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  listAnomalies: {
+    parameters: {
+      query?: {
+        status?: "open" | "triaged" | "closed" | "";
+        severity?: "low" | "medium" | "high" | "critical" | "";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    closeAnomaly: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnomalyActionInputBody"];
-            };
+        content: {
+          "application/json": components["schemas"]["ListAnomaliesOutputBody"];
         };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    triageAnomaly: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnomalyActionInputBody"];
-            };
-        };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  closeAnomaly: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    listAuditEvents: {
-        parameters: {
-            query?: {
-                target_kind?: string;
-                target_id?: string;
-                since?: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListAuditOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AnomalyActionInputBody"];
+      };
     };
-    listDLQ: {
-        parameters: {
-            query?: {
-                stream?: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    replayDLQMessage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReplayOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  triageAnomaly: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    resolveDLQMessage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResolveInputBody"];
-            };
-        };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AnomalyActionInputBody"];
+      };
     };
-    reviewVendorDocument: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReviewDocumentInputBody"];
-            };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
         };
+      };
     };
-    listPayrollBatches: {
-        parameters: {
-            query?: {
-                status?: "draft" | "locked" | "exported" | "closed" | "";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListBatchesOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  listAuditEvents: {
+    parameters: {
+      query?: {
+        target_kind?: string;
+        target_id?: string;
+        since?: string;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    createPayrollBatch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateBatchInputBody"];
-            };
+        content: {
+          "application/json": components["schemas"]["ListAuditOutputBody"];
         };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BatchOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    getPayrollBatch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BatchWithEntriesOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  listDLQ: {
+    parameters: {
+      query?: {
+        stream?: string;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    lockPayrollBatch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["ListOutputBody"];
         };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    listPayrollDisputes: {
-        parameters: {
-            query?: {
-                status?: "open" | "resolved_refund" | "resolved_reject" | "cancelled" | "";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListDisputesOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  replayDLQMessage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    resolvePayrollDispute: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResolveDisputeInputBody"];
-            };
+        content: {
+          "application/json": components["schemas"]["ReplayOutputBody"];
         };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    listVendors: {
-        parameters: {
-            query?: {
-                /** @description Optional status filter */
-                status?: "pending" | "approved" | "suspended" | "terminated" | "";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListVendorsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  resolveDLQMessage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    createPendingVendor: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateVendorInputBody"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreateVendorOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ResolveInputBody"];
+      };
     };
-    approveVendor: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApproveInputBody"];
-            };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
         };
+      };
     };
-    issueVendorInvite: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InviteOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  reviewVendorDocument: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    reinstateVendor: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReviewDocumentInputBody"];
+      };
     };
-    suspendVendor: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    listVendorDocuments: {
-        parameters: {
-            query?: {
-                include_all?: boolean;
-            };
-            header?: never;
-            path: {
-                vendor_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListDocumentsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  listPayrollBatches: {
+    parameters: {
+      query?: {
+        status?: "draft" | "locked" | "exported" | "closed" | "";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    uploadVendorDocument: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                vendor_id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UploadDocumentInputBody"];
-            };
+        content: {
+          "application/json": components["schemas"]["ListBatchesOutputBody"];
         };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadDocumentOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    listMyDisputes: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListDisputesOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  createPayrollBatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    openMyDispute: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OpenDisputeInputBody"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DisputeOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateBatchInputBody"];
+      };
     };
-    listEmployeeFavorites: {
-        parameters: {
-            query?: {
-                /** @description YYYY-MM-DD target day; required (controller will add defaulting) */
-                day?: string;
-                /** @description RFC3339Nano created_at returned as next_cursor from a previous page */
-                cursor?: string;
-                /** @description Page size, clamped to 1..50 */
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListFavoritesOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["BatchOutputBody"];
         };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    addEmployeeFavorite: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AddFavoriteInputBody"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  getPayrollBatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    removeEmployeeFavorite: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                menu_item_id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["BatchWithEntriesOutputBody"];
         };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    getEmployeeHome: {
-        parameters: {
-            query?: {
-                /** @description YYYY-MM-DD; overrides server-derived target_day */
-                day?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HomeOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  lockPayrollBatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    listEmployeeMenu: {
-        parameters: {
-            query?: {
-                /** @description Plant code; defaults to caller's plant */
-                plant?: string;
-                /** @description YYYY-MM-DD; defaults to today UTC */
-                day?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListEmployeeMenuOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    listMyOrders: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListOrdersOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  listPayrollDisputes: {
+    parameters: {
+      query?: {
+        status?: "open" | "resolved_refund" | "resolved_reject" | "cancelled" | "";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    placeOrder: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PlaceOrderInputBody"];
-            };
+        content: {
+          "application/json": components["schemas"]["ListDisputesOutputBody"];
         };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlaceOrderOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    getMyOrder: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrderOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  resolvePayrollDispute: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    cancelMyOrder: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ResolveDisputeInputBody"];
+      };
     };
-    getPickupCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PickupCodeOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    reorderMyOrder: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReorderInputBody"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReorderOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  listVendors: {
+    parameters: {
+      query?: {
+        /** @description Optional status filter */
+        status?: "pending" | "approved" | "suspended" | "terminated" | "";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    listEmployeeRecommendations: {
-        parameters: {
-            query?: {
-                /** @description YYYY-MM-DD target day; defaults to server-derived target_day */
-                day?: string;
-                /** @description opaque integer offset (0 to start) */
-                cursor?: number;
-                /** @description page size; defaults to 5 */
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecommendationsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["ListVendorsOutputBody"];
         };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    listEmployeeReorders: {
-        parameters: {
-            query?: {
-                /** @description opaque integer offset returned by a previous response (0 to start) */
-                cursor?: number;
-                /** @description page size; defaults to 5 */
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReordersOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  createPendingVendor: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    listMerchantCategories: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListCategoriesOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateVendorInputBody"];
+      };
     };
-    createMerchantCategory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateCategoryInputBody"];
-            };
+        content: {
+          "application/json": components["schemas"]["CreateVendorOutputBody"];
         };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreateCategoryOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    listMerchantMenuItems: {
-        parameters: {
-            query?: {
-                /** @description Include archived items in the result */
-                include_archived?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListItemsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  approveVendor: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    createMerchantMenuItem: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateItemInputBody"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ItemOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ApproveInputBody"];
+      };
     };
-    updateMerchantMenuItem: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateItemInputBody"];
-            };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ItemOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
         };
+      };
     };
-    archiveMerchantMenuItem: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  issueVendorInvite: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    publishMerchantMenuItem: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["InviteOutputBody"];
         };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    listMerchantOrders: {
-        parameters: {
-            query?: {
-                date?: string;
-                status?: "placed" | "cutoff" | "ready" | "picked_up" | "no_show" | "cancelled" | "";
-                plant?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListMerchantOrdersOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  reinstateVendor: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    verifyPickup: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VerifyPickupInputBody"];
-            };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
         };
+      };
     };
-    markOrdersReady: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MarkReadyInputBody"];
-            };
-        };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  suspendVendor: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    listMerchantSupply: {
-        parameters: {
-            query?: {
-                /** @description YYYY-MM-DD; defaults to today UTC */
-                date?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListSupplyOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    setMerchantSupply: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                itemID: string;
-                date: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetCapacityInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SupplyOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  listVendorDocuments: {
+    parameters: {
+      query?: {
+        include_all?: boolean;
+      };
+      header?: never;
+      path: {
+        vendor_id: string;
+      };
+      cookie?: never;
     };
-    completeLogin: {
-        parameters: {
-            query?: {
-                state?: string;
-                code?: string;
-                app?: "employee" | "merchant" | "admin";
-            };
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["ListDocumentsOutputBody"];
         };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
-    startLogin: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description OIDC provider */
-                provider: "google" | "github";
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StartLoginInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StartLoginOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+  };
+  uploadVendorDocument: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        vendor_id: string;
+      };
+      cookie?: never;
     };
-    logout: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UploadDocumentInputBody"];
+      };
     };
-    me: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MeOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["UploadDocumentOutputBody"];
         };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
     };
+  };
+  listMyDisputes: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListDisputesOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  openMyDispute: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OpenDisputeInputBody"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DisputeOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  listEmployeeFavorites: {
+    parameters: {
+      query?: {
+        /** @description YYYY-MM-DD target day; required (controller will add defaulting) */
+        day?: string;
+        /** @description RFC3339Nano created_at returned as next_cursor from a previous page */
+        cursor?: string;
+        /** @description Page size, clamped to 1..50 */
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListFavoritesOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  addEmployeeFavorite: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AddFavoriteInputBody"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  removeEmployeeFavorite: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        menu_item_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  getEmployeeHome: {
+    parameters: {
+      query?: {
+        /** @description YYYY-MM-DD; overrides server-derived target_day */
+        day?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HomeOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  listEmployeeMenu: {
+    parameters: {
+      query?: {
+        /** @description Plant code; defaults to caller's plant */
+        plant?: string;
+        /** @description YYYY-MM-DD; defaults to today UTC */
+        day?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListEmployeeMenuOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  listMyOrders: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListOrdersOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  placeOrder: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlaceOrderInputBody"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlaceOrderOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  getMyOrder: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OrderOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  cancelMyOrder: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  getPickupCode: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PickupCodeOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  reorderMyOrder: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReorderInputBody"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReorderOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  listEmployeeRecommendations: {
+    parameters: {
+      query?: {
+        /** @description YYYY-MM-DD target day; defaults to server-derived target_day */
+        day?: string;
+        /** @description opaque integer offset (0 to start) */
+        cursor?: number;
+        /** @description page size; defaults to 5 */
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RecommendationsOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  listEmployeeReorders: {
+    parameters: {
+      query?: {
+        /** @description opaque integer offset returned by a previous response (0 to start) */
+        cursor?: number;
+        /** @description page size; defaults to 5 */
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReordersOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  listMerchantCategories: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListCategoriesOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  createMerchantCategory: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateCategoryInputBody"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CreateCategoryOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  listMerchantMenuItems: {
+    parameters: {
+      query?: {
+        /** @description Include archived items in the result */
+        include_archived?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListItemsOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  createMerchantMenuItem: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateItemInputBody"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ItemOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  updateMerchantMenuItem: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateItemInputBody"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ItemOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  archiveMerchantMenuItem: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  publishMerchantMenuItem: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  listMerchantOrders: {
+    parameters: {
+      query?: {
+        date?: string;
+        status?: "placed" | "cutoff" | "ready" | "picked_up" | "no_show" | "cancelled" | "";
+        plant?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListMerchantOrdersOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  verifyPickup: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VerifyPickupInputBody"];
+      };
+    };
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  markOrdersReady: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MarkReadyInputBody"];
+      };
+    };
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  listMerchantSupply: {
+    parameters: {
+      query?: {
+        /** @description YYYY-MM-DD; defaults to today UTC */
+        date?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListSupplyOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  setMerchantSupply: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        itemID: string;
+        date: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SetCapacityInputBody"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupplyOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  completeLogin: {
+    parameters: {
+      query?: {
+        state?: string;
+        code?: string;
+        app?: "employee" | "merchant" | "admin";
+      };
+      header?: never;
+      path: {
+        provider: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          Location?: string;
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  startLogin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description OIDC provider */
+        provider: "google" | "github";
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartLoginInputBody"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StartLoginOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  logout: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
+  me: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MeOutputBody"];
+        };
+      };
+      /** @description Error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["ErrorModel"];
+        };
+      };
+    };
+  };
 }

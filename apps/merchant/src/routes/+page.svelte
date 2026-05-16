@@ -26,9 +26,7 @@
   const itemById = $derived(
     Object.fromEntries(data.items.map((i: any) => [i.id, i])) as Record<string, any>,
   );
-  const selectedDayDef = $derived(
-    data.days.find((d: any) => d.id === selectedDay) ?? data.days[0],
-  );
+  const selectedDayDef = $derived(data.days.find((d: any) => d.id === selectedDay) ?? data.days[0]);
 
   /** Enrich a date's supply rows with menu-item detail; drop removed (cap 0). */
   function slotsFor(date: string) {
@@ -86,107 +84,104 @@
     <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-red-600">
       {data.today.replace(/-/g, " / ")} · {todayDay.weekday} · 今日營運
     </div>
-    <h1 class="mt-1 text-3xl font-black tracking-tight text-tb-slate-900">
-      今日備餐儀表板
-    </h1>
+    <h1 class="mt-1 text-3xl font-black tracking-tight text-tb-slate-900">今日備餐儀表板</h1>
     <p class="mt-1 text-sm text-tb-slate-500">{dashboardSub}</p>
   </section>
 
-{#if form?.error}
-  <p class="mb-4 rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">
-    {form.error}
-  </p>
-{/if}
-
-<section class="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-  <StatCard label="今日份數" value={data.stats.totalCapacity} suffix="份" />
-  <StatCard label="準時率" value={`${onTimeRate}%`} hint={`${data.stats.pickedUp} 筆已領取`} />
-  <StatCard label="待備餐" value={data.stats.pendingPrep} suffix="筆" />
-  <StatCard label="今日營收" value={`$${data.stats.revenue.toLocaleString()}`} />
-</section>
-
-<!-- Per-plant prep & delivery aggregation (today) -->
-<section class="mb-10">
-  <div class="mb-3 flex items-baseline justify-between">
-    <div>
-      <h2 class="text-lg font-bold text-tb-slate-900">備餐與配送彙總</h2>
-      <p class="text-sm text-tb-slate-500">
-        {data.today.replace(/-/g, "/")}（{todayDay.weekday.slice(1)}） · 依廠區分組
-      </p>
-    </div>
-    <a href="/orders">
-      <Button variant="secondary" size="sm">
-        <Icon name="doc" class="h-4 w-4" />檢視今日總表
-      </Button>
-    </a>
-  </div>
-  {#if data.plants.length === 0}
-    <div
-      class="grid place-items-center rounded-tb-2xl border border-dashed border-tb-slate-300 bg-white py-14 text-center"
-    >
-      <Icon name="doc" class="h-9 w-9 text-tb-slate-300" />
-      <p class="mt-2 text-sm font-bold text-tb-slate-700">今日尚無訂單</p>
-      <p class="mt-1 text-xs text-tb-slate-500">員工下單後，將依廠區彙總顯示於此。</p>
-    </div>
-  {:else}
-    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {#each data.plants as block (block.plant)}
-        <PlantAggCard
-          plant={block.plant}
-          total={block.total}
-          items={block.items}
-          orderCount={block.orderCount}
-        />
-      {/each}
-    </div>
+  {#if form?.error}
+    <p class="mb-4 rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">
+      {form.error}
+    </p>
   {/if}
-</section>
 
-<!-- 7-day schedule planner -->
-<section>
-  <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
-    <div>
-      <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-red-600">
-        Schedule · 排程菜單
+  <section class="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
+    <StatCard label="今日份數" value={data.stats.totalCapacity} suffix="份" />
+    <StatCard label="準時率" value={`${onTimeRate}%`} hint={`${data.stats.pickedUp} 筆已領取`} />
+    <StatCard label="待備餐" value={data.stats.pendingPrep} suffix="筆" />
+    <StatCard label="今日營收" value={`$${data.stats.revenue.toLocaleString()}`} />
+  </section>
+
+  <!-- Per-plant prep & delivery aggregation (today) -->
+  <section class="mb-10">
+    <div class="mb-3 flex items-baseline justify-between">
+      <div>
+        <h2 class="text-lg font-bold text-tb-slate-900">備餐與配送彙總</h2>
+        <p class="text-sm text-tb-slate-500">
+          {data.today.replace(/-/g, "/")}（{todayDay.weekday.slice(1)}） · 依廠區分組
+        </p>
       </div>
-      <h2 class="mt-1 text-2xl font-extrabold tracking-tight text-tb-slate-900">
-        未來 7 天排菜
-      </h2>
-      <p class="mt-1 text-sm text-tb-slate-500">
-        為每一天預先安排菜色與上限份數。所有菜色從「餐點庫」一鍵取出，照片與描述會保留。
-      </p>
+      <a href="/orders">
+        <Button variant="secondary" size="sm">
+          <Icon name="doc" class="h-4 w-4" />檢視今日總表
+        </Button>
+      </a>
     </div>
-  </div>
+    {#if data.plants.length === 0}
+      <div
+        class="grid place-items-center rounded-tb-2xl border border-dashed border-tb-slate-300 bg-white py-14 text-center"
+      >
+        <Icon name="doc" class="h-9 w-9 text-tb-slate-300" />
+        <p class="mt-2 text-sm font-bold text-tb-slate-700">今日尚無訂單</p>
+        <p class="mt-1 text-xs text-tb-slate-500">員工下單後，將依廠區彙總顯示於此。</p>
+      </div>
+    {:else}
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {#each data.plants as block (block.plant)}
+          <PlantAggCard
+            plant={block.plant}
+            total={block.total}
+            items={block.items}
+            orderCount={block.orderCount}
+          />
+        {/each}
+      </div>
+    {/if}
+  </section>
 
-  <div class="mb-4">
-    <ScheduleDayPicker
-      days={data.days}
-      supplyByDate={Object.fromEntries(
-        data.days.map((d: any) => [
-          d.id,
-          slotsFor(d.id).map((s) => ({ cap: s.cap, ordered: s.ordered })),
-        ]),
-      )}
-      selected={selectedDay}
-      onSelect={(id) => (selectedDay = id)}
+  <!-- 7-day schedule planner -->
+  <section>
+    <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-red-600">
+          Schedule · 排程菜單
+        </div>
+        <h2 class="mt-1 text-2xl font-extrabold tracking-tight text-tb-slate-900">未來 7 天排菜</h2>
+        <p class="mt-1 text-sm text-tb-slate-500">
+          為每一天預先安排菜色與上限份數。所有菜色從「餐點庫」一鍵取出，照片與描述會保留。
+        </p>
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <ScheduleDayPicker
+        days={data.days}
+        supplyByDate={Object.fromEntries(
+          data.days.map((d: any) => [
+            d.id,
+            slotsFor(d.id).map((s) => ({ cap: s.cap, ordered: s.ordered })),
+          ]),
+        )}
+        selected={selectedDay}
+        onSelect={(id) => (selectedDay = id)}
+      />
+    </div>
+
+    <ScheduleTable
+      day={selectedDayDef}
+      slots={selectedSlots}
+      onOpenLibrary={() => (libraryOpen = true)}
+      {submitCap}
     />
-  </div>
 
-  <ScheduleTable
-    day={selectedDayDef}
-    slots={selectedSlots}
-    onOpenLibrary={() => (libraryOpen = true)}
-    {submitCap}
-  />
-
-  <div
-    class="mt-3 flex items-start gap-2 rounded-xl bg-tb-amber-50 px-3 py-2.5 text-xs text-tb-amber-900"
-  >
-    <Icon name="alert" class="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-    <span>
-      每日截單時間 = 取餐日前一日 17:00；截單後系統會自動鎖定當日菜色與上限。若某菜色已訂購數接近上限，建議提早提高上限或新增其他菜色。
-    </span>
-  </div>
+    <div
+      class="mt-3 flex items-start gap-2 rounded-xl bg-tb-amber-50 px-3 py-2.5 text-xs text-tb-amber-900"
+    >
+      <Icon name="alert" class="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+      <span>
+        每日截單時間 = 取餐日前一日
+        17:00；截單後系統會自動鎖定當日菜色與上限。若某菜色已訂購數接近上限，建議提早提高上限或新增其他菜色。
+      </span>
+    </div>
   </section>
 </div>
 
@@ -195,30 +190,18 @@
   open={libraryOpen}
   onClose={() => (libraryOpen = false)}
   library={data.items}
-  scheduledIds={scheduledIds}
+  {scheduledIds}
   onAdd={addFromLibrary}
 />
 
 <!-- Hidden forms — drive schedule edits through +page.server.ts actions. -->
-<form
-  bind:this={capForm}
-  method="POST"
-  action="?/setSupply"
-  class="hidden"
-  use:enhance
->
+<form bind:this={capForm} method="POST" action="?/setSupply" class="hidden" use:enhance>
   <input type="hidden" name="item_id" value={capItemId} />
   <input type="hidden" name="date" value={capDate} />
   <input type="hidden" name="capacity" value={capValue} />
   <input type="hidden" name="pickup_window" value={capPickup} />
   <input type="hidden" name="cutoff_at" value={`${capDate}T17:00:00Z`} />
 </form>
-<form
-  bind:this={publishForm}
-  method="POST"
-  action="?/publishItem"
-  class="hidden"
-  use:enhance
->
+<form bind:this={publishForm} method="POST" action="?/publishItem" class="hidden" use:enhance>
   <input type="hidden" name="item_id" value={publishItemId} />
 </form>

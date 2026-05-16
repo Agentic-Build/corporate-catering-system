@@ -43,12 +43,7 @@
     delta={data.counts.pending > 0 ? "待處理" : "已清空"}
     deltaTone={data.counts.pending > 0 ? "warning" : "success"}
   />
-  <StatCard
-    label="已核准商家"
-    value={data.counts.approved}
-    delta="營運中"
-    deltaTone="success"
-  />
+  <StatCard label="已核准商家" value={data.counts.approved} delta="營運中" deltaTone="success" />
   <StatCard
     label="近 7 日告警"
     value={data.counts.anomalies7d}
@@ -150,9 +145,7 @@
               <td class="px-4 py-2.5 text-right font-jetbrains-mono font-bold tabular-nums">
                 {ntd(Number(e.amount_minor))}
               </td>
-              <td
-                class="px-4 py-2.5 text-right font-jetbrains-mono tabular-nums text-tb-rose-700"
-              >
+              <td class="px-4 py-2.5 text-right font-jetbrains-mono tabular-nums text-tb-rose-700">
                 {Number(e.refunded_minor) > 0 ? ntd(Number(e.refunded_minor)) : "—"}
               </td>
               <td class="px-4 py-2.5">

@@ -20,9 +20,7 @@
 <article
   class="flex flex-col overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm"
 >
-  <header
-    class="flex items-center justify-between gap-3 border-b border-tb-slate-100 px-5 py-4"
-  >
+  <header class="flex items-center justify-between gap-3 border-b border-tb-slate-100 px-5 py-4">
     <div>
       <h3 class="text-base font-bold text-tb-slate-900">{plant}</h3>
       <p class="text-xs text-tb-slate-500">{orderCount} 筆訂單</p>
@@ -33,9 +31,7 @@
       >
         {total}
       </div>
-      <div
-        class="text-[10px] font-semibold uppercase tracking-eyebrow text-tb-slate-500"
-      >
+      <div class="text-[10px] font-semibold uppercase tracking-eyebrow text-tb-slate-500">
         共 {total} 份
       </div>
     </div>
@@ -44,9 +40,7 @@
     {#each items as it (it.name)}
       <li class="flex items-center justify-between py-2.5 text-sm">
         <span class="text-tb-slate-800">{it.name}</span>
-        <span
-          class="font-jetbrains-mono text-sm font-bold tabular-nums text-tb-slate-900"
-        >
+        <span class="font-jetbrains-mono text-sm font-bold tabular-nums text-tb-slate-900">
           × {it.qty}
         </span>
       </li>

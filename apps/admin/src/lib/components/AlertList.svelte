@@ -21,10 +21,7 @@
   let { anomalies }: Props = $props();
 
   // critical/high → danger, medium → warning, low/other → info.
-  const toneMap: Record<
-    string,
-    { dot: string; border: string; bg: string }
-  > = {
+  const toneMap: Record<string, { dot: string; border: string; bg: string }> = {
     danger: { dot: "bg-tb-rose-500", border: "border-tb-rose-200", bg: "bg-tb-rose-50/60" },
     warning: { dot: "bg-tb-amber-500", border: "border-tb-amber-200", bg: "bg-tb-amber-50/60" },
     info: { dot: "bg-tb-emerald-500", border: "border-tb-emerald-200", bg: "bg-tb-emerald-50/60" },
@@ -59,9 +56,7 @@
     <div class="grid gap-3">
       {#each anomalies as a (a.id)}
         {@const t = toneFor(a.severity)}
-        <div
-          class="flex flex-wrap items-start gap-3 rounded-xl border {t.border} {t.bg} p-4"
-        >
+        <div class="flex flex-wrap items-start gap-3 rounded-xl border {t.border} {t.bg} p-4">
           <span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full {t.dot}" aria-hidden="true"></span>
           <div class="min-w-0 flex-1">
             <div class="text-sm font-bold text-tb-slate-900">

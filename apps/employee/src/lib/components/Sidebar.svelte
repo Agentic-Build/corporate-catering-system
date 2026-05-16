@@ -69,7 +69,9 @@
       class="rounded-tb-2xl border border-tb-amber-200 bg-gradient-to-br from-tb-amber-50 to-tb-rose-50 p-4"
     >
       <div class="text-[10px] font-bold uppercase tracking-eyebrow text-tb-amber-800">Pro Tip</div>
-      <div class="mt-1 text-sm font-bold leading-snug text-tb-slate-900">前一日 17:00 前還可改單</div>
+      <div class="mt-1 text-sm font-bold leading-snug text-tb-slate-900">
+        前一日 17:00 前還可改單
+      </div>
       <div class="mt-1 text-[11px] leading-relaxed text-tb-slate-600">
         預訂後仍可至「我的訂單」修改份數、取餐點或取消。
       </div>

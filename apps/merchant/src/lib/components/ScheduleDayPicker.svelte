@@ -50,16 +50,13 @@
       </div>
       <div class="mt-2 flex items-baseline gap-1">
         <span
-          class="text-base font-black tabular-nums {on
-            ? 'text-tb-red-700'
-            : 'text-tb-slate-900'}">{slots.length}</span
+          class="text-base font-black tabular-nums {on ? 'text-tb-red-700' : 'text-tb-slate-900'}"
+          >{slots.length}</span
         >
         <span class="text-[10px] text-tb-slate-500">道菜 · </span>
         <span class="text-[10px] tabular-nums text-tb-slate-500">{ordered}/{total}</span>
       </div>
-      <span
-        class="mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold {status.tone}"
-      >
+      <span class="mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold {status.tone}">
         {status.label}
       </span>
     </button>

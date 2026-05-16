@@ -68,11 +68,7 @@
     載入失敗：{data.error}
   </div>
 {:else if chips.length === 0}
-  <EmptyState
-    icon="tag"
-    title="尚無推薦"
-    hint="正在收集你的偏好，先看看同事都點什麼吧。"
-  />
+  <EmptyState icon="tag" title="尚無推薦" hint="正在收集你的偏好，先看看同事都點什麼吧。" />
 {:else}
   <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
     {#each chips as c (c.menu_item_id)}

@@ -7,9 +7,7 @@
   }
   let { remain, cap }: Props = $props();
 
-  const pct = $derived(
-    cap > 0 ? Math.max(0, Math.min(100, Math.round((remain / cap) * 100))) : 0,
-  );
+  const pct = $derived(cap > 0 ? Math.max(0, Math.min(100, Math.round((remain / cap) * 100))) : 0);
   const barTone = $derived(
     remain === 0
       ? "bg-tb-slate-300"

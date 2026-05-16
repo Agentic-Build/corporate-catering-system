@@ -43,15 +43,9 @@
 </div>
 
 {#if data.items.length === 0}
-  <EmptyState
-    icon="doc"
-    title="尚未建立任何餐點"
-    hint="點「新增餐點」建立第一道菜色。"
-  />
+  <EmptyState icon="doc" title="尚未建立任何餐點" hint="點「新增餐點」建立第一道菜色。" />
 {:else}
-  <div
-    class="overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm"
-  >
+  <div class="overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm">
     <table class="w-full text-sm">
       <thead
         class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
@@ -68,9 +62,7 @@
           {@const meta = statusMeta[item.status] ?? { tone: "neutral", label: item.status }}
           <tr class="hover:bg-tb-slate-50/60">
             <td class="px-5 py-3 font-semibold text-tb-slate-900">{item.name}</td>
-            <td
-              class="px-3 py-3 text-right font-jetbrains-mono tabular-nums text-tb-slate-900"
-            >
+            <td class="px-3 py-3 text-right font-jetbrains-mono tabular-nums text-tb-slate-900">
               ${item.price_minor.toLocaleString()}
             </td>
             <td class="px-3 py-3">

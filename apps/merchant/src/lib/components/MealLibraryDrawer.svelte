@@ -19,9 +19,7 @@
   const filtered = $derived(
     library.filter(
       (m: any) =>
-        !query ||
-        m.name?.includes(query) ||
-        (m.tags ?? []).some((t: string) => t.includes(query)),
+        !query || m.name?.includes(query) || (m.tags ?? []).some((t: string) => t.includes(query)),
     ),
   );
 </script>
@@ -30,14 +28,10 @@
   {#snippet header()}
     <div class="flex items-center justify-between gap-3">
       <div>
-        <div
-          class="text-[11px] font-bold uppercase tracking-eyebrow-wide text-tb-red-600"
-        >
+        <div class="text-[11px] font-bold uppercase tracking-eyebrow-wide text-tb-red-600">
           餐點庫 · Meal Library
         </div>
-        <h2 class="mt-0.5 text-lg font-extrabold text-tb-slate-900">
-          從歷史菜色重新上架
-        </h2>
+        <h2 class="mt-0.5 text-lg font-extrabold text-tb-slate-900">從歷史菜色重新上架</h2>
       </div>
       <button
         type="button"
@@ -52,11 +46,7 @@
       所有曾經上架過的菜色都會保留照片、名稱、描述與價格 — 重新上架時只需設定當日上限。
     </p>
     <div class="mt-3">
-      <SearchInput
-        value={query}
-        onInput={(v) => (query = v)}
-        placeholder="搜尋餐點名稱或標籤…"
-      />
+      <SearchInput value={query} onInput={(v) => (query = v)} placeholder="搜尋餐點名稱或標籤…" />
     </div>
   {/snippet}
 
@@ -69,11 +59,7 @@
           : 'border-tb-slate-200 hover:border-tb-slate-300 hover:shadow-tb-sm'}"
       >
         {#if m.images?.[0]}
-          <img
-            src={m.images[0]}
-            alt=""
-            class="h-24 w-24 flex-shrink-0 rounded-xl object-cover"
-          />
+          <img src={m.images[0]} alt="" class="h-24 w-24 flex-shrink-0 rounded-xl object-cover" />
         {:else}
           <div
             class="grid h-24 w-24 flex-shrink-0 place-items-center rounded-xl bg-tb-slate-100 text-tb-slate-400"

@@ -149,11 +149,7 @@
           {#if a.status !== "closed"}
             <div class="mt-3 flex flex-wrap gap-2 border-t border-tb-slate-100 pt-3">
               {#if a.status === "open"}
-                <form
-                  method="POST"
-                  action="?/triage"
-                  class="flex flex-wrap items-center gap-2"
-                >
+                <form method="POST" action="?/triage" class="flex flex-wrap items-center gap-2">
                   <input type="hidden" name="id" value={a.id} />
                   <input
                     type="text"
@@ -164,11 +160,7 @@
                   <Button variant="secondary" size="sm" type="submit">標記處理中</Button>
                 </form>
               {/if}
-              <form
-                method="POST"
-                action="?/close"
-                class="flex flex-wrap items-center gap-2"
-              >
+              <form method="POST" action="?/close" class="flex flex-wrap items-center gap-2">
                 <input type="hidden" name="id" value={a.id} />
                 <input
                   type="text"

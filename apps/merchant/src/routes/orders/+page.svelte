@@ -81,9 +81,7 @@
   </p>
 {/if}
 {#if form?.success && form?.verifiedID}
-  <p class="mb-4 rounded-lg bg-tb-emerald-50 px-3 py-2 text-sm text-tb-emerald-700">
-    已核銷訂單
-  </p>
+  <p class="mb-4 rounded-lg bg-tb-emerald-50 px-3 py-2 text-sm text-tb-emerald-700">已核銷訂單</p>
 {/if}
 
 {#if Object.keys(data.byPlant).length === 0}

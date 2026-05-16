@@ -30,7 +30,8 @@
         <span
           class="grid h-5 min-w-[20px] place-items-center rounded-full px-1.5 text-[10px] font-bold tabular-nums
             {on ? 'bg-tb-red-100 text-tb-red-800' : 'bg-tb-slate-100 text-tb-slate-600'}"
-        >{t.count}</span>
+          >{t.count}</span
+        >
       {/if}
     </button>
   {/each}
