@@ -54,3 +54,13 @@ type ActiveItemRow struct {
 	ETALabel     string
 	CutoffAt     time.Time
 }
+
+// MerchantItemRow is the join result returned by ListByVendor. It augments a
+// menu item with read-only usage stats for the merchant meal-library view:
+// LastUsed is the most recent meal_supply.supply_date (nil if never scheduled),
+// TotalSold is the cumulative order_item.qty over picked-up orders (0 if none).
+type MerchantItemRow struct {
+	Item      Item
+	LastUsed  *time.Time
+	TotalSold int
+}

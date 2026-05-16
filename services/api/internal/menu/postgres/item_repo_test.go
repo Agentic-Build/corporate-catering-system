@@ -82,7 +82,7 @@ func TestItemRepo_SetStatusAndListFilter(t *testing.T) {
 	listed, err := repo.ListByVendor(ctx, vendorID, false)
 	require.NoError(t, err)
 	require.Len(t, listed, 2)
-	names := []string{listed[0].Name, listed[1].Name}
+	names := []string{listed[0].Item.Name, listed[1].Item.Name}
 	assert.Contains(t, names, "A")
 	assert.Contains(t, names, "B")
 	assert.NotContains(t, names, "C")
