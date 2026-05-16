@@ -1,9 +1,8 @@
 import { test, expect } from "@playwright/test";
+import { loginEmployee } from "./auth";
 
 test("pickup page redirects to order detail when not ready", async ({ page }) => {
-  await page.goto("/login");
-  await page.getByText("使用 Google 繼續").click();
-  await page.waitForURL(/\/$/, { timeout: 15_000 });
+  await loginEmployee(page);
 
   // The default cutoff is 17:00 UTC the day BEFORE supply_date, so "today" is
   // already past cutoff. Switch to "明天" (tomorrow) before submitting.

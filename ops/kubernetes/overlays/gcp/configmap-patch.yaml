@@ -29,3 +29,13 @@ data:
   S3_ENDPOINT: "https://storage.googleapis.com"
   # PLACEHOLDER: replace PROJECT_ID with your GCP project ID at deploy time.
   S3_BUCKET: "tbite-PROJECT_ID-prod"
+  OIDC_CALLBACK_BASE_URL: "https://api.tbite.com"
+  AUTH_PROVIDER_SLUGS: "authentik"
+  AUTH_PROVIDER_AUTHENTIK_DISPLAY_NAME: "Authentik"
+  AUTH_PROVIDER_AUTHENTIK_ISSUER_URL: "https://auth.PROD_DOMAIN/application/o/tbite/"
+  AUTH_PROVIDER_AUTHENTIK_SCOPES: "openid email profile tbite"
+  AUTHENTIK_BASE_URL: "https://auth.PROD_DOMAIN"
+  AUTHENTIK_VENDOR_OPERATOR_GROUP: "tbite:role:vendor_operator"
+  APP_BASE_URL_EMPLOYEE: "https://app.tbite.com"
+  APP_BASE_URL_MERCHANT: "https://merchant.tbite.com"
+  APP_BASE_URL_ADMIN: "https://admin.tbite.com"

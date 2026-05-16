@@ -56,6 +56,10 @@ func (a *API) AuthMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "user lookup", http.StatusInternalServerError)
 			return
 		}
+		if u.Status != identity.StatusActive {
+			http.Error(w, "account suspended", http.StatusLocked)
+			return
+		}
 		ctx := context.WithValue(r.Context(), userCtxKey, u)
 		ctx = context.WithValue(ctx, tokenCtxKey, tok)
 		_ = a.Sessions.Touch(ctx, tok)

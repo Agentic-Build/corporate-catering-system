@@ -296,6 +296,41 @@ components:
                 - tags
                 - badges
             type: object
+        CreateOperatorInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/CreateOperatorInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                display_name:
+                    minLength: 1
+                    type: string
+                email:
+                    format: email
+                    type: string
+            required:
+                - email
+                - display_name
+            type: object
+        CreateOperatorOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/CreateOperatorOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                operator:
+                    $ref: '#/components/schemas/OperatorDTO'
+            required:
+                - operator
+            type: object
         CreateVendorInputBody:
             additionalProperties: false
             properties:
@@ -639,21 +674,6 @@ components:
                 - recommend_chips
                 - day_menu
             type: object
-        InviteOutputBody:
-            additionalProperties: false
-            properties:
-                $schema:
-                    description: A URL to the JSON Schema for this object.
-                    examples:
-                        - https://example.com/schemas/InviteOutputBody.json
-                    format: uri
-                    readOnly: true
-                    type: string
-                code:
-                    type: string
-            required:
-                - code
-            type: object
         Item:
             additionalProperties: false
             properties:
@@ -922,6 +942,25 @@ components:
                         - "null"
             required:
                 - date
+                - items
+            type: object
+        ListOperatorsOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ListOperatorsOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/OperatorDTO'
+                    type:
+                        - array
+                        - "null"
+            required:
                 - items
             type: object
         ListOrdersOutputBody:
@@ -1200,6 +1239,35 @@ components:
                 - order_id
                 - reason
             type: object
+        OperatorDTO:
+            additionalProperties: false
+            properties:
+                display_name:
+                    type: string
+                email:
+                    type: string
+                external_subject:
+                    type: string
+                id:
+                    type: string
+                last_synced_at:
+                    type: string
+                provider:
+                    type: string
+                setup_url:
+                    type: string
+                status:
+                    type: string
+                vendor_id:
+                    type: string
+            required:
+                - id
+                - vendor_id
+                - email
+                - display_name
+                - provider
+                - status
+            type: object
         OrderDTO:
             additionalProperties: false
             properties:
@@ -1354,6 +1422,36 @@ components:
                     $ref: '#/components/schemas/OrderDTO'
             required:
                 - order
+            type: object
+        ProviderDTO:
+            additionalProperties: false
+            properties:
+                display_name:
+                    type: string
+                slug:
+                    type: string
+            required:
+                - slug
+                - display_name
+            type: object
+        ProvidersOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ProvidersOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/ProviderDTO'
+                    type:
+                        - array
+                        - "null"
+            required:
+                - items
             type: object
         RecommendChipDTO:
             additionalProperties: false
@@ -1615,8 +1713,6 @@ components:
                         - employee
                         - merchant
                         - admin
-                    type: string
-                invite_code:
                     type: string
                 return_to:
                     type: string
@@ -2390,9 +2486,9 @@ paths:
             tags:
                 - admin
                 - vendor
-    /api/admin/vendors/{id}/invite:
-        post:
-            operationId: issueVendorInvite
+    /api/admin/vendors/{id}/operators:
+        get:
+            operationId: listVendorOperators
             parameters:
                 - in: path
                   name: id
@@ -2401,11 +2497,45 @@ paths:
                     format: uuid
                     type: string
             responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOperatorsOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: List vendor operators
+            tags:
+                - admin
+                - vendor
+        post:
+            operationId: createVendorOperator
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateOperatorInputBody'
+                required: true
+            responses:
                 "201":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/InviteOutputBody'
+                                $ref: '#/components/schemas/CreateOperatorOutputBody'
                     description: Created
                 default:
                     content:
@@ -2415,7 +2545,69 @@ paths:
                     description: Error
             security:
                 - bearer: []
-            summary: Issue a single-use invite code for a vendor
+            summary: Create or update a vendor operator in Authentik
+            tags:
+                - admin
+                - vendor
+    /api/admin/vendors/{id}/operators/{operator_id}/reinstate:
+        post:
+            operationId: reinstateVendorOperator
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - in: path
+                  name: operator_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Reinstate a vendor operator
+            tags:
+                - admin
+                - vendor
+    /api/admin/vendors/{id}/operators/{operator_id}/suspend:
+        post:
+            operationId: suspendVendorOperator
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - in: path
+                  name: operator_id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Suspend a vendor operator
             tags:
                 - admin
                 - vendor
@@ -3376,15 +3568,6 @@ paths:
                   name: code
                   schema:
                     type: string
-                - explode: false
-                  in: query
-                  name: app
-                  schema:
-                    enum:
-                        - employee
-                        - merchant
-                        - admin
-                    type: string
             responses:
                 "204":
                     description: No Content
@@ -3405,15 +3588,12 @@ paths:
         post:
             operationId: startLogin
             parameters:
-                - description: OIDC provider
+                - description: OIDC provider slug
                   in: path
                   name: provider
                   required: true
                   schema:
-                    description: OIDC provider
-                    enum:
-                        - google
-                        - github
+                    description: OIDC provider slug
                     type: string
             requestBody:
                 content:
@@ -3452,6 +3632,25 @@ paths:
             security:
                 - bearer: []
             summary: Revoke current session
+            tags:
+                - auth
+    /auth/providers:
+        get:
+            operationId: listAuthProviders
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProvidersOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            summary: List enabled auth providers
             tags:
                 - auth
     /me:

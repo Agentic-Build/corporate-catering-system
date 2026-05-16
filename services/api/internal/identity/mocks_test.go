@@ -62,6 +62,21 @@ func (r *fakeUserRepo) UpdateStatus(ctx context.Context, id string, status ident
 	return identity.ErrUserNotFound
 }
 
+func (r *fakeUserRepo) UpdateProfile(ctx context.Context, u *identity.User) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	existing, ok := r.byID[u.ID]
+	if !ok {
+		return identity.ErrUserNotFound
+	}
+	delete(r.users, existing.PrimaryEmail)
+	u.CreatedAt = existing.CreatedAt
+	u.UpdatedAt = time.Now().UTC()
+	r.users[u.PrimaryEmail] = u
+	r.byID[u.ID] = u
+	return nil
+}
+
 // ---- Identity ----
 type fakeIdentityRepo struct {
 	mu    sync.Mutex
@@ -100,70 +115,6 @@ func (r *fakeIdentityRepo) ListByUser(ctx context.Context, userID string) ([]*id
 		}
 	}
 	return out, nil
-}
-
-// ---- Directory ----
-type fakeDir struct {
-	byEmail map[string]*identity.EmployeeDirectoryEntry
-}
-
-func (r *fakeDir) GetByEmail(ctx context.Context, email string) (*identity.EmployeeDirectoryEntry, error) {
-	if e, ok := r.byEmail[email]; ok {
-		return e, nil
-	}
-	return nil, identity.ErrNotInDirectory
-}
-
-// ---- Vendor invite ----
-type fakeInvites struct {
-	mu      sync.Mutex
-	byCode  map[string]*identity.VendorInvite
-}
-
-func newFakeInvites() *fakeInvites {
-	return &fakeInvites{byCode: map[string]*identity.VendorInvite{}}
-}
-
-func (r *fakeInvites) Get(_ context.Context, code string) (*identity.VendorInvite, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if inv, ok := r.byCode[code]; ok {
-		return inv, nil
-	}
-	return nil, identity.ErrInviteNotFound
-}
-
-func (r *fakeInvites) Put(_ context.Context, inv *identity.VendorInvite) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.byCode[inv.Code] = inv
-	return nil
-}
-
-func (r *fakeInvites) Consume(_ context.Context, code, userID string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	inv, ok := r.byCode[code]
-	if !ok {
-		return identity.ErrInviteNotFound
-	}
-	if inv.ConsumedAt != nil {
-		return identity.ErrInviteAlreadyUsed
-	}
-	now := time.Now().UTC()
-	inv.ConsumedAt = &now
-	inv.ConsumedBy = &userID
-	return nil
-}
-
-// ---- Admin whitelist ----
-type fakeAdminWL struct {
-	emails map[string]struct{}
-}
-
-func (r *fakeAdminWL) IsAllowed(ctx context.Context, email string) (bool, error) {
-	_, ok := r.emails[email]
-	return ok, nil
 }
 
 // ---- Session ----
@@ -262,6 +213,8 @@ type fakeProvider struct {
 
 func (p *fakeProvider) Name() string { return p.name }
 
+func (p *fakeProvider) DisplayName() string { return p.name }
+
 func (p *fakeProvider) BuildAuthURL(ctx context.Context, state string) (*oidc.AuthURL, error) {
 	p.nextState = state
 	return &oidc.AuthURL{URL: "https://fake/" + state, PKCEVerifier: "v", Nonce: "n"}, nil
@@ -273,11 +226,6 @@ func (p *fakeProvider) Exchange(ctx context.Context, code, _v, _n string) (*oidc
 	}
 	return p.userinfo, nil
 }
-
-// ---- Clock ----
-type fixedClock struct{ t time.Time }
-
-func (c fixedClock) Now() time.Time { return c.t }
 
 // ---- helpers ----
 func fmtInt(n int) string { return strconv.Itoa(n) }

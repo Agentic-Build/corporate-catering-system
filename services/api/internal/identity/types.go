@@ -20,11 +20,6 @@ const (
 
 type Provider string
 
-const (
-	ProviderGoogle Provider = "google"
-	ProviderGitHub Provider = "github"
-)
-
 type User struct {
 	ID           string
 	PrimaryEmail string
@@ -46,28 +41,4 @@ type UserIdentity struct {
 	ExternalSubject string
 	RawClaims       map[string]any
 	LinkedAt        time.Time
-}
-
-type EmployeeDirectoryEntry struct {
-	EmployeeID   string
-	PrimaryEmail string
-	DisplayName  string
-	Plant        *string
-	Department   *string
-	Status       Status
-}
-
-type VendorInvite struct {
-	Code       string
-	VendorID   string
-	EmailHint  *string
-	ExpiresAt  time.Time
-	ConsumedAt *time.Time
-	ConsumedBy *string
-}
-
-type AdminWhitelistEntry struct {
-	Email     string
-	AddedBy   string
-	CreatedAt time.Time
 }

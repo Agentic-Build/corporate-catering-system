@@ -6,8 +6,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
-	"time"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
 )
@@ -15,22 +15,15 @@ import (
 type Service struct {
 	Users      UserRepository
 	Identities UserIdentityRepository
-	Directory  EmployeeDirectoryRepository
-	Invites    VendorInviteRepository
-	AdminWL    AdminWhitelistRepository
 	Sessions   SessionStore
 	Providers  map[string]oidc.Provider
 	States     oidc.StateStore
-	Clock      Clock
 }
 
-type Clock interface{ Now() time.Time }
-
 type StartLoginInput struct {
-	App        string
-	Provider   string
-	ReturnTo   string
-	InviteCode string
+	App      string
+	Provider string
+	ReturnTo string
 }
 
 type StartLoginOutput struct {
@@ -39,15 +32,25 @@ type StartLoginOutput struct {
 }
 
 type CompleteLoginInput struct {
-	App   string
-	State string
-	Code  string
+	Provider string
+	State    string
+	Code     string
 }
 
 type CompleteLoginOutput struct {
 	User     *User
 	Session  *Session
+	App      string
 	ReturnTo string
+}
+
+func (s *Service) ProviderInfos() []oidc.ProviderInfo {
+	out := make([]oidc.ProviderInfo, 0, len(s.Providers))
+	for slug, p := range s.Providers {
+		out = append(out, oidc.ProviderInfo{Slug: slug, DisplayName: p.DisplayName()})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Slug < out[j].Slug })
+	return out
 }
 
 func (s *Service) StartLogin(ctx context.Context, in StartLoginInput) (*StartLoginOutput, error) {
@@ -69,7 +72,6 @@ func (s *Service) StartLogin(ctx context.Context, in StartLoginInput) (*StartLog
 		ReturnTo:     safeReturnTo(in.ReturnTo),
 		PKCEVerifier: au.PKCEVerifier,
 		Nonce:        au.Nonce,
-		InviteCode:   in.InviteCode,
 	}
 	if err := s.States.Put(ctx, state, payload); err != nil {
 		return nil, err
@@ -82,8 +84,8 @@ func (s *Service) CompleteLogin(ctx context.Context, in CompleteLoginInput) (*Co
 	if err != nil {
 		return nil, err
 	}
-	if sp.App != in.App {
-		return nil, fmt.Errorf("identity: state app mismatch (got %s, want %s)", sp.App, in.App)
+	if sp.Provider != in.Provider {
+		return nil, fmt.Errorf("identity: state provider mismatch (got %s, want %s)", in.Provider, sp.Provider)
 	}
 	_ = s.States.Consume(ctx, in.State)
 
@@ -96,33 +98,37 @@ func (s *Service) CompleteLogin(ctx context.Context, in CompleteLoginInput) (*Co
 		return nil, err
 	}
 	if !ui.EmailVerified {
-		return nil, fmt.Errorf("identity: email not verified by provider")
+		return nil, fmt.Errorf("%w: email not verified", ErrInvalidClaims)
 	}
-	email := ui.Email
+	if ui.Email == "" || ui.ExternalSubject == "" {
+		return nil, fmt.Errorf("%w: missing subject or email", ErrInvalidClaims)
+	}
 
-	user, err := s.Users.GetByEmail(ctx, email)
-	if err != nil && !errors.Is(err, ErrUserNotFound) {
+	claims, err := userFromClaims(sp.App, ui)
+	if err != nil {
 		return nil, err
 	}
 
-	role := roleForApp(in.App)
+	user, err := s.userForIdentity(ctx, Provider(sp.Provider), ui.ExternalSubject, claims.PrimaryEmail)
+	if err != nil {
+		return nil, err
+	}
 	if user == nil {
-		u, err := s.bootstrapUser(ctx, role, email, ui.DisplayName, sp.InviteCode)
-		if err != nil {
+		user = claims
+		if err := s.Users.Create(ctx, user); err != nil {
 			return nil, err
 		}
-		user = u
 	} else {
-		if user.Role != role {
-			return nil, fmt.Errorf("identity: user role %s does not match app %s", user.Role, in.App)
+		if user.Status != StatusActive {
+			return nil, ErrAccountSuspended
+		}
+		claims.ID = user.ID
+		user = claims
+		if err := s.Users.UpdateProfile(ctx, user); err != nil {
+			return nil, err
 		}
 	}
 
-	if user.Status == StatusSuspended || user.Status == StatusTerminated {
-		return nil, ErrAccountSuspended
-	}
-
-	// Link identity if not yet linked
 	if _, err := s.Identities.GetByProviderSubject(ctx, Provider(sp.Provider), ui.ExternalSubject); err != nil {
 		if !errors.Is(err, ErrIdentityNotFound) {
 			return nil, err
@@ -141,86 +147,78 @@ func (s *Service) CompleteLogin(ctx context.Context, in CompleteLoginInput) (*Co
 	if err != nil {
 		return nil, err
 	}
-	return &CompleteLoginOutput{User: user, Session: sess, ReturnTo: sp.ReturnTo}, nil
+	return &CompleteLoginOutput{User: user, Session: sess, App: sp.App, ReturnTo: sp.ReturnTo}, nil
 }
 
-func (s *Service) bootstrapUser(ctx context.Context, role Role, email, name, inviteCode string) (*User, error) {
+func (s *Service) userForIdentity(ctx context.Context, provider Provider, subject, email string) (*User, error) {
+	ui, err := s.Identities.GetByProviderSubject(ctx, provider, subject)
+	if err == nil {
+		return s.Users.GetByID(ctx, ui.UserID)
+	}
+	if !errors.Is(err, ErrIdentityNotFound) {
+		return nil, err
+	}
+	user, err := s.Users.GetByEmail(ctx, email)
+	if errors.Is(err, ErrUserNotFound) {
+		return nil, nil
+	}
+	return user, err
+}
+
+func userFromClaims(app string, ui *oidc.Userinfo) (*User, error) {
+	role := Role(claimString(ui.Raw, "tbite_role"))
+	if !validRole(role) {
+		return nil, fmt.Errorf("%w: missing or invalid tbite_role", ErrInvalidClaims)
+	}
+	want := roleForApp(app)
+	if role != want {
+		return nil, fmt.Errorf("%w: role %s cannot enter %s", ErrRoleMismatch, role, app)
+	}
+
+	u := &User{
+		PrimaryEmail: strings.ToLower(ui.Email),
+		DisplayName:  ui.DisplayName,
+		Role:         role,
+		Status:       StatusActive,
+	}
 	switch role {
 	case RoleEmployee:
-		entry, err := s.Directory.GetByEmail(ctx, email)
-		if err != nil {
-			return nil, err
+		employeeID := claimString(ui.Raw, "tbite_employee_id")
+		plant := claimString(ui.Raw, "tbite_plant")
+		department := claimString(ui.Raw, "tbite_department")
+		if employeeID == "" || plant == "" {
+			return nil, fmt.Errorf("%w: employee claims require tbite_employee_id and tbite_plant", ErrInvalidClaims)
 		}
-		if entry.Status != StatusActive {
-			return nil, ErrAccountSuspended
+		u.EmployeeID = &employeeID
+		u.Plant = &plant
+		if department != "" {
+			u.Department = &department
 		}
-		u := &User{
-			PrimaryEmail: email,
-			DisplayName:  entry.DisplayName,
-			Role:         RoleEmployee,
-			Status:       StatusActive,
-			EmployeeID:   &entry.EmployeeID,
-			Plant:        entry.Plant,
-			Department:   entry.Department,
-		}
-		if err := s.Users.Create(ctx, u); err != nil {
-			return nil, err
-		}
-		return u, nil
-
-	case RoleWelfareAdmin:
-		ok, err := s.AdminWL.IsAllowed(ctx, email)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return nil, ErrNotInAdminWhitelist
-		}
-		u := &User{
-			PrimaryEmail: email,
-			DisplayName:  name,
-			Role:         RoleWelfareAdmin,
-			Status:       StatusActive,
-		}
-		if err := s.Users.Create(ctx, u); err != nil {
-			return nil, err
-		}
-		return u, nil
-
 	case RoleVendorOperator:
-		if inviteCode == "" {
-			return nil, ErrInviteNotFound
+		vendorID := claimString(ui.Raw, "tbite_vendor_id")
+		if vendorID == "" {
+			return nil, fmt.Errorf("%w: vendor operator requires tbite_vendor_id", ErrInvalidClaims)
 		}
-		inv, err := s.Invites.Get(ctx, inviteCode)
-		if err != nil {
-			return nil, err
-		}
-		if inv.ConsumedAt != nil {
-			return nil, ErrInviteAlreadyUsed
-		}
-		if inv.ExpiresAt.Before(s.Clock.Now()) {
-			return nil, ErrInviteExpired
-		}
-		// NOTE: P2 does this in 3 separate calls (no transaction). A failure between
-		// Users.Create and Invites.Consume leaves an orphaned user. Acceptable for P2.
-		// P3+ should wrap in a transaction via a unit-of-work pattern.
-		u := &User{
-			PrimaryEmail: email,
-			DisplayName:  name,
-			Role:         RoleVendorOperator,
-			Status:       StatusActive,
-			VendorID:     &inv.VendorID,
-		}
-		if err := s.Users.Create(ctx, u); err != nil {
-			return nil, err
-		}
-		if err := s.Invites.Consume(ctx, inviteCode, u.ID); err != nil {
-			return nil, err
-		}
-		return u, nil
-
+		u.VendorID = &vendorID
+	case RoleWelfareAdmin:
 	default:
 		return nil, ErrInvalidRole
+	}
+	return u, nil
+}
+
+func claimString(claims map[string]any, key string) string {
+	v, ok := claims[key]
+	if !ok || v == nil {
+		return ""
+	}
+	switch x := v.(type) {
+	case string:
+		return strings.TrimSpace(x)
+	case fmt.Stringer:
+		return strings.TrimSpace(x.String())
+	default:
+		return strings.TrimSpace(fmt.Sprint(x))
 	}
 }
 
@@ -239,6 +237,10 @@ func roleForApp(app string) Role {
 
 func validApp(app string) bool {
 	return app == "employee" || app == "merchant" || app == "admin"
+}
+
+func validRole(role Role) bool {
+	return role == RoleEmployee || role == RoleVendorOperator || role == RoleWelfareAdmin
 }
 
 func safeReturnTo(s string) string {

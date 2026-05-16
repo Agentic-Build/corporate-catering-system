@@ -57,3 +57,22 @@ func (r *UserRepo) UpdateStatus(ctx context.Context, id string, status identity.
 	_, err := r.pool.Exec(ctx, `UPDATE "user" SET status=$2, updated_at=now() WHERE id=$1`, id, string(status))
 	return err
 }
+
+func (r *UserRepo) UpdateProfile(ctx context.Context, u *identity.User) error {
+	return r.pool.QueryRow(ctx, `
+UPDATE "user"
+SET primary_email=$2,
+    display_name=$3,
+    role=$4,
+    status=$5,
+    employee_id=$6,
+    vendor_id=$7,
+    plant=$8,
+    department=$9,
+    updated_at=now()
+WHERE id=$1
+RETURNING created_at, updated_at`,
+		u.ID, u.PrimaryEmail, u.DisplayName, string(u.Role), string(u.Status),
+		u.EmployeeID, u.VendorID, u.Plant, u.Department,
+	).Scan(&u.CreatedAt, &u.UpdatedAt)
+}

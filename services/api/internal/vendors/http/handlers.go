@@ -58,6 +58,11 @@ type vendorIDInput struct {
 	ID string `path:"id" format:"uuid"`
 }
 
+type operatorIDInput struct {
+	ID         string `path:"id" format:"uuid"`
+	OperatorID string `path:"operator_id" format:"uuid"`
+}
+
 type approveInput struct {
 	ID   string `path:"id" format:"uuid"`
 	Body struct {
@@ -65,9 +70,35 @@ type approveInput struct {
 	}
 }
 
-type inviteOutput struct {
+type operatorDTO struct {
+	ID              string  `json:"id"`
+	VendorID        string  `json:"vendor_id"`
+	Email           string  `json:"email"`
+	DisplayName     string  `json:"display_name"`
+	Provider        string  `json:"provider"`
+	ExternalSubject *string `json:"external_subject,omitempty"`
+	Status          string  `json:"status"`
+	SetupURL        *string `json:"setup_url,omitempty"`
+	LastSyncedAt    *string `json:"last_synced_at,omitempty"`
+}
+
+type listOperatorsOutput struct {
 	Body struct {
-		Code string `json:"code"`
+		Items []operatorDTO `json:"items"`
+	}
+}
+
+type createOperatorInput struct {
+	ID   string `path:"id" format:"uuid"`
+	Body struct {
+		Email       string `json:"email" format:"email"`
+		DisplayName string `json:"display_name" minLength:"1"`
+	}
+}
+
+type createOperatorOutput struct {
+	Body struct {
+		Operator operatorDTO `json:"operator"`
 	}
 }
 
@@ -124,14 +155,43 @@ func (a *API) Register(api huma.API) {
 	}, a.reinstate)
 
 	huma.Register(api, huma.Operation{
-		OperationID:   "issueVendorInvite",
+		OperationID: "listVendorOperators",
+		Method:      http.MethodGet,
+		Path:        "/api/admin/vendors/{id}/operators",
+		Summary:     "List vendor operators",
+		Tags:        []string{"admin", "vendor"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.listOperators)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "createVendorOperator",
 		Method:        http.MethodPost,
-		Path:          "/api/admin/vendors/{id}/invite",
-		Summary:       "Issue a single-use invite code for a vendor",
+		Path:          "/api/admin/vendors/{id}/operators",
+		Summary:       "Create or update a vendor operator in Authentik",
 		Tags:          []string{"admin", "vendor"},
 		Security:      []map[string][]string{{"bearer": {}}},
 		DefaultStatus: http.StatusCreated,
-	}, a.invite)
+	}, a.createOperator)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "suspendVendorOperator",
+		Method:        http.MethodPost,
+		Path:          "/api/admin/vendors/{id}/operators/{operator_id}/suspend",
+		Summary:       "Suspend a vendor operator",
+		Tags:          []string{"admin", "vendor"},
+		Security:      []map[string][]string{{"bearer": {}}},
+		DefaultStatus: http.StatusNoContent,
+	}, a.suspendOperator)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "reinstateVendorOperator",
+		Method:        http.MethodPost,
+		Path:          "/api/admin/vendors/{id}/operators/{operator_id}/reinstate",
+		Summary:       "Reinstate a vendor operator",
+		Tags:          []string{"admin", "vendor"},
+		Security:      []map[string][]string{{"bearer": {}}},
+		DefaultStatus: http.StatusNoContent,
+	}, a.reinstateOperator)
 }
 
 // ----- Auth guard -----
@@ -217,17 +277,53 @@ func (a *API) reinstate(ctx context.Context, in *vendorIDInput) (*struct{}, erro
 	return &struct{}{}, nil
 }
 
-func (a *API) invite(ctx context.Context, in *vendorIDInput) (*inviteOutput, error) {
+func (a *API) listOperators(ctx context.Context, in *vendorIDInput) (*listOperatorsOutput, error) {
 	if _, err := a.requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	code, err := a.Svc.IssueInvite(ctx, in.ID)
+	ops, err := a.Svc.ListOperators(ctx, in.ID)
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	var resp inviteOutput
-	resp.Body.Code = code
+	var resp listOperatorsOutput
+	resp.Body.Items = make([]operatorDTO, 0, len(ops))
+	for _, op := range ops {
+		resp.Body.Items = append(resp.Body.Items, toOperatorDTO(op))
+	}
 	return &resp, nil
+}
+
+func (a *API) createOperator(ctx context.Context, in *createOperatorInput) (*createOperatorOutput, error) {
+	if _, err := a.requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	op, err := a.Svc.CreateOperator(ctx, in.ID, in.Body.Email, in.Body.DisplayName)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp createOperatorOutput
+	resp.Body.Operator = toOperatorDTO(op)
+	return &resp, nil
+}
+
+func (a *API) suspendOperator(ctx context.Context, in *operatorIDInput) (*struct{}, error) {
+	if _, err := a.requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	if err := a.Svc.SuspendOperator(ctx, in.ID, in.OperatorID); err != nil {
+		return nil, mapErr(err)
+	}
+	return &struct{}{}, nil
+}
+
+func (a *API) reinstateOperator(ctx context.Context, in *operatorIDInput) (*struct{}, error) {
+	if _, err := a.requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	if err := a.Svc.ReinstateOperator(ctx, in.ID, in.OperatorID); err != nil {
+		return nil, mapErr(err)
+	}
+	return &struct{}{}, nil
 }
 
 // ----- Helpers -----
@@ -247,12 +343,34 @@ func toDTO(v *vendor.Vendor) vendorDTO {
 	return d
 }
 
+func toOperatorDTO(op *vendor.OperatorAccount) operatorDTO {
+	d := operatorDTO{
+		ID:              op.ID,
+		VendorID:        op.VendorID,
+		Email:           op.Email,
+		DisplayName:     op.DisplayName,
+		Provider:        op.Provider,
+		ExternalSubject: op.ExternalSubject,
+		Status:          string(op.Status),
+		SetupURL:        op.SetupURL,
+	}
+	if op.LastSyncedAt != nil {
+		s := op.LastSyncedAt.Format("2006-01-02T15:04:05Z")
+		d.LastSyncedAt = &s
+	}
+	return d
+}
+
 func mapErr(err error) error {
 	switch {
-	case errors.Is(err, vendor.ErrVendorNotFound):
+	case errors.Is(err, vendor.ErrVendorNotFound), errors.Is(err, vendor.ErrOperatorNotFound):
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, vendor.ErrAlreadyApproved), errors.Is(err, vendor.ErrInvalidStatus):
 		return huma.Error409Conflict(err.Error())
+	case errors.Is(err, vendor.ErrInvalidOperator):
+		return huma.Error400BadRequest(err.Error())
+	case errors.Is(err, vendor.ErrProvisioningSetup):
+		return huma.NewError(http.StatusBadGateway, err.Error())
 	}
 	return huma.Error500InternalServerError("internal", err)
 }

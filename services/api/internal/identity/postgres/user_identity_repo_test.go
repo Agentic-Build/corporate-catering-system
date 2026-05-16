@@ -28,15 +28,15 @@ func TestUserIdentityRepo_LinkAndGet(t *testing.T) {
 	repo := postgres.NewUserIdentityRepo(pool)
 	ui := &identity.UserIdentity{
 		UserID:          u.ID,
-		Provider:        identity.ProviderGoogle,
-		ExternalSubject: "google-sub-1",
+		Provider:        identity.Provider("authentik"),
+		ExternalSubject: "ak-sub-1",
 		RawClaims:       map[string]any{"email": "owner@example.com", "hd": "example.com"},
 	}
 	require.NoError(t, repo.Link(ctx, ui))
 	require.NotEmpty(t, ui.ID)
 	require.False(t, ui.LinkedAt.IsZero())
 
-	got, err := repo.GetByProviderSubject(ctx, identity.ProviderGoogle, "google-sub-1")
+	got, err := repo.GetByProviderSubject(ctx, identity.Provider("authentik"), "ak-sub-1")
 	require.NoError(t, err)
 	assert.Equal(t, u.ID, got.UserID)
 	assert.Equal(t, "owner@example.com", got.RawClaims["email"])
@@ -46,7 +46,7 @@ func TestUserIdentityRepo_GetByProviderSubject_NotFound(t *testing.T) {
 	pool, cleanup := setupPostgres(t)
 	defer cleanup()
 	repo := postgres.NewUserIdentityRepo(pool)
-	_, err := repo.GetByProviderSubject(context.Background(), identity.ProviderGoogle, "no-such-sub")
+	_, err := repo.GetByProviderSubject(context.Background(), identity.Provider("authentik"), "no-such-sub")
 	assert.ErrorIs(t, err, identity.ErrIdentityNotFound)
 }
 
@@ -66,10 +66,10 @@ func TestUserIdentityRepo_ListByUser(t *testing.T) {
 
 	repo := postgres.NewUserIdentityRepo(pool)
 	require.NoError(t, repo.Link(ctx, &identity.UserIdentity{
-		UserID: u.ID, Provider: identity.ProviderGoogle, ExternalSubject: "g-1", RawClaims: map[string]any{},
+		UserID: u.ID, Provider: identity.Provider("authentik"), ExternalSubject: "ak-1", RawClaims: map[string]any{},
 	}))
 	require.NoError(t, repo.Link(ctx, &identity.UserIdentity{
-		UserID: u.ID, Provider: identity.ProviderGitHub, ExternalSubject: "gh-1", RawClaims: map[string]any{},
+		UserID: u.ID, Provider: identity.Provider("authentik-dev"), ExternalSubject: "ak-dev-1", RawClaims: map[string]any{},
 	}))
 
 	list, err := repo.ListByUser(ctx, u.ID)

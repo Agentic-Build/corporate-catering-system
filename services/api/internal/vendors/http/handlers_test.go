@@ -33,9 +33,9 @@ func (s *stubSessions) Get(_ context.Context, t string) (*identity.Session, erro
 	}
 	return nil, identity.ErrSessionNotFound
 }
-func (s *stubSessions) Touch(context.Context, string) error                { return nil }
-func (s *stubSessions) Revoke(context.Context, string) error               { return nil }
-func (s *stubSessions) RevokeAllForUser(context.Context, string) error     { return nil }
+func (s *stubSessions) Touch(context.Context, string) error            { return nil }
+func (s *stubSessions) Revoke(context.Context, string) error           { return nil }
+func (s *stubSessions) RevokeAllForUser(context.Context, string) error { return nil }
 
 type stubUsers struct{ byID map[string]*identity.User }
 
@@ -50,6 +50,7 @@ func (u *stubUsers) GetByEmail(context.Context, string) (*identity.User, error) 
 }
 func (u *stubUsers) Create(context.Context, *identity.User) error                { return nil }
 func (u *stubUsers) UpdateStatus(context.Context, string, identity.Status) error { return nil }
+func (u *stubUsers) UpdateProfile(context.Context, *identity.User) error         { return nil }
 
 // TestRequireAdmin_RejectsEmployee asserts admin-only vendor endpoints return
 // 403 when called with an employee session.

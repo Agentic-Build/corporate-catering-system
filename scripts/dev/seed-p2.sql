@@ -64,14 +64,17 @@ WHERE
   )
 ON CONFLICT (menu_item_id, supply_date) DO NOTHING;
 
--- Admin allowlist (test admin can log in via Google)
-INSERT INTO admin_email_whitelist (email, added_by)
-VALUES ('e2e-admin@tbite.test', 'seed-p2')
-ON CONFLICT (email) DO NOTHING;
-
--- An invite code for merchant onboarding e2e (linked to vendor 稻禾家便當)
-INSERT INTO vendor_invite (code, vendor_id, expires_at)
-VALUES ('TBI-DEV-DAOHE-001', 'a1111111-1111-1111-1111-111111111111', now() + INTERVAL '30 days')
-ON CONFLICT (code) DO NOTHING;
+-- Mirror the Authentik dev merchant account. Authentik remains the source of
+-- login claims; this table lets admins see/manage the operator from T-Bite.
+INSERT INTO vendor_operator_account (vendor_id, email, display_name, provider, status, last_synced_at)
+VALUES (
+  'a1111111-1111-1111-1111-111111111111',
+  'e2e-merchant@tbite.test',
+  'E2E Merchant',
+  'authentik',
+  'active',
+  now()
+)
+ON CONFLICT (vendor_id, email) DO NOTHING;
 
 COMMIT;
