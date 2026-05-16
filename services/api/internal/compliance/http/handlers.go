@@ -16,6 +16,7 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
+	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
 // API exposes compliance admin endpoints. All routes require welfare_admin.
@@ -286,6 +287,9 @@ func (a *API) Register(api huma.API) {
 		Tags:        []string{"admin", "compliance"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.audit)
+
+	// Merchant self-view (read-only); see merchant_handlers.go.
+	a.registerMerchant(api)
 }
 
 // ----- Auth -----
@@ -441,7 +445,8 @@ func (a *API) audit(ctx context.Context, in *listAuditInput) (*listAuditOutput, 
 func mapErr(err error) error {
 	switch {
 	case errors.Is(err, compliance.ErrDocumentNotFound),
-		errors.Is(err, compliance.ErrAnomalyNotFound):
+		errors.Is(err, compliance.ErrAnomalyNotFound),
+		errors.Is(err, vendor.ErrVendorNotFound):
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, compliance.ErrInvalidStatus):
 		return huma.Error409Conflict(err.Error())
