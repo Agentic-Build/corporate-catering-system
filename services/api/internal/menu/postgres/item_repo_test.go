@@ -82,7 +82,7 @@ func TestItemRepo_SetStatusAndListFilter(t *testing.T) {
 	listed, err := repo.ListByVendor(ctx, vendorID, false)
 	require.NoError(t, err)
 	require.Len(t, listed, 2)
-	names := []string{listed[0].Name, listed[1].Name}
+	names := []string{listed[0].Item.Name, listed[1].Item.Name}
 	assert.Contains(t, names, "A")
 	assert.Contains(t, names, "B")
 	assert.NotContains(t, names, "C")
@@ -96,6 +96,57 @@ func TestItemRepo_SetStatusAndListFilter(t *testing.T) {
 	got, err := repo.GetByID(ctx, c.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.ArchivedAt)
+}
+
+func TestItemRepo_ListByVendor_LastUsedAndTotalSold(t *testing.T) {
+	pool, cleanup := setupPostgres(t)
+	defer cleanup()
+	repo := postgres.NewItemRepo(pool)
+	ctx := context.Background()
+
+	vendorID := seedApprovedVendor(t, pool, "stats-v")
+	plant := "F12B-3F"
+
+	// Item with two supply rows on different dates + picked-up orders.
+	withStats := &menu.Item{VendorID: vendorID, Name: "雞腿便當", PriceMinor: 12000, Status: menu.ItemStatusActive}
+	require.NoError(t, repo.Create(ctx, withStats))
+	require.NoError(t, repo.SetStatus(ctx, withStats.ID, menu.ItemStatusActive))
+
+	earlier := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
+	later := time.Date(2026, 5, 14, 0, 0, 0, 0, time.UTC)
+	seedMealSupply(t, pool, withStats.ID, earlier, 50, 50)
+	seedMealSupply(t, pool, withStats.ID, later, 40, 40)
+
+	emp := seedEmployeeForOrders(t, pool, plant)
+	// Two picked_up orders: qty 3 + qty 4 = 7.
+	seedConfirmedOrder(t, pool, emp, vendorID, plant, earlier, map[string]int{withStats.ID: 3}, "picked_up")
+	seedConfirmedOrder(t, pool, emp, vendorID, plant, later, map[string]int{withStats.ID: 4}, "picked_up")
+	// A non-picked-up order (status=ready) that must be EXCLUDED from total_sold.
+	seedConfirmedOrder(t, pool, emp, vendorID, plant, later, map[string]int{withStats.ID: 99}, "ready")
+
+	// Item that was never scheduled and never ordered.
+	noStats := &menu.Item{VendorID: vendorID, Name: "新品便當", PriceMinor: 9000, Status: menu.ItemStatusDraft}
+	require.NoError(t, repo.Create(ctx, noStats))
+
+	rows, err := repo.ListByVendor(ctx, vendorID, false)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+
+	byID := make(map[string]*menu.MerchantItemRow, len(rows))
+	for _, r := range rows {
+		byID[r.Item.ID] = r
+	}
+
+	got := byID[withStats.ID]
+	require.NotNil(t, got)
+	require.NotNil(t, got.LastUsed, "last_used should be the most recent supply_date")
+	assert.Equal(t, later, got.LastUsed.UTC())
+	assert.Equal(t, 7, got.TotalSold, "total_sold should sum qty over picked_up orders only")
+
+	never := byID[noStats.ID]
+	require.NotNil(t, never)
+	assert.Nil(t, never.LastUsed, "last_used should be nil when never scheduled")
+	assert.Equal(t, 0, never.TotalSold, "total_sold should be 0 when never sold")
 }
 
 func TestItemRepo_ListActiveByPlant(t *testing.T) {

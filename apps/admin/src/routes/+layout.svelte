@@ -1,27 +1,49 @@
 <script lang="ts">
+  // Ported from ui_kits/tbite/AdminView.jsx header shell — no role switcher,
+  // so the sticky header sits at top-0 (not top-[52px]).
   import "../app.css";
-  import { TBiteLogo } from "@tbite/ui";
+  import { TBiteLogo, Button, Icon } from "@tbite/ui";
   let { data, children } = $props();
 </script>
 
-<header
-  class="sticky top-0 z-40 flex items-center justify-between bg-white/95 px-6 py-4 shadow-tb-sm backdrop-blur"
->
-  <TBiteLogo />
-  {#if data.user}
-    <div class="flex items-center gap-4 text-sm">
-      <a href="/vendors" class="text-tb-slate-700 hover:text-tb-slate-950">商家管理</a>
-      <a href="/payroll" class="text-tb-slate-700 hover:text-tb-slate-950">月結</a>
-      <a href="/anomalies" class="text-tb-slate-700 hover:text-tb-slate-950">告警</a>
-      <a href="/dlq" class="text-tb-slate-700 hover:text-tb-slate-950">死信</a>
-      <a href="/audit" class="text-tb-slate-700 hover:text-tb-slate-950">稽核</a>
-      <span class="text-tb-slate-500">{data.user.display_name}</span>
-      <form method="POST" action="/auth/logout">
-        <button class="text-tb-red-600 hover:text-tb-red-700" type="submit">登出</button>
-      </form>
+<div class="fade-up min-h-screen bg-tb-slate-50">
+  <header class="sticky top-0 z-30 border-b border-tb-slate-200 bg-white/95 backdrop-blur">
+    <div class="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 md:px-8">
+      <TBiteLogo />
+      <span class="ml-2 rounded-full bg-tb-slate-100 px-3 py-1 text-xs font-bold text-tb-slate-700"
+        >福委會後台 · 管理員</span
+      >
+      {#if data.user}
+        <div class="ml-auto flex items-center gap-2">
+          <a href="/audit">
+            <Button variant="secondary" size="sm">
+              <Icon name="download" class="h-4 w-4" />稽核紀錄
+            </Button>
+          </a>
+          <a href="/vendors">
+            <Button variant="primary" size="sm">
+              <Icon name="plus" class="h-3.5 w-3.5" />新增邀請
+            </Button>
+          </a>
+          <form method="POST" action="/auth/logout">
+            <Button variant="ghost" size="sm" type="submit">登出</Button>
+          </form>
+          <div
+            class="ml-1 grid h-9 w-9 place-items-center rounded-full bg-tb-slate-800 text-xs font-bold text-white shadow-tb-sm"
+            title={data.user.display_name}
+          >
+            福
+          </div>
+        </div>
+      {:else}
+        <a href="/login" class="ml-auto text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+          >登入</a
+        >
+      {/if}
     </div>
-  {:else}
-    <a href="/login" class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700">登入</a>
-  {/if}
-</header>
-<main class="mx-auto max-w-[1400px] px-4 py-8 md:px-8">{@render children()}</main>
+  </header>
+
+  <main class="mx-auto grid max-w-[1400px] gap-6 px-4 py-6 md:px-8">
+    {@render children()}
+  </main>
+</div>

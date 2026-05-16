@@ -18,7 +18,7 @@ type ItemRepository interface {
 	Update(ctx context.Context, i *Item) error
 	SetStatus(ctx context.Context, id string, status ItemStatus) error
 	GetByID(ctx context.Context, id string) (*Item, error)
-	ListByVendor(ctx context.Context, vendorID string, includeArchived bool) ([]*Item, error)
+	ListByVendor(ctx context.Context, vendorID string, includeArchived bool) ([]*MerchantItemRow, error)
 	ListActiveByPlant(ctx context.Context, plant string, day time.Time) ([]*ActiveItemRow, error)
 }
 

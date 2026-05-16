@@ -126,38 +126,15 @@ export const actions: Actions = {
     const r = await client.POST("/api/employee/orders", {
       body: { plant, supply_date: supplyDate, items } as never,
     });
-    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
-    const orderID = (r.data as { order?: { id?: string } } | undefined)?.order?.id;
-    if (!orderID) return fail(500, { error: "no order id in response" });
-    throw redirect(303, `/orders/${orderID}`);
-  },
-
-  // Quick-add a single menu item (1 qty) to a fresh order. Used by FavoriteChip / RecommendChip.
-  addFavoriteChipToCart: async ({ request, locals, url }) => {
-    if (!locals.user) throw redirect(303, "/login");
-    const fd = await request.formData();
-    const menuItemId = String(fd.get("menu_item_id") ?? "");
-    if (!menuItemId) return fail(400, { error: "menu_item_id required" });
-
-    const selectedPlant = url.searchParams.get("plant") ?? locals.user.plant ?? PLANTS[0].id;
-    const dayOverride = url.searchParams.get("day") ?? undefined;
-
-    const client = createApiClient(API_BASE_URL, locals.apiToken);
-    // Determine target day via /home unless overridden.
-    let supplyDate = dayOverride;
-    if (!supplyDate) {
-      const h = await client.GET("/api/employee/home", { params: { query: {} } });
-      supplyDate = h.data?.target_day ?? new Date().toISOString().slice(0, 10);
+    if (r.error) {
+      // RFC 9457 problem-details — surface a calm Chinese message, not raw JSON.
+      const err = r.error as { status?: number; detail?: string };
+      const msg =
+        err.detail === "order: cutoff time has passed"
+          ? "已超過截單時間，此日已無法預訂。"
+          : (err.detail ?? "送出預訂失敗，請稍後再試。");
+      return fail(err.status ?? 409, { error: msg });
     }
-
-    const r = await client.POST("/api/employee/orders", {
-      body: {
-        plant: selectedPlant,
-        supply_date: supplyDate,
-        items: [{ menu_item_id: menuItemId, qty: 1 }],
-      } as never,
-    });
-    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
     const orderID = (r.data as { order?: { id?: string } } | undefined)?.order?.id;
     if (!orderID) return fail(500, { error: "no order id in response" });
     throw redirect(303, `/orders/${orderID}`);

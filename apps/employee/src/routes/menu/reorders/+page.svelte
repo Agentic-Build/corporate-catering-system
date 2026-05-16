@@ -1,7 +1,10 @@
 <script lang="ts">
+  // 再點一次 — design-language pass. Reorder chips are past orders, not single
+  // menu items, so they render as reorder cards in a grid rather than
+  // MealCards. The reorderPast action + partial-mode toast are preserved.
   import { onMount } from "svelte";
   import { deserialize } from "$app/forms";
-  import ReorderChip from "$lib/components/ReorderChip.svelte";
+  import { PageHeader, EmptyState } from "@tbite/ui";
 
   let { data, form } = $props();
 
@@ -47,9 +50,8 @@
         | { type: "failure"; data?: unknown }
         | { type: "error" | "redirect"; [k: string]: unknown };
       if (result.type === "success" && result.data) {
-        const more = result.data;
-        chips = [...chips, ...((more.chips as ReorderC[]) ?? [])];
-        nextCursor = more.nextCursor;
+        chips = [...chips, ...((result.data.chips as ReorderC[]) ?? [])];
+        nextCursor = result.data.nextCursor;
       }
     } finally {
       loading = false;
@@ -69,58 +71,76 @@
   });
 </script>
 
-<section class="space-y-4 pb-12">
-  <header class="flex items-center justify-between">
-    <div>
-      <a href="/" class="text-xs text-tb-slate-500 hover:text-tb-slate-900">← 返回首頁</a>
-      <h1 class="mt-1 text-2xl font-black text-tb-slate-900">✋ 再點一次</h1>
-      <p class="mt-1 text-sm text-tb-slate-500">你最近 30 天的訂單，依商家頻率排序</p>
-    </div>
-  </header>
+<PageHeader
+  eyebrow="Reorder · 再點一次"
+  title="再點一次"
+  subtitle="你最近 30 天的訂單，依商家頻率排序 · 一鍵重新預訂。"
+/>
 
-  {#if data.error}
-    <div
-      class="rounded-tb-2xl border border-tb-rose-300 bg-tb-rose-50/60 p-4 text-sm text-tb-rose-700"
-    >
-      載入失敗：{data.error}
-    </div>
-  {/if}
+{#if data.error}
+  <div
+    class="rounded-tb-2xl border border-tb-rose-300 bg-tb-rose-50/60 p-4 text-sm text-tb-rose-700"
+  >
+    載入失敗：{data.error}
+  </div>
+{:else if chips.length === 0}
+  <EmptyState icon="doc" title="尚無訂單紀錄" hint="點完第一份午餐後，這裡就會出現。" />
+{:else}
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    {#each chips as c (c.source_order_id)}
+      <form
+        method="POST"
+        action="?/reorderPast"
+        class={c.available_today ? "" : "pointer-events-none opacity-50"}
+      >
+        <input type="hidden" name="source_order_id" value={c.source_order_id} />
+        <input type="hidden" name="supply_date" value={data.targetDay} />
+        <button
+          type="submit"
+          disabled={!c.available_today}
+          class="flex w-full flex-col gap-2 rounded-tb-2xl border border-tb-slate-200 bg-white p-4 text-left shadow-tb-sm transition hover:-translate-y-0.5 hover:shadow-tb-md disabled:cursor-not-allowed"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="truncate text-sm font-bold text-tb-slate-900">{c.vendor_name}</span>
+            {#if c.freq > 1}
+              <span
+                class="shrink-0 rounded-full bg-tb-slate-100 px-2 py-0.5 text-[10px] font-semibold text-tb-slate-700"
+                >× {c.freq}</span
+              >
+            {/if}
+          </div>
+          {#if c.items_preview && c.items_preview.length > 0}
+            <p class="line-clamp-2 text-xs text-tb-slate-500">
+              {c.items_preview.slice(0, 3).join("、")}
+            </p>
+          {/if}
+          <div class="flex items-center justify-between">
+            <span class="font-jetbrains-mono text-base font-black tabular-nums text-tb-slate-900">
+              ${c.total_price_minor.toLocaleString()}
+            </span>
+            {#if c.available_today}
+              <span class="text-xs font-bold text-tb-red-700">再點一次 →</span>
+            {:else}
+              <span class="text-[11px] font-semibold text-tb-rose-600">今日無供應</span>
+            {/if}
+          </div>
+        </button>
+      </form>
+    {/each}
+  </div>
+{/if}
 
-  {#if chips.length === 0 && !data.error}
-    <div
-      class="rounded-tb-2xl border border-dashed border-tb-slate-200 bg-tb-slate-50 p-8 text-center text-sm text-tb-slate-500"
-    >
-      還沒有訂單紀錄 — 點完第一份午餐後就會出現
-    </div>
-  {:else}
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      {#each chips as c (c.source_order_id)}
-        <ReorderChip
-          sourceOrderId={c.source_order_id}
-          vendorName={c.vendor_name}
-          totalPriceMinor={c.total_price_minor}
-          freq={c.freq}
-          itemsPreview={c.items_preview ?? []}
-          availableToday={c.available_today}
-          supplyDate={data.targetDay}
-          action="?/reorderPast"
-        />
-      {/each}
-    </div>
-  {/if}
+<div bind:this={sentinel} class="h-8"></div>
+{#if loading}
+  <p class="text-center text-xs text-tb-slate-500">載入中…</p>
+{/if}
 
-  <div bind:this={sentinel} class="h-8"></div>
-  {#if loading}
-    <p class="text-center text-xs text-tb-slate-500">載入中…</p>
-  {/if}
-
-  {#if toast}
-    <div
-      role="alert"
-      aria-live="polite"
-      class="fixed bottom-5 left-1/2 z-40 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 rounded-tb-2xl border border-tb-amber-300 bg-tb-amber-50 px-4 py-3 text-sm text-tb-amber-700 shadow-tb-md"
-    >
-      {toast}
-    </div>
-  {/if}
-</section>
+{#if toast}
+  <div
+    role="alert"
+    aria-live="polite"
+    class="fixed bottom-5 left-1/2 z-40 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 rounded-tb-2xl border border-tb-amber-300 bg-tb-amber-50 px-4 py-3 text-sm text-tb-amber-700 shadow-tb-md"
+  >
+    {toast}
+  </div>
+{/if}

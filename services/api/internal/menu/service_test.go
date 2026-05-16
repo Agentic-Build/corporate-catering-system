@@ -135,10 +135,10 @@ func (r *fakeItemRepo) GetByID(_ context.Context, id string) (*menu.Item, error)
 	return nil, menu.ErrItemNotFound
 }
 
-func (r *fakeItemRepo) ListByVendor(_ context.Context, vendorID string, includeArchived bool) ([]*menu.Item, error) {
+func (r *fakeItemRepo) ListByVendor(_ context.Context, vendorID string, includeArchived bool) ([]*menu.MerchantItemRow, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var out []*menu.Item
+	var out []*menu.MerchantItemRow
 	for _, i := range r.byID {
 		if i.VendorID != vendorID {
 			continue
@@ -146,7 +146,7 @@ func (r *fakeItemRepo) ListByVendor(_ context.Context, vendorID string, includeA
 		if !includeArchived && i.Status == menu.ItemStatusArchived {
 			continue
 		}
-		out = append(out, i)
+		out = append(out, &menu.MerchantItemRow{Item: *i})
 	}
 	return out, nil
 }

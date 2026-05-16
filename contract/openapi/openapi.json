@@ -1247,7 +1247,7 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ItemDTO"
+              "$ref": "#/components/schemas/MerchantItemDTO"
             },
             "type": [
               "array",
@@ -1473,6 +1473,85 @@
           "email",
           "display_name",
           "role"
+        ],
+        "type": "object"
+      },
+      "MerchantItemDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "badges": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "category_id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "images": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last_used": {
+            "description": "Most recent supply date (YYYY-MM-DD), null if never scheduled",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "price_minor": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "total_sold": {
+            "description": "Cumulative quantity sold across picked-up orders",
+            "format": "int64",
+            "type": "integer"
+          },
+          "vendor_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "vendor_id",
+          "name",
+          "description",
+          "price_minor",
+          "tags",
+          "badges",
+          "status",
+          "last_used",
+          "total_sold"
         ],
         "type": "object"
       },

@@ -41,6 +41,23 @@ type itemDTO struct {
 	Images      []string `json:"images,omitempty"`
 }
 
+// merchantItemDTO is the item projection for GET /api/merchant/menu-items.
+// It is itemDTO plus two read-only usage stats the meal-library view needs.
+type merchantItemDTO struct {
+	ID          string   `json:"id"`
+	VendorID    string   `json:"vendor_id"`
+	CategoryID  *string  `json:"category_id,omitempty"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	PriceMinor  int64    `json:"price_minor"`
+	Tags        []string `json:"tags"`
+	Badges      []string `json:"badges"`
+	Status      string   `json:"status"`
+	Images      []string `json:"images,omitempty"`
+	LastUsed    *string  `json:"last_used" doc:"Most recent supply date (YYYY-MM-DD), null if never scheduled"`
+	TotalSold   int      `json:"total_sold" doc:"Cumulative quantity sold across picked-up orders"`
+}
+
 type employeeMenuItemDTO struct {
 	ID           string   `json:"id"`
 	Vendor       string   `json:"vendor"`
@@ -118,7 +135,7 @@ type listItemsInput struct {
 
 type listItemsOutput struct {
 	Body struct {
-		Items []itemDTO `json:"items"`
+		Items []merchantItemDTO `json:"items"`
 	}
 }
 
@@ -285,14 +302,14 @@ func (a *API) listItems(ctx context.Context, in *listItemsInput) (*listItemsOutp
 	if err != nil {
 		return nil, err
 	}
-	items, err := a.Svc.ListByVendor(ctx, vendorID, in.IncludeArchived)
+	rows, err := a.Svc.ListByVendor(ctx, vendorID, in.IncludeArchived)
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	var resp listItemsOutput
-	resp.Body.Items = make([]itemDTO, 0, len(items))
-	for _, it := range items {
-		resp.Body.Items = append(resp.Body.Items, toItemDTO(it))
+	resp.Body.Items = make([]merchantItemDTO, 0, len(rows))
+	for _, row := range rows {
+		resp.Body.Items = append(resp.Body.Items, toMerchantItemDTO(row))
 	}
 	return &resp, nil
 }
@@ -438,6 +455,30 @@ func toItemDTO(i *menu.Item) itemDTO {
 		Badges:      badges,
 		Status:      string(i.Status),
 	}
+}
+
+// toMerchantItemDTO maps a repo MerchantItemRow to the merchant list DTO,
+// formatting last_used as a YYYY-MM-DD date string (null when never scheduled).
+func toMerchantItemDTO(row *menu.MerchantItemRow) merchantItemDTO {
+	d := toItemDTO(&row.Item)
+	out := merchantItemDTO{
+		ID:          d.ID,
+		VendorID:    d.VendorID,
+		CategoryID:  d.CategoryID,
+		Name:        d.Name,
+		Description: d.Description,
+		PriceMinor:  d.PriceMinor,
+		Tags:        d.Tags,
+		Badges:      d.Badges,
+		Status:      d.Status,
+		Images:      d.Images,
+		TotalSold:   row.TotalSold,
+	}
+	if row.LastUsed != nil {
+		s := row.LastUsed.Format("2006-01-02")
+		out.LastUsed = &s
+	}
+	return out
 }
 
 func mapErr(err error) error {

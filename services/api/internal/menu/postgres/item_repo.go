@@ -80,29 +80,42 @@ SELECT id, vendor_id, category_id, name, description, price_minor, tags, badges,
 	return &i, nil
 }
 
-func (r *ItemRepo) ListByVendor(ctx context.Context, vendorID string, includeArchived bool) ([]*menu.Item, error) {
-	where := "WHERE vendor_id=$1"
+// ListByVendor returns the vendor's items with read-only usage stats for the
+// merchant meal-library view. last_used is the most recent meal_supply.supply_date
+// (NULL if never scheduled); total_sold is the cumulative order_item.qty over
+// orders in status 'picked_up' (0 if none). Both are computed set-based via
+// correlated aggregate subqueries in a single round trip — no per-item query.
+func (r *ItemRepo) ListByVendor(ctx context.Context, vendorID string, includeArchived bool) ([]*menu.MerchantItemRow, error) {
+	where := "WHERE mi.vendor_id=$1"
 	if !includeArchived {
-		where += " AND status != 'archived'"
+		where += " AND mi.status != 'archived'"
 	}
 	q := `
-SELECT id, vendor_id, category_id, name, description, price_minor, tags, badges, status, archived_at, created_at, updated_at
-  FROM menu_item ` + where + ` ORDER BY created_at`
+SELECT mi.id, mi.vendor_id, mi.category_id, mi.name, mi.description, mi.price_minor,
+       mi.tags, mi.badges, mi.status, mi.archived_at, mi.created_at, mi.updated_at,
+       (SELECT max(ms.supply_date) FROM meal_supply ms
+         WHERE ms.menu_item_id = mi.id) AS last_used,
+       COALESCE((SELECT sum(oi.qty) FROM order_item oi
+         JOIN "order" o ON o.id = oi.order_id
+        WHERE oi.menu_item_id = mi.id AND o.status = 'picked_up'), 0) AS total_sold
+  FROM menu_item mi ` + where + ` ORDER BY mi.created_at`
 	rows, err := r.pool.Query(ctx, q, vendorID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []*menu.Item
+	var out []*menu.MerchantItemRow
 	for rows.Next() {
-		var i menu.Item
+		var row menu.MerchantItemRow
 		var status string
-		if err := rows.Scan(&i.ID, &i.VendorID, &i.CategoryID, &i.Name, &i.Description, &i.PriceMinor,
-			&i.Tags, &i.Badges, &status, &i.ArchivedAt, &i.CreatedAt, &i.UpdatedAt); err != nil {
+		if err := rows.Scan(&row.Item.ID, &row.Item.VendorID, &row.Item.CategoryID, &row.Item.Name,
+			&row.Item.Description, &row.Item.PriceMinor, &row.Item.Tags, &row.Item.Badges, &status,
+			&row.Item.ArchivedAt, &row.Item.CreatedAt, &row.Item.UpdatedAt,
+			&row.LastUsed, &row.TotalSold); err != nil {
 			return nil, err
 		}
-		i.Status = menu.ItemStatus(status)
-		out = append(out, &i)
+		row.Item.Status = menu.ItemStatus(status)
+		out = append(out, &row)
 	}
 	return out, rows.Err()
 }

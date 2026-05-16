@@ -129,8 +129,9 @@ func (s *Service) Archive(ctx context.Context, itemID, vendorID string) error {
 	return s.Items.SetStatus(ctx, itemID, ItemStatusArchived)
 }
 
-// ListByVendor returns the vendor's items, optionally including archived rows.
-func (s *Service) ListByVendor(ctx context.Context, vendorID string, includeArchived bool) ([]*Item, error) {
+// ListByVendor returns the vendor's items with usage stats, optionally
+// including archived rows.
+func (s *Service) ListByVendor(ctx context.Context, vendorID string, includeArchived bool) ([]*MerchantItemRow, error) {
 	return s.Items.ListByVendor(ctx, vendorID, includeArchived)
 }
 

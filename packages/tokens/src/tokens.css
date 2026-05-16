@@ -12,35 +12,35 @@
 
 :root {
   /* ───── Brand ───── */
-  --tb-red-50:  #fef2f2;
+  --tb-red-50: #fef2f2;
   --tb-red-100: #fee2e2;
   --tb-red-200: #fecaca;
   --tb-red-300: #fca5a5;
   --tb-red-400: #f87171;
   --tb-red-500: #ef4444;
-  --tb-red-600: #dc2626;   /* PRIMARY — buttons, accents, brand */
-  --tb-red-700: #b91c1c;   /* Hover / pressed primary */
+  --tb-red-600: #dc2626; /* PRIMARY — buttons, accents, brand */
+  --tb-red-700: #b91c1c; /* Hover / pressed primary */
   --tb-red-800: #991b1b;
   --tb-red-900: #7f1d1d;
 
   --tb-rose-100: #ffe4e6;
   --tb-rose-500: #f43f5e;
-  --tb-rose-600: #e11d48;  /* "Critical" alt — danger button, low-stock */
+  --tb-rose-600: #e11d48; /* "Critical" alt — danger button, low-stock */
   --tb-rose-700: #be123c;
 
   /* Amber is the "highlight / signal / pro-tip" accent ---------- */
-  --tb-amber-50:  #fffbeb;
+  --tb-amber-50: #fffbeb;
   --tb-amber-100: #fef3c7;
   --tb-amber-200: #fde68a;
   --tb-amber-300: #fcd34d;
-  --tb-amber-400: #fbbf24;  /* logo dot, glow indicator */
+  --tb-amber-400: #fbbf24; /* logo dot, glow indicator */
   --tb-amber-500: #f59e0b;
   --tb-amber-700: #b45309;
   --tb-amber-800: #92400e;
   --tb-amber-900: #78350f;
 
   /* Semantic — success / warning / danger / info ---------------- */
-  --tb-emerald-50:  #ecfdf5;
+  --tb-emerald-50: #ecfdf5;
   --tb-emerald-100: #d1fae5;
   --tb-emerald-300: #6ee7b7;
   --tb-emerald-500: #10b981;
@@ -52,97 +52,97 @@
   --tb-sky-700: #0369a1;
 
   /* ───── Neutrals (Slate) ───── */
-  --tb-slate-50:  #f8fafc;   /* page surface */
-  --tb-slate-100: #f1f5f9;   /* chip / hover */
-  --tb-slate-200: #e2e8f0;   /* hairline border */
+  --tb-slate-50: #f8fafc; /* page surface */
+  --tb-slate-100: #f1f5f9; /* chip / hover */
+  --tb-slate-200: #e2e8f0; /* hairline border */
   --tb-slate-300: #cbd5e1;
   --tb-slate-400: #94a3b8;
-  --tb-slate-500: #64748b;   /* secondary text */
+  --tb-slate-500: #64748b; /* secondary text */
   --tb-slate-600: #475569;
-  --tb-slate-700: #334155;   /* body text */
-  --tb-slate-800: #1e293b;   /* role-switcher bar / floating CTA bg */
-  --tb-slate-900: #0f172a;   /* primary text + footer dark */
+  --tb-slate-700: #334155; /* body text */
+  --tb-slate-800: #1e293b; /* role-switcher bar / floating CTA bg */
+  --tb-slate-900: #0f172a; /* primary text + footer dark */
 
   /* ───── Semantic surfaces / text ───── */
-  --tb-bg:        #ffffff;
-  --tb-surface-0: var(--tb-slate-50);     /* app background */
-  --tb-surface-1: #ffffff;                /* card */
-  --tb-surface-2: var(--tb-slate-100);    /* chip / inactive pill */
-  --tb-surface-inv: var(--tb-slate-900);  /* inverted: floating bars, top role switcher */
+  --tb-bg: #ffffff;
+  --tb-surface-0: var(--tb-slate-50); /* app background */
+  --tb-surface-1: #ffffff; /* card */
+  --tb-surface-2: var(--tb-slate-100); /* chip / inactive pill */
+  --tb-surface-inv: var(--tb-slate-900); /* inverted: floating bars, top role switcher */
 
-  --tb-fg-1: var(--tb-slate-900);         /* primary text */
-  --tb-fg-2: var(--tb-slate-700);         /* body */
-  --tb-fg-3: var(--tb-slate-500);         /* secondary / meta */
-  --tb-fg-4: var(--tb-slate-400);         /* placeholder */
-  --tb-fg-on-red:  #ffffff;
+  --tb-fg-1: var(--tb-slate-900); /* primary text */
+  --tb-fg-2: var(--tb-slate-700); /* body */
+  --tb-fg-3: var(--tb-slate-500); /* secondary / meta */
+  --tb-fg-4: var(--tb-slate-400); /* placeholder */
+  --tb-fg-on-red: #ffffff;
   --tb-fg-on-dark: #ffffff;
 
-  --tb-border:        var(--tb-slate-200);
+  --tb-border: var(--tb-slate-200);
   --tb-border-strong: var(--tb-slate-300);
-  --tb-divider:       var(--tb-slate-100);
+  --tb-divider: var(--tb-slate-100);
 
   /* Brand accents in use --------------------------------------- */
-  --tb-accent-primary:    var(--tb-red-600);
+  --tb-accent-primary: var(--tb-red-600);
   --tb-accent-primary-hi: var(--tb-red-700);
-  --tb-accent-warm:       var(--tb-amber-400);   /* the "T-Bite dot" */
-  --tb-link:              var(--tb-red-700);
+  --tb-accent-warm: var(--tb-amber-400); /* the "T-Bite dot" */
+  --tb-link: var(--tb-red-700);
 
   /* Status tones — match StateTag in ui.jsx --------------------- */
-  --tb-tone-info-bg:    var(--tb-red-100);
-  --tb-tone-info-fg:    var(--tb-red-900);
+  --tb-tone-info-bg: var(--tb-red-100);
+  --tb-tone-info-fg: var(--tb-red-900);
   --tb-tone-success-bg: var(--tb-emerald-100);
   --tb-tone-success-fg: var(--tb-emerald-900);
   --tb-tone-warning-bg: var(--tb-amber-100);
   --tb-tone-warning-fg: var(--tb-amber-900);
-  --tb-tone-danger-bg:  var(--tb-rose-100);
-  --tb-tone-danger-fg:  var(--tb-rose-700);
+  --tb-tone-danger-bg: var(--tb-rose-100);
+  --tb-tone-danger-fg: var(--tb-rose-700);
   --tb-tone-neutral-bg: var(--tb-slate-100);
   --tb-tone-neutral-fg: var(--tb-slate-700);
 
   /* ───── Type ───── */
-  --tb-font-sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
-                  system-ui, -apple-system, "Segoe UI", sans-serif;
-  --tb-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular,
-                  Menlo, Consolas, monospace;
+  --tb-font-sans:
+    "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --tb-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --tb-fw-regular:  400;
-  --tb-fw-medium:   500;
+  --tb-fw-regular: 400;
+  --tb-fw-medium: 500;
   --tb-fw-semibold: 600;
-  --tb-fw-bold:     700;
-  --tb-fw-extra:    800;
-  --tb-fw-black:    900;
+  --tb-fw-bold: 700;
+  --tb-fw-extra: 800;
+  --tb-fw-black: 900;
 
   /* Type scale (Tailwind-mirroring, px-based for clarity) */
-  --tb-text-2xs: 10px;   /* uppercase eyebrow / micro */
-  --tb-text-xs:  12px;   /* meta, badges */
-  --tb-text-sm:  14px;   /* body small, buttons */
-  --tb-text-md:  16px;   /* body */
-  --tb-text-lg:  18px;   /* card titles */
-  --tb-text-xl:  20px;   /* section h2 */
+  --tb-text-2xs: 10px; /* uppercase eyebrow / micro */
+  --tb-text-xs: 12px; /* meta, badges */
+  --tb-text-sm: 14px; /* body small, buttons */
+  --tb-text-md: 16px; /* body */
+  --tb-text-lg: 18px; /* card titles */
+  --tb-text-xl: 20px; /* section h2 */
   --tb-text-2xl: 24px;
-  --tb-text-3xl: 30px;   /* page H1 */
+  --tb-text-3xl: 30px; /* page H1 */
   --tb-text-4xl: 36px;
 
   /* Line heights */
-  --tb-lh-tight:  1.1;
-  --tb-lh-snug:   1.25;
+  --tb-lh-tight: 1.1;
+  --tb-lh-snug: 1.25;
   --tb-lh-normal: 1.5;
-  --tb-lh-relaxed:1.65;
+  --tb-lh-relaxed: 1.65;
 
   /* Letter spacing — the brand loves ultra-wide eyebrows --------- */
-  --tb-track-tight:    -0.02em;
-  --tb-track-normal:    0em;
-  --tb-track-eyebrow:   0.18em;
-  --tb-track-eyebrowHi: 0.22em;   /* extra-wide eyebrow tracking */
+  --tb-track-tight: -0.02em;
+  --tb-track-normal: 0em;
+  --tb-track-eyebrow: 0.18em;
+  --tb-track-eyebrowHi: 0.22em; /* extra-wide eyebrow tracking */
 
   /* ───── Radii ───── */
-  --tb-radius-xs:  4px;
-  --tb-radius-sm:  6px;
-  --tb-radius-md:  8px;    /* inputs / buttons (rounded-lg in tw = 8px) */
-  --tb-radius-lg:  12px;   /* secondary cards, chips */
-  --tb-radius-xl:  16px;   /* meal cards, modals */
-  --tb-radius-2xl: 20px;   /* hero cards */
-  --tb-radius-pill: 9999px;/* pills, capsule CTAs, avatars */
+  --tb-radius-xs: 4px;
+  --tb-radius-sm: 6px;
+  --tb-radius-md: 8px; /* inputs / buttons (rounded-lg in tw = 8px) */
+  --tb-radius-lg: 12px; /* secondary cards, chips */
+  --tb-radius-xl: 16px; /* meal cards, modals */
+  --tb-radius-2xl: 20px; /* hero cards */
+  --tb-radius-pill: 9999px; /* pills, capsule CTAs, avatars */
 
   /* ───── Spacing (8-pt with half-step) ───── */
   --tb-space-0: 0;
@@ -159,26 +159,146 @@
 
   /* ───── Shadows ───── */
   --tb-shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06);
-  --tb-shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08),
-                  0 2px 4px -2px rgb(15 23 42 / 0.06);
-  --tb-shadow-lg: 0 12px 28px -8px rgb(15 23 42 / 0.18),
-                  0 4px 10px -4px rgb(15 23 42 / 0.10);
+  --tb-shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+  --tb-shadow-lg: 0 12px 28px -8px rgb(15 23 42 / 0.18), 0 4px 10px -4px rgb(15 23 42 / 0.1);
   --tb-shadow-xl: 0 24px 60px -16px rgb(15 23 42 / 0.28);
   --tb-shadow-inset: inset 0 0 0 1px rgb(15 23 42 / 0.04);
   --tb-ring-focus: 0 0 0 4px rgb(220 38 38 / 0.18); /* red focus ring */
 
   /* ───── Motion ───── */
-  --tb-ease:        cubic-bezier(.2, .0, .2, 1);
-  --tb-ease-out:    cubic-bezier(.16, 1, .3, 1);
-  --tb-dur-fast:    120ms;
-  --tb-dur-base:    220ms;
-  --tb-dur-slow:    320ms;
+  --tb-ease: cubic-bezier(0.2, 0, 0.2, 1);
+  --tb-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --tb-dur-fast: 120ms;
+  --tb-dur-base: 220ms;
+  --tb-dur-slow: 320ms;
+
+  /* ───── Palette completion ─────
+     Fills out the `--tb-*` scale to a full 50–950 for every hue the
+     T-Bite design system uses, so the CSS-var layer mirrors
+     packages/tokens/src/tailwind-preset.cjs 1:1. The semantically
+     named vars above are kept; this block only adds what they omit.
+     Hex values are the Tailwind CSS v3 default palette. */
+
+  /* red — adds 950 */
+  --tb-red-950: #450a0a;
+
+  /* rose — adds 50, 200, 300, 400, 800, 900, 950 */
+  --tb-rose-50: #fff1f2;
+  --tb-rose-200: #fecdd3;
+  --tb-rose-300: #fda4af;
+  --tb-rose-400: #fb7185;
+  --tb-rose-800: #9f1239;
+  --tb-rose-900: #881337;
+  --tb-rose-950: #4c0519;
+
+  /* amber — adds 600, 950 */
+  --tb-amber-600: #d97706;
+  --tb-amber-950: #451a03;
+
+  /* emerald — adds 200, 400, 600, 800, 950 */
+  --tb-emerald-200: #a7f3d0;
+  --tb-emerald-400: #34d399;
+  --tb-emerald-600: #059669;
+  --tb-emerald-800: #065f46;
+  --tb-emerald-950: #022c22;
+
+  /* sky — adds 50, 200, 300, 400, 600, 800, 900, 950 */
+  --tb-sky-50: #f0f9ff;
+  --tb-sky-200: #bae6fd;
+  --tb-sky-300: #7dd3fc;
+  --tb-sky-400: #38bdf8;
+  --tb-sky-600: #0284c7;
+  --tb-sky-800: #075985;
+  --tb-sky-900: #0c4a6e;
+  --tb-sky-950: #082f49;
+
+  /* slate — adds 950 */
+  --tb-slate-950: #020617;
+
+  /* orange — new hue */
+  --tb-orange-50: #fff7ed;
+  --tb-orange-100: #ffedd5;
+  --tb-orange-200: #fed7aa;
+  --tb-orange-300: #fdba74;
+  --tb-orange-400: #fb923c;
+  --tb-orange-500: #f97316;
+  --tb-orange-600: #ea580c;
+  --tb-orange-700: #c2410c;
+  --tb-orange-800: #9a3412;
+  --tb-orange-900: #7c2d12;
+  --tb-orange-950: #431407;
+
+  /* yellow — new hue */
+  --tb-yellow-50: #fefce8;
+  --tb-yellow-100: #fef9c3;
+  --tb-yellow-200: #fef08a;
+  --tb-yellow-300: #fde047;
+  --tb-yellow-400: #facc15;
+  --tb-yellow-500: #eab308;
+  --tb-yellow-600: #ca8a04;
+  --tb-yellow-700: #a16207;
+  --tb-yellow-800: #854d0e;
+  --tb-yellow-900: #713f12;
+  --tb-yellow-950: #422006;
+
+  /* lime — new hue */
+  --tb-lime-50: #f7fee7;
+  --tb-lime-100: #ecfccb;
+  --tb-lime-200: #d9f99d;
+  --tb-lime-300: #bef264;
+  --tb-lime-400: #a3e635;
+  --tb-lime-500: #84cc16;
+  --tb-lime-600: #65a30d;
+  --tb-lime-700: #4d7c0f;
+  --tb-lime-800: #3f6212;
+  --tb-lime-900: #365314;
+  --tb-lime-950: #1a2e05;
+
+  /* cyan — new hue */
+  --tb-cyan-50: #ecfeff;
+  --tb-cyan-100: #cffafe;
+  --tb-cyan-200: #a5f3fc;
+  --tb-cyan-300: #67e8f9;
+  --tb-cyan-400: #22d3ee;
+  --tb-cyan-500: #06b6d4;
+  --tb-cyan-600: #0891b2;
+  --tb-cyan-700: #0e7490;
+  --tb-cyan-800: #155e75;
+  --tb-cyan-900: #164e63;
+  --tb-cyan-950: #083344;
+
+  /* pink — new hue */
+  --tb-pink-50: #fdf2f8;
+  --tb-pink-100: #fce7f3;
+  --tb-pink-200: #fbcfe8;
+  --tb-pink-300: #f9a8d4;
+  --tb-pink-400: #f472b6;
+  --tb-pink-500: #ec4899;
+  --tb-pink-600: #db2777;
+  --tb-pink-700: #be185d;
+  --tb-pink-800: #9d174d;
+  --tb-pink-900: #831843;
+  --tb-pink-950: #500724;
+
+  /* stone — new hue */
+  --tb-stone-50: #fafaf9;
+  --tb-stone-100: #f5f5f4;
+  --tb-stone-200: #e7e5e4;
+  --tb-stone-300: #d6d3d1;
+  --tb-stone-400: #a8a29e;
+  --tb-stone-500: #78716c;
+  --tb-stone-600: #57534e;
+  --tb-stone-700: #44403c;
+  --tb-stone-800: #292524;
+  --tb-stone-900: #1c1917;
+  --tb-stone-950: #0c0a09;
 }
 
 /* ───── Semantic role styles (drop-in tags) ─────
    Use these directly: <h1>, <h2>, <p>, code, .eyebrow, etc.
 */
-html, body {
+html,
+body {
   font-family: var(--tb-font-sans);
   color: var(--tb-fg-1);
   background: var(--tb-surface-0);
@@ -186,33 +306,38 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
-h1, .tb-h1 {
+h1,
+.tb-h1 {
   font-size: var(--tb-text-3xl);
   font-weight: var(--tb-fw-black);
   line-height: var(--tb-lh-tight);
   letter-spacing: var(--tb-track-tight);
   color: var(--tb-fg-1);
 }
-h2, .tb-h2 {
+h2,
+.tb-h2 {
   font-size: var(--tb-text-xl);
   font-weight: var(--tb-fw-extra);
   line-height: var(--tb-lh-snug);
   letter-spacing: var(--tb-track-tight);
   color: var(--tb-fg-1);
 }
-h3, .tb-h3 {
+h3,
+.tb-h3 {
   font-size: var(--tb-text-lg);
   font-weight: var(--tb-fw-bold);
   line-height: var(--tb-lh-snug);
   color: var(--tb-fg-1);
 }
-h4, .tb-h4 {
+h4,
+.tb-h4 {
   font-size: var(--tb-text-md);
   font-weight: var(--tb-fw-bold);
   line-height: var(--tb-lh-snug);
   color: var(--tb-fg-1);
 }
-p, .tb-body {
+p,
+.tb-body {
   font-size: var(--tb-text-sm);
   line-height: var(--tb-lh-relaxed);
   color: var(--tb-fg-2);
@@ -229,10 +354,16 @@ p, .tb-body {
   text-transform: uppercase;
   color: var(--tb-fg-3);
 }
-.tb-eyebrow--red    { color: var(--tb-red-600); }
-.tb-eyebrow--amber  { color: var(--tb-amber-700); }
+.tb-eyebrow--red {
+  color: var(--tb-red-600);
+}
+.tb-eyebrow--amber {
+  color: var(--tb-amber-700);
+}
 
-code, .tb-mono, .tb-tabular {
+code,
+.tb-mono,
+.tb-tabular {
   font-family: var(--tb-font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
@@ -243,4 +374,45 @@ code, .tb-mono, .tb-tabular {
   font-weight: var(--tb-fw-black);
   font-variant-numeric: tabular-nums;
   letter-spacing: var(--tb-track-tight);
+}
+
+/* ───── Animations & utilities ─────
+   Ported from the T-Bite prototype (colors_and_type.css / index.html).
+*/
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-up {
+  animation: fadeUp 220ms ease-out both;
+}
+
+@keyframes cartBump {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.cart-bump {
+  animation: cartBump 320ms ease-out;
+}
+
+/* horizontal scroll without a visible scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
