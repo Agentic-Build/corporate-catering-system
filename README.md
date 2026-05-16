@@ -24,11 +24,11 @@ Pre-reqs: Node 20.11+, pnpm 9, Go 1.23, Docker.
 
 ```bash
 pnpm install
-( cd services/api && go mod download )
+go mod download
 make dev
 ```
 
-`make dev` starts Postgres / Redis / NATS / MinIO via `docker compose`, applies migrations, seeds e2e + p2 fixtures, then runs the Go API and the three SvelteKit dev servers on the host. Ctrl-C stops the host processes; deps stay up.
+`make dev` starts Postgres / Redis / NATS / MinIO / Authentik via `docker compose`, applies migrations, seeds p2 fixtures, then runs the Go API and the three SvelteKit dev servers on the host. Ctrl-C stops the host processes; deps stay up.
 
 URLs:
 
@@ -36,12 +36,14 @@ URLs:
 - http://localhost:5174 — 商家
 - http://localhost:5175 — 福委會
 - http://localhost:8080/healthz — Go API
+- http://localhost:9002 — Authentik (`akadmin` / `tbite-dev-admin`)
 - http://localhost:9001 — MinIO console (`tbite` / `tbite-dev-secret`)
 
-Seeded test identities (via `FAKE_OIDC=1`):
+Seeded Authentik identities (`tbite-dev-pass`):
 
 - Employee: `e2e-employee@tbite.test`
 - Admin (福委會): `e2e-admin@tbite.test`
+- Merchant: `e2e-merchant@tbite.test`
 
 Stop / reset deps:
 

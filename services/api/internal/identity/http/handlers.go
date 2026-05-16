@@ -25,11 +25,10 @@ type API struct {
 // ----- DTOs -----
 
 type startLoginInput struct {
-	Provider string `path:"provider" enum:"google,github" doc:"OIDC provider"`
+	Provider string `path:"provider" doc:"OIDC provider slug"`
 	Body     struct {
-		App        string `json:"app" enum:"employee,merchant,admin"`
-		ReturnTo   string `json:"return_to,omitempty"`
-		InviteCode string `json:"invite_code,omitempty"`
+		App      string `json:"app" enum:"employee,merchant,admin"`
+		ReturnTo string `json:"return_to,omitempty"`
 	}
 }
 type startLoginOutput struct {
@@ -43,7 +42,6 @@ type completeLoginInput struct {
 	Provider string `path:"provider"`
 	State    string `query:"state"`
 	Code     string `query:"code"`
-	App      string `query:"app" enum:"employee,merchant,admin"`
 }
 type completeLoginOutput struct {
 	Status int
@@ -63,9 +61,28 @@ type meOutput struct {
 	}
 }
 
+type providersOutput struct {
+	Body struct {
+		Items []providerDTO `json:"items"`
+	}
+}
+
+type providerDTO struct {
+	Slug        string `json:"slug"`
+	DisplayName string `json:"display_name"`
+}
+
 // ----- Registration -----
 
 func (a *API) Register(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "listAuthProviders",
+		Method:      http.MethodGet,
+		Path:        "/auth/providers",
+		Summary:     "List enabled auth providers",
+		Tags:        []string{"auth"},
+	}, a.providers)
+
 	huma.Register(api, huma.Operation{
 		OperationID: "startLogin",
 		Method:      http.MethodPost,
@@ -105,7 +122,6 @@ func (a *API) Register(api huma.API) {
 func (a *API) startLogin(ctx context.Context, in *startLoginInput) (*startLoginOutput, error) {
 	out, err := a.Svc.StartLogin(ctx, identity.StartLoginInput{
 		App: in.Body.App, Provider: in.Provider, ReturnTo: in.Body.ReturnTo,
-		InviteCode: in.Body.InviteCode,
 	})
 	if err != nil {
 		return nil, mapErr(err)
@@ -118,14 +134,14 @@ func (a *API) startLogin(ctx context.Context, in *startLoginInput) (*startLoginO
 
 func (a *API) completeLogin(ctx context.Context, in *completeLoginInput) (*completeLoginOutput, error) {
 	out, err := a.Svc.CompleteLogin(ctx, identity.CompleteLoginInput{
-		App: in.App, State: in.State, Code: in.Code,
+		Provider: in.Provider, State: in.State, Code: in.Code,
 	})
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	base, ok := a.AppURLs[in.App]
+	base, ok := a.AppURLs[out.App]
 	if !ok {
-		return nil, huma.Error500InternalServerError("unknown app base url for " + in.App)
+		return nil, huma.Error500InternalServerError("unknown app base url for " + out.App)
 	}
 	landing := fmt.Sprintf("%s/auth/landing?token=%s&return_to=%s",
 		base,
@@ -133,6 +149,19 @@ func (a *API) completeLogin(ctx context.Context, in *completeLoginInput) (*compl
 		url.QueryEscape(out.ReturnTo),
 	)
 	return &completeLoginOutput{Status: http.StatusFound, Url: landing}, nil
+}
+
+func (a *API) providers(_ context.Context, _ *struct{}) (*providersOutput, error) {
+	infos := a.Svc.ProviderInfos()
+	resp := providersOutput{}
+	resp.Body.Items = make([]providerDTO, 0, len(infos))
+	for _, p := range infos {
+		resp.Body.Items = append(resp.Body.Items, providerDTO{
+			Slug:        p.Slug,
+			DisplayName: p.DisplayName,
+		})
+	}
+	return &resp, nil
 }
 
 func (a *API) logout(ctx context.Context, _ *struct{}) (*struct{}, error) {
@@ -165,16 +194,13 @@ func (a *API) me(ctx context.Context, _ *struct{}) (*meOutput, error) {
 
 func mapErr(err error) error {
 	switch {
-	case errors.Is(err, identity.ErrNotInDirectory),
-		errors.Is(err, identity.ErrNotInAdminWhitelist),
-		errors.Is(err, identity.ErrInviteNotFound),
-		errors.Is(err, identity.ErrInviteAlreadyUsed),
-		errors.Is(err, identity.ErrInviteExpired):
+	case errors.Is(err, identity.ErrRoleMismatch):
 		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, identity.ErrAccountSuspended):
 		return huma.NewError(http.StatusLocked, err.Error())
 	case errors.Is(err, identity.ErrInvalidProvider),
-		errors.Is(err, identity.ErrInvalidRole):
+		errors.Is(err, identity.ErrInvalidRole),
+		errors.Is(err, identity.ErrInvalidClaims):
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, identity.ErrUserNotFound),
 		errors.Is(err, identity.ErrSessionNotFound):

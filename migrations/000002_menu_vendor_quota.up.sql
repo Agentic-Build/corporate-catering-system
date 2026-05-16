@@ -1,6 +1,7 @@
 -- 000002_menu_vendor_quota.up.sql
 
 CREATE TYPE vendor_status AS ENUM ('pending', 'approved', 'suspended', 'terminated');
+CREATE TYPE vendor_operator_status AS ENUM ('active', 'suspended', 'vendor_suspended');
 CREATE TYPE menu_item_status AS ENUM ('draft', 'active', 'archived');
 
 CREATE TABLE vendor (
@@ -29,15 +30,32 @@ CREATE TABLE vendor_plant_mapping (
 CREATE UNIQUE INDEX vendor_plant_unique_idx ON vendor_plant_mapping(vendor_id, plant);
 CREATE INDEX vendor_plant_active_idx ON vendor_plant_mapping(plant) WHERE active;
 
--- vendor 的 invite code（P1 schema 已建 vendor_invite，這裡只補 FK）
-ALTER TABLE vendor_invite
-  ADD CONSTRAINT vendor_invite_vendor_fk
-  FOREIGN KEY (vendor_id) REFERENCES vendor(id) ON DELETE CASCADE;
-
 -- 把 user.vendor_id 也補上 FK
 ALTER TABLE "user"
   ADD CONSTRAINT user_vendor_fk
   FOREIGN KEY (vendor_id) REFERENCES vendor(id) ON DELETE SET NULL;
+
+CREATE TABLE vendor_operator_account (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vendor_id        UUID NOT NULL REFERENCES vendor(id) ON DELETE CASCADE,
+  email            TEXT NOT NULL,
+  display_name     TEXT NOT NULL,
+  provider         TEXT NOT NULL CHECK (provider ~ '^[a-z0-9][a-z0-9_.-]*$'),
+  external_subject TEXT,
+  status           vendor_operator_status NOT NULL DEFAULT 'active',
+  setup_url        TEXT,
+  last_synced_at   TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT vendor_operator_email_lower CHECK (email = lower(email))
+);
+CREATE UNIQUE INDEX vendor_operator_vendor_email_idx
+  ON vendor_operator_account(vendor_id, email);
+CREATE UNIQUE INDEX vendor_operator_provider_subject_idx
+  ON vendor_operator_account(provider, external_subject)
+  WHERE external_subject IS NOT NULL;
+CREATE INDEX vendor_operator_vendor_status_idx
+  ON vendor_operator_account(vendor_id, status);
 
 CREATE TABLE menu_category (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -92,6 +110,7 @@ CREATE UNIQUE INDEX meal_supply_item_date_idx ON meal_supply(menu_item_id, suppl
 CREATE INDEX meal_supply_date_idx ON meal_supply(supply_date);
 
 COMMENT ON TABLE vendor IS 'External catering vendors approved by welfare admin.';
+COMMENT ON TABLE vendor_operator_account IS 'Mirror of vendor operator accounts provisioned in the configured identity provider.';
 COMMENT ON TABLE vendor_plant_mapping IS 'Which plant areas a vendor is allowed to serve.';
 COMMENT ON TABLE menu_item IS 'Vendor menu items (catalog rows).';
 COMMENT ON TABLE meal_supply IS 'Daily capacity + remaining count per menu_item, the quota source of truth.';

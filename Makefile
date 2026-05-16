@@ -44,7 +44,7 @@ test-web: ## Frontend checks
 	@pnpm -r check && pnpm -r lint
 
 test-e2e: ## Playwright e2e against $$E2E_BASE_URL (default localhost:5173)
-	@FAKE_OIDC=1 E2E_BASE_URL=$${E2E_BASE_URL:-http://localhost:5173} \
+	@E2E_BASE_URL=$${E2E_BASE_URL:-http://localhost:5173} \
 	 pnpm exec playwright test --config=tests/e2e/playwright.config.ts
 
 render-overlay: ## Render kustomize overlay (env=single-node|gcp)

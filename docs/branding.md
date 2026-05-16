@@ -69,7 +69,7 @@ as `TBiteLogo` from `@tbite/ui` and used by:
 - `apps/employee/src/routes/login/+page.svelte` (login hero)
 - `apps/admin/src/routes/+layout.svelte` (app header)
 - `apps/admin/src/routes/login/+page.svelte` (login hero)
-- `apps/merchant/src/routes/onboard/+page.svelte` (onboarding hero)
+- `apps/merchant/src/routes/login/+page.svelte` (login hero)
 
 The current implementation is an inline SVG placeholder (rounded gradient
 tile + bite notch + amber accent dot + bold "T"). Swap the SVG body when

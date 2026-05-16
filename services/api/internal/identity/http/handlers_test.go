@@ -60,6 +60,7 @@ func (u *fakeUsers) GetByEmail(context.Context, string) (*identity.User, error) 
 }
 func (u *fakeUsers) Create(context.Context, *identity.User) error                { return nil }
 func (u *fakeUsers) UpdateStatus(context.Context, string, identity.Status) error { return nil }
+func (u *fakeUsers) UpdateProfile(context.Context, *identity.User) error         { return nil }
 
 func buildHandler(api *idhttp.API) http.Handler {
 	r := chi.NewRouter()
@@ -105,7 +106,7 @@ func TestMe_Authenticated(t *testing.T) {
 }
 
 func TestLogout_Authenticated(t *testing.T) {
-	user := &identity.User{ID: "u2", PrimaryEmail: "b@x.com", DisplayName: "B", Role: identity.RoleEmployee}
+	user := &identity.User{ID: "u2", PrimaryEmail: "b@x.com", DisplayName: "B", Role: identity.RoleEmployee, Status: identity.StatusActive}
 	sessions := newFakeSessions()
 	sessions.sessions["tb_logout"] = &identity.Session{Token: "tb_logout", UserID: "u2", Role: identity.RoleEmployee}
 	users := &fakeUsers{byID: map[string]*identity.User{"u2": user}}

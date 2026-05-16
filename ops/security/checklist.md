@@ -59,7 +59,7 @@ workloads. See "Open items" below.
 | Item | Where enforced |
 | --- | --- |
 | No plaintext secrets baked into images | All app images are built from `gcr.io/distroless/static:nonroot` with only the compiled binary copied in — see `services/api/Dockerfile:8-13`. Web images run `node:20-alpine` with only the SvelteKit build output. No `.env` files are copied. |
-| App reads every credential from env supplied by `Secret` / `ConfigMap` | `ops/kubernetes/base/deployment-api.yaml:41-64` (`envFrom: configMapRef` + per-key `secretKeyRef` for OIDC credentials) |
+| App reads every credential from env supplied by `Secret` / `ConfigMap` | `ops/kubernetes/base/deployment-api.yaml:41-59` (`envFrom: configMapRef` + per-key `secretKeyRef` for Authentik OIDC/API credentials) |
 | Single-node uses a clearly-labelled DEV secret | `ops/kubernetes/overlays/single-node/secrets-bootstrap.yaml:1-3` (header comment explicitly warns "DO NOT USE OUTSIDE LOCAL DEV"); production overlays must override |
 | Production uses External Secrets Operator + GCP Secret Manager | `ops/kubernetes/overlays/gcp/external-secrets.yaml` — declares one `SecretStore` (L36-55) and three `ExternalSecret`s for `tbite-postgres-password` (L58-79), `tbite-redis-auth` (L82-102), and `tbite-app-secrets` (L104-126), all authenticated via Workload Identity. |
 
@@ -114,8 +114,8 @@ exposing the system to external traffic at scale:
 3. **Allow-list `NetworkPolicy` per workload** — explicit `api -> postgres /
    redis / nats / minio`, `web-* -> api`, `worker -> nats / postgres`
    policies in the single-node overlay.
-4. **Secret rotation policy** — document a 90-day rotation cadence for OIDC
-   client secrets and DB passwords; automate via Secret Manager rotation
+4. **Secret rotation policy** — document a 90-day rotation cadence for Authentik
+   OIDC client/API secrets and DB passwords; automate via Secret Manager rotation
    schedules.
 5. **RBAC scope review** — audit the `tbite-api` and `tbite-scheduler`
    ServiceAccount RBAC bindings; ensure scheduler only has the

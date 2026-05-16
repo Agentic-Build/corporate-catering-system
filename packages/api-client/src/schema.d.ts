@@ -261,7 +261,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/vendors/{id}/invite": {
+    "/api/admin/vendors/{id}/operators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List vendor operators */
+        get: operations["listVendorOperators"];
+        put?: never;
+        /** Create or update a vendor operator in Authentik */
+        post: operations["createVendorOperator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/vendors/{id}/operators/{operator_id}/reinstate": {
         parameters: {
             query?: never;
             header?: never;
@@ -270,8 +288,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Issue a single-use invite code for a vendor */
-        post: operations["issueVendorInvite"];
+        /** Reinstate a vendor operator */
+        post: operations["reinstateVendorOperator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/vendors/{id}/operators/{operator_id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suspend a vendor operator */
+        post: operations["suspendVendorOperator"];
         delete?: never;
         options?: never;
         head?: never;
@@ -760,6 +795,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List enabled auth providers */
+        get: operations["listAuthProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -919,6 +971,26 @@ export interface components {
             price_minor: number;
             tags: string[] | null;
         };
+        CreateOperatorInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateOperatorInputBody.json
+             */
+            readonly $schema?: string;
+            display_name: string;
+            /** Format: email */
+            email: string;
+        };
+        CreateOperatorOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateOperatorOutputBody.json
+             */
+            readonly $schema?: string;
+            operator: components["schemas"]["OperatorDTO"];
+        };
         CreateVendorInputBody: {
             /**
              * Format: uri
@@ -1075,15 +1147,6 @@ export interface components {
             reorder_chips: components["schemas"]["ReorderChipDTO"][] | null;
             target_day: string;
         };
-        InviteOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/InviteOutputBody.json
-             */
-            readonly $schema?: string;
-            code: string;
-        };
         Item: {
             /** Format: uuid */
             menu_item_id: string;
@@ -1203,6 +1266,15 @@ export interface components {
             readonly $schema?: string;
             date: string;
             items: components["schemas"]["MerchantOrderDTO"][] | null;
+        };
+        ListOperatorsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListOperatorsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["OperatorDTO"][] | null;
         };
         ListOrdersOutputBody: {
             /**
@@ -1325,6 +1397,17 @@ export interface components {
             order_id: string;
             reason: string;
         };
+        OperatorDTO: {
+            display_name: string;
+            email: string;
+            external_subject?: string;
+            id: string;
+            last_synced_at?: string;
+            provider: string;
+            setup_url?: string;
+            status: string;
+            vendor_id: string;
+        };
         OrderDTO: {
             cancelled_at?: string;
             cutoff_at: string;
@@ -1394,6 +1477,19 @@ export interface components {
              */
             readonly $schema?: string;
             order: components["schemas"]["OrderDTO"];
+        };
+        ProviderDTO: {
+            display_name: string;
+            slug: string;
+        };
+        ProvidersOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ProvidersOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["ProviderDTO"][] | null;
         };
         RecommendChipDTO: {
             menu_item_id: string;
@@ -1524,7 +1620,6 @@ export interface components {
             readonly $schema?: string;
             /** @enum {string} */
             app: "employee" | "merchant" | "admin";
-            invite_code?: string;
             return_to?: string;
         };
         StartLoginOutputBody: {
@@ -2174,7 +2269,7 @@ export interface operations {
             };
         };
     };
-    issueVendorInvite: {
+    listVendorOperators: {
         parameters: {
             query?: never;
             header?: never;
@@ -2185,14 +2280,109 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListOperatorsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    createVendorOperator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOperatorInputBody"];
+            };
+        };
+        responses: {
             /** @description Created */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InviteOutputBody"];
+                    "application/json": components["schemas"]["CreateOperatorOutputBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    reinstateVendorOperator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                operator_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    suspendVendorOperator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                operator_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {
@@ -3201,7 +3391,6 @@ export interface operations {
             query?: {
                 state?: string;
                 code?: string;
-                app?: "employee" | "merchant" | "admin";
             };
             header?: never;
             path: {
@@ -3235,8 +3424,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description OIDC provider */
-                provider: "google" | "github";
+                /** @description OIDC provider slug */
+                provider: string;
             };
             cookie?: never;
         };
@@ -3281,6 +3470,35 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listAuthProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvidersOutputBody"];
+                };
             };
             /** @description Error */
             default: {

@@ -2,6 +2,7 @@ package vendor_test
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"sync"
 	"testing"
@@ -13,8 +14,6 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
-
-// ----- Mocks -----
 
 type fakeVendorRepo struct {
 	mu      sync.Mutex
@@ -131,71 +130,144 @@ func (r *fakePlantRepo) Set(_ context.Context, id string, plants []string) error
 	return nil
 }
 
-type fakeInvites struct {
+type fakeOperatorRepo struct {
 	mu     sync.Mutex
-	byCode map[string]*identity.VendorInvite
+	byID   map[string]*vendor.OperatorAccount
+	nextID int
 }
 
-func newFakeInvites() *fakeInvites {
-	return &fakeInvites{byCode: map[string]*identity.VendorInvite{}}
+func newFakeOperatorRepo() *fakeOperatorRepo {
+	return &fakeOperatorRepo{byID: map[string]*vendor.OperatorAccount{}}
 }
 
-func (f *fakeInvites) Get(_ context.Context, code string) (*identity.VendorInvite, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if i, ok := f.byCode[code]; ok {
-		return i, nil
+func (r *fakeOperatorRepo) Get(_ context.Context, vendorID, operatorID string) (*vendor.OperatorAccount, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	op, ok := r.byID[operatorID]
+	if !ok || op.VendorID != vendorID {
+		return nil, vendor.ErrOperatorNotFound
 	}
-	return nil, identity.ErrInviteNotFound
+	return op, nil
 }
 
-func (f *fakeInvites) Put(_ context.Context, inv *identity.VendorInvite) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if _, exists := f.byCode[inv.Code]; !exists {
-		f.byCode[inv.Code] = inv
+func (r *fakeOperatorRepo) ListByVendor(_ context.Context, vendorID string) ([]*vendor.OperatorAccount, error) {
+	return r.ListByVendorStatus(context.Background(), vendorID, nil)
+}
+
+func (r *fakeOperatorRepo) ListByVendorStatus(_ context.Context, vendorID string, statuses []vendor.OperatorStatus) ([]*vendor.OperatorAccount, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []*vendor.OperatorAccount
+	for _, op := range r.byID {
+		if op.VendorID != vendorID {
+			continue
+		}
+		if len(statuses) == 0 || hasOperatorStatus(statuses, op.Status) {
+			out = append(out, op)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeOperatorRepo) Upsert(_ context.Context, op *vendor.OperatorAccount) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, existing := range r.byID {
+		if existing.VendorID == op.VendorID && existing.Email == op.Email {
+			op.ID = existing.ID
+			op.CreatedAt = existing.CreatedAt
+			op.UpdatedAt = time.Now().UTC()
+			r.byID[op.ID] = op
+			return nil
+		}
+	}
+	r.nextID++
+	op.ID = "op-" + strconv.Itoa(r.nextID)
+	op.CreatedAt = time.Now().UTC()
+	op.UpdatedAt = op.CreatedAt
+	r.byID[op.ID] = op
+	return nil
+}
+
+func (r *fakeOperatorRepo) SetStatus(_ context.Context, vendorID, operatorID string, status vendor.OperatorStatus) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	op, ok := r.byID[operatorID]
+	if !ok || op.VendorID != vendorID {
+		return vendor.ErrOperatorNotFound
+	}
+	op.Status = status
+	return nil
+}
+
+func (r *fakeOperatorRepo) SetStatuses(_ context.Context, vendorID string, from []vendor.OperatorStatus, to vendor.OperatorStatus) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, op := range r.byID {
+		if op.VendorID == vendorID && hasOperatorStatus(from, op.Status) {
+			op.Status = to
+		}
 	}
 	return nil
 }
 
-func (f *fakeInvites) Consume(_ context.Context, code, userID string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	inv, ok := f.byCode[code]
-	if !ok {
-		return identity.ErrInviteNotFound
+type fakeProvisioner struct {
+	err           error
+	upserts       int
+	suspended     []string
+	reinstated    []string
+	subjectByMail map[string]string
+}
+
+func newFakeProvisioner() *fakeProvisioner {
+	return &fakeProvisioner{subjectByMail: map[string]string{}}
+}
+
+func (p *fakeProvisioner) UpsertVendorOperator(_ context.Context, in identity.VendorOperatorProvisionInput) (*identity.VendorOperatorProvisioned, error) {
+	if p.err != nil {
+		return nil, p.err
 	}
-	if inv.ConsumedAt != nil {
-		return identity.ErrInviteAlreadyUsed
+	p.upserts++
+	sub := p.subjectByMail[in.Email]
+	if sub == "" {
+		sub = "ak-" + strconv.Itoa(p.upserts)
+		p.subjectByMail[in.Email] = sub
 	}
-	now := time.Now().UTC()
-	inv.ConsumedAt = &now
-	inv.ConsumedBy = &userID
+	return &identity.VendorOperatorProvisioned{Provider: "authentik", ExternalSubject: sub, SetupURL: "http://auth/setup/" + sub}, nil
+}
+
+func (p *fakeProvisioner) SuspendVendorOperator(_ context.Context, _ string, externalSubject string) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.suspended = append(p.suspended, externalSubject)
 	return nil
 }
 
-type fixedClock struct{ T time.Time }
+func (p *fakeProvisioner) ReinstateVendorOperator(_ context.Context, _ string, externalSubject, _ string) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.reinstated = append(p.reinstated, externalSubject)
+	return nil
+}
 
-func (c fixedClock) Now() time.Time { return c.T }
-
-// ----- Tests -----
-
-func newSvc() (*vendor.Service, *fakeVendorRepo, *fakePlantRepo, *fakeInvites) {
+func newSvc() (*vendor.Service, *fakeVendorRepo, *fakePlantRepo, *fakeOperatorRepo, *fakeProvisioner) {
 	vr := newFakeVendorRepo()
 	pr := newFakePlantRepo()
-	iv := newFakeInvites()
+	or := newFakeOperatorRepo()
+	prov := newFakeProvisioner()
 	svc := &vendor.Service{
-		Vendors:   vr,
-		Plants:    pr,
-		Invites:   iv,
-		Clock:     fixedClock{T: time.Now().UTC()},
-		InviteTTL: 7 * 24 * time.Hour,
+		Vendors:     vr,
+		Plants:      pr,
+		Operators:   or,
+		Provisioner: prov,
 	}
-	return svc, vr, pr, iv
+	return svc, vr, pr, or, prov
 }
 
 func TestService_CreatePending(t *testing.T) {
-	svc, _, _, _ := newSvc()
+	svc, _, _, _, _ := newSvc()
 	v, err := svc.CreatePending(context.Background(), "稻禾家便當", "稻禾家便當有限公司", "ops@daohe.tw")
 	require.NoError(t, err)
 	assert.Equal(t, vendor.StatusPending, v.Status)
@@ -203,7 +275,7 @@ func TestService_CreatePending(t *testing.T) {
 }
 
 func TestService_ApproveHappy(t *testing.T) {
-	svc, vr, pr, _ := newSvc()
+	svc, vr, pr, _, _ := newSvc()
 	v, _ := svc.CreatePending(context.Background(), "A", "A Ltd", "a@x.com")
 	require.NoError(t, svc.Approve(context.Background(), v.ID, "admin-1", []string{"F12B-3F", "F15-2F"}))
 	got, _ := vr.GetByID(context.Background(), v.ID)
@@ -213,44 +285,97 @@ func TestService_ApproveHappy(t *testing.T) {
 	assert.Equal(t, []string{"F12B-3F", "F15-2F"}, pr.byVendor[v.ID])
 }
 
-func TestService_ApproveAlreadyApproved(t *testing.T) {
-	svc, _, _, _ := newSvc()
+func TestService_CreateOperator_ProvisionsAuthentikThenMirrors(t *testing.T) {
+	svc, _, _, ops, prov := newSvc()
 	v, _ := svc.CreatePending(context.Background(), "A", "A Ltd", "a@x.com")
-	_ = svc.Approve(context.Background(), v.ID, "admin", nil)
-	err := svc.Approve(context.Background(), v.ID, "admin", nil)
-	assert.ErrorIs(t, err, vendor.ErrAlreadyApproved)
-}
+	require.NoError(t, svc.Approve(context.Background(), v.ID, "admin", nil))
 
-func TestService_SuspendAndReinstate(t *testing.T) {
-	svc, _, _, _ := newSvc()
-	v, _ := svc.CreatePending(context.Background(), "A", "A Ltd", "a@x.com")
-	_ = svc.Approve(context.Background(), v.ID, "admin", nil)
-	require.NoError(t, svc.Suspend(context.Background(), v.ID))
-	err := svc.Suspend(context.Background(), v.ID) // already suspended
-	assert.ErrorIs(t, err, vendor.ErrInvalidStatus)
-	require.NoError(t, svc.Reinstate(context.Background(), v.ID, "admin"))
-}
-
-func TestService_IssueInvite(t *testing.T) {
-	svc, _, _, inv := newSvc()
-	v, _ := svc.CreatePending(context.Background(), "A", "A Ltd", "a@x.com")
-	code, err := svc.IssueInvite(context.Background(), v.ID)
+	op, err := svc.CreateOperator(context.Background(), v.ID, "Owner@Vendor.tw", "Owner")
 	require.NoError(t, err)
-	assert.NotEmpty(t, code)
-	assert.Contains(t, code, "TBI-")
-	stored, ok := inv.byCode[code]
-	require.True(t, ok)
-	assert.Equal(t, v.ID, stored.VendorID)
+	assert.Equal(t, "owner@vendor.tw", op.Email)
+	assert.Equal(t, "authentik", op.Provider)
+	require.NotNil(t, op.ExternalSubject)
+	assert.Equal(t, "ak-1", *op.ExternalSubject)
+	assert.Equal(t, vendor.OperatorStatusActive, op.Status)
+	assert.Equal(t, 1, prov.upserts)
+	assert.Len(t, ops.byID, 1)
 }
 
-func TestService_IssueInvite_VendorNotFound(t *testing.T) {
-	svc, _, _, _ := newSvc()
-	_, err := svc.IssueInvite(context.Background(), "nope")
-	assert.ErrorIs(t, err, vendor.ErrVendorNotFound)
+func TestService_CreateOperator_ProvisioningFailureLeavesNoLocalOperator(t *testing.T) {
+	svc, _, _, ops, prov := newSvc()
+	prov.err = errors.New("authentik down")
+	v, _ := svc.CreatePending(context.Background(), "A", "A Ltd", "a@x.com")
+	require.NoError(t, svc.Approve(context.Background(), v.ID, "admin", nil))
+
+	_, err := svc.CreateOperator(context.Background(), v.ID, "owner@vendor.tw", "Owner")
+	assert.ErrorIs(t, err, vendor.ErrProvisioningSetup)
+	assert.Empty(t, ops.byID)
+}
+
+func TestService_SuspendVendor_DisablesActiveOperators(t *testing.T) {
+	svc, _, _, _, prov := newSvc()
+	v, _ := svc.CreatePending(context.Background(), "A", "A Ltd", "a@x.com")
+	require.NoError(t, svc.Approve(context.Background(), v.ID, "admin", nil))
+	op, err := svc.CreateOperator(context.Background(), v.ID, "owner@vendor.tw", "Owner")
+	require.NoError(t, err)
+
+	require.NoError(t, svc.Suspend(context.Background(), v.ID))
+	assert.Equal(t, []string{*op.ExternalSubject}, prov.suspended)
+	got, err := svc.ListOperators(context.Background(), v.ID)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, vendor.OperatorStatusVendorSuspended, got[0].Status)
+}
+
+func TestService_ReinstateVendor_RestoresVendorSuspendedOperators(t *testing.T) {
+	svc, _, _, _, prov := newSvc()
+	v, _ := svc.CreatePending(context.Background(), "A", "A Ltd", "a@x.com")
+	require.NoError(t, svc.Approve(context.Background(), v.ID, "admin", nil))
+	op, err := svc.CreateOperator(context.Background(), v.ID, "owner@vendor.tw", "Owner")
+	require.NoError(t, err)
+	require.NoError(t, svc.Suspend(context.Background(), v.ID))
+
+	require.NoError(t, svc.Reinstate(context.Background(), v.ID, "admin"))
+	assert.Equal(t, []string{*op.ExternalSubject}, prov.reinstated)
+	got, err := svc.ListOperators(context.Background(), v.ID)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, vendor.OperatorStatusActive, got[0].Status)
+}
+
+func TestService_SuspendOperator(t *testing.T) {
+	svc, _, _, _, prov := newSvc()
+	v, _ := svc.CreatePending(context.Background(), "A", "A Ltd", "a@x.com")
+	require.NoError(t, svc.Approve(context.Background(), v.ID, "admin", nil))
+	op, err := svc.CreateOperator(context.Background(), v.ID, "owner@vendor.tw", "Owner")
+	require.NoError(t, err)
+
+	require.NoError(t, svc.SuspendOperator(context.Background(), v.ID, op.ID))
+	assert.Equal(t, []string{*op.ExternalSubject}, prov.suspended)
+	got, err := svc.ListOperators(context.Background(), v.ID)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, vendor.OperatorStatusSuspended, got[0].Status)
+}
+
+func TestService_ReinstateOperator(t *testing.T) {
+	svc, _, _, _, prov := newSvc()
+	v, _ := svc.CreatePending(context.Background(), "A", "A Ltd", "a@x.com")
+	require.NoError(t, svc.Approve(context.Background(), v.ID, "admin", nil))
+	op, err := svc.CreateOperator(context.Background(), v.ID, "owner@vendor.tw", "Owner")
+	require.NoError(t, err)
+	require.NoError(t, svc.SuspendOperator(context.Background(), v.ID, op.ID))
+
+	require.NoError(t, svc.ReinstateOperator(context.Background(), v.ID, op.ID))
+	assert.Equal(t, []string{*op.ExternalSubject}, prov.reinstated)
+	got, err := svc.ListOperators(context.Background(), v.ID)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, vendor.OperatorStatusActive, got[0].Status)
 }
 
 func TestService_List(t *testing.T) {
-	svc, _, _, _ := newSvc()
+	svc, _, _, _, _ := newSvc()
 	a, _ := svc.CreatePending(context.Background(), "A", "A Ltd", "a@x.com")
 	_, _ = svc.CreatePending(context.Background(), "B", "B Ltd", "b@x.com")
 	_ = svc.Approve(context.Background(), a.ID, "admin", nil)
@@ -261,4 +386,13 @@ func TestService_List(t *testing.T) {
 	assert.Len(t, pending, 1)
 	all, _ := svc.List(context.Background(), nil)
 	assert.Len(t, all, 2)
+}
+
+func hasOperatorStatus(items []vendor.OperatorStatus, status vendor.OperatorStatus) bool {
+	for _, item := range items {
+		if item == status {
+			return true
+		}
+	}
+	return false
 }

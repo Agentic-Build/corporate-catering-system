@@ -2,24 +2,24 @@ package vendor
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
+	"errors"
+	"fmt"
+	"net/mail"
+	"strings"
 	"time"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 )
 
-// Clock abstracts time.Now for deterministic invite expiry.
-type Clock interface{ Now() time.Time }
-
-// Service orchestrates admin operations over vendors, plant mappings, and invites.
-// It depends only on repository interfaces and a clock; no transport concerns.
+// Service orchestrates admin operations over vendors, plant mappings, and the
+// Authentik-backed vendor-operator mirror.
 type Service struct {
-	Vendors   Repository
-	Plants    PlantMappingRepository
-	Invites   identity.VendorInviteRepository
-	Clock     Clock
-	InviteTTL time.Duration
+	Vendors     Repository
+	Plants      PlantMappingRepository
+	Operators   OperatorRepository
+	Provisioner identity.VendorOperatorProvisioner
+	Users       identity.UserRepository
+	Sessions    identity.SessionStore
 }
 
 // CreatePending creates a vendor in pending status. Approval (and plant mapping)
@@ -65,7 +65,27 @@ func (s *Service) Suspend(ctx context.Context, id string) error {
 	if v.Status != StatusApproved {
 		return ErrInvalidStatus
 	}
-	return s.Vendors.UpdateStatus(ctx, id, StatusSuspended, nil)
+	ops, err := s.Operators.ListByVendorStatus(ctx, id, []OperatorStatus{OperatorStatusActive})
+	if err != nil {
+		return err
+	}
+	for _, op := range ops {
+		if err := s.suspendRemoteOperator(ctx, op); err != nil {
+			return err
+		}
+	}
+	if err := s.Vendors.UpdateStatus(ctx, id, StatusSuspended, nil); err != nil {
+		return err
+	}
+	if err := s.Operators.SetStatuses(ctx, id, []OperatorStatus{OperatorStatusActive}, OperatorStatusVendorSuspended); err != nil {
+		return err
+	}
+	for _, op := range ops {
+		if err := s.revokeByEmail(ctx, op.Email); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Reinstate transitions a suspended vendor back to approved.
@@ -77,7 +97,19 @@ func (s *Service) Reinstate(ctx context.Context, id, adminUserID string) error {
 	if v.Status != StatusSuspended {
 		return ErrInvalidStatus
 	}
-	return s.Vendors.UpdateStatus(ctx, id, StatusApproved, &adminUserID)
+	ops, err := s.Operators.ListByVendorStatus(ctx, id, []OperatorStatus{OperatorStatusVendorSuspended})
+	if err != nil {
+		return err
+	}
+	for _, op := range ops {
+		if err := s.reinstateRemoteOperator(ctx, op); err != nil {
+			return err
+		}
+	}
+	if err := s.Vendors.UpdateStatus(ctx, id, StatusApproved, &adminUserID); err != nil {
+		return err
+	}
+	return s.Operators.SetStatuses(ctx, id, []OperatorStatus{OperatorStatusVendorSuspended}, OperatorStatusActive)
 }
 
 // List returns vendors filtered by status (empty slice means all).
@@ -100,26 +132,150 @@ func (s *Service) ListPlants(ctx context.Context, id string) ([]string, error) {
 	return out, nil
 }
 
-// IssueInvite generates a single-use invite code stored in vendor_invite.
-// The vendor must exist; expiry is now + InviteTTL.
-func (s *Service) IssueInvite(ctx context.Context, vendorID string) (string, error) {
+func (s *Service) ListOperators(ctx context.Context, vendorID string) ([]*OperatorAccount, error) {
 	if _, err := s.Vendors.GetByID(ctx, vendorID); err != nil {
-		return "", err
+		return nil, err
 	}
-	code := makeInviteCode()
-	inv := &identity.VendorInvite{
-		Code:      code,
-		VendorID:  vendorID,
-		ExpiresAt: s.Clock.Now().Add(s.InviteTTL),
-	}
-	if err := s.Invites.Put(ctx, inv); err != nil {
-		return "", err
-	}
-	return code, nil
+	return s.Operators.ListByVendor(ctx, vendorID)
 }
 
-func makeInviteCode() string {
-	b := make([]byte, 12)
-	_, _ = rand.Read(b)
-	return "TBI-" + base64.RawURLEncoding.EncodeToString(b)
+func (s *Service) CreateOperator(ctx context.Context, vendorID, email, displayName string) (*OperatorAccount, error) {
+	v, err := s.Vendors.GetByID(ctx, vendorID)
+	if err != nil {
+		return nil, err
+	}
+	if v.Status != StatusApproved {
+		return nil, ErrInvalidStatus
+	}
+	email, err = normalizeEmail(email)
+	if err != nil {
+		return nil, err
+	}
+	displayName = strings.TrimSpace(displayName)
+	if displayName == "" {
+		return nil, fmt.Errorf("%w: display_name is required", ErrInvalidOperator)
+	}
+	if s.Provisioner == nil {
+		return nil, fmt.Errorf("%w: provisioner is not configured", ErrProvisioningSetup)
+	}
+	prov, err := s.Provisioner.UpsertVendorOperator(ctx, identity.VendorOperatorProvisionInput{
+		Email:       email,
+		DisplayName: displayName,
+		VendorID:    vendorID,
+		Active:      true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrProvisioningSetup, err)
+	}
+	now := time.Now().UTC()
+	op := &OperatorAccount{
+		VendorID:        vendorID,
+		Email:           email,
+		DisplayName:     displayName,
+		Provider:        prov.Provider,
+		ExternalSubject: stringPtr(prov.ExternalSubject),
+		Status:          OperatorStatusActive,
+		SetupURL:        stringPtr(prov.SetupURL),
+		LastSyncedAt:    &now,
+	}
+	if err := s.Operators.Upsert(ctx, op); err != nil {
+		return nil, err
+	}
+	return op, nil
+}
+
+func (s *Service) SuspendOperator(ctx context.Context, vendorID, operatorID string) error {
+	op, err := s.Operators.Get(ctx, vendorID, operatorID)
+	if err != nil {
+		return err
+	}
+	if op.Status != OperatorStatusActive {
+		return ErrInvalidStatus
+	}
+	if err := s.suspendRemoteOperator(ctx, op); err != nil {
+		return err
+	}
+	if err := s.Operators.SetStatus(ctx, vendorID, operatorID, OperatorStatusSuspended); err != nil {
+		return err
+	}
+	return s.revokeByEmail(ctx, op.Email)
+}
+
+func (s *Service) ReinstateOperator(ctx context.Context, vendorID, operatorID string) error {
+	v, err := s.Vendors.GetByID(ctx, vendorID)
+	if err != nil {
+		return err
+	}
+	if v.Status != StatusApproved {
+		return ErrInvalidStatus
+	}
+	op, err := s.Operators.Get(ctx, vendorID, operatorID)
+	if err != nil {
+		return err
+	}
+	if op.Status != OperatorStatusSuspended && op.Status != OperatorStatusVendorSuspended {
+		return ErrInvalidStatus
+	}
+	if err := s.reinstateRemoteOperator(ctx, op); err != nil {
+		return err
+	}
+	return s.Operators.SetStatus(ctx, vendorID, operatorID, OperatorStatusActive)
+}
+
+func (s *Service) suspendRemoteOperator(ctx context.Context, op *OperatorAccount) error {
+	if s.Provisioner == nil {
+		return fmt.Errorf("%w: provisioner is not configured", ErrProvisioningSetup)
+	}
+	if op.ExternalSubject == nil || *op.ExternalSubject == "" {
+		return fmt.Errorf("%w: missing external subject", ErrInvalidOperator)
+	}
+	if err := s.Provisioner.SuspendVendorOperator(ctx, op.Provider, *op.ExternalSubject); err != nil {
+		return fmt.Errorf("%w: %v", ErrProvisioningSetup, err)
+	}
+	return nil
+}
+
+func (s *Service) reinstateRemoteOperator(ctx context.Context, op *OperatorAccount) error {
+	if s.Provisioner == nil {
+		return fmt.Errorf("%w: provisioner is not configured", ErrProvisioningSetup)
+	}
+	if op.ExternalSubject == nil || *op.ExternalSubject == "" {
+		return fmt.Errorf("%w: missing external subject", ErrInvalidOperator)
+	}
+	if err := s.Provisioner.ReinstateVendorOperator(ctx, op.Provider, *op.ExternalSubject, op.VendorID); err != nil {
+		return fmt.Errorf("%w: %v", ErrProvisioningSetup, err)
+	}
+	return nil
+}
+
+func (s *Service) revokeByEmail(ctx context.Context, email string) error {
+	if s.Users == nil || s.Sessions == nil {
+		return nil
+	}
+	u, err := s.Users.GetByEmail(ctx, email)
+	if errors.Is(err, identity.ErrUserNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.Sessions.RevokeAllForUser(ctx, u.ID)
+}
+
+func normalizeEmail(email string) (string, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return "", fmt.Errorf("%w: email is required", ErrInvalidOperator)
+	}
+	if _, err := mail.ParseAddress(email); err != nil {
+		return "", fmt.Errorf("%w: invalid email", ErrInvalidOperator)
+	}
+	return email, nil
+}
+
+func stringPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

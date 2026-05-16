@@ -4,10 +4,10 @@ import { env } from "$env/dynamic/private";
 export async function GET({ url }) {
   const provider = url.searchParams.get("provider");
   const returnTo = url.searchParams.get("return_to") ?? "/";
-  if (provider !== "google" && provider !== "github") throw error(400, "bad provider");
+  if (!provider || !/^[a-z0-9][a-z0-9_.-]*$/.test(provider)) throw error(400, "bad provider");
 
   const apiBaseUrl = env.API_BASE_URL ?? "http://localhost:8080";
-  const resp = await fetch(`${apiBaseUrl}/auth/${provider}/start`, {
+  const resp = await fetch(`${apiBaseUrl}/auth/${encodeURIComponent(provider)}/start`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ app: "employee", return_to: returnTo }),

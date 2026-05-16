@@ -42,26 +42,21 @@ spec:
             - configMapRef:
                 name: tbite-config
           env:
-            - name: OIDC_GOOGLE_CLIENT_ID
+            - name: AUTH_PROVIDER_AUTHENTIK_CLIENT_ID
               valueFrom:
                 secretKeyRef:
                   name: tbite-dev-secrets
-                  key: OIDC_GOOGLE_CLIENT_ID
-            - name: OIDC_GOOGLE_CLIENT_SECRET
+                  key: AUTH_PROVIDER_AUTHENTIK_CLIENT_ID
+            - name: AUTH_PROVIDER_AUTHENTIK_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: tbite-dev-secrets
-                  key: OIDC_GOOGLE_CLIENT_SECRET
-            - name: OIDC_GITHUB_CLIENT_ID
+                  key: AUTH_PROVIDER_AUTHENTIK_CLIENT_SECRET
+            - name: AUTHENTIK_API_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: tbite-dev-secrets
-                  key: OIDC_GITHUB_CLIENT_ID
-            - name: OIDC_GITHUB_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: tbite-dev-secrets
-                  key: OIDC_GITHUB_CLIENT_SECRET
+                  key: AUTHENTIK_API_TOKEN
           livenessProbe:
             httpGet:
               path: /healthz

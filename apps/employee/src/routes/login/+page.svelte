@@ -16,18 +16,14 @@
       <h1 class="mt-1 text-3xl font-black tracking-tight text-tb-slate-900">歡迎回來</h1>
       <p class="mt-1 text-sm text-tb-slate-500">使用公司 SSO 帳號登入即可開始預訂午餐。</p>
       <div class="mt-6 space-y-3">
-        <ProviderButton
-          provider="google"
-          href={`/auth/start?provider=google&return_to=${returnTo}`}
-        >
-          使用 Google 繼續
-        </ProviderButton>
-        <ProviderButton
-          provider="github"
-          href={`/auth/start?provider=github&return_to=${returnTo}`}
-        >
-          使用 GitHub 繼續
-        </ProviderButton>
+        {#each data.providers as provider}
+          <ProviderButton
+            provider={provider.slug}
+            href={`/auth/start?provider=${provider.slug}&return_to=${returnTo}`}
+          >
+            使用 {provider.display_name} 登入
+          </ProviderButton>
+        {/each}
       </div>
     </Card>
     <p class="mt-6 text-center text-[11px] uppercase tracking-eyebrow-wide text-tb-slate-500">
