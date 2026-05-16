@@ -74,7 +74,7 @@
             required
             minlength="1"
             placeholder="請描述異常狀況（例如：餐點未送達、品質異常、商家未開放領取等）"
-            class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
+            class="rounded-tb-lg border border-tb-slate-300 px-3 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
           ></textarea>
         </label>
         <div class="flex flex-wrap items-center gap-3">

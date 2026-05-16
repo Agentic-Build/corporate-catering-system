@@ -132,37 +132,6 @@ export const actions: Actions = {
     throw redirect(303, `/orders/${orderID}`);
   },
 
-  // Quick-add a single menu item (1 qty) to a fresh order. Used by FavoriteChip / RecommendChip.
-  addFavoriteChipToCart: async ({ request, locals, url }) => {
-    if (!locals.user) throw redirect(303, "/login");
-    const fd = await request.formData();
-    const menuItemId = String(fd.get("menu_item_id") ?? "");
-    if (!menuItemId) return fail(400, { error: "menu_item_id required" });
-
-    const selectedPlant = url.searchParams.get("plant") ?? locals.user.plant ?? PLANTS[0].id;
-    const dayOverride = url.searchParams.get("day") ?? undefined;
-
-    const client = createApiClient(API_BASE_URL, locals.apiToken);
-    // Determine target day via /home unless overridden.
-    let supplyDate = dayOverride;
-    if (!supplyDate) {
-      const h = await client.GET("/api/employee/home", { params: { query: {} } });
-      supplyDate = h.data?.target_day ?? new Date().toISOString().slice(0, 10);
-    }
-
-    const r = await client.POST("/api/employee/orders", {
-      body: {
-        plant: selectedPlant,
-        supply_date: supplyDate,
-        items: [{ menu_item_id: menuItemId, qty: 1 }],
-      } as never,
-    });
-    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
-    const orderID = (r.data as { order?: { id?: string } } | undefined)?.order?.id;
-    if (!orderID) return fail(500, { error: "no order id in response" });
-    throw redirect(303, `/orders/${orderID}`);
-  },
-
   // Reorder an entire past order. May produce partial result with unavailable_items[].
   reorderPast: async ({ request, locals }) => {
     if (!locals.user) throw redirect(303, "/login");

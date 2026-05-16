@@ -30,12 +30,15 @@
     });
   });
 
-  // 1s countdown; on zero, ask the caller to re-fetch a fresh code.
+  // 1s countdown. On zero, ask the caller to re-fetch a fresh code; the
+  // countdown then holds at 0 until the new code arrives, at which point the
+  // $effect above re-syncs `seconds` from the new `expiresInSeconds` — so the
+  // displayed countdown always reflects the real expiry, never a guessed 30.
   $effect(() => {
     const t = setInterval(() => {
       if (seconds <= 1) {
+        seconds = 0;
         onExpire?.();
-        seconds = 30;
       } else {
         seconds -= 1;
       }
