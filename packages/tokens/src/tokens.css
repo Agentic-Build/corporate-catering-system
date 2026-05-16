@@ -244,3 +244,30 @@ code, .tb-mono, .tb-tabular {
   font-variant-numeric: tabular-nums;
   letter-spacing: var(--tb-track-tight);
 }
+
+/* ───── Animations & utilities ─────
+   Ported from the T-Bite prototype (colors_and_type.css / index.html).
+*/
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up {
+  animation: fadeUp 220ms ease-out both;
+}
+
+@keyframes cartBump {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+.cart-bump {
+  animation: cartBump 320ms ease-out;
+}
+
+/* horizontal scroll without a visible scrollbar */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
