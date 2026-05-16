@@ -1,24 +1,37 @@
 <script lang="ts">
+  // 員工登入 — design-language pass. Centred card with the brand eyebrow +
+  // big title style, SSO via ProviderButton.
   import { Card, ProviderButton, TBiteLogo } from "@tbite/ui";
   let { data } = $props();
-  const r = encodeURIComponent(data.returnTo);
+  const returnTo = $derived(encodeURIComponent(data.returnTo));
 </script>
 
-<div class="mx-auto mt-16 max-w-md">
-  <div class="mb-8 flex justify-center"><TBiteLogo size={40} /></div>
-  <Card>
-    <h1 class="mb-1 text-xl font-black text-tb-slate-900">員工登入</h1>
-    <p class="mb-6 text-sm text-tb-slate-500">使用公司 Email 登入</p>
-    <div class="space-y-3">
-      <ProviderButton provider="google" href={`/auth/start?provider=google&return_to=${r}`}>
-        使用 Google 繼續
-      </ProviderButton>
-      <ProviderButton provider="github" href={`/auth/start?provider=github&return_to=${r}`}>
-        使用 GitHub 繼續
-      </ProviderButton>
-    </div>
-  </Card>
-  <p class="mt-6 text-center text-xs uppercase tracking-eyebrow-wide text-tb-slate-500">
-    T-Bite · Employee
-  </p>
+<div class="grid min-h-screen place-items-center bg-tb-slate-50 px-4 py-12">
+  <div class="w-full max-w-md fade-up">
+    <div class="mb-8 flex justify-center"><TBiteLogo size={44} /></div>
+    <Card>
+      <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-red-600">
+        Employee · 員工登入
+      </div>
+      <h1 class="mt-1 text-3xl font-black tracking-tight text-tb-slate-900">歡迎回來</h1>
+      <p class="mt-1 text-sm text-tb-slate-500">使用公司 SSO 帳號登入即可開始預訂午餐。</p>
+      <div class="mt-6 space-y-3">
+        <ProviderButton
+          provider="google"
+          href={`/auth/start?provider=google&return_to=${returnTo}`}
+        >
+          使用 Google 繼續
+        </ProviderButton>
+        <ProviderButton
+          provider="github"
+          href={`/auth/start?provider=github&return_to=${returnTo}`}
+        >
+          使用 GitHub 繼續
+        </ProviderButton>
+      </div>
+    </Card>
+    <p class="mt-6 text-center text-[11px] uppercase tracking-eyebrow-wide text-tb-slate-500">
+      T-Bite · Corporate Catering
+    </p>
+  </div>
 </div>
