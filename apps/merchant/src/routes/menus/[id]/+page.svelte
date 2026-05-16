@@ -1,40 +1,81 @@
 <script lang="ts">
+  import { PageHeader, Card, Button, StateTag } from "@tbite/ui";
   let { data, form } = $props();
-  const item = data.item;
+  const item = $derived(data.item);
+
+  const statusMeta = {
+    active: { tone: "success", label: "上架中" },
+    draft: { tone: "neutral", label: "草稿" },
+    archived: { tone: "warning", label: "已封存" },
+  } as Record<string, { tone: "success" | "neutral" | "warning"; label: string }>;
+  const meta = $derived(
+    statusMeta[item.status] ?? { tone: "neutral", label: item.status },
+  );
+
+  const fieldClass =
+    "mt-1 w-full rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100";
 </script>
 
-<section class="max-w-xl space-y-4">
-  <h1 class="text-2xl font-black text-tb-slate-900">編輯餐點</h1>
+<div class="max-w-xl">
+  <PageHeader eyebrow="Menu Library · 菜單管理" title="編輯餐點">
+    {#snippet actions()}
+      <StateTag tone={meta.tone}>{meta.label}</StateTag>
+    {/snippet}
+  </PageHeader>
 
-  <form method="POST" action="?/update" class="space-y-3 rounded-tb-2xl border border-tb-slate-200 bg-white p-5 shadow-tb-sm">
-    <label class="block text-sm font-semibold">名稱
-      <input name="name" required value={item.name} class="mt-1 w-full rounded-lg border border-tb-slate-300 px-3 py-2 text-sm" />
-    </label>
-    <label class="block text-sm font-semibold">敘述
-      <textarea name="description" rows="2" class="mt-1 w-full rounded-lg border border-tb-slate-300 px-3 py-2 text-sm">{item.description}</textarea>
-    </label>
-    <label class="block text-sm font-semibold">價格（NTD）
-      <input name="price" type="number" min="0" required value={item.price_minor} class="mt-1 w-full rounded-lg border border-tb-slate-300 px-3 py-2 font-jetbrains-mono tabular-nums text-sm" />
-    </label>
-    <label class="block text-sm font-semibold">標籤（逗號分隔）
-      <input name="tags" value={(item.tags ?? []).join(",")} class="mt-1 w-full rounded-lg border border-tb-slate-300 px-3 py-2 text-sm" />
-    </label>
-    <label class="block text-sm font-semibold">徽章（逗號分隔）
-      <input name="badges" value={(item.badges ?? []).join(",")} class="mt-1 w-full rounded-lg border border-tb-slate-300 px-3 py-2 text-sm" />
-    </label>
-    {#if form?.error}
-      <p class="rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">{form.error}</p>
-    {/if}
-    <button type="submit" class="rounded-lg bg-tb-red-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-tb-red-700">儲存</button>
-  </form>
+  <Card>
+    <form method="POST" action="?/update" class="space-y-3">
+      <label class="block text-sm font-semibold text-tb-slate-800">
+        名稱
+        <input name="name" required value={item.name} class={fieldClass} />
+      </label>
+      <label class="block text-sm font-semibold text-tb-slate-800">
+        敘述
+        <textarea name="description" rows="2" class={fieldClass}
+          >{item.description}</textarea
+        >
+      </label>
+      <label class="block text-sm font-semibold text-tb-slate-800">
+        價格（NTD）
+        <input
+          name="price"
+          type="number"
+          min="0"
+          required
+          value={item.price_minor}
+          class="{fieldClass} font-jetbrains-mono tabular-nums"
+        />
+      </label>
+      <label class="block text-sm font-semibold text-tb-slate-800">
+        標籤（逗號分隔）
+        <input name="tags" value={(item.tags ?? []).join(",")} class={fieldClass} />
+      </label>
+      <label class="block text-sm font-semibold text-tb-slate-800">
+        徽章（逗號分隔）
+        <input name="badges" value={(item.badges ?? []).join(",")} class={fieldClass} />
+      </label>
+      {#if form?.error}
+        <p class="rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">
+          {form.error}
+        </p>
+      {/if}
+      <div class="pt-1">
+        <Button variant="primary" type="submit">儲存</Button>
+      </div>
+    </form>
+  </Card>
 
-  <div class="flex gap-2">
+  <div class="mt-4 flex flex-wrap gap-2">
     {#if item.status !== "active"}
-      <form method="POST" action="?/publish"><button class="rounded-lg border border-emerald-500 bg-emerald-50 px-3.5 py-2 text-sm font-semibold text-emerald-700">上架</button></form>
+      <form method="POST" action="?/publish">
+        <Button variant="primary" type="submit">上架</Button>
+      </form>
     {/if}
     {#if item.status !== "archived"}
-      <form method="POST" action="?/archive"><button class="rounded-lg border border-tb-rose-300 bg-tb-rose-50 px-3.5 py-2 text-sm font-semibold text-tb-rose-700">封存</button></form>
+      <form method="POST" action="?/archive">
+        <Button variant="danger" type="submit">封存</Button>
+      </form>
     {/if}
-    <a href="/menus" class="rounded-lg border border-tb-slate-300 px-3.5 py-2 text-sm font-semibold text-tb-slate-800">返回</a>
+    <a href="/menus"><Button variant="secondary">返回</Button></a>
   </div>
-</section>
+</div>
