@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { StateTag } from "@tbite/ui";
+  import { PageHeader, Card, StateTag, Button, Icon } from "@tbite/ui";
   let { data } = $props();
 
   const filters = [
@@ -24,63 +24,87 @@
   } as Record<string, string>;
 </script>
 
-<section class="space-y-4">
-  <header class="flex items-center justify-between">
-    <h1 class="text-2xl font-black text-tb-slate-900">月結批次</h1>
-    <a href="/payroll/new" class="rounded-lg bg-tb-red-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-tb-red-700">+ 建立月份</a>
-  </header>
+<PageHeader
+  eyebrow="薪資代扣"
+  title="月結批次"
+  subtitle="聚合 picked_up／no_show 訂單為對帳批次 · 鎖定後排程匯出 HR CSV"
+>
+  {#snippet actions()}
+    <a href="/payroll/new">
+      <Button variant="primary" size="md">
+        <Icon name="plus" class="h-3.5 w-3.5" />建立月份
+      </Button>
+    </a>
+  {/snippet}
+</PageHeader>
 
-  <div class="flex flex-wrap gap-1 rounded-full bg-tb-slate-100 p-1">
-    {#each filters as f}
-      <a href={f.id ? `?status=${f.id}` : "?"}
-         class="rounded-full px-3 py-1 text-xs font-semibold {data.status === f.id ? 'bg-tb-slate-900 text-white' : 'text-tb-slate-700'}">
-        {f.label}
-      </a>
-    {/each}
-  </div>
+<div class="flex flex-wrap items-center gap-1 rounded-full bg-tb-slate-100 p-1">
+  {#each filters as f}
+    <a
+      href={f.id ? `?status=${f.id}` : "?"}
+      class="rounded-full px-3.5 py-1.5 text-xs font-semibold transition {data.status === f.id
+        ? 'bg-tb-slate-900 text-white'
+        : 'text-tb-slate-700 hover:bg-tb-slate-200'}"
+    >
+      {f.label}
+    </a>
+  {/each}
+</div>
 
+<div class="mt-4">
   {#if data.batches.length === 0}
-    <p class="rounded-tb-2xl border border-tb-slate-200 bg-white p-6 text-center text-sm text-tb-slate-500">
-      尚無批次
+    <p
+      class="rounded-tb-2xl border border-dashed border-tb-slate-300 bg-tb-slate-50/60 p-8 text-center text-sm text-tb-slate-500"
+    >
+      尚無月結批次
     </p>
   {:else}
-    <div class="overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm">
-      <table class="w-full text-sm">
-        <thead class="bg-tb-slate-50 text-left text-xs uppercase tracking-eyebrow text-tb-slate-500">
-          <tr>
-            <th class="px-4 py-2">期間</th>
-            <th class="px-4 py-2">狀態</th>
-            <th class="px-4 py-2">鎖定時間</th>
-            <th class="px-4 py-2">匯出時間</th>
-            <th class="px-4 py-2">CSV</th>
-            <th class="px-4 py-2"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each data.batches as b (b.id)}
-            <tr class="border-t border-tb-slate-100">
-              <td class="px-4 py-3 font-semibold text-tb-slate-900 font-jetbrains-mono">
-                {b.period_start} — {b.period_end}
-              </td>
-              <td class="px-4 py-3">
-                <StateTag tone={statusTone[b.status] ?? "neutral"}>{statusLabel[b.status] ?? b.status}</StateTag>
-              </td>
-              <td class="px-4 py-3 text-xs text-tb-slate-500 font-jetbrains-mono">{b.locked_at ?? "-"}</td>
-              <td class="px-4 py-3 text-xs text-tb-slate-500 font-jetbrains-mono">{b.exported_at ?? "-"}</td>
-              <td class="px-4 py-3 text-xs">
-                {#if b.export_uri}
-                  <span class="font-jetbrains-mono break-all text-tb-slate-500">{b.export_uri}</span>
-                {:else}
-                  -
-                {/if}
-              </td>
-              <td class="px-4 py-3 text-right">
-                <a href="/payroll/{b.id}" class="text-tb-red-600 hover:text-tb-red-700">詳細</a>
-              </td>
+    <Card>
+      <div class="overflow-hidden rounded-xl border border-tb-slate-200">
+        <table class="w-full text-sm">
+          <thead
+            class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
+          >
+            <tr>
+              <th class="px-4 py-2.5">月結周期</th>
+              <th class="px-4 py-2.5">狀態</th>
+              <th class="px-4 py-2.5">鎖定時間</th>
+              <th class="px-4 py-2.5">匯出時間</th>
+              <th class="px-4 py-2.5"></th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody class="divide-y divide-tb-slate-100">
+            {#each data.batches as b (b.id)}
+              <tr class="hover:bg-tb-slate-50/60">
+                <td class="px-4 py-3 font-jetbrains-mono text-xs font-semibold text-tb-slate-800">
+                  {b.period_start} — {b.period_end}
+                </td>
+                <td class="px-4 py-3">
+                  <StateTag
+                    tone={statusTone[b.status] ?? "neutral"}
+                    pulse={b.status === "locked"}
+                  >
+                    {statusLabel[b.status] ?? b.status}
+                  </StateTag>
+                </td>
+                <td class="px-4 py-3 font-jetbrains-mono text-xs text-tb-slate-500">
+                  {b.locked_at ? b.locked_at.slice(0, 16).replace("T", " ") : "—"}
+                </td>
+                <td class="px-4 py-3 font-jetbrains-mono text-xs text-tb-slate-500">
+                  {b.exported_at ? b.exported_at.slice(0, 16).replace("T", " ") : "—"}
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <a
+                    href="/payroll/{b.id}"
+                    class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+                    >詳細</a
+                  >
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   {/if}
-</section>
+</div>
