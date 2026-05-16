@@ -4,6 +4,7 @@
   import PlantAggCard from "$lib/components/PlantAggCard.svelte";
   import ScheduleDayPicker from "$lib/components/ScheduleDayPicker.svelte";
   import ScheduleTable from "$lib/components/ScheduleTable.svelte";
+  import MealLibraryDrawer from "$lib/components/MealLibraryDrawer.svelte";
 
   let { data, form } = $props();
 
@@ -20,6 +21,7 @@
   // ── Schedule planner state ──
   // Default to tomorrow when present, else today.
   let selectedDay = $state(data.days[1]?.id ?? data.days[0].id);
+  let libraryOpen = $state(false);
 
   const itemById = $derived(
     Object.fromEntries(data.items.map((i: any) => [i.id, i])) as Record<string, any>,
@@ -49,6 +51,7 @@
       });
   }
   const selectedSlots = $derived(slotsFor(selectedDay));
+  const scheduledIds = $derived(new Set(selectedSlots.map((s) => s.itemId)));
 
   // ── Hidden-form plumbing for schedule edits ──
   let capForm = $state<HTMLFormElement>();
@@ -72,6 +75,14 @@
     activeItemId = itemId;
     activeAction = on ? "publishItem" : "archiveItem";
     queueMicrotask(() => activeForm?.requestSubmit());
+  }
+
+  /** Library "加入此日" — publish if archived, then schedule a default cap. */
+  function addFromLibrary(item: any) {
+    if (item.status === "archived") {
+      submitActive(item.id, true);
+    }
+    submitCap(item.id, 50, "11:50-12:10");
   }
 </script>
 
@@ -169,7 +180,7 @@
   <ScheduleTable
     day={selectedDayDef}
     slots={selectedSlots}
-    onOpenLibrary={() => {}}
+    onOpenLibrary={() => (libraryOpen = true)}
     {submitCap}
     {submitActive}
   />
@@ -183,6 +194,15 @@
     </span>
   </div>
 </section>
+
+<!-- Meal-library drawer -->
+<MealLibraryDrawer
+  open={libraryOpen}
+  onClose={() => (libraryOpen = false)}
+  library={data.items}
+  scheduledIds={scheduledIds}
+  onAdd={addFromLibrary}
+/>
 
 <!-- Hidden forms — drive schedule edits through +page.server.ts actions. -->
 <form
