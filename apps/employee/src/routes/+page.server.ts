@@ -126,7 +126,15 @@ export const actions: Actions = {
     const r = await client.POST("/api/employee/orders", {
       body: { plant, supply_date: supplyDate, items } as never,
     });
-    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    if (r.error) {
+      // RFC 9457 problem-details — surface a calm Chinese message, not raw JSON.
+      const err = r.error as { status?: number; detail?: string };
+      const msg =
+        err.detail === "order: cutoff time has passed"
+          ? "已超過截單時間，此日已無法預訂。"
+          : (err.detail ?? "送出預訂失敗，請稍後再試。");
+      return fail(err.status ?? 409, { error: msg });
+    }
     const orderID = (r.data as { order?: { id?: string } } | undefined)?.order?.id;
     if (!orderID) return fail(500, { error: "no order id in response" });
     throw redirect(303, `/orders/${orderID}`);
