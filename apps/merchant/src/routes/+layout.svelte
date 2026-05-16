@@ -12,7 +12,7 @@
 <div class="min-h-screen bg-tb-slate-50">
   <header class="sticky top-0 z-30 border-b border-tb-slate-200 bg-white">
     <div class="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 md:px-8">
-      <a href="/" class="flex items-center"><TBiteLogo /></a>
+      <TBiteLogo />
       {#if data.user}
         <span
           class="ml-2 rounded-full bg-tb-slate-100 px-3 py-1 text-xs font-bold text-tb-slate-700"
