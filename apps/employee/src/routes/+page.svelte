@@ -8,6 +8,7 @@
   import { page } from "$app/stores";
   import CategoryStrip from "$lib/components/CategoryStrip.svelte";
   import FeaturedRow from "$lib/components/FeaturedRow.svelte";
+  import MenuFilterBar from "$lib/components/MenuFilterBar.svelte";
   import { cart } from "$lib/cart.svelte";
 
   let { data, form } = $props();
@@ -100,12 +101,18 @@
   // ── header search query (set by the layout SearchInput) ──
   const query = $derived($page.url.searchParams.get("q")?.trim() ?? "");
 
+  // ── F3 — when the filter bar is active the server returns an already
+  //    filtered/sorted grid; otherwise the day_menu is filtered client-side
+  //    by the category strip + header search box. ──
+  const serverFiltered = $derived(Boolean(data.filterActive));
   const filteredMenu = $derived(
-    dayMenu.filter((m) => {
-      if (activeCat !== "all" && !(m.tags ?? []).includes(activeCat)) return false;
-      if (query && !m.name.includes(query) && !m.vendor.includes(query)) return false;
-      return true;
-    }),
+    serverFiltered
+      ? ((data.filteredMenu as DayMenuItem[]) ?? [])
+      : dayMenu.filter((m) => {
+          if (activeCat !== "all" && !(m.tags ?? []).includes(activeCat)) return false;
+          if (query && !m.name.includes(query) && !m.vendor.includes(query)) return false;
+          return true;
+        }),
   );
 
   // ── enrich recommend / favorite chips with full MealCard data from the
@@ -458,7 +465,18 @@
       </div>
     </div>
 
-    {#if dayMenu.length === 0}
+    <!-- F3 篩選列 -->
+    <MenuFilterBar
+      tags={data.tagPool as string[]}
+      q={data.menuFilter.q}
+      selectedTags={data.menuFilter.tags}
+      priceMin={data.menuFilter.priceMin}
+      priceMax={data.menuFilter.priceMax}
+      inStock={data.menuFilter.inStock}
+      sort={data.menuFilter.sort}
+    />
+
+    {#if dayMenu.length === 0 && !serverFiltered}
       <div
         class="rounded-tb-2xl border border-tb-slate-200 bg-white p-6 text-center text-sm text-tb-slate-500"
       >

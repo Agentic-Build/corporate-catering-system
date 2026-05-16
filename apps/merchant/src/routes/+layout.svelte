@@ -1,12 +1,28 @@
 <script lang="ts">
   import "../app.css";
-  import { TBiteLogo, Button, Icon } from "@tbite/ui";
+  import { page } from "$app/stores";
+  import { TBiteLogo, Button, Icon, type IconName } from "@tbite/ui";
   let { data, children } = $props();
 
   // No vendor-name field on the merchant `Me` payload — the operator's
   // display name is the closest real data, and stands in for the shop.
   const vendorName = $derived(data.user?.display_name ?? "");
   const avatarText = $derived(vendorName ? vendorName.slice(0, 2) : "");
+
+  const navItems: { href: string; label: string; icon: IconName }[] = [
+    { href: "/", label: "備餐儀表板", icon: "home" },
+    { href: "/orders", label: "備餐看板", icon: "doc" },
+    { href: "/menus", label: "菜單管理", icon: "tag" },
+    { href: "/complaints", label: "客訴收件匣", icon: "bell" },
+    { href: "/reconciliation", label: "對帳", icon: "wallet" },
+    { href: "/compliance", label: "合規自查", icon: "check" },
+  ];
+
+  /** A nav item is active when the path matches it or sits beneath it. */
+  function isActive(href: string, path: string): boolean {
+    if (href === "/") return path === "/";
+    return path === href || path.startsWith(href + "/");
+  }
 </script>
 
 <div class="min-h-screen bg-tb-slate-50">
@@ -20,16 +36,6 @@
           商家後台 · {vendorName}
         </span>
         <div class="ml-auto flex items-center gap-2">
-          <a href="/orders">
-            <Button variant="secondary" size="sm">
-              <Icon name="bell" class="h-4 w-4" />通知
-            </Button>
-          </a>
-          <a href="/menus">
-            <Button variant="secondary" size="sm">
-              <Icon name="cog" class="h-4 w-4" />設定
-            </Button>
-          </a>
           <form method="POST" action="/auth/logout">
             <Button variant="ghost" size="sm" type="submit">登出</Button>
           </form>
@@ -48,6 +54,24 @@
         </a>
       {/if}
     </div>
+    {#if data.user}
+      <nav class="mx-auto max-w-[1400px] px-4 md:px-8">
+        <div class="flex gap-1 overflow-x-auto">
+          {#each navItems as item (item.href)}
+            {@const on = isActive(item.href, $page.url.pathname)}
+            <a
+              href={item.href}
+              class="flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition
+                {on
+                ? 'border-tb-red-600 text-tb-red-700'
+                : 'border-transparent text-tb-slate-500 hover:text-tb-slate-900'}"
+            >
+              <Icon name={item.icon} class="h-4 w-4" />{item.label}
+            </a>
+          {/each}
+        </div>
+      </nav>
+    {/if}
   </header>
 
   <main class="mx-auto max-w-[1400px] px-4 py-6 md:px-8">{@render children()}</main>

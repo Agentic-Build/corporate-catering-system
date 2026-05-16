@@ -2,8 +2,25 @@
   // Ported from ui_kits/tbite/AdminView.jsx header shell — no role switcher,
   // so the sticky header sits at top-0 (not top-[52px]).
   import "../app.css";
-  import { TBiteLogo, Button, Icon } from "@tbite/ui";
+  import { page } from "$app/stores";
+  import { TBiteLogo, Button, Icon, type IconName } from "@tbite/ui";
   let { data, children } = $props();
+
+  const navItems: { href: string; label: string; icon: IconName }[] = [
+    { href: "/", label: "治理總覽", icon: "home" },
+    { href: "/vendors", label: "商家管理", icon: "doc" },
+    { href: "/payroll", label: "薪資代扣", icon: "wallet" },
+    { href: "/vendor-settlements", label: "商家結算", icon: "card" },
+    { href: "/complaints", label: "升級客訴", icon: "bell" },
+    { href: "/anomalies", label: "告警", icon: "alert" },
+    { href: "/audit", label: "稽核紀錄", icon: "download" },
+  ];
+
+  /** A nav item is active when the path matches it or sits beneath it. */
+  function isActive(href: string, path: string): boolean {
+    if (href === "/") return path === "/";
+    return path === href || path.startsWith(href + "/");
+  }
 </script>
 
 <div class="fade-up min-h-screen bg-tb-slate-50">
@@ -41,6 +58,24 @@
         >
       {/if}
     </div>
+    {#if data.user}
+      <nav class="mx-auto max-w-[1400px] px-4 md:px-8">
+        <div class="flex gap-1 overflow-x-auto">
+          {#each navItems as item (item.href)}
+            {@const on = isActive(item.href, $page.url.pathname)}
+            <a
+              href={item.href}
+              class="flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition
+                {on
+                ? 'border-tb-red-600 text-tb-red-700'
+                : 'border-transparent text-tb-slate-500 hover:text-tb-slate-900'}"
+            >
+              <Icon name={item.icon} class="h-4 w-4" />{item.label}
+            </a>
+          {/each}
+        </div>
+      </nav>
+    {/if}
   </header>
 
   <main class="mx-auto grid max-w-[1400px] gap-6 px-4 py-6 md:px-8">

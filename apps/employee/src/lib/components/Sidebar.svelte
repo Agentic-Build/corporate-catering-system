@@ -17,6 +17,7 @@
     { id: "orders", label: "我的訂單", icon: "doc", href: "/orders" },
     { id: "totp", label: "領餐碼", icon: "qr" },
     { id: "favorites", label: "我的常點", icon: "heart", href: "/menu/favorites" },
+    { id: "complaints", label: "我的客訴", icon: "bell", href: "/complaints" },
     { id: "disputes", label: "申訴", icon: "alert", href: "/disputes" },
   ];
 
