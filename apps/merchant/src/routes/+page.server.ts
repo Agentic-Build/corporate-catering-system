@@ -115,7 +115,7 @@ export const actions: Actions = {
     const date = String(fd.get("date") ?? "");
     const capacity = parseInt(String(fd.get("capacity") ?? "0"), 10);
     const pickupWindow = String(fd.get("pickup_window") ?? "11:50-12:10");
-    const cutoffAt = String(fd.get("cutoff_at") ?? `${date}T09:00:00Z`);
+    const cutoffAt = String(fd.get("cutoff_at") ?? `${date}T17:00:00Z`);
 
     if (!itemId || !date) return fail(400, { error: "缺少餐點或日期" });
     if (!Number.isFinite(capacity) || capacity < 0) return fail(400, { error: "上限數值無效" });
@@ -134,26 +134,13 @@ export const actions: Actions = {
     return { success: true };
   },
 
-  /** Publish a menu item (used before adding an archived item to a day). */
+  /** Publish a menu item — used before adding an archived item to a day. */
   publishItem: async ({ request, locals }) => {
     const fd = await request.formData();
     const id = String(fd.get("item_id") ?? "");
     if (!id) return fail(400, { error: "缺少餐點" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/merchant/menu-items/{id}/publish", {
-      params: { path: { id } },
-    });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
-    return { success: true };
-  },
-
-  /** Archive a menu item (used by the schedule on/off toggle when turning off). */
-  archiveItem: async ({ request, locals }) => {
-    const fd = await request.formData();
-    const id = String(fd.get("item_id") ?? "");
-    if (!id) return fail(400, { error: "缺少餐點" });
-    const client = apiFor(locals.apiToken);
-    const r = await client.POST("/api/merchant/menu-items/{id}/archive", {
       params: { path: { id } },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });

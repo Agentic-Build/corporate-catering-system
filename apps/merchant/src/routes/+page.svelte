@@ -10,7 +10,7 @@
 
   const todayDay = $derived(data.days[0]);
   const dashboardSub = $derived(
-    `${data.today.replace(/-/g, " / ")} · ${todayDay.weekday} · 三廠區合計 ${data.stats.totalCapacity} 份`,
+    `${data.today.replace(/-/g, " / ")} · ${todayDay.weekday} · ${data.plants.length} 個廠區合計 ${data.stats.totalCapacity} 份`,
   );
   const onTimeRate = $derived(
     data.stats.todayOrderCount > 0
@@ -45,7 +45,6 @@
           price: item?.price_minor ?? 0,
           cap: s.capacity,
           ordered: Math.max(0, s.capacity - s.remain),
-          active: item?.status === "active",
           pickupWindow: s.pickup_window ?? "11:50-12:10",
         };
       });
@@ -60,9 +59,8 @@
   let capValue = $state("0");
   let capPickup = $state("11:50-12:10");
 
-  let activeForm = $state<HTMLFormElement>();
-  let activeAction = $state<"publishItem" | "archiveItem">("publishItem");
-  let activeItemId = $state("");
+  let publishForm = $state<HTMLFormElement>();
+  let publishItemId = $state("");
 
   function submitCap(itemId: string, capacity: number, pickupWindow: string) {
     capItemId = itemId;
@@ -71,31 +69,28 @@
     capPickup = pickupWindow;
     queueMicrotask(() => capForm?.requestSubmit());
   }
-  function submitActive(itemId: string, on: boolean) {
-    activeItemId = itemId;
-    activeAction = on ? "publishItem" : "archiveItem";
-    queueMicrotask(() => activeForm?.requestSubmit());
-  }
 
   /** Library "加入此日" — publish if archived, then schedule a default cap. */
   function addFromLibrary(item: any) {
     if (item.status === "archived") {
-      submitActive(item.id, true);
+      publishItemId = item.id;
+      queueMicrotask(() => publishForm?.requestSubmit());
     }
     submitCap(item.id, 50, "11:50-12:10");
   }
 </script>
 
-<!-- Today operational dashboard -->
-<section class="mb-6">
-  <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-red-600">
-    {data.today.replace(/-/g, " / ")} · {todayDay.weekday} · 今日營運
-  </div>
-  <h1 class="mt-1 text-3xl font-black tracking-tight text-tb-slate-900">
-    今日備餐儀表板
-  </h1>
-  <p class="mt-1 text-sm text-tb-slate-500">{dashboardSub}</p>
-</section>
+<div class="fade-up">
+  <!-- Today operational dashboard -->
+  <section class="mb-6">
+    <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-red-600">
+      {data.today.replace(/-/g, " / ")} · {todayDay.weekday} · 今日營運
+    </div>
+    <h1 class="mt-1 text-3xl font-black tracking-tight text-tb-slate-900">
+      今日備餐儀表板
+    </h1>
+    <p class="mt-1 text-sm text-tb-slate-500">{dashboardSub}</p>
+  </section>
 
 {#if form?.error}
   <p class="mb-4 rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">
@@ -121,7 +116,7 @@
     </div>
     <a href="/orders">
       <Button variant="secondary" size="sm">
-        <Icon name="download" class="h-4 w-4" />下載今日總表
+        <Icon name="doc" class="h-4 w-4" />檢視今日總表
       </Button>
     </a>
   </div>
@@ -182,7 +177,6 @@
     slots={selectedSlots}
     onOpenLibrary={() => (libraryOpen = true)}
     {submitCap}
-    {submitActive}
   />
 
   <div
@@ -193,7 +187,8 @@
       每日截單時間 = 取餐日前一日 17:00；截單後系統會自動鎖定當日菜色與上限。若某菜色已訂購數接近上限，建議提早提高上限或新增其他菜色。
     </span>
   </div>
-</section>
+  </section>
+</div>
 
 <!-- Meal-library drawer -->
 <MealLibraryDrawer
@@ -216,14 +211,14 @@
   <input type="hidden" name="date" value={capDate} />
   <input type="hidden" name="capacity" value={capValue} />
   <input type="hidden" name="pickup_window" value={capPickup} />
-  <input type="hidden" name="cutoff_at" value={`${capDate}T09:00:00Z`} />
+  <input type="hidden" name="cutoff_at" value={`${capDate}T17:00:00Z`} />
 </form>
 <form
-  bind:this={activeForm}
+  bind:this={publishForm}
   method="POST"
-  action={`?/${activeAction}`}
+  action="?/publishItem"
   class="hidden"
   use:enhance
 >
-  <input type="hidden" name="item_id" value={activeItemId} />
+  <input type="hidden" name="item_id" value={publishItemId} />
 </form>

@@ -1,8 +1,9 @@
 <script lang="ts">
   // Single-day schedule table — ported from MerchantView.jsx ScheduleTable.
-  // Cap edits post the `setSupply` action; the on/off toggle posts
-  // publish/archive; "移除" sets capacity to 0. Today's row is read-only.
-  import { Button, Toggle, Icon } from "@tbite/ui";
+  // Cap edits post the `setSupply` action; "移除" sets capacity to 0.
+  // Today's row is read-only. There is no per-day on/off control: publish/
+  // archive are global to the menu item and live on /menus + the library.
+  import { Button, Icon } from "@tbite/ui";
   import OrderProgress from "./OrderProgress.svelte";
 
   interface Slot {
@@ -13,7 +14,6 @@
     price: number;
     cap: number;
     ordered: number;
-    active: boolean;
     pickupWindow: string;
   }
   interface Day {
@@ -28,25 +28,50 @@
     onOpenLibrary: () => void;
     /** Submits a `setSupply` post for `itemId` on `day.id` at `capacity`. */
     submitCap: (itemId: string, capacity: number, pickupWindow: string) => void;
-    /** Publishes (true) or archives (false) the menu item. */
-    submitActive: (itemId: string, on: boolean) => void;
   }
-  let { day, slots, onOpenLibrary, submitCap, submitActive }: Props = $props();
+  let { day, slots, onOpenLibrary, submitCap }: Props = $props();
 
   const isToday = $derived(day.offset === 0);
   const isTomorrow = $derived(day.offset === 1);
   const canEdit = $derived(!isToday);
   const empty = $derived(slots.length === 0);
-  const totalCap = $derived(slots.reduce((s, x) => s + x.cap, 0));
+
+  // Optimistic cap overrides keyed by itemId — updated immediately on each
+  // click so consecutive edits compound (server data only refreshes after
+  // the enhanced form resolves). Reconciled to server values once `slots`
+  // reloads with the committed capacity.
+  let capOverride = $state<Record<string, number>>({});
+  $effect(() => {
+    const next = { ...capOverride };
+    let changed = false;
+    for (const s of slots) {
+      if (next[s.itemId] !== undefined && next[s.itemId] === s.cap) {
+        delete next[s.itemId];
+        changed = true;
+      }
+    }
+    if (changed) capOverride = next;
+  });
+
+  function capOf(slot: Slot): number {
+    return capOverride[slot.itemId] ?? slot.cap;
+  }
+  const totalCap = $derived(slots.reduce((s, x) => s + capOf(x), 0));
   const totalOrdered = $derived(slots.reduce((s, x) => s + x.ordered, 0));
 
-  function step(slot: Slot, delta: number) {
-    const next = Math.max(slot.ordered, Math.max(5, slot.cap + delta));
+  function setCap(slot: Slot, next: number) {
+    capOverride = { ...capOverride, [slot.itemId]: next };
     submitCap(slot.itemId, next, slot.pickupWindow);
   }
+  function step(slot: Slot, delta: number) {
+    setCap(slot, Math.max(slot.ordered, Math.max(5, capOf(slot) + delta)));
+  }
   function onInput(slot: Slot, value: string) {
-    const next = Math.max(slot.ordered, parseInt(value, 10) || 0);
-    submitCap(slot.itemId, next, slot.pickupWindow);
+    setCap(slot, Math.max(slot.ordered, Math.max(5, parseInt(value, 10) || 0)));
+  }
+  function remove(slot: Slot) {
+    // "移除" delists the item for this day — capacity 0.
+    setCap(slot, 0);
   }
 </script>
 
@@ -103,13 +128,13 @@
           <th class="px-3 py-3 text-right">售價</th>
           <th class="px-3 py-3 text-right">上限</th>
           <th class="px-3 py-3" style="min-width: 220px">已訂購</th>
-          <th class="px-3 py-3 text-center">上架</th>
           <th class="px-5 py-3"></th>
         </tr>
       </thead>
       <tbody class="divide-y divide-tb-slate-100">
         {#each slots as slot (slot.itemId)}
-          <tr class="text-sm hover:bg-tb-slate-50/60 {slot.active ? '' : 'opacity-60'}">
+          {@const cap = capOf(slot)}
+          <tr class="text-sm hover:bg-tb-slate-50/60">
             <td class="px-5 py-3">
               <div class="flex items-center gap-3">
                 {#if slot.image}
@@ -145,7 +170,7 @@
                 >
                   <button
                     type="button"
-                    disabled={slot.cap <= 5}
+                    disabled={cap <= 5}
                     onclick={() => step(slot, -5)}
                     class="grid h-8 w-8 place-items-center text-tb-slate-500 hover:bg-tb-slate-50 disabled:opacity-30"
                     aria-label="減少上限"
@@ -154,7 +179,7 @@
                   </button>
                   <input
                     type="number"
-                    value={slot.cap}
+                    value={cap}
                     min={slot.ordered}
                     onchange={(e) => onInput(slot, e.currentTarget.value)}
                     class="w-14 border-l border-r border-tb-slate-200 bg-transparent py-1 text-center font-jetbrains-mono text-sm font-bold tabular-nums text-tb-slate-900 focus:bg-tb-red-50 focus:outline-none"
@@ -170,31 +195,16 @@
                 </div>
               {:else}
                 <span class="font-jetbrains-mono font-bold tabular-nums text-tb-slate-700">
-                  {slot.cap}
+                  {cap}
                 </span>
               {/if}
             </td>
             <td class="px-3 py-3">
-              <OrderProgress ordered={slot.ordered} cap={slot.cap} />
-            </td>
-            <td class="px-3 py-3 text-center">
-              <span class="inline-flex">
-                <Toggle
-                  on={slot.active}
-                  onChange={(v) => {
-                    if (canEdit) submitActive(slot.itemId, v);
-                  }}
-                  label={slot.active ? "上架中" : "已下架"}
-                />
-              </span>
+              <OrderProgress ordered={slot.ordered} {cap} />
             </td>
             <td class="px-5 py-3 text-right">
               {#if canEdit}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onclick={() => submitCap(slot.itemId, 0, slot.pickupWindow)}
-                >
+                <Button variant="ghost" size="sm" onclick={() => remove(slot)}>
                   移除
                 </Button>
               {/if}
@@ -218,7 +228,7 @@
               共 {totalOrdered} 份已訂
             </span>
           </td>
-          <td colspan="2"></td>
+          <td></td>
         </tr>
       </tfoot>
     </table>

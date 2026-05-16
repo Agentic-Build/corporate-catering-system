@@ -56,11 +56,8 @@
     class="flex items-center justify-end gap-2 border-t border-tb-slate-100 bg-tb-slate-50/60 px-5 py-3"
   >
     <a href="/orders?plant={encodeURIComponent(plant)}">
-      <Button variant="secondary" size="sm">分區總表</Button>
-    </a>
-    <a href="/orders?plant={encodeURIComponent(plant)}">
       <Button variant="primary" size="sm">
-        <Icon name="download" class="h-3.5 w-3.5" />下載配送標籤
+        <Icon name="doc" class="h-3.5 w-3.5" />檢視配送清單
       </Button>
     </a>
   </footer>

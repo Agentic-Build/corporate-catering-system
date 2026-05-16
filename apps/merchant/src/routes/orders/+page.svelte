@@ -32,12 +32,19 @@
   let verifyOpen = $state(false);
   let verifyOrderID = $state("");
   let verifyOrderLabel = $state("");
+  let codeInput = $state<HTMLInputElement>();
 
   function openVerify(orderID: string, plant: string, total: number) {
     verifyOrderID = orderID;
     verifyOrderLabel = `${plant} · $${total.toLocaleString()}`;
     verifyOpen = true;
   }
+
+  // The shared Modal focuses its close button on open; move focus to the
+  // code input once the dialog has mounted so merchants can type at once.
+  $effect(() => {
+    if (verifyOpen) requestAnimationFrame(() => codeInput?.focus());
+  });
 </script>
 
 <section class="mb-6">
@@ -180,6 +187,7 @@
       <label class="block text-sm">
         <span class="font-semibold text-tb-slate-800">員工出示的 6 位數動態碼</span>
         <input
+          bind:this={codeInput}
           name="code"
           required
           pattern="\d{6}"
