@@ -1,5 +1,7 @@
 export { default as Button } from "./Button.svelte";
 export { default as Card } from "./Card.svelte";
+export { default as Icon } from "./Icon.svelte";
+export type { IconName } from "./Icon.svelte";
 export { default as LocationBar } from "./LocationBar.svelte";
 export { default as MealCard } from "./MealCard.svelte";
 export { default as ProviderButton } from "./ProviderButton.svelte";
