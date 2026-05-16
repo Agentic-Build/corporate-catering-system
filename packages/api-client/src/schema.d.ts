@@ -1192,7 +1192,7 @@ export interface components {
              * @example https://example.com/schemas/ListItemsOutputBody.json
              */
             readonly $schema?: string;
-            items: components["schemas"]["ItemDTO"][] | null;
+            items: components["schemas"]["MerchantItemDTO"][] | null;
         };
         ListMerchantOrdersOutputBody: {
             /**
@@ -1265,6 +1265,26 @@ export interface components {
             role: string;
             user_id: string;
             vendor_id?: string;
+        };
+        MerchantItemDTO: {
+            badges: string[] | null;
+            category_id?: string;
+            description: string;
+            id: string;
+            images?: string[] | null;
+            /** @description Most recent supply date (YYYY-MM-DD), null if never scheduled */
+            last_used: string | null;
+            name: string;
+            /** Format: int64 */
+            price_minor: number;
+            status: string;
+            tags: string[] | null;
+            /**
+             * Format: int64
+             * @description Cumulative quantity sold across picked-up orders
+             */
+            total_sold: number;
+            vendor_id: string;
         };
         MerchantOrderDTO: {
             id: string;
