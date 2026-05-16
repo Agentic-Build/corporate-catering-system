@@ -174,7 +174,16 @@ module.exports = {
         ],
         "jetbrains-mono": ['"JetBrains Mono"', "ui-monospace", "monospace"],
       },
-      borderRadius: { "tb-2xl": "16px" },
+      borderRadius: {
+        tb: "4px",
+        "tb-sm": "2px",
+        "tb-md": "6px",
+        "tb-lg": "8px",
+        "tb-xl": "12px",
+        "tb-2xl": "16px",
+        "tb-3xl": "24px",
+        "tb-full": "9999px",
+      },
       boxShadow: {
         "tb-sm": "0 1px 2px 0 rgba(15, 23, 42, 0.06)",
         "tb-md": "0 4px 6px -1px rgba(15, 23, 42, 0.10)",
