@@ -36,9 +36,9 @@
     onToggleFavorite,
   }: Props = $props();
 
-  const isLowStock = !soldOut && remain > 0 && remain <= lowStockThreshold;
-  const isSoldOut = soldOut || remain === 0;
-  const priceFormatted = "$" + priceMinor.toLocaleString();
+  const isLowStock = $derived(!soldOut && remain > 0 && remain <= lowStockThreshold);
+  const isSoldOut = $derived(soldOut || remain === 0);
+  const priceFormatted = $derived("$" + priceMinor.toLocaleString());
 </script>
 
 <article
@@ -53,7 +53,12 @@
   >
     <div class="aspect-[16/10] w-full overflow-hidden bg-tb-slate-100">
       {#if image}
-        <img src={image} alt={name} class="h-full w-full object-cover" />
+        <img
+          src={image}
+          alt={name}
+          loading="lazy"
+          class="h-full w-full object-cover transition group-hover:scale-[1.03]"
+        />
       {:else}
         <div class="flex h-full w-full items-center justify-center text-tb-slate-400 text-xs uppercase tracking-eyebrow">No image</div>
       {/if}
@@ -76,8 +81,8 @@
   </button>
 
   {#if isSoldOut}
-    <div class="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center">
-      <span class="inline-flex items-center rounded-full bg-tb-slate-900/85 px-3 py-1 text-xs font-semibold text-white">本日已售罄</span>
+    <div class="pointer-events-none absolute inset-0 grid place-items-center bg-tb-slate-900/50">
+      <span class="rounded-full bg-white px-3 py-1 text-xs font-bold text-tb-slate-800">本日已售罄</span>
     </div>
   {:else if isLowStock}
     <span

@@ -1,6 +1,9 @@
 <script lang="ts">
+  // Calibrated against reference_src/ui.jsx + components.jsx StateTag —
+  // adds the `pending` tone (reference has 6 tones). The leading dot +
+  // `pulse` are kept; existing callers depend on them.
   interface Props {
-    tone?: "success" | "warning" | "danger" | "info" | "neutral";
+    tone?: "success" | "warning" | "danger" | "info" | "pending" | "neutral";
     pulse?: boolean;
     children?: import("svelte").Snippet;
   }
@@ -10,6 +13,7 @@
     warning: "bg-tb-amber-50 text-tb-amber-700 border-tb-amber-300",
     danger:  "bg-tb-rose-50 text-tb-rose-700 border-tb-rose-300",
     info:    "bg-tb-red-50 text-tb-red-700 border-tb-red-200",
+    pending: "bg-tb-slate-100 text-tb-slate-800 border-tb-slate-300",
     neutral: "bg-tb-slate-100 text-tb-slate-700 border-tb-slate-200",
   };
   const dots = {
@@ -17,6 +21,7 @@
     warning: "bg-tb-amber-400",
     danger:  "bg-tb-rose-600",
     info:    "bg-tb-red-600",
+    pending: "bg-tb-slate-500",
     neutral: "bg-tb-slate-400",
   };
 </script>
