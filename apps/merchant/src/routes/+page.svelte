@@ -1,8 +1,11 @@
 <script lang="ts">
   import { StatCard, Button, Icon } from "@tbite/ui";
+  import { enhance } from "$app/forms";
   import PlantAggCard from "$lib/components/PlantAggCard.svelte";
+  import ScheduleDayPicker from "$lib/components/ScheduleDayPicker.svelte";
+  import ScheduleTable from "$lib/components/ScheduleTable.svelte";
 
-  let { data } = $props();
+  let { data, form } = $props();
 
   const todayDay = $derived(data.days[0]);
   const dashboardSub = $derived(
@@ -13,6 +16,63 @@
       ? Math.round((data.stats.pickedUp / data.stats.todayOrderCount) * 100)
       : 0,
   );
+
+  // ── Schedule planner state ──
+  // Default to tomorrow when present, else today.
+  let selectedDay = $state(data.days[1]?.id ?? data.days[0].id);
+
+  const itemById = $derived(
+    Object.fromEntries(data.items.map((i: any) => [i.id, i])) as Record<string, any>,
+  );
+  const selectedDayDef = $derived(
+    data.days.find((d: any) => d.id === selectedDay) ?? data.days[0],
+  );
+
+  /** Enrich a date's supply rows with menu-item detail; drop removed (cap 0). */
+  function slotsFor(date: string) {
+    const supply = data.supplyByDate[date] ?? [];
+    return supply
+      .filter((s: any) => s.capacity > 0)
+      .map((s: any) => {
+        const item = itemById[s.menu_item_id];
+        return {
+          itemId: s.menu_item_id,
+          name: item?.name ?? "未知餐點",
+          description: item?.description ?? "",
+          image: item?.images?.[0] ?? null,
+          price: item?.price_minor ?? 0,
+          cap: s.capacity,
+          ordered: Math.max(0, s.capacity - s.remain),
+          active: item?.status === "active",
+          pickupWindow: s.pickup_window ?? "11:50-12:10",
+        };
+      });
+  }
+  const selectedSlots = $derived(slotsFor(selectedDay));
+
+  // ── Hidden-form plumbing for schedule edits ──
+  let capForm = $state<HTMLFormElement>();
+  let capItemId = $state("");
+  let capDate = $state("");
+  let capValue = $state("0");
+  let capPickup = $state("11:50-12:10");
+
+  let activeForm = $state<HTMLFormElement>();
+  let activeAction = $state<"publishItem" | "archiveItem">("publishItem");
+  let activeItemId = $state("");
+
+  function submitCap(itemId: string, capacity: number, pickupWindow: string) {
+    capItemId = itemId;
+    capDate = selectedDay;
+    capValue = String(capacity);
+    capPickup = pickupWindow;
+    queueMicrotask(() => capForm?.requestSubmit());
+  }
+  function submitActive(itemId: string, on: boolean) {
+    activeItemId = itemId;
+    activeAction = on ? "publishItem" : "archiveItem";
+    queueMicrotask(() => activeForm?.requestSubmit());
+  }
 </script>
 
 <!-- Today operational dashboard -->
@@ -25,6 +85,12 @@
   </h1>
   <p class="mt-1 text-sm text-tb-slate-500">{dashboardSub}</p>
 </section>
+
+{#if form?.error}
+  <p class="mb-4 rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">
+    {form.error}
+  </p>
+{/if}
 
 <section class="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
   <StatCard label="今日份數" value={data.stats.totalCapacity} suffix="份" />
@@ -69,3 +135,75 @@
     </div>
   {/if}
 </section>
+
+<!-- 7-day schedule planner -->
+<section>
+  <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-red-600">
+        Schedule · 排程菜單
+      </div>
+      <h2 class="mt-1 text-2xl font-extrabold tracking-tight text-tb-slate-900">
+        未來 7 天排菜
+      </h2>
+      <p class="mt-1 text-sm text-tb-slate-500">
+        為每一天預先安排菜色與上限份數。所有菜色從「餐點庫」一鍵取出，照片與描述會保留。
+      </p>
+    </div>
+  </div>
+
+  <div class="mb-4">
+    <ScheduleDayPicker
+      days={data.days}
+      supplyByDate={Object.fromEntries(
+        data.days.map((d: any) => [
+          d.id,
+          slotsFor(d.id).map((s) => ({ cap: s.cap, ordered: s.ordered })),
+        ]),
+      )}
+      selected={selectedDay}
+      onSelect={(id) => (selectedDay = id)}
+    />
+  </div>
+
+  <ScheduleTable
+    day={selectedDayDef}
+    slots={selectedSlots}
+    onOpenLibrary={() => {}}
+    {submitCap}
+    {submitActive}
+  />
+
+  <div
+    class="mt-3 flex items-start gap-2 rounded-xl bg-tb-amber-50 px-3 py-2.5 text-xs text-tb-amber-900"
+  >
+    <Icon name="alert" class="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+    <span>
+      每日截單時間 = 取餐日前一日 17:00；截單後系統會自動鎖定當日菜色與上限。若某菜色已訂購數接近上限，建議提早提高上限或新增其他菜色。
+    </span>
+  </div>
+</section>
+
+<!-- Hidden forms — drive schedule edits through +page.server.ts actions. -->
+<form
+  bind:this={capForm}
+  method="POST"
+  action="?/setSupply"
+  class="hidden"
+  use:enhance
+>
+  <input type="hidden" name="item_id" value={capItemId} />
+  <input type="hidden" name="date" value={capDate} />
+  <input type="hidden" name="capacity" value={capValue} />
+  <input type="hidden" name="pickup_window" value={capPickup} />
+  <input type="hidden" name="cutoff_at" value={`${capDate}T09:00:00Z`} />
+</form>
+<form
+  bind:this={activeForm}
+  method="POST"
+  action={`?/${activeAction}`}
+  class="hidden"
+  use:enhance
+>
+  <input type="hidden" name="item_id" value={activeItemId} />
+</form>
