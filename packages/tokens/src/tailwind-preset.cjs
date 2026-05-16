@@ -182,12 +182,13 @@ module.exports = {
       letterSpacing: { eyebrow: "0.18em", "eyebrow-wide": "0.22em" },
       keyframes: {
         "tb-fade-up": {
-          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "0%": { opacity: "0", transform: "translateY(6px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
         "tb-cart-bump": {
-          "0%,100%": { transform: "scale(1)" },
-          "50%": { transform: "scale(1.18)" },
+          "0%": { transform: "scale(1)" },
+          "40%": { transform: "scale(1.18)" },
+          "100%": { transform: "scale(1)" },
         },
       },
       animation: {

@@ -22,12 +22,27 @@
     footer,
   }: Props = $props();
 
+  let panel = $state<HTMLDivElement>();
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === "Escape" && open) onClose();
   }
 
   const sideClass = $derived(side === "left" ? "left-0" : "right-0");
   const hiddenTransform = $derived(side === "left" ? "-translate-x-full" : "translate-x-full");
+
+  // Focus management — move focus into the panel on open, restore it on close.
+  $effect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const first = panel?.querySelector<HTMLElement>(
+      'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    (first ?? panel)?.focus();
+    return () => {
+      previouslyFocused?.focus();
+    };
+  });
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -44,11 +59,13 @@
     onclick={onClose}
   ></button>
   <div
-    class="absolute top-0 {sideClass} flex h-full w-full {maxWidth} flex-col bg-white shadow-xl transition-transform {open
+    bind:this={panel}
+    class="absolute top-0 {sideClass} flex h-full w-full {maxWidth} flex-col bg-white shadow-2xl transition-transform {open
       ? 'translate-x-0'
       : hiddenTransform}"
     role="dialog"
     aria-modal="true"
+    tabindex="-1"
   >
     {#if header}
       <header class="border-b border-tb-slate-200 px-5 py-4">{@render header()}</header>

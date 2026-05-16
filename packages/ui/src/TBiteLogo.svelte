@@ -13,7 +13,7 @@
 
 <a href="/" class="inline-flex items-center gap-2.5 font-noto-tc" aria-label="T-Bite home">
   <span
-    class="relative grid place-items-center rounded-2xl bg-gradient-to-br from-tb-red-500 to-tb-rose-700 text-white shadow-tb-sm"
+    class="relative grid place-items-center rounded-tb-2xl bg-gradient-to-br from-tb-red-500 to-tb-rose-700 text-white shadow-tb-sm"
     style="height: {size}px; width: {size}px;"
   >
     <span class="text-lg font-black tracking-tight">T</span>

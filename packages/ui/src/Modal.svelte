@@ -13,6 +13,8 @@
   }
   let { open, onClose, title, width = "max-w-md", children, footer }: Props = $props();
 
+  let dialog = $state<HTMLDivElement>();
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === "Escape") onClose();
   }
@@ -24,6 +26,19 @@
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
+    };
+  });
+
+  // Focus management — move focus into the dialog on open, restore it on close.
+  $effect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const first = dialog?.querySelector<HTMLElement>(
+      'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    (first ?? dialog)?.focus();
+    return () => {
+      previouslyFocused?.focus();
     };
   });
 </script>
@@ -39,10 +54,12 @@
       onclick={onClose}
     ></button>
     <div
-      class="relative w-[92%] {width} rounded-tb-2xl border border-tb-slate-200 bg-white p-5 shadow-xl"
+      bind:this={dialog}
+      class="relative w-[92%] {width} rounded-tb-2xl border border-tb-slate-200 bg-white p-5 shadow-2xl"
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      tabindex="-1"
     >
       <div class="mb-3 flex items-start justify-between gap-3">
         <h2 class="text-lg font-bold text-tb-slate-900">{title}</h2>
