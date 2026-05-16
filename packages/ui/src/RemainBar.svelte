@@ -14,9 +14,9 @@
     remain === 0
       ? "bg-tb-slate-300"
       : pct <= 15
-        ? "bg-tb-rose-600"
+        ? "bg-tb-rose-500"
         : pct <= 35
-          ? "bg-tb-amber-400"
+          ? "bg-tb-amber-500"
           : "bg-tb-emerald-500",
   );
   const textTone = $derived(
@@ -26,7 +26,7 @@
         ? "text-tb-rose-700"
         : pct <= 35
           ? "text-tb-amber-700"
-          : "text-emerald-700",
+          : "text-tb-emerald-700",
   );
 </script>
 

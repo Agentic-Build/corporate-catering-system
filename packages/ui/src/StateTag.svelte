@@ -9,7 +9,7 @@
   }
   let { tone = "neutral", pulse = false, children }: Props = $props();
   const tones = {
-    success: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    success: "bg-tb-emerald-50 text-tb-emerald-700 border-tb-emerald-200",
     warning: "bg-tb-amber-50 text-tb-amber-700 border-tb-amber-300",
     danger:  "bg-tb-rose-50 text-tb-rose-700 border-tb-rose-300",
     info:    "bg-tb-red-50 text-tb-red-700 border-tb-red-200",
@@ -17,7 +17,7 @@
     neutral: "bg-tb-slate-100 text-tb-slate-700 border-tb-slate-200",
   };
   const dots = {
-    success: "bg-emerald-500",
+    success: "bg-tb-emerald-500",
     warning: "bg-tb-amber-400",
     danger:  "bg-tb-rose-600",
     info:    "bg-tb-red-600",

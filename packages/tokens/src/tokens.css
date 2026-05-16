@@ -173,6 +173,72 @@
   --tb-dur-fast:    120ms;
   --tb-dur-base:    220ms;
   --tb-dur-slow:    320ms;
+
+  /* ───── Palette completion ─────
+     Fills out the `--tb-*` scale to a full 50–950 for every hue the
+     T-Bite design system uses, so the CSS-var layer mirrors
+     packages/tokens/src/tailwind-preset.cjs 1:1. The semantically
+     named vars above are kept; this block only adds what they omit.
+     Hex values are the Tailwind CSS v3 default palette. */
+
+  /* red — adds 950 */
+  --tb-red-950: #450a0a;
+
+  /* rose — adds 50, 200, 300, 400, 800, 900, 950 */
+  --tb-rose-50:  #fff1f2;  --tb-rose-200: #fecdd3;  --tb-rose-300: #fda4af;
+  --tb-rose-400: #fb7185;  --tb-rose-800: #9f1239;  --tb-rose-900: #881337;
+  --tb-rose-950: #4c0519;
+
+  /* amber — adds 600, 950 */
+  --tb-amber-600: #d97706;  --tb-amber-950: #451a03;
+
+  /* emerald — adds 200, 400, 600, 800, 950 */
+  --tb-emerald-200: #a7f3d0;  --tb-emerald-400: #34d399;  --tb-emerald-600: #059669;
+  --tb-emerald-800: #065f46;  --tb-emerald-950: #022c22;
+
+  /* sky — adds 50, 200, 300, 400, 600, 800, 900, 950 */
+  --tb-sky-50:  #f0f9ff;  --tb-sky-200: #bae6fd;  --tb-sky-300: #7dd3fc;
+  --tb-sky-400: #38bdf8;  --tb-sky-600: #0284c7;  --tb-sky-800: #075985;
+  --tb-sky-900: #0c4a6e;  --tb-sky-950: #082f49;
+
+  /* slate — adds 950 */
+  --tb-slate-950: #020617;
+
+  /* orange — new hue */
+  --tb-orange-50:  #fff7ed;  --tb-orange-100: #ffedd5;  --tb-orange-200: #fed7aa;
+  --tb-orange-300: #fdba74;  --tb-orange-400: #fb923c;  --tb-orange-500: #f97316;
+  --tb-orange-600: #ea580c;  --tb-orange-700: #c2410c;  --tb-orange-800: #9a3412;
+  --tb-orange-900: #7c2d12;  --tb-orange-950: #431407;
+
+  /* yellow — new hue */
+  --tb-yellow-50:  #fefce8;  --tb-yellow-100: #fef9c3;  --tb-yellow-200: #fef08a;
+  --tb-yellow-300: #fde047;  --tb-yellow-400: #facc15;  --tb-yellow-500: #eab308;
+  --tb-yellow-600: #ca8a04;  --tb-yellow-700: #a16207;  --tb-yellow-800: #854d0e;
+  --tb-yellow-900: #713f12;  --tb-yellow-950: #422006;
+
+  /* lime — new hue */
+  --tb-lime-50:  #f7fee7;  --tb-lime-100: #ecfccb;  --tb-lime-200: #d9f99d;
+  --tb-lime-300: #bef264;  --tb-lime-400: #a3e635;  --tb-lime-500: #84cc16;
+  --tb-lime-600: #65a30d;  --tb-lime-700: #4d7c0f;  --tb-lime-800: #3f6212;
+  --tb-lime-900: #365314;  --tb-lime-950: #1a2e05;
+
+  /* cyan — new hue */
+  --tb-cyan-50:  #ecfeff;  --tb-cyan-100: #cffafe;  --tb-cyan-200: #a5f3fc;
+  --tb-cyan-300: #67e8f9;  --tb-cyan-400: #22d3ee;  --tb-cyan-500: #06b6d4;
+  --tb-cyan-600: #0891b2;  --tb-cyan-700: #0e7490;  --tb-cyan-800: #155e75;
+  --tb-cyan-900: #164e63;  --tb-cyan-950: #083344;
+
+  /* pink — new hue */
+  --tb-pink-50:  #fdf2f8;  --tb-pink-100: #fce7f3;  --tb-pink-200: #fbcfe8;
+  --tb-pink-300: #f9a8d4;  --tb-pink-400: #f472b6;  --tb-pink-500: #ec4899;
+  --tb-pink-600: #db2777;  --tb-pink-700: #be185d;  --tb-pink-800: #9d174d;
+  --tb-pink-900: #831843;  --tb-pink-950: #500724;
+
+  /* stone — new hue */
+  --tb-stone-50:  #fafaf9;  --tb-stone-100: #f5f5f4;  --tb-stone-200: #e7e5e4;
+  --tb-stone-300: #d6d3d1;  --tb-stone-400: #a8a29e;  --tb-stone-500: #78716c;
+  --tb-stone-600: #57534e;  --tb-stone-700: #44403c;  --tb-stone-800: #292524;
+  --tb-stone-900: #1c1917;  --tb-stone-950: #0c0a09;
 }
 
 /* ───── Semantic role styles (drop-in tags) ─────

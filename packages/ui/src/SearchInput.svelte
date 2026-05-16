@@ -21,6 +21,6 @@
     {value}
     {placeholder}
     oninput={(e) => onInput(e.currentTarget.value)}
-    class="w-full rounded-full border border-tb-slate-200 bg-tb-slate-100 py-2.5 pl-10 pr-3 text-sm placeholder-tb-slate-500 transition focus:border-tb-red-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-tb-red-50"
+    class="w-full rounded-full border border-tb-slate-200 bg-tb-slate-100 py-2.5 pl-10 pr-3 text-sm placeholder-tb-slate-500 transition focus:border-tb-red-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-tb-red-100"
   />
 </div>
