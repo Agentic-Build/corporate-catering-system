@@ -82,28 +82,35 @@ async function request<T>(
   }
 }
 
-export function submitRating(
+export async function submitRating(
   token: string | undefined,
   orderId: string,
   score: number,
   comment: string,
 ): Promise<FeedbackResult<MealRating>> {
-  return request(token, `/api/employee/orders/${orderId}/rating`, {
+  // The handler wraps the DTO: { "rating": {...} }. Unwrap to the DTO.
+  const r = await request<{ rating: MealRating }>(token, `/api/employee/orders/${orderId}/rating`, {
     method: "POST",
     body: JSON.stringify({ score, comment }),
   });
+  if (!r.ok) return { ...r, data: undefined };
+  return { ok: true, status: r.status, data: r.data?.rating };
 }
 
-export function submitComplaint(
+export async function submitComplaint(
   token: string | undefined,
   orderId: string,
   category: ComplaintCategory,
   description: string,
 ): Promise<FeedbackResult<MealComplaint>> {
-  return request(token, `/api/employee/orders/${orderId}/complaint`, {
-    method: "POST",
-    body: JSON.stringify({ category, description }),
-  });
+  // The handler wraps the DTO: { "complaint": {...} }. Unwrap to the DTO.
+  const r = await request<{ complaint: MealComplaint }>(
+    token,
+    `/api/employee/orders/${orderId}/complaint`,
+    { method: "POST", body: JSON.stringify({ category, description }) },
+  );
+  if (!r.ok) return { ...r, data: undefined };
+  return { ok: true, status: r.status, data: r.data?.complaint };
 }
 
 export async function listComplaints(
@@ -116,11 +123,12 @@ export async function listComplaints(
   return { ok: true, status: r.status, data: r.data?.items ?? [] };
 }
 
+// escalate / resolve return 204 No Content — there is no response body.
 export function escalateComplaint(
   token: string | undefined,
   complaintId: string,
-): Promise<FeedbackResult<MealComplaint>> {
-  return request(token, `/api/employee/complaints/${complaintId}/escalate`, {
+): Promise<FeedbackResult<void>> {
+  return request<void>(token, `/api/employee/complaints/${complaintId}/escalate`, {
     method: "POST",
   });
 }
@@ -128,8 +136,8 @@ export function escalateComplaint(
 export function resolveComplaint(
   token: string | undefined,
   complaintId: string,
-): Promise<FeedbackResult<MealComplaint>> {
-  return request(token, `/api/employee/complaints/${complaintId}/resolve`, {
+): Promise<FeedbackResult<void>> {
+  return request<void>(token, `/api/employee/complaints/${complaintId}/resolve`, {
     method: "POST",
   });
 }

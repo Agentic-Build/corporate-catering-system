@@ -4,9 +4,8 @@
 
   let { data } = $props();
 
-  // The detail payload may nest its summary under `settlement` or be flat.
-  const s = $derived(data.settlement?.settlement ?? data.settlement ?? {});
-  const orders = $derived(s.orders ?? data.settlement?.orders ?? []);
+  const s = $derived(data.settlement ?? {});
+  const orders = $derived(data.orders ?? []);
 
   const orderStatusMeta = {
     picked_up: { tone: "success", label: "已領取" },
@@ -85,23 +84,21 @@
           <tr>
             <th class="px-5 py-3">訂單</th>
             <th class="px-3 py-3">供餐日</th>
-            <th class="px-3 py-3">廠區</th>
             <th class="px-3 py-3 text-right">份數</th>
             <th class="px-3 py-3 text-right">金額</th>
             <th class="px-5 py-3">狀態</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-tb-slate-100">
-          {#each orders as o (o.id)}
+          {#each orders as o (o.order_id)}
             {@const meta = orderStatusMeta[o.status] ?? { tone: "neutral", label: o.status }}
             <tr class="hover:bg-tb-slate-50/60">
               <td class="px-5 py-3 font-jetbrains-mono text-xs text-tb-slate-500">
-                {String(o.id ?? "").slice(0, 8)}…
+                {String(o.order_id ?? "").slice(0, 8)}…
               </td>
               <td class="px-3 py-3 font-jetbrains-mono text-xs text-tb-slate-600">
                 {o.supply_date ?? "—"}
               </td>
-              <td class="px-3 py-3 text-tb-slate-700">{o.plant ?? "—"}</td>
               <td class="px-3 py-3 text-right font-jetbrains-mono tabular-nums text-tb-slate-700">
                 {orderPortions(o)}
               </td>
