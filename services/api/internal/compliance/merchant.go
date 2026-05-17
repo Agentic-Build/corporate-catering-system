@@ -91,6 +91,13 @@ func computeWarnings(docs []*Document, now time.Time) []Warning {
 	cutoff := now.AddDate(0, 0, expiringWindowDays)
 
 	for _, d := range docs {
+		// DESIGN DECISION (reviewers: comment here if you disagree) — a required
+		// kind counts as "on file" as soon as ANY document of that kind exists,
+		// whatever its status. So a vendor whose only business_license was
+		// rejected gets a document_rejected warning, NOT document_missing: the
+		// document is on file and the rejected warning already tells them to
+		// fix it. If a rejected required doc should instead also count as
+		// missing, gate this on d.Status (e.g. only approved/pending qualify).
 		uploaded[d.Kind] = true
 
 		if d.Status == DocStatusRejected {
