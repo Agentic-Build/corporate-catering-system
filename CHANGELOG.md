@@ -2,6 +2,15 @@
 
 All notable changes to T-Bite, by phase.
 
+## Feedback / Settlement / Menu Search / Compliance (2026-05-17)
+- F1 員工回饋: `meal_rating` + `meal_complaint` workflow (open → vendor_responded → escalated → resolved, 24h escalation gate)
+- FeedbackScanner opens `satisfaction_drop` / `complaint_spike` anomalies — the governance engine's two previously unbacked signals
+- F2 商家對帳: admin monthly close (`vendor_settlement`), merchant live reconciliation view + closed statement history
+- F3 菜單搜尋: optional keyword / health-tag / price-range / in-stock / sort filtering on the employee menu endpoint
+- F4 商家合規自查: `GET /api/merchant/compliance` — vendor status, documents, computed warnings
+- 15 new HTTP endpoints + 3 MCP tools (`feedback.rate_order`, `feedback.file_complaint`, `settlement.close_period`)
+- migrations 000009 (feedback) + 000010 (vendor_settlement)
+
 ## P8 — Hardening (2026-05-13)
 - k6 lunch-peak load test (3 scenarios) + run-loadtest.sh harness
 - Hard-SLO CI load gate workflow (nightly + manual_dispatch)
