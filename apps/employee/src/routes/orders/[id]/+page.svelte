@@ -147,6 +147,10 @@
       </dd>
       <dt class="text-tb-slate-500">截單時間</dt>
       <dd class="font-jetbrains-mono">{fmt(o.cutoff_at)}</dd>
+      {#if o.notes}
+        <dt class="text-tb-slate-500">特殊需求</dt>
+        <dd class="text-tb-slate-700">{o.notes}</dd>
+      {/if}
     </dl>
     <div class="mt-3 flex items-end justify-between border-t border-tb-slate-100 pt-3">
       <span class="text-sm text-tb-slate-600">合計（薪資代扣）</span>
@@ -200,6 +204,19 @@
             </li>
           {/each}
         </ul>
+        <label class="flex flex-col gap-1.5 text-sm">
+          <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
+            特殊需求備註（選填，最多 500 字）
+          </span>
+          <textarea
+            name="notes"
+            rows="2"
+            maxlength="500"
+            placeholder="例如：不要辣、過敏原、餐具需求…"
+            class="rounded-tb-lg border border-tb-slate-300 px-3 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
+            >{o.notes}</textarea
+          >
+        </label>
         <div class="flex items-center justify-between border-t border-tb-slate-100 pt-3">
           <span class="text-sm text-tb-slate-600">修改後合計</span>
           <span class="font-jetbrains-mono text-xl font-black tabular-nums text-tb-slate-900">

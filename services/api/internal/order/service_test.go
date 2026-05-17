@@ -498,6 +498,35 @@ RETURNING id`).Scan(&otherVendor))
 	assert.ErrorIs(t, err, order.ErrMultiVendor)
 }
 
+func TestService_Notes_PlaceAndModify(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemA, userID := seedScenario(t, pool, 5)
+
+	// Notes given at placement are persisted and read back.
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID: userID, Plant: testPlant, SupplyDate: testSupplyDate,
+		Items: []order.PlaceItem{{MenuItemID: itemA, Qty: 1}},
+		Notes: "不要辣，謝謝",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "不要辣，謝謝", o.Notes)
+
+	got, err := svc.Get(context.Background(), o.ID, userID)
+	require.NoError(t, err)
+	assert.Equal(t, "不要辣，謝謝", got.Notes)
+
+	// Modify overwrites the note.
+	mod, err := svc.Modify(context.Background(), order.ModifyOrderInput{
+		OrderID: o.ID, UserID: userID,
+		Items: []order.PlaceItem{{MenuItemID: itemA, Qty: 2}},
+		Notes: "改成大辣",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "改成大辣", mod.Notes)
+}
+
 // forceStatus rewrites the order's status (and optionally totp_secret) directly
 // in the DB so tests can land an order in a state that normally requires a
 // scheduler tick (cutoff, ready) without having to mock time.

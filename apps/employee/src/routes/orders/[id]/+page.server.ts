@@ -78,10 +78,12 @@ export const actions: Actions = {
     if (items.length === 0) {
       return fail(400, { modifyError: "訂單至少需保留一個餐點；若要清空請改用取消訂單。" });
     }
+    const notes = String(fd.get("notes") ?? "").trim();
+    if (notes.length > 500) return fail(400, { modifyError: "備註不可超過 500 字" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.PUT("/api/employee/orders/{id}", {
       params: { path: { id: params.id } },
-      body: { items },
+      body: { items, notes },
     });
     if (r.error) {
       const status = r.response.status;

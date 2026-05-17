@@ -37,6 +37,7 @@ type orderDTO struct {
 	SupplyDate      string         `json:"supply_date"`
 	Status          string         `json:"status"`
 	TotalPriceMinor int64          `json:"total_price_minor"`
+	Notes           string         `json:"notes"`
 	PlacedAt        *string        `json:"placed_at,omitempty"`
 	CutoffAt        string         `json:"cutoff_at"`
 	CancelledAt     *string        `json:"cancelled_at,omitempty"`
@@ -51,6 +52,7 @@ func toDTO(o *order.Order) orderDTO {
 		SupplyDate:      o.SupplyDate.Format("2006-01-02"),
 		Status:          string(o.Status),
 		TotalPriceMinor: o.TotalPriceMinor,
+		Notes:           o.Notes,
 		CutoffAt:        o.CutoffAt.UTC().Format(time.RFC3339),
 		Items:           make([]orderItemDTO, 0, len(o.Items)),
 	}
@@ -79,6 +81,7 @@ type placeOrderInput struct {
 	Body struct {
 		Plant      string `json:"plant"`
 		SupplyDate string `json:"supply_date"` // YYYY-MM-DD
+		Notes      string `json:"notes,omitempty" maxLength:"500" doc:"Free-text special requirements shown on the merchant prep board"`
 		Items      []struct {
 			MenuItemID string `json:"menu_item_id" format:"uuid"`
 			Qty        int    `json:"qty" minimum:"1"`
@@ -105,6 +108,7 @@ type orderIDInput struct {
 type modifyOrderInput struct {
 	ID   string `path:"id" format:"uuid"`
 	Body struct {
+		Notes string `json:"notes,omitempty" maxLength:"500" doc:"Free-text special requirements shown on the merchant prep board"`
 		Items []struct {
 			MenuItemID string `json:"menu_item_id" format:"uuid"`
 			Qty        int    `json:"qty" minimum:"1"`
@@ -150,6 +154,7 @@ type merchantOrderDTO struct {
 	Plant           string         `json:"plant"`
 	Status          string         `json:"status"`
 	TotalPriceMinor int64          `json:"total_price_minor"`
+	Notes           string         `json:"notes"`
 	PlacedAt        *string        `json:"placed_at,omitempty"`
 	ReadyAt         *string        `json:"ready_at,omitempty"`
 	PickedUpAt      *string        `json:"picked_up_at,omitempty"`
@@ -169,6 +174,7 @@ func toMerchantDTO(o *order.Order) merchantOrderDTO {
 		Plant:           o.Plant,
 		Status:          string(o.Status),
 		TotalPriceMinor: o.TotalPriceMinor,
+		Notes:           o.Notes,
 		Items:           make([]orderItemDTO, 0, len(o.Items)),
 	}
 	if o.PlacedAt != nil {
@@ -333,6 +339,7 @@ func (a *API) place(ctx context.Context, in *placeOrderInput) (*placeOrderOutput
 		Plant:      in.Body.Plant,
 		SupplyDate: day,
 		Items:      items,
+		Notes:      in.Body.Notes,
 	})
 	if err != nil {
 		return nil, mapErr(err)
@@ -389,6 +396,7 @@ func (a *API) modify(ctx context.Context, in *modifyOrderInput) (*orderOutput, e
 		OrderID: in.ID,
 		UserID:  u.ID,
 		Items:   items,
+		Notes:   in.Body.Notes,
 	})
 	if err != nil {
 		return nil, mapErr(err)

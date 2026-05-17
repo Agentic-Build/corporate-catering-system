@@ -23,7 +23,7 @@ type QuotaTx interface {
 type OrderTx interface {
 	CreateTx(ctx context.Context, tx pgx.Tx, o *Order) error
 	UpdateStatusTx(ctx context.Context, tx pgx.Tx, id string, from, to Status) error
-	ReplaceItemsTx(ctx context.Context, tx pgx.Tx, orderID string, items []Item, totalMinor int64) error
+	ReplaceItemsTx(ctx context.Context, tx pgx.Tx, orderID string, items []Item, totalMinor int64, notes string) error
 	MarkReadyTx(ctx context.Context, tx pgx.Tx, id string) error
 	MarkPickedUpTx(ctx context.Context, tx pgx.Tx, id string) error
 	MarkNoShowTx(ctx context.Context, tx pgx.Tx, id string) error
@@ -77,6 +77,7 @@ type PlaceOrderInput struct {
 	Plant      string
 	SupplyDate time.Time
 	Items      []PlaceItem
+	Notes      string
 }
 
 // Place creates an order in PLACED state inside a single transaction.
@@ -154,6 +155,7 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		SupplyDate:      in.SupplyDate,
 		Status:          StatusPlaced,
 		TotalPriceMinor: totalPrice,
+		Notes:           in.Notes,
 		TOTPSecret:      secret,
 		PlacedAt:        &placedAt,
 		CutoffAt:        cutoffAt,
@@ -251,6 +253,7 @@ type ModifyOrderInput struct {
 	OrderID string
 	UserID  string
 	Items   []PlaceItem
+	Notes   string
 }
 
 // Modify replaces the items of a user-owned PLACED order before its cutoff.
@@ -323,11 +326,12 @@ func (s *Service) Modify(ctx context.Context, in ModifyOrderInput) (*Order, erro
 				}
 			}
 		}
-		if err := s.OrdersTx.ReplaceItemsTx(ctx, tx, o.ID, newItems, totalPrice); err != nil {
+		if err := s.OrdersTx.ReplaceItemsTx(ctx, tx, o.ID, newItems, totalPrice, in.Notes); err != nil {
 			return err
 		}
 		o.Items = newItems
 		o.TotalPriceMinor = totalPrice
+		o.Notes = in.Notes
 		payload := buildOrderPayload(o)
 		if err := s.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.modified.v1", payload, map[string]any{}); err != nil {
 			return err
@@ -507,6 +511,7 @@ func buildOrderPayload(o *Order) map[string]any {
 		"plant":             o.Plant,
 		"supply_date":       o.SupplyDate.Format("2006-01-02"),
 		"total_price_minor": o.TotalPriceMinor,
+		"notes":             o.Notes,
 		"items":             items,
 	}
 }

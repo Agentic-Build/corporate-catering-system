@@ -1911,6 +1911,9 @@
               "null"
             ]
           },
+          "notes": {
+            "type": "string"
+          },
           "picked_up_at": {
             "type": "string"
           },
@@ -1936,6 +1939,7 @@
           "plant",
           "status",
           "total_price_minor",
+          "notes",
           "items"
         ],
         "type": "object"
@@ -2011,6 +2015,11 @@
               "array",
               "null"
             ]
+          },
+          "notes": {
+            "description": "Free-text special requirements shown on the merchant prep board",
+            "maxLength": 500,
+            "type": "string"
           }
         },
         "required": [
@@ -2107,6 +2116,9 @@
               "null"
             ]
           },
+          "notes": {
+            "type": "string"
+          },
           "placed_at": {
             "type": "string"
           },
@@ -2134,6 +2146,7 @@
           "supply_date",
           "status",
           "total_price_minor",
+          "notes",
           "cutoff_at",
           "items"
         ],
@@ -2295,6 +2308,11 @@
               "array",
               "null"
             ]
+          },
+          "notes": {
+            "description": "Free-text special requirements shown on the merchant prep board",
+            "maxLength": 500,
+            "type": "string"
           },
           "plant": {
             "type": "string"

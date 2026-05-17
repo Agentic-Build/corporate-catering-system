@@ -1729,6 +1729,7 @@ export interface components {
         MerchantOrderDTO: {
             id: string;
             items: components["schemas"]["OrderItemDTO"][] | null;
+            notes: string;
             picked_up_at?: string;
             placed_at?: string;
             plant: string;
@@ -1762,6 +1763,8 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["Item"][] | null;
+            /** @description Free-text special requirements shown on the merchant prep board */
+            notes?: string;
         };
         OpenDisputeInputBody: {
             /**
@@ -1790,6 +1793,7 @@ export interface components {
             cutoff_at: string;
             id: string;
             items: components["schemas"]["OrderItemDTO"][] | null;
+            notes: string;
             placed_at?: string;
             plant: string;
             status: string;
@@ -1852,6 +1856,8 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["Item"][] | null;
+            /** @description Free-text special requirements shown on the merchant prep board */
+            notes?: string;
             plant: string;
             supply_date: string;
         };

@@ -109,6 +109,9 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 					"required": []string{"menu_item_id", "qty"},
 				}),
 			),
+			mcp.WithString("notes",
+				mcp.Description("Optional free-text special requirements shown on the merchant prep board"),
+			),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -151,11 +154,13 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 				qty, _ := m["qty"].(float64)
 				items = append(items, order.PlaceItem{MenuItemID: id, Qty: int(qty)})
 			}
+			notes, _ := args["notes"].(string)
 			o, err := deps.Order.Place(ctx, order.PlaceOrderInput{
 				UserID:     u.ID,
 				Plant:      plant,
 				SupplyDate: day,
 				Items:      items,
+				Notes:      notes,
 			})
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
@@ -222,6 +227,9 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 					"required": []string{"menu_item_id", "qty"},
 				}),
 			),
+			mcp.WithString("notes",
+				mcp.Description("Optional free-text special requirements; replaces the order's existing note"),
+			),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -253,10 +261,12 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 				qty, _ := m["qty"].(float64)
 				items = append(items, order.PlaceItem{MenuItemID: id, Qty: int(qty)})
 			}
+			notes, _ := args["notes"].(string)
 			o, err := deps.Order.Modify(ctx, order.ModifyOrderInput{
 				OrderID: orderID,
 				UserID:  u.ID,
 				Items:   items,
+				Notes:   notes,
 			})
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil

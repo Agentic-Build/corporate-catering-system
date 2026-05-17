@@ -1369,6 +1369,8 @@ components:
                     type:
                         - array
                         - "null"
+                notes:
+                    type: string
                 picked_up_at:
                     type: string
                 placed_at:
@@ -1387,6 +1389,7 @@ components:
                 - plant
                 - status
                 - total_price_minor
+                - notes
                 - items
             type: object
         MessageDTO:
@@ -1442,6 +1445,10 @@ components:
                     type:
                         - array
                         - "null"
+                notes:
+                    description: Free-text special requirements shown on the merchant prep board
+                    maxLength: 500
+                    type: string
             required:
                 - items
             type: object
@@ -1509,6 +1516,8 @@ components:
                     type:
                         - array
                         - "null"
+                notes:
+                    type: string
                 placed_at:
                     type: string
                 plant:
@@ -1529,6 +1538,7 @@ components:
                 - supply_date
                 - status
                 - total_price_minor
+                - notes
                 - cutoff_at
                 - items
             type: object
@@ -1647,6 +1657,10 @@ components:
                     type:
                         - array
                         - "null"
+                notes:
+                    description: Free-text special requirements shown on the merchant prep board
+                    maxLength: 500
+                    type: string
                 plant:
                     type: string
                 supply_date:

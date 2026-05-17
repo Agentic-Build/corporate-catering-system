@@ -160,6 +160,14 @@
                       {/if}
                     </td>
                   </tr>
+                  {#if o.notes}
+                    <tr class="bg-tb-amber-50/70">
+                      <td></td>
+                      <td colspan="5" class="pb-2.5 text-xs text-tb-amber-800">
+                        <span class="font-bold">特殊需求：</span>{o.notes}
+                      </td>
+                    </tr>
+                  {/if}
                 {/each}
               </tbody>
             </table>

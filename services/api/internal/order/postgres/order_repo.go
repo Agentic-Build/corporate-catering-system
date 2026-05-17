@@ -20,7 +20,7 @@ func NewOrderRepo(p *pgxpool.Pool) *OrderRepo { return &OrderRepo{pool: p} }
 // orderSelectCols is the canonical SELECT projection for the "order" table.
 // Keep the column order in lock-step with the Scan calls below.
 const orderSelectCols = `id, user_id, vendor_id, plant, supply_date, status, total_price_minor,
-       totp_secret, placed_at, cutoff_at, ready_at, picked_up_at, no_show_at,
+       notes, totp_secret, placed_at, cutoff_at, ready_at, picked_up_at, no_show_at,
        cancelled_at, created_at, updated_at`
 
 // scanOrder reads one row using the orderSelectCols projection.
@@ -28,7 +28,7 @@ func scanOrder(row pgx.Row, o *order.Order) error {
 	var status string
 	if err := row.Scan(
 		&o.ID, &o.UserID, &o.VendorID, &o.Plant, &o.SupplyDate, &status, &o.TotalPriceMinor,
-		&o.TOTPSecret, &o.PlacedAt, &o.CutoffAt, &o.ReadyAt, &o.PickedUpAt, &o.NoShowAt,
+		&o.Notes, &o.TOTPSecret, &o.PlacedAt, &o.CutoffAt, &o.ReadyAt, &o.PickedUpAt, &o.NoShowAt,
 		&o.CancelledAt, &o.CreatedAt, &o.UpdatedAt,
 	); err != nil {
 		return err
@@ -46,11 +46,11 @@ func (r *OrderRepo) CreateTx(ctx context.Context, tx pgx.Tx, o *order.Order) err
 	}
 	err := tx.QueryRow(ctx, `
 INSERT INTO "order"
-  (user_id, vendor_id, plant, supply_date, status, total_price_minor, placed_at, cutoff_at, totp_secret)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+  (user_id, vendor_id, plant, supply_date, status, total_price_minor, notes, placed_at, cutoff_at, totp_secret)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 RETURNING id, created_at, updated_at`,
 		o.UserID, o.VendorID, o.Plant, o.SupplyDate, string(o.Status),
-		o.TotalPriceMinor, o.PlacedAt, o.CutoffAt, o.TOTPSecret,
+		o.TotalPriceMinor, o.Notes, o.PlacedAt, o.CutoffAt, o.TOTPSecret,
 	).Scan(&o.ID, &o.CreatedAt, &o.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert order: %w", err)
@@ -130,10 +130,10 @@ func (r *OrderRepo) UpdateStatus(ctx context.Context, id string, from, to order.
 }
 
 // ReplaceItemsTx swaps the order's item rows for a new set and updates the
-// stored total, all inside the caller's transaction. order_item has no
-// append-only guard, so deleting and re-inserting is the simplest correct
+// stored total + notes, all inside the caller's transaction. order_item has
+// no append-only guard, so deleting and re-inserting is the simplest correct
 // way to apply a full-replacement edit. Callers must adjust quota separately.
-func (r *OrderRepo) ReplaceItemsTx(ctx context.Context, tx pgx.Tx, orderID string, items []order.Item, totalMinor int64) error {
+func (r *OrderRepo) ReplaceItemsTx(ctx context.Context, tx pgx.Tx, orderID string, items []order.Item, totalMinor int64, notes string) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM order_item WHERE order_id=$1`, orderID); err != nil {
 		return fmt.Errorf("delete order_items: %w", err)
 	}
@@ -150,7 +150,8 @@ VALUES ($1,$2,$3,$4) RETURNING id`,
 		it.OrderID = orderID
 	}
 	tag, err := tx.Exec(ctx, `
-UPDATE "order" SET total_price_minor=$2, updated_at=now() WHERE id=$1`, orderID, totalMinor)
+UPDATE "order" SET total_price_minor=$2, notes=$3, updated_at=now() WHERE id=$1`,
+		orderID, totalMinor, notes)
 	if err != nil {
 		return fmt.Errorf("update order total: %w", err)
 	}
