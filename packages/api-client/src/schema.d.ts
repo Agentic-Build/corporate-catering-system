@@ -932,6 +932,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/orders/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live order events for the merchant prep board (Server-Sent Events) */
+        get: operations["streamMerchantOrderEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/orders/mark-ready": {
         parameters: {
             query?: never;
@@ -1218,6 +1235,12 @@ export interface components {
             readonly $schema?: string;
             batch: components["schemas"]["BatchDTO"];
             entries: components["schemas"]["EntryDTO"][] | null;
+        };
+        BoardEvent: {
+            /** @description Order event kind, e.g. placed / modified / ready / cancelled */
+            kind: string;
+            /** @description Affected order id; empty for keep-alive pings */
+            order_id: string;
         };
         CategoryDTO: {
             id: string;
@@ -4297,6 +4320,46 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    streamMerchantOrderEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": {
+                        data: components["schemas"]["BoardEvent"];
+                        /**
+                         * @description The event name.
+                         * @constant
+                         */
+                        event?: "message";
+                        /** @description The event ID. */
+                        id?: number;
+                        /** @description The retry time in milliseconds. */
+                        retry?: number;
+                    }[];
+                };
             };
             /** @description Error */
             default: {

@@ -208,7 +208,10 @@ func main() {
 			Plants:      plantRepo,
 			Clock:       clock.SystemClock{},
 		}
-		orderAPI := &ohttp.API{Svc: orderService}
+		// BoardHub fans live order events to the merchant prep board over SSE.
+		// It is wired to NATS below when NATS_URL is configured.
+		boardHub := order.NewBoardHub()
+		orderAPI := &ohttp.API{Svc: orderService, Board: boardHub}
 
 		// 7f. Payroll service + admin/employee handlers
 		payrollService := &payroll.Service{
@@ -265,6 +268,14 @@ func main() {
 			if natsClient, err := messaging.New(ctx, cfg.NATSURL); err == nil {
 				dlqAPI.JS = natsClient.JS
 				defer natsClient.Close()
+				// Tap ORDERS_V1 so the merchant prep board SSE endpoint can
+				// push live updates. Failure here is non-fatal: the board
+				// still works, just without push.
+				go func() {
+					if err := order.RunBoardConsumer(ctx, natsClient.JS, boardHub, logger); err != nil {
+						logger.Warn("board consumer stopped", "err", err)
+					}
+				}()
 			} else {
 				logger.Warn("nats unavailable for dlq replay; /replay will return 503", "err", err)
 			}

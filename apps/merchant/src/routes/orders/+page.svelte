@@ -5,10 +5,25 @@
 
   let { data, form } = $props();
 
-  // Auto-refresh every 15s.
+  // Live updates: an SSE stream pushes order events the moment they happen;
+  // each event triggers a board re-fetch. A slow fallback poll keeps the
+  // board fresh if SSE is unavailable (NATS down / proxy issue).
   onMount(() => {
-    const t = setInterval(() => invalidateAll(), 15_000);
-    return () => clearInterval(t);
+    const es = new EventSource("/orders/events");
+    es.onmessage = (e) => {
+      let kind = "";
+      try {
+        kind = (JSON.parse(e.data)?.kind as string) ?? "";
+      } catch {
+        // Unparseable payload still signals activity — refetch anyway.
+      }
+      if (kind !== "ping") invalidateAll();
+    };
+    const fallback = setInterval(() => invalidateAll(), 60_000);
+    return () => {
+      es.close();
+      clearInterval(fallback);
+    };
   });
 
   const statusTone = {
@@ -53,7 +68,7 @@
   </div>
   <h1 class="mt-1 text-3xl font-black tracking-tight text-tb-slate-900">備餐看板</h1>
   <p class="mt-1 text-sm text-tb-slate-500">
-    {data.date} · {data.totalCount} 筆訂單 · 每 15 秒自動更新
+    {data.date} · {data.totalCount} 筆訂單 · 即時更新
   </p>
 </section>
 

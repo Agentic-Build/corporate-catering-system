@@ -204,6 +204,19 @@ components:
                 - batch
                 - entries
             type: object
+        BoardEvent:
+            additionalProperties: false
+            properties:
+                kind:
+                    description: Order event kind, e.g. placed / modified / ready / cancelled
+                    type: string
+                order_id:
+                    description: Affected order id; empty for keep-alive pings
+                    type: string
+            required:
+                - kind
+                - order_id
+            type: object
         CategoryDTO:
             additionalProperties: false
             properties:
@@ -4468,6 +4481,49 @@ paths:
             security:
                 - bearer: []
             summary: Verify TOTP code and mark order picked up
+            tags:
+                - merchant
+                - order
+    /api/merchant/orders/events:
+        get:
+            operationId: streamMerchantOrderEvents
+            responses:
+                "200":
+                    content:
+                        text/event-stream:
+                            schema:
+                                description: Each oneOf object in the array represents one possible Server Sent Events (SSE) message, serialized as UTF-8 text according to the SSE specification.
+                                items:
+                                    oneOf:
+                                        - properties:
+                                            data:
+                                                $ref: '#/components/schemas/BoardEvent'
+                                            event:
+                                                const: message
+                                                description: The event name.
+                                                type: string
+                                            id:
+                                                description: The event ID.
+                                                type: integer
+                                            retry:
+                                                description: The retry time in milliseconds.
+                                                type: integer
+                                          required:
+                                            - data
+                                          title: Event message
+                                          type: object
+                                title: Server Sent Events
+                                type: array
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Live order events for the merchant prep board (Server-Sent Events)
             tags:
                 - merchant
                 - order

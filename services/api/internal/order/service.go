@@ -241,7 +241,7 @@ func (s *Service) Cancel(ctx context.Context, orderID, userID string) error {
 		}); err != nil {
 			return err
 		}
-		payload := map[string]any{"order_id": o.ID, "by": "user"}
+		payload := map[string]any{"order_id": o.ID, "vendor_id": o.VendorID, "by": "user"}
 		if err := s.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.cancelled.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
@@ -481,7 +481,7 @@ func (s *Service) MarkNoShow(ctx context.Context, cutoffAge time.Duration) (int,
 			}); err != nil {
 				return err
 			}
-			payload := map[string]any{"order_id": o.ID}
+			payload := map[string]any{"order_id": o.ID, "vendor_id": o.VendorID}
 			if err := s.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.no_show.v1", payload, map[string]any{}); err != nil {
 				return err
 			}

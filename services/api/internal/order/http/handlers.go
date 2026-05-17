@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/sse"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
@@ -19,6 +20,10 @@ import (
 // All endpoints require the employee role.
 type API struct {
 	Svc *order.Service
+	// Board fans live order events to the merchant prep board over SSE. It is
+	// optional: when nil (NATS not configured) the SSE endpoint stays open but
+	// emits only keep-alive pings.
+	Board *order.BoardHub
 }
 
 // ----- DTOs -----
@@ -287,6 +292,17 @@ func (a *API) Register(api huma.API) {
 		Tags:        []string{"merchant", "order"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.listMerchantOrders)
+
+	sse.Register(api, huma.Operation{
+		OperationID: "streamMerchantOrderEvents",
+		Method:      http.MethodGet,
+		Path:        "/api/merchant/orders/events",
+		Summary:     "Live order events for the merchant prep board (Server-Sent Events)",
+		Tags:        []string{"merchant", "order"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, map[string]any{
+		"message": order.BoardEvent{},
+	}, a.streamMerchantOrderEvents)
 }
 
 // ----- Auth helper -----
@@ -491,6 +507,42 @@ func (a *API) listMerchantOrders(ctx context.Context, in *listMerchantOrdersInpu
 		resp.Body.Items = append(resp.Body.Items, toMerchantDTO(o))
 	}
 	return &resp, nil
+}
+
+// streamMerchantOrderEvents streams live order events for the caller's vendor
+// over SSE. The merchant prep board re-fetches its data on each event, so the
+// payload stays minimal. A 20s keep-alive ping holds the connection open.
+func (a *API) streamMerchantOrderEvents(ctx context.Context, _ *struct{}, send sse.Sender) {
+	u, ok := idhttp.UserFromContext(ctx)
+	if !ok || u.Role != identity.RoleVendorOperator || u.VendorID == nil || *u.VendorID == "" {
+		return
+	}
+	if a.Board == nil {
+		<-ctx.Done()
+		return
+	}
+	ch, unsub := a.Board.Subscribe(*u.VendorID)
+	defer unsub()
+
+	heartbeat := time.NewTicker(20 * time.Second)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-heartbeat.C:
+			if send.Data(order.BoardEvent{Kind: "ping"}) != nil {
+				return
+			}
+		case ev, open := <-ch:
+			if !open {
+				return
+			}
+			if send.Data(ev) != nil {
+				return
+			}
+		}
+	}
 }
 
 // mapErr translates domain errors to huma HTTP errors.
