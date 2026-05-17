@@ -5,14 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/pflag"
@@ -31,6 +29,7 @@ import (
 	fpg "github.com/takalawang/corporate-catering-system/services/api/internal/feedback/postgres"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
+	idauthentik "github.com/takalawang/corporate-catering-system/services/api/internal/identity/authentik"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
 	pgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/identity/postgres"
@@ -120,21 +119,15 @@ func main() {
 		defer rdb.Close()
 
 		// 3. OIDC providers
-		googleRedirect := cfg.OIDCCallbackBaseURL + "/auth/google/callback"
-		googleProv, err := oidc.NewGoogle(ctx, cfg.GoogleClientID, cfg.GoogleClientSecret, googleRedirect)
+		providers, err := buildOIDCProviders(ctx, cfg)
 		if err != nil {
-			logger.Error("google oidc discovery", "err", err)
+			logger.Error("oidc providers", "err", err)
 			os.Exit(1)
 		}
-		githubRedirect := cfg.OIDCCallbackBaseURL + "/auth/github/callback"
-		githubProv := oidc.NewGitHub(cfg.GitHubClientID, cfg.GitHubClientSecret, githubRedirect)
 
 		// 4. Repositories
 		userRepo := pgrepo.NewUserRepo(pool)
 		idRepo := pgrepo.NewUserIdentityRepo(pool)
-		dirRepo := pgrepo.NewDirectoryRepo(pool)
-		invRepo := pgrepo.NewVendorInviteRepo(pool)
-		awRepo := pgrepo.NewAdminWhitelistRepo(pool)
 
 		// 5. Session store + OIDC state store
 		sessStore := idredis.NewSessionStore(rdb, 7*24*time.Hour)
@@ -144,16 +137,9 @@ func main() {
 		svc := &identity.Service{
 			Users:      userRepo,
 			Identities: idRepo,
-			Directory:  dirRepo,
-			Invites:    invRepo,
-			AdminWL:    awRepo,
 			Sessions:   sessStore,
-			Providers: map[string]oidc.Provider{
-				"google": googleProv,
-				"github": githubProv,
-			},
-			States: stateStore,
-			Clock:  clock.SystemClock{},
+			Providers:  providers,
+			States:     stateStore,
 		}
 
 		// 7. HTTP API
@@ -169,12 +155,18 @@ func main() {
 		}
 
 		// 7b. Vendor service + admin handlers
+		authentikProvisioner, err := newAuthentikProvisioner(cfg)
+		if err != nil {
+			logger.Error("authentik provisioner", "err", err)
+			os.Exit(1)
+		}
 		vendorService := &vendor.Service{
-			Vendors:   vpgrepo.NewVendorRepo(pool),
-			Plants:    vpgrepo.NewPlantMappingRepo(pool),
-			Invites:   invRepo,
-			Clock:     clock.SystemClock{},
-			InviteTTL: 7 * 24 * time.Hour,
+			Vendors:     vpgrepo.NewVendorRepo(pool),
+			Plants:      vpgrepo.NewPlantMappingRepo(pool),
+			Operators:   vpgrepo.NewOperatorRepo(pool),
+			Provisioner: authentikProvisioner,
+			Users:       userRepo,
+			Sessions:    sessStore,
 		}
 		vendorAPI := &vhttp.API{Svc: vendorService}
 
@@ -358,37 +350,8 @@ func main() {
 		}
 		settlementAPI := &settlementhttp.API{Svc: settlementService}
 
-		// 8. HTTP server. When FAKE_OIDC=1, swap the google provider for a
-		// deterministic fake and mount its auto-redirect handler. Used for
-		// local dev and Playwright e2e — never enable in production.
-		var extraRoutes func(chi.Router)
-		if os.Getenv("FAKE_OIDC") == "1" {
-			logger.Warn("FAKE_OIDC enabled: swapping google provider for FakeProvider (dev/e2e only)")
-			fake := &oidc.FakeProvider{
-				ProviderName: "google",
-				BaseURL:      cfg.OIDCCallbackBaseURL,
-				Userinfo: &oidc.Userinfo{
-					Provider:        "google",
-					ExternalSubject: "fake-google-sub-001",
-					Email:           "e2e-employee@tbite.test",
-					EmailVerified:   true,
-					DisplayName:     "E2E 員工",
-					Raw:             map[string]any{"e2e": true},
-				},
-			}
-			svc.Providers["google"] = fake
-			callback := cfg.OIDCCallbackBaseURL + "/auth/google/callback"
-			extraRoutes = func(r chi.Router) {
-				// /test/oidc/google/authorize is the fake "consent screen" — it
-				// immediately bounces back to the real OIDC callback with a
-				// canned authorization code. The `app` query param is required
-				// by completeLogin; the FakeProvider only supports employee.
-				r.Get("/test/oidc/google/authorize", func(w http.ResponseWriter, req *http.Request) {
-					state := req.URL.Query().Get("state")
-					http.Redirect(w, req, fmt.Sprintf("%s?state=%s&code=fake&app=employee", callback, state), http.StatusFound)
-				})
-			}
-		}
+		// 8. HTTP server. Local and e2e auth now run through Authentik; there is
+		// no fake OIDC route mounted by the API.
 
 		// 9. MCP server (P7). Reuses the same service instances and the same
 		// Bearer auth middleware as the REST API. Tools are registered in
@@ -406,7 +369,7 @@ func main() {
 			Sessions:   sessStore,
 		})
 
-		srv := httpserver.New(cfg.HTTPAddr, logger, api, extraRoutes, mcpSrv,
+		srv := httpserver.New(cfg.HTTPAddr, logger, api, nil, mcpSrv,
 			vendorAPI.Register,
 			menuAPI.Register,
 			quotaAPI.Register,
@@ -677,6 +640,11 @@ func main() {
 		supplyRepo := qpgrepo.NewSupplyRepo(pool)
 		itemRepo := mpgrepo.NewItemRepo(pool)
 		plantRepo := vpgrepo.NewPlantMappingRepo(pool)
+		authentikProvisioner, err := newAuthentikProvisioner(cfg)
+		if err != nil {
+			logger.Error("authentik provisioner", "err", err)
+			os.Exit(1)
+		}
 
 		orderService := &order.Service{
 			Pool:        pool,
@@ -694,11 +662,12 @@ func main() {
 			Clock:       clock.SystemClock{},
 		}
 		vendorService := &vendor.Service{
-			Vendors:   vpgrepo.NewVendorRepo(pool),
-			Plants:    plantRepo,
-			Invites:   pgrepo.NewVendorInviteRepo(pool),
-			Clock:     clock.SystemClock{},
-			InviteTTL: 7 * 24 * time.Hour,
+			Vendors:     vpgrepo.NewVendorRepo(pool),
+			Plants:      plantRepo,
+			Operators:   vpgrepo.NewOperatorRepo(pool),
+			Provisioner: authentikProvisioner,
+			Users:       userRepo,
+			Sessions:    sessStore,
 		}
 		payrollService := &payroll.Service{
 			Pool:     pool,
@@ -762,6 +731,58 @@ func main() {
 		}
 		logger.Info("mcp stdio shutdown")
 	}
+}
+
+func buildOIDCProviders(ctx context.Context, cfg config.Config) (map[string]oidc.Provider, error) {
+	if len(cfg.AuthProviders) == 0 {
+		return nil, errors.New("AUTH_PROVIDER_SLUGS must configure at least one OIDC provider")
+	}
+	providers := make(map[string]oidc.Provider, len(cfg.AuthProviders))
+	for _, p := range cfg.AuthProviders {
+		if !validProviderSlug(p.Slug) {
+			return nil, fmt.Errorf("invalid auth provider slug %q", p.Slug)
+		}
+		redirectURL := cfg.OIDCCallbackBaseURL + "/auth/" + p.Slug + "/callback"
+		provider, err := oidc.New(ctx, oidc.Config{
+			Slug:         p.Slug,
+			DisplayName:  p.DisplayName,
+			IssuerURL:    p.IssuerURL,
+			ClientID:     p.ClientID,
+			ClientSecret: p.ClientSecret,
+			RedirectURL:  redirectURL,
+			Scopes:       p.Scopes,
+		})
+		if err != nil {
+			return nil, err
+		}
+		providers[p.Slug] = provider
+	}
+	return providers, nil
+}
+
+func newAuthentikProvisioner(cfg config.Config) (identity.VendorOperatorProvisioner, error) {
+	return idauthentik.New(idauthentik.Config{
+		BaseURL:             cfg.AuthentikBaseURL,
+		APIToken:            cfg.AuthentikAPIToken,
+		Provider:            "authentik",
+		VendorOperatorGroup: cfg.AuthentikVendorOperatorGroup,
+	})
+}
+
+func validProviderSlug(slug string) bool {
+	if slug == "" {
+		return false
+	}
+	for i, r := range slug {
+		ok := r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '.'
+		if !ok {
+			return false
+		}
+		if i == 0 && !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // getenv returns the value of the named env var, or def when unset/empty.

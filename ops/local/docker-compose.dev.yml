@@ -59,13 +59,78 @@ services:
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/minio/health/live || exit 1"]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 5s
       timeout: 3s
       retries: 12
+
+  authentik-postgresql:
+    image: postgres:16-alpine
+    container_name: tbite-authentik-postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: authentik
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: authentik
+    volumes:
+      - authentik-postgresql-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik -d authentik"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2026.2.0}
+    container_name: tbite-authentik-server
+    restart: unless-stopped
+    command: server
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment: &authentik-env
+      AUTHENTIK_SECRET_KEY: tbite-local-authentik-secret-key-change-outside-dev
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: authentik
+      AUTHENTIK_BOOTSTRAP_EMAIL: akadmin@tbite.test
+      AUTHENTIK_BOOTSTRAP_PASSWORD: tbite-dev-admin
+      AUTHENTIK_BOOTSTRAP_TOKEN: tbite-dev-authentik-api-token
+      AUTHENTIK_LOG_LEVEL: info
+    ports:
+      - "9002:9000"
+    volumes:
+      - authentik-media:/media
+      - ./authentik/blueprints/tbite.yaml:/blueprints/tbite.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "ak healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2026.2.0}
+    container_name: tbite-authentik-worker
+    restart: unless-stopped
+    command: worker
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment: *authentik-env
+    volumes:
+      - authentik-media:/media
+      - ./authentik/blueprints/tbite.yaml:/blueprints/tbite.yaml:ro
 
 volumes:
   postgres-data:
   redis-data:
   nats-data:
   minio-data:
+  authentik-postgresql-data:
+  authentik-media:

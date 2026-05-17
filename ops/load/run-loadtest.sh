@@ -35,12 +35,20 @@ fi
 
 # Start API (background)
 echo "starting api..."
+echo "requires Authentik on http://localhost:9002; run make dev or ops/local/docker-compose.dev.yml first"
 DATABASE_RW_URL="postgres://tbite:tbite@localhost:55432/tbite?sslmode=disable" \
 REDIS_URL="redis://localhost:56379/0" \
 NATS_URL="nats://localhost:54222" \
-OIDC_GOOGLE_CLIENT_ID=x OIDC_GOOGLE_CLIENT_SECRET=x \
-OIDC_GITHUB_CLIENT_ID=x OIDC_GITHUB_CLIENT_SECRET=x \
 OIDC_CALLBACK_BASE_URL="http://localhost:8080" \
+AUTH_PROVIDER_SLUGS="authentik" \
+AUTH_PROVIDER_AUTHENTIK_DISPLAY_NAME="Authentik" \
+AUTH_PROVIDER_AUTHENTIK_ISSUER_URL="http://localhost:9002/application/o/tbite/" \
+AUTH_PROVIDER_AUTHENTIK_CLIENT_ID="tbite-local" \
+AUTH_PROVIDER_AUTHENTIK_CLIENT_SECRET="tbite-local-client-secret" \
+AUTH_PROVIDER_AUTHENTIK_SCOPES="openid email profile tbite" \
+AUTHENTIK_BASE_URL="http://localhost:9002" \
+AUTHENTIK_API_TOKEN="tbite-dev-authentik-api-token" \
+AUTHENTIK_VENDOR_OPERATOR_GROUP="tbite:role:vendor_operator" \
 APP_BASE_URL_EMPLOYEE="http://localhost:5173" \
 APP_BASE_URL_MERCHANT="http://localhost:5174" \
 APP_BASE_URL_ADMIN="http://localhost:5175" \

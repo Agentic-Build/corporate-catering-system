@@ -13,12 +13,14 @@
     <h1 class="mt-1 text-2xl font-black tracking-tight text-tb-slate-900">商家登入</h1>
     <p class="mb-6 mt-1 text-sm text-tb-slate-500">使用商家 Email 登入後台</p>
     <div class="space-y-3">
-      <ProviderButton provider="google" href={`/auth/start?provider=google&return_to=${returnTo}`}>
-        使用 Google 繼續
-      </ProviderButton>
-      <ProviderButton provider="github" href={`/auth/start?provider=github&return_to=${returnTo}`}>
-        使用 GitHub 繼續
-      </ProviderButton>
+      {#each data.providers as provider}
+        <ProviderButton
+          provider={provider.slug}
+          href={`/auth/start?provider=${provider.slug}&return_to=${returnTo}`}
+        >
+          使用 {provider.display_name} 登入
+        </ProviderButton>
+      {/each}
     </div>
   </Card>
   <p class="mt-6 text-center text-xs uppercase tracking-eyebrow-wide text-tb-slate-500">

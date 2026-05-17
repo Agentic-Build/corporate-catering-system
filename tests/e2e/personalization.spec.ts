@@ -1,13 +1,12 @@
 import { test, expect } from "@playwright/test";
+import { loginEmployee } from "./auth";
 
 // P9 personalization: chip carousels + ⭐ favorites. Runs against the local
-// dev stack (`make dev-up` + `make dev-app`) — same prerequisites as the
+// dev stack (`make dev`) — same prerequisites as the
 // other employee specs in this directory.
 
 test("cold-start employee sees three empty chip rows with onboarding hints", async ({ page }) => {
-  await page.goto("/login");
-  await page.getByText("使用 Google 繼續").click();
-  await page.waitForURL(/\/$/, { timeout: 15_000 });
+  await loginEmployee(page);
 
   // The three chip-row headings are stable anchors; the empty placeholders
   // carry the spec-mandated copy.
@@ -20,9 +19,7 @@ test("cold-start employee sees three empty chip rows with onboarding hints", asy
 });
 
 test("clicking ⭐ on a meal card surfaces it in the 我的最愛 row", async ({ page }) => {
-  await page.goto("/login");
-  await page.getByText("使用 Google 繼續").click();
-  await page.waitForURL(/\/$/, { timeout: 15_000 });
+  await loginEmployee(page);
 
   // Pick "明天" so a non-cutoff menu is loaded with star buttons available.
   await page.getByRole("button", { name: /明天/ }).click();
@@ -55,9 +52,8 @@ test("clicking ⭐ on a meal card surfaces it in the 我的最愛 row", async ({
 //
 // 4. Employee reorders a past order with 1 archived item → 201 + toast
 //    "3 項中 2 項已加入購物車...". Needs seeded order_item referencing a
-//    menu_item that was later archived; seed-e2e.sql does not produce this.
+//    menu_item that was later archived.
 //
 // 5. Same-plant peer ordering boosts recommend ranking. Needs multiple
 //    seeded employee identities + per-user order history in the same plant
-//    to exercise the popularity × affinity score; the fake OIDC provider
-//    currently bootstraps a single shared employee.
+//    to exercise the popularity × affinity score.

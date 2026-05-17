@@ -16,6 +16,11 @@ type Userinfo struct {
 	Raw             map[string]any
 }
 
+type ProviderInfo struct {
+	Slug        string
+	DisplayName string
+}
+
 type AuthURL struct {
 	URL          string
 	PKCEVerifier string
@@ -24,6 +29,7 @@ type AuthURL struct {
 
 type Provider interface {
 	Name() string
+	DisplayName() string
 	BuildAuthURL(ctx context.Context, state string) (*AuthURL, error)
 	Exchange(ctx context.Context, code, pkceVerifier, nonce string) (*Userinfo, error)
 }

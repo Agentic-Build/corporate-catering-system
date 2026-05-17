@@ -65,8 +65,8 @@ All notable changes to T-Bite, by phase.
 - 4 UI ports (MealCard, StateTag, StatCard, LocationBar)
 
 ## P1 — Identity + OIDC (2026-05-13)
-- `user` / `user_identity` / `employee_directory` / `vendor_invite` schema
-- Google + GitHub OIDC + role-aware bootstrap
+- `user` / `user_identity` schema with configurable OIDC provider slugs
+- Authentik-only OIDC + role-aware claim bootstrap
 - Redis session store + OIDC state store
 - Three SvelteKit apps share `@tbite/web-auth` hooks
 - OpenAPI + TS client auto-generation (`make contract-sync`)

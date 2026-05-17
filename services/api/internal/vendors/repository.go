@@ -15,3 +15,12 @@ type PlantMappingRepository interface {
 	ListVendorsForPlant(ctx context.Context, plant string) ([]string, error)
 	Set(ctx context.Context, vendorID string, plants []string) error
 }
+
+type OperatorRepository interface {
+	Get(ctx context.Context, vendorID, operatorID string) (*OperatorAccount, error)
+	ListByVendor(ctx context.Context, vendorID string) ([]*OperatorAccount, error)
+	ListByVendorStatus(ctx context.Context, vendorID string, statuses []OperatorStatus) ([]*OperatorAccount, error)
+	Upsert(ctx context.Context, op *OperatorAccount) error
+	SetStatus(ctx context.Context, vendorID, operatorID string, status OperatorStatus) error
+	SetStatuses(ctx context.Context, vendorID string, from []OperatorStatus, to OperatorStatus) error
+}
