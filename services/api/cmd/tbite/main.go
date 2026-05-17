@@ -400,6 +400,8 @@ func main() {
 			Vendor:     vendorService,
 			Payroll:    payrollService,
 			Compliance: complianceService,
+			Feedback:   feedbackService,
+			Settlement: settlementService,
 			Users:      userRepo,
 			Sessions:   sessStore,
 		})
@@ -719,6 +721,21 @@ func main() {
 			AuditQry: auditRepo,
 			Clock:    clock.SystemClock{},
 		}
+		feedbackService := &feedback.Service{
+			Pool:       pool,
+			Ratings:    fpg.NewRatingRepo(pool),
+			Complaints: fpg.NewComplaintRepo(pool),
+			Orders:     fpg.NewOrderReader(pool),
+			Audit:      auditRepo,
+			Clock:      clock.SystemClock{},
+		}
+		settlementRepo := settlementpg.NewSettlementRepo(pool)
+		settlementService := &settlement.Service{
+			Pool:        pool,
+			Settlements: settlementRepo,
+			Orders:      settlementRepo,
+			Audit:       auditRepo,
+		}
 
 		mcpSrv := mcpserver.New(mcpserver.Deps{
 			Pool:       pool,
@@ -727,6 +744,8 @@ func main() {
 			Vendor:     vendorService,
 			Payroll:    payrollService,
 			Compliance: complianceService,
+			Feedback:   feedbackService,
+			Settlement: settlementService,
 			Users:      userRepo,
 			Sessions:   sessStore,
 		})
