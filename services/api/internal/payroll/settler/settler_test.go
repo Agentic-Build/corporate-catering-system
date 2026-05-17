@@ -244,7 +244,7 @@ func TestSettler_BatchLockedToCSVExport(t *testing.T) {
 	assert.Equal(t, 3, len(rows), "expected header + 2 entry rows")
 	assert.Equal(t, []string{
 		"employee_id", "primary_email", "display_name", "plant", "department",
-		"amount_ntd", "refunded_ntd", "net_ntd", "batch_period",
+		"amount_ntd", "refunded_ntd", "net_ntd", "batch_period", "exception",
 	}, rows[0])
 	// Verify a user_b row exists with net=16000
 	var foundB bool

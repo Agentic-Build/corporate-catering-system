@@ -215,15 +215,16 @@ func main() {
 
 		// 7f. Payroll service + admin/employee handlers
 		payrollService := &payroll.Service{
-			Pool:     pool,
-			Batches:  payrollpgrepo.NewBatchRepo(pool),
-			Entries:  payrollpgrepo.NewEntryRepo(pool),
-			Disputes: payrollpgrepo.NewDisputeRepo(pool),
-			Orders:   orderRepo,
-			OrderTx:  orderRepo,
-			Audit:    auditRepo,
-			Outbox:   outboxRepo,
-			Clock:    clock.SystemClock{},
+			Pool:       pool,
+			Batches:    payrollpgrepo.NewBatchRepo(pool),
+			Entries:    payrollpgrepo.NewEntryRepo(pool),
+			Disputes:   payrollpgrepo.NewDisputeRepo(pool),
+			Exceptions: payrollpgrepo.NewExceptionRepo(pool),
+			Orders:     orderRepo,
+			OrderTx:    orderRepo,
+			Audit:      auditRepo,
+			Outbox:     outboxRepo,
+			Clock:      clock.SystemClock{},
 		}
 		payrollAPI := &payrollhttp.API{Svc: payrollService}
 
@@ -451,15 +452,16 @@ func main() {
 		}
 
 		settler := &payrollsettler.Settler{
-			JS:      natsClient.JS,
-			Pool:    pool,
-			Batches: payrollpgrepo.NewBatchRepo(pool),
-			Entries: payrollpgrepo.NewEntryRepo(pool),
-			Users:   payrollsettler.NewPgUserLookup(pool),
-			Storage: s3Client,
-			Logger:  logger.With("component", "payroll-settler"),
-			Audit:   opgrepo.NewAuditRepo(pool),
-			Outbox:  outbox,
+			JS:         natsClient.JS,
+			Pool:       pool,
+			Batches:    payrollpgrepo.NewBatchRepo(pool),
+			Entries:    payrollpgrepo.NewEntryRepo(pool),
+			Users:      payrollsettler.NewPgUserLookup(pool),
+			Exceptions: payrollpgrepo.NewExceptionRepo(pool),
+			Storage:    s3Client,
+			Logger:     logger.With("component", "payroll-settler"),
+			Audit:      opgrepo.NewAuditRepo(pool),
+			Outbox:     outbox,
 		}
 
 		onTimeEval := &evaluator.OnTimeRateEvaluator{

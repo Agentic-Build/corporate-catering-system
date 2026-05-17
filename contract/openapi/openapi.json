@@ -1017,6 +1017,77 @@
         },
         "type": "object"
       },
+      "ExceptionDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "entry_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string"
+          },
+          "resolved_at": {
+            "type": "string"
+          },
+          "resolved_by": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "batch_id",
+          "entry_id",
+          "user_id",
+          "kind",
+          "status",
+          "detail",
+          "resolution",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "ExceptionOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ExceptionOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "exception": {
+            "$ref": "#/components/schemas/ExceptionDTO"
+          }
+        },
+        "required": [
+          "exception"
+        ],
+        "type": "object"
+      },
       "FavoriteChipDTO": {
         "additionalProperties": false,
         "properties": {
@@ -1078,6 +1149,33 @@
         "required": [
           "category",
           "description"
+        ],
+        "type": "object"
+      },
+      "FlagExceptionInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/FlagExceptionInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "detail": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "entry_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "detail"
         ],
         "type": "object"
       },
@@ -1458,6 +1556,33 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/EmployeeMenuItemDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ListExceptionsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ListExceptionsOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExceptionDTO"
             },
             "type": [
               "array",
@@ -2858,6 +2983,36 @@
         ],
         "type": "object"
       },
+      "ResolveExceptionInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ResolveExceptionInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "resolution": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "excluded"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "resolution"
+        ],
+        "type": "object"
+      },
       "ResolveInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -4129,6 +4284,112 @@
         ]
       }
     },
+    "/api/admin/payroll/batches/{id}/exceptions": {
+      "get": {
+        "operationId": "listPayrollExceptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListExceptionsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List a batch's settlement exceptions (re-runs departed-employee detection)",
+        "tags": [
+          "admin",
+          "payroll"
+        ]
+      },
+      "post": {
+        "operationId": "flagPayrollException",
+        "parameters": [
+          {
+            "description": "Payroll batch id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Payroll batch id",
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlagExceptionInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExceptionOutputBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Flag a batch entry with a manual deduction-failed exception",
+        "tags": [
+          "admin",
+          "payroll"
+        ]
+      }
+    },
     "/api/admin/payroll/batches/{id}/lock": {
       "post": {
         "operationId": "lockPayrollBatch",
@@ -4269,6 +4530,59 @@
           }
         ],
         "summary": "Resolve a payroll dispute (refund or reject)",
+        "tags": [
+          "admin",
+          "payroll"
+        ]
+      }
+    },
+    "/api/admin/payroll/exceptions/{id}/resolve": {
+      "post": {
+        "operationId": "resolvePayrollException",
+        "parameters": [
+          {
+            "description": "Payroll exception id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Payroll exception id",
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveExceptionInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Resolve a settlement exception (resolved or excluded)",
         "tags": [
           "admin",
           "payroll"

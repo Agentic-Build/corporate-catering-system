@@ -30,6 +30,19 @@ type EntryRepository interface {
 	FindByOrderForUser(ctx context.Context, userID, orderID string) (string, error)
 }
 
+type ExceptionRepository interface {
+	// UpsertDepartedTx detects batch entries whose employee is no longer
+	// active and inserts an employee_departed exception for each. Idempotent
+	// via the (batch_id, entry_id, kind) unique index.
+	UpsertDepartedTx(ctx context.Context, tx pgx.Tx, batchID string) error
+	// UpsertDeparted is the pool-based variant for on-demand re-detection.
+	UpsertDeparted(ctx context.Context, batchID string) error
+	Create(ctx context.Context, e *Exception) error
+	GetByID(ctx context.Context, id string) (*Exception, error)
+	ListByBatch(ctx context.Context, batchID string) ([]*Exception, error)
+	Resolve(ctx context.Context, id string, status ExceptionStatus, resolution, resolvedBy string) error
+}
+
 type DisputeRepository interface {
 	Create(ctx context.Context, d *Dispute) error
 	GetByID(ctx context.Context, id string) (*Dispute, error)

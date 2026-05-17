@@ -118,6 +118,43 @@ func toDisputeDTO(d *payroll.Dispute) disputeDTO {
 	return out
 }
 
+type exceptionDTO struct {
+	ID         string  `json:"id"`
+	BatchID    string  `json:"batch_id"`
+	EntryID    string  `json:"entry_id"`
+	UserID     string  `json:"user_id"`
+	Kind       string  `json:"kind"`
+	Status     string  `json:"status"`
+	Detail     string  `json:"detail"`
+	Resolution string  `json:"resolution"`
+	ResolvedBy *string `json:"resolved_by,omitempty"`
+	ResolvedAt *string `json:"resolved_at,omitempty"`
+	CreatedAt  string  `json:"created_at"`
+}
+
+func toExceptionDTO(e *payroll.Exception) exceptionDTO {
+	out := exceptionDTO{
+		ID:         e.ID,
+		BatchID:    e.BatchID,
+		EntryID:    e.EntryID,
+		UserID:     e.UserID,
+		Kind:       string(e.Kind),
+		Status:     string(e.Status),
+		Detail:     e.Detail,
+		Resolution: e.Resolution,
+		CreatedAt:  e.CreatedAt.UTC().Format(time.RFC3339),
+	}
+	if e.ResolvedBy != nil {
+		s := *e.ResolvedBy
+		out.ResolvedBy = &s
+	}
+	if e.ResolvedAt != nil {
+		s := e.ResolvedAt.UTC().Format(time.RFC3339)
+		out.ResolvedAt = &s
+	}
+	return out
+}
+
 // ----- Inputs / Outputs -----
 
 type createBatchInput struct {
@@ -183,6 +220,34 @@ type openDisputeInput struct {
 type disputeOutput struct {
 	Body struct {
 		Dispute disputeDTO `json:"dispute"`
+	}
+}
+
+type listExceptionsOutput struct {
+	Body struct {
+		Items []exceptionDTO `json:"items"`
+	}
+}
+
+type flagExceptionInput struct {
+	ID   string `path:"id" format:"uuid" doc:"Payroll batch id"`
+	Body struct {
+		EntryID string `json:"entry_id" format:"uuid"`
+		Detail  string `json:"detail" maxLength:"500"`
+	}
+}
+
+type resolveExceptionInput struct {
+	ID   string `path:"id" format:"uuid" doc:"Payroll exception id"`
+	Body struct {
+		Status     string `json:"status" enum:"resolved,excluded"`
+		Resolution string `json:"resolution" maxLength:"500"`
+	}
+}
+
+type exceptionOutput struct {
+	Body struct {
+		Exception exceptionDTO `json:"exception"`
 	}
 }
 
@@ -264,6 +329,35 @@ func (a *API) Register(api huma.API) {
 		Tags:        []string{"employee", "payroll"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.listMyDisputes)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "listPayrollExceptions",
+		Method:      http.MethodGet,
+		Path:        "/api/admin/payroll/batches/{id}/exceptions",
+		Summary:     "List a batch's settlement exceptions (re-runs departed-employee detection)",
+		Tags:        []string{"admin", "payroll"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.listExceptions)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "flagPayrollException",
+		Method:        http.MethodPost,
+		Path:          "/api/admin/payroll/batches/{id}/exceptions",
+		Summary:       "Flag a batch entry with a manual deduction-failed exception",
+		Tags:          []string{"admin", "payroll"},
+		Security:      []map[string][]string{{"bearer": {}}},
+		DefaultStatus: http.StatusCreated,
+	}, a.flagException)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "resolvePayrollException",
+		Method:        http.MethodPost,
+		Path:          "/api/admin/payroll/exceptions/{id}/resolve",
+		Summary:       "Resolve a settlement exception (resolved or excluded)",
+		Tags:          []string{"admin", "payroll"},
+		Security:      []map[string][]string{{"bearer": {}}},
+		DefaultStatus: http.StatusNoContent,
+	}, a.resolveException)
 }
 
 // ----- Auth helpers -----
@@ -438,15 +532,64 @@ func (a *API) listMyDisputes(ctx context.Context, _ *struct{}) (*listDisputesOut
 	return &resp, nil
 }
 
+func (a *API) listExceptions(ctx context.Context, in *batchIDInput) (*listExceptionsOutput, error) {
+	if _, err := a.requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	exs, err := a.Svc.ListExceptions(ctx, in.ID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp listExceptionsOutput
+	resp.Body.Items = make([]exceptionDTO, 0, len(exs))
+	for _, e := range exs {
+		resp.Body.Items = append(resp.Body.Items, toExceptionDTO(e))
+	}
+	return &resp, nil
+}
+
+func (a *API) flagException(ctx context.Context, in *flagExceptionInput) (*exceptionOutput, error) {
+	u, err := a.requireAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	e, err := a.Svc.FlagException(ctx, payroll.FlagExceptionInput{
+		BatchID:   in.ID,
+		EntryID:   in.Body.EntryID,
+		Detail:    in.Body.Detail,
+		FlaggedBy: u.ID,
+	})
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp exceptionOutput
+	resp.Body.Exception = toExceptionDTO(e)
+	return &resp, nil
+}
+
+func (a *API) resolveException(ctx context.Context, in *resolveExceptionInput) (*struct{}, error) {
+	u, err := a.requireAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.Svc.ResolveException(ctx, in.ID, payroll.ExceptionStatus(in.Body.Status), in.Body.Resolution, u.ID); err != nil {
+		return nil, mapErr(err)
+	}
+	return &struct{}{}, nil
+}
+
 // mapErr translates payroll sentinels to huma HTTP errors.
 func mapErr(err error) error {
 	switch {
 	case errors.Is(err, payroll.ErrBatchNotFound),
 		errors.Is(err, payroll.ErrEntryNotFound),
-		errors.Is(err, payroll.ErrDisputeNotFound):
+		errors.Is(err, payroll.ErrDisputeNotFound),
+		errors.Is(err, payroll.ErrExceptionNotFound):
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, payroll.ErrForbidden):
 		return huma.Error403Forbidden(err.Error())
+	case errors.Is(err, payroll.ErrInvalidException):
+		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, payroll.ErrBatchLocked),
 		errors.Is(err, payroll.ErrBatchPeriodExists),
 		errors.Is(err, payroll.ErrInvalidTransition):

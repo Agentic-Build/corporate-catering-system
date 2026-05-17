@@ -209,6 +209,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/payroll/batches/{id}/exceptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a batch's settlement exceptions (re-runs departed-employee detection) */
+        get: operations["listPayrollExceptions"];
+        put?: never;
+        /** Flag a batch entry with a manual deduction-failed exception */
+        post: operations["flagPayrollException"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/payroll/batches/{id}/lock": {
         parameters: {
             query?: never;
@@ -254,6 +272,23 @@ export interface paths {
         put?: never;
         /** Resolve a payroll dispute (refund or reject) */
         post: operations["resolvePayrollDispute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/payroll/exceptions/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve a settlement exception (resolved or excluded) */
+        post: operations["resolvePayrollException"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1493,6 +1528,28 @@ export interface components {
              */
             type: string;
         };
+        ExceptionDTO: {
+            batch_id: string;
+            created_at: string;
+            detail: string;
+            entry_id: string;
+            id: string;
+            kind: string;
+            resolution: string;
+            resolved_at?: string;
+            resolved_by?: string;
+            status: string;
+            user_id: string;
+        };
+        ExceptionOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ExceptionOutputBody.json
+             */
+            readonly $schema?: string;
+            exception: components["schemas"]["ExceptionDTO"];
+        };
         FavoriteChipDTO: {
             available_today: boolean;
             menu_item_id: string;
@@ -1511,6 +1568,17 @@ export interface components {
             /** @enum {string} */
             category: "wrong_item" | "missing_item" | "quality" | "portion" | "hygiene" | "other";
             description: string;
+        };
+        FlagExceptionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/FlagExceptionInputBody.json
+             */
+            readonly $schema?: string;
+            detail: string;
+            /** Format: uuid */
+            entry_id: string;
         };
         HomeOutputBody: {
             /**
@@ -1626,6 +1694,15 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["EmployeeMenuItemDTO"][] | null;
+        };
+        ListExceptionsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListExceptionsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["ExceptionDTO"][] | null;
         };
         ListFavoritesOutputBody: {
             /**
@@ -2078,6 +2155,17 @@ export interface components {
             resolution: string;
             /** @enum {string} */
             status: "resolved_refund" | "resolved_reject";
+        };
+        ResolveExceptionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ResolveExceptionInputBody.json
+             */
+            readonly $schema?: string;
+            resolution: string;
+            /** @enum {string} */
+            status: "resolved" | "excluded";
         };
         ResolveInputBody: {
             /**
@@ -2696,6 +2784,73 @@ export interface operations {
             };
         };
     };
+    listPayrollExceptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListExceptionsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    flagPayrollException: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Payroll batch id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FlagExceptionInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExceptionOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     lockPayrollBatch: {
         parameters: {
             query?: never;
@@ -2768,6 +2923,40 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ResolveDisputeInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    resolvePayrollException: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Payroll exception id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveExceptionInputBody"];
             };
         };
         responses: {

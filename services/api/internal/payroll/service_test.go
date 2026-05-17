@@ -65,15 +65,16 @@ func setup(t *testing.T) (*pgxpool.Pool, *payroll.Service, func()) {
 	outboxRepo := opg.NewOutboxRepo(pool)
 
 	svc := &payroll.Service{
-		Pool:     pool,
-		Batches:  ppg.NewBatchRepo(pool),
-		Entries:  ppg.NewEntryRepo(pool),
-		Disputes: ppg.NewDisputeRepo(pool),
-		Orders:   orderRepo,
-		OrderTx:  orderRepo,
-		Audit:    auditRepo,
-		Outbox:   outboxRepo,
-		Clock:    fixedClock{T: time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)},
+		Pool:       pool,
+		Batches:    ppg.NewBatchRepo(pool),
+		Entries:    ppg.NewEntryRepo(pool),
+		Disputes:   ppg.NewDisputeRepo(pool),
+		Exceptions: ppg.NewExceptionRepo(pool),
+		Orders:     orderRepo,
+		OrderTx:    orderRepo,
+		Audit:      auditRepo,
+		Outbox:     outboxRepo,
+		Clock:      fixedClock{T: time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)},
 	}
 	cleanup := func() {
 		pool.Close()
@@ -469,4 +470,80 @@ func TestService_ResolveDispute_Reject(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx,
 		`SELECT status::text FROM "order" WHERE id=$1`, orderID).Scan(&orderStatus))
 	assert.Equal(t, string(order.StatusPickedUp), orderStatus, "reject must not transition order")
+}
+
+// ---------- Exception list tests ----------
+
+func TestService_Exceptions_DetectFlagResolve(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	activeUser := seedEmployeeUser(t, pool)
+	departedUser := seedEmployeeUser(t, pool)
+	_, err := pool.Exec(ctx, `UPDATE "user" SET status='terminated' WHERE id=$1`, departedUser)
+	require.NoError(t, err)
+
+	vendorID := seedVendor(t, pool)
+	start := time.Date(2026, time.June, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, -1)
+	day := time.Date(2026, time.June, 10, 0, 0, 0, 0, time.UTC)
+	seedPickedUpOrder(t, pool, activeUser, vendorID, day, 12000)
+	seedPickedUpOrder(t, pool, departedUser, vendorID, day, 15000)
+
+	batch, err := svc.BuildDraft(ctx, payroll.BuildDraftInput{PeriodStart: start, PeriodEnd: end})
+	require.NoError(t, err)
+
+	// BuildDraft auto-detected the departed employee's entry only.
+	exs, err := svc.ListExceptions(ctx, batch.ID)
+	require.NoError(t, err)
+	require.Len(t, exs, 1)
+	assert.Equal(t, payroll.ExceptionEmployeeDeparted, exs[0].Kind)
+	assert.Equal(t, departedUser, exs[0].UserID)
+	assert.Equal(t, payroll.ExceptionOpen, exs[0].Status)
+
+	// Re-listing re-runs detection but must not duplicate.
+	exs, err = svc.ListExceptions(ctx, batch.ID)
+	require.NoError(t, err)
+	require.Len(t, exs, 1)
+	departedExID := exs[0].ID
+
+	// Flag the active user's entry as a manual deduction failure.
+	entries, err := svc.ListBatchEntries(ctx, batch.ID)
+	require.NoError(t, err)
+	var activeEntryID string
+	for _, e := range entries {
+		if e.UserID == activeUser {
+			activeEntryID = e.ID
+		}
+	}
+	require.NotEmpty(t, activeEntryID)
+	admin := seedAdminUser(t, pool)
+	flagged, err := svc.FlagException(ctx, payroll.FlagExceptionInput{
+		BatchID: batch.ID, EntryID: activeEntryID, Detail: "銀行帳號錯誤", FlaggedBy: admin,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, payroll.ExceptionDeductionFailed, flagged.Kind)
+
+	// Resolve the departed-employee exception as excluded.
+	require.NoError(t, svc.ResolveException(ctx, departedExID, payroll.ExceptionExcluded, "員工已離職", admin))
+
+	exs, err = svc.ListExceptions(ctx, batch.ID)
+	require.NoError(t, err)
+	require.Len(t, exs, 2)
+	for _, e := range exs {
+		if e.Kind == payroll.ExceptionEmployeeDeparted {
+			assert.Equal(t, payroll.ExceptionExcluded, e.Status)
+		}
+	}
+
+	// An invalid resolution status is rejected.
+	err = svc.ResolveException(ctx, departedExID, payroll.ExceptionOpen, "", admin)
+	assert.ErrorIs(t, err, payroll.ErrInvalidException)
+
+	// Flagging an entry that is not part of the batch is rejected.
+	_, err = svc.FlagException(ctx, payroll.FlagExceptionInput{
+		BatchID: batch.ID, EntryID: "00000000-0000-0000-0000-000000000000", Detail: "x", FlaggedBy: admin,
+	})
+	require.Error(t, err)
 }

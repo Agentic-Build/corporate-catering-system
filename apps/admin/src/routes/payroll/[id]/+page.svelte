@@ -36,6 +36,17 @@
     if (timer) clearInterval(timer);
   });
 
+  const exceptions = $derived(data.exceptions ?? []);
+  const exKindLabel = {
+    employee_departed: "員工已離職／停用",
+    deduction_failed: "扣款失敗",
+  } as Record<string, string>;
+  const exStatusMeta = {
+    open: { tone: "warning", label: "待處理" },
+    resolved: { tone: "success", label: "已處理" },
+    excluded: { tone: "neutral", label: "已排除出 CSV" },
+  } as Record<string, { tone: "warning" | "success" | "neutral"; label: string }>;
+
   const totals = $derived.by(() => {
     let amount = 0;
     let refunded = 0;
@@ -107,6 +118,89 @@
       <p class="text-xs text-tb-slate-500">此批次已關閉</p>
     {/if}
   </div>
+</Card>
+
+<Card
+  title="月結例外清單"
+  description="離職／停用員工自動偵測;扣款失敗可手動標記。排除的明細不會出現在 HR CSV。"
+>
+  {#if form?.exError}
+    <p class="mb-3 rounded-tb-xl bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">
+      {form.exError}
+    </p>
+  {/if}
+  {#if exceptions.length === 0}
+    <p class="text-sm text-tb-slate-500">目前沒有偵測到例外。</p>
+  {:else}
+    <ul class="divide-y divide-tb-slate-100">
+      {#each exceptions as ex (ex.id)}
+        {@const meta = exStatusMeta[ex.status] ?? { tone: "neutral", label: ex.status }}
+        <li class="py-3">
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <span class="text-sm font-semibold text-tb-slate-900">
+                {exKindLabel[ex.kind] ?? ex.kind}
+              </span>
+              <span class="font-jetbrains-mono text-xs text-tb-slate-500">
+                · 員工 {ex.user_id.slice(0, 8)}
+              </span>
+            </div>
+            <StateTag tone={meta.tone}>{meta.label}</StateTag>
+          </div>
+          {#if ex.detail}
+            <p class="mt-1 text-xs text-tb-slate-500">{ex.detail}</p>
+          {/if}
+          {#if ex.resolution}
+            <p class="mt-1 text-xs text-tb-slate-600">處理說明:{ex.resolution}</p>
+          {/if}
+          {#if ex.status === "open"}
+            <div class="mt-2 flex gap-2">
+              <form method="POST" action="?/resolveException">
+                <input type="hidden" name="exception_id" value={ex.id} />
+                <input type="hidden" name="status" value="resolved" />
+                <Button variant="secondary" size="sm" type="submit">標記已處理</Button>
+              </form>
+              <form method="POST" action="?/resolveException">
+                <input type="hidden" name="exception_id" value={ex.id} />
+                <input type="hidden" name="status" value="excluded" />
+                <Button variant="danger" size="sm" type="submit">排除出 CSV</Button>
+              </form>
+            </div>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+  {/if}
+  {#if b.status === "draft" && entries.length > 0}
+    <form
+      method="POST"
+      action="?/flagException"
+      class="mt-4 flex flex-wrap items-end gap-2 border-t border-tb-slate-100 pt-4"
+    >
+      <label class="flex flex-col gap-1 text-xs">
+        <span class="font-semibold text-tb-slate-600">手動標記扣款失敗</span>
+        <select
+          name="entry_id"
+          required
+          class="rounded-tb-lg border border-tb-slate-300 px-3 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
+        >
+          <option value="" disabled selected>選擇代扣明細</option>
+          {#each entries as e (e.id)}
+            <option value={e.id}>
+              員工 {e.user_id.slice(0, 8)} · {ntd(Number(e.amount_minor))}
+            </option>
+          {/each}
+        </select>
+      </label>
+      <input
+        name="detail"
+        maxlength="500"
+        placeholder="原因（選填）"
+        class="flex-1 rounded-tb-lg border border-tb-slate-300 px-3 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
+      />
+      <Button variant="secondary" size="sm" type="submit">標記例外</Button>
+    </form>
+  {/if}
 </Card>
 
 {#if entries.length === 0}

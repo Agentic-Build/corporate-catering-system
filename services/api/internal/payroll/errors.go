@@ -10,4 +10,6 @@ var (
 	ErrBatchPeriodExists = errors.New("payroll: batch for this period already exists")
 	ErrInvalidTransition = errors.New("payroll: invalid state transition")
 	ErrForbidden         = errors.New("payroll: forbidden")
+	ErrExceptionNotFound = errors.New("payroll: exception not found")
+	ErrInvalidException  = errors.New("payroll: invalid exception request")
 )

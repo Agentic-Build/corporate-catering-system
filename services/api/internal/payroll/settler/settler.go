@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -53,18 +54,25 @@ type OutboxAppender interface {
 	AppendTx(ctx context.Context, tx pgx.Tx, aggregateType, aggregateID, subject string, payload map[string]any, headers map[string]any) error
 }
 
+// ExceptionLister loads a batch's payroll exceptions so the CSV can flag
+// affected entries and drop the ones a welfare admin marked excluded.
+type ExceptionLister interface {
+	ListByBatch(ctx context.Context, batchID string) ([]*payroll.Exception, error)
+}
+
 // Settler wires together the NATS consumer, repos, storage, and audit/outbox
 // dependencies needed to process payroll.batch_locked.v1 events.
 type Settler struct {
-	JS      jetstream.JetStream
-	Pool    *pgxpool.Pool
-	Batches payroll.BatchRepository
-	Entries payroll.EntryRepository
-	Users   UserLookup
-	Storage *storage.S3Client
-	Logger  *slog.Logger
-	Audit   AuditWriter
-	Outbox  OutboxAppender
+	JS         jetstream.JetStream
+	Pool       *pgxpool.Pool
+	Batches    payroll.BatchRepository
+	Entries    payroll.EntryRepository
+	Users      UserLookup
+	Exceptions ExceptionLister
+	Storage    *storage.S3Client
+	Logger     *slog.Logger
+	Audit      AuditWriter
+	Outbox     OutboxAppender
 }
 
 // Run blocks until ctx is cancelled or an unrecoverable error occurs. The
@@ -202,6 +210,11 @@ func (s *Settler) handle(ctx context.Context, data []byte) error {
 //   - Header row
 //   - One row per entry, with user details resolved via Users.GetByID
 //
+// The trailing `exception` column flags entries that carry a payroll
+// exception (departed employee / failed deduction). Entries whose exception
+// a welfare admin marked `excluded` are dropped from the file entirely — HR
+// must not deduct them this period.
+//
 // A failed user lookup logs a warning and writes a "?" placeholder row rather
 // than aborting the whole batch — HR can still reconcile from order_ids.
 func (s *Settler) renderCSV(ctx context.Context, batch *payroll.Batch, entries []*payroll.Entry) ([]byte, error) {
@@ -211,10 +224,27 @@ func (s *Settler) renderCSV(ctx context.Context, batch *payroll.Batch, entries [
 	buf.WriteByte(0xBB)
 	buf.WriteByte(0xBF)
 
+	// Group the batch's exceptions by entry: excluded -> drop the row,
+	// otherwise surface the kinds in the exception column.
+	excluded := map[string]bool{}
+	flagged := map[string][]string{}
+	if s.Exceptions != nil {
+		exs, err := s.Exceptions.ListByBatch(ctx, batch.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list exceptions: %w", err)
+		}
+		for _, ex := range exs {
+			if ex.Status == payroll.ExceptionExcluded {
+				excluded[ex.EntryID] = true
+			}
+			flagged[ex.EntryID] = append(flagged[ex.EntryID], string(ex.Kind))
+		}
+	}
+
 	w := csv.NewWriter(&buf)
 	if err := w.Write([]string{
 		"employee_id", "primary_email", "display_name", "plant", "department",
-		"amount_ntd", "refunded_ntd", "net_ntd", "batch_period",
+		"amount_ntd", "refunded_ntd", "net_ntd", "batch_period", "exception",
 	}); err != nil {
 		return nil, err
 	}
@@ -223,6 +253,9 @@ func (s *Settler) renderCSV(ctx context.Context, batch *payroll.Batch, entries [
 		batch.PeriodEnd.Format("2006-01-02"),
 	)
 	for _, e := range entries {
+		if excluded[e.ID] {
+			continue
+		}
 		u, err := s.Users.GetByID(ctx, e.UserID)
 		if err != nil {
 			s.Logger.Warn("user lookup failed", "user_id", e.UserID, "err", err)
@@ -250,6 +283,7 @@ func (s *Settler) renderCSV(ctx context.Context, batch *payroll.Batch, entries [
 			fmt.Sprintf("%d", e.RefundedMinor),
 			fmt.Sprintf("%d", e.AmountMinor-e.RefundedMinor),
 			period,
+			strings.Join(flagged[e.ID], ";"),
 		}); err != nil {
 			return nil, err
 		}
