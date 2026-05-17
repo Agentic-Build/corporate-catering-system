@@ -615,7 +615,8 @@ export interface paths {
         };
         /** Get an order by ID (owner only) */
         get: operations["getMyOrder"];
-        put?: never;
+        /** Modify my order's items before cutoff (owner only) */
+        put: operations["modifyMyOrder"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1752,6 +1753,15 @@ export interface components {
             source_consumer: string;
             source_stream: string;
             source_subject: string;
+        };
+        ModifyOrderInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ModifyOrderInputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["Item"][] | null;
         };
         OpenDisputeInputBody: {
             /**
@@ -3556,6 +3566,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    modifyMyOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModifyOrderInputBody"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

@@ -290,6 +290,214 @@ RETURNING id`, testPlant).Scan(&otherID))
 	assert.ErrorIs(t, err, order.ErrForbidden)
 }
 
+// seedExtraItem adds a second menu item (with its own supply row) for the
+// given vendor so modify tests can add/remove items. capacity == initial remain.
+func seedExtraItem(t *testing.T, pool *pgxpool.Pool, vendorID string, priceMinor, capacity int) (itemID string) {
+	t.Helper()
+	ctx := context.Background()
+	require.NoError(t, pool.QueryRow(ctx, `
+INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags, badges)
+VALUES ($1, 'Item B', '', $2, 'active', ARRAY[]::text[], ARRAY[]::text[])
+RETURNING id`, vendorID, priceMinor).Scan(&itemID))
+	_, err := pool.Exec(ctx, `
+INSERT INTO meal_supply (menu_item_id, supply_date, capacity, remain, pickup_window, eta_label, cutoff_at)
+VALUES ($1, $2, $3, $3, '', '', $4)`, itemID, testSupplyDate, capacity, testCutoffAt)
+	require.NoError(t, err)
+	return itemID
+}
+
+func remainOf(t *testing.T, pool *pgxpool.Pool, itemID string) int {
+	t.Helper()
+	var remain int
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT remain FROM meal_supply WHERE menu_item_id=$1`, itemID).Scan(&remain))
+	return remain
+}
+
+func TestService_Modify_Happy(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	vendorID, itemA, userID := seedScenario(t, pool, 5) // A: price 110, cap 5
+	itemB := seedExtraItem(t, pool, vendorID, 200, 10)  // B: price 200, cap 10
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemA, Qty: 2}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 3, remainOf(t, pool, itemA)) // 5 - 2
+
+	// Modify: A 2→1 (restore 1), add B 3 (decrement 3).
+	got, err := svc.Modify(context.Background(), order.ModifyOrderInput{
+		OrderID: o.ID,
+		UserID:  userID,
+		Items:   []order.PlaceItem{{MenuItemID: itemA, Qty: 1}, {MenuItemID: itemB, Qty: 3}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, order.StatusPlaced, got.Status)
+	assert.Equal(t, int64(110*1+200*3), got.TotalPriceMinor)
+	require.Len(t, got.Items, 2)
+	assert.Equal(t, 4, remainOf(t, pool, itemA)) // 3 + 1 restored
+	assert.Equal(t, 7, remainOf(t, pool, itemB)) // 10 - 3
+
+	// Modify again: drop A entirely (restore 1), B 3→2 (restore 1).
+	got, err = svc.Modify(context.Background(), order.ModifyOrderInput{
+		OrderID: o.ID,
+		UserID:  userID,
+		Items:   []order.PlaceItem{{MenuItemID: itemB, Qty: 2}},
+	})
+	require.NoError(t, err)
+	require.Len(t, got.Items, 1)
+	assert.Equal(t, 5, remainOf(t, pool, itemA)) // fully restored
+	assert.Equal(t, 8, remainOf(t, pool, itemB)) // 7 + 1
+
+	// Two modify calls each leave an audit + outbox row (on top of place).
+	var auditCount, outboxCount int
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM audit_event WHERE target_id=$1 AND action='order.modify'`, o.ID).Scan(&auditCount))
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM outbox_event WHERE aggregate_id::text=$1 AND subject='order.modified.v1'`, o.ID).Scan(&outboxCount))
+	assert.Equal(t, 2, auditCount)
+	assert.Equal(t, 2, outboxCount)
+}
+
+func TestService_Modify_OutOfStock(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemA, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemA, Qty: 2}},
+	})
+	require.NoError(t, err)
+
+	// Ask for 6 > capacity 5 → out of stock, full rollback.
+	_, err = svc.Modify(context.Background(), order.ModifyOrderInput{
+		OrderID: o.ID,
+		UserID:  userID,
+		Items:   []order.PlaceItem{{MenuItemID: itemA, Qty: 6}},
+	})
+	assert.ErrorIs(t, err, qmod.ErrOutOfStock)
+
+	// Order items and quota unchanged.
+	after, err := svc.Get(context.Background(), o.ID, userID)
+	require.NoError(t, err)
+	require.Len(t, after.Items, 1)
+	assert.Equal(t, 2, after.Items[0].Qty)
+	assert.Equal(t, int64(220), after.TotalPriceMinor)
+	assert.Equal(t, 3, remainOf(t, pool, itemA)) // still 5 - 2
+}
+
+func TestService_Modify_AfterCutoff(t *testing.T) {
+	pool, _, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemA, userID := seedScenario(t, pool, 5)
+
+	// Clock before cutoff for Place.
+	svcEarly := &order.Service{
+		Pool: pool, Orders: opg.NewOrderRepo(pool), OrdersTx: opg.NewOrderRepo(pool),
+		StateEvents: opg.NewStateEventRepo(pool), StateTx: opg.NewStateEventRepo(pool),
+		Audit: opg.NewAuditRepo(pool), AuditTx: opg.NewAuditRepo(pool),
+		Outbox: opg.NewOutboxRepo(pool), OutboxTx: opg.NewOutboxRepo(pool),
+		QuotaTx: qpg.NewSupplyRepo(pool), Items: mpg.NewItemRepo(pool),
+		Plants: vpg.NewPlantMappingRepo(pool), Clock: fixedClock{T: testClockTime},
+	}
+	o, err := svcEarly.Place(context.Background(), order.PlaceOrderInput{
+		UserID: userID, Plant: testPlant, SupplyDate: testSupplyDate,
+		Items: []order.PlaceItem{{MenuItemID: itemA, Qty: 1}},
+	})
+	require.NoError(t, err)
+
+	// Clock past cutoff for Modify.
+	svcLate := *svcEarly
+	svcLate.Clock = fixedClock{T: testCutoffAt.Add(time.Minute)}
+	_, err = svcLate.Modify(context.Background(), order.ModifyOrderInput{
+		OrderID: o.ID, UserID: userID,
+		Items: []order.PlaceItem{{MenuItemID: itemA, Qty: 2}},
+	})
+	assert.ErrorIs(t, err, order.ErrCutoffPassed)
+}
+
+func TestService_Modify_NotOwner(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemA, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID: userID, Plant: testPlant, SupplyDate: testSupplyDate,
+		Items: []order.PlaceItem{{MenuItemID: itemA, Qty: 1}},
+	})
+	require.NoError(t, err)
+
+	var otherID string
+	require.NoError(t, pool.QueryRow(context.Background(), `
+INSERT INTO "user" (primary_email, display_name, role, status, plant)
+VALUES ('other2@test.com', 'Other', 'employee', 'active', $1)
+RETURNING id`, testPlant).Scan(&otherID))
+
+	_, err = svc.Modify(context.Background(), order.ModifyOrderInput{
+		OrderID: o.ID, UserID: otherID,
+		Items: []order.PlaceItem{{MenuItemID: itemA, Qty: 2}},
+	})
+	assert.ErrorIs(t, err, order.ErrForbidden)
+}
+
+func TestService_Modify_NotPlaced(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemA, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID: userID, Plant: testPlant, SupplyDate: testSupplyDate,
+		Items: []order.PlaceItem{{MenuItemID: itemA, Qty: 1}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, svc.Cancel(context.Background(), o.ID, userID))
+
+	_, err = svc.Modify(context.Background(), order.ModifyOrderInput{
+		OrderID: o.ID, UserID: userID,
+		Items: []order.PlaceItem{{MenuItemID: itemA, Qty: 2}},
+	})
+	assert.ErrorIs(t, err, order.ErrInvalidTransition)
+}
+
+func TestService_Modify_CrossVendor(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+
+	_, itemA, userID := seedScenario(t, pool, 5)
+
+	o, err := svc.Place(context.Background(), order.PlaceOrderInput{
+		UserID: userID, Plant: testPlant, SupplyDate: testSupplyDate,
+		Items: []order.PlaceItem{{MenuItemID: itemA, Qty: 1}},
+	})
+	require.NoError(t, err)
+
+	// A second vendor with its own item — modifying to add it must be rejected.
+	var otherVendor string
+	require.NoError(t, pool.QueryRow(context.Background(), `
+INSERT INTO vendor (display_name, legal_name, contact_email, status)
+VALUES ('Other', 'Other Ltd', 'other3@vendor.com', 'approved')
+RETURNING id`).Scan(&otherVendor))
+	foreignItem := seedExtraItem(t, pool, otherVendor, 150, 10)
+
+	_, err = svc.Modify(context.Background(), order.ModifyOrderInput{
+		OrderID: o.ID, UserID: userID,
+		Items: []order.PlaceItem{{MenuItemID: itemA, Qty: 1}, {MenuItemID: foreignItem, Qty: 1}},
+	})
+	assert.ErrorIs(t, err, order.ErrMultiVendor)
+}
+
 // forceStatus rewrites the order's status (and optionally totp_secret) directly
 // in the DB so tests can land an order in a state that normally requires a
 // scheduler tick (cutoff, ready) without having to mock time.

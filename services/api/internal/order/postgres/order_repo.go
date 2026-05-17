@@ -129,6 +129,37 @@ func (r *OrderRepo) UpdateStatus(ctx context.Context, id string, from, to order.
 	})
 }
 
+// ReplaceItemsTx swaps the order's item rows for a new set and updates the
+// stored total, all inside the caller's transaction. order_item has no
+// append-only guard, so deleting and re-inserting is the simplest correct
+// way to apply a full-replacement edit. Callers must adjust quota separately.
+func (r *OrderRepo) ReplaceItemsTx(ctx context.Context, tx pgx.Tx, orderID string, items []order.Item, totalMinor int64) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM order_item WHERE order_id=$1`, orderID); err != nil {
+		return fmt.Errorf("delete order_items: %w", err)
+	}
+	for i := range items {
+		it := &items[i]
+		err := tx.QueryRow(ctx, `
+INSERT INTO order_item (order_id, menu_item_id, qty, unit_price_minor)
+VALUES ($1,$2,$3,$4) RETURNING id`,
+			orderID, it.MenuItemID, it.Qty, it.UnitPriceMinor,
+		).Scan(&it.ID)
+		if err != nil {
+			return fmt.Errorf("insert order_item: %w", err)
+		}
+		it.OrderID = orderID
+	}
+	tag, err := tx.Exec(ctx, `
+UPDATE "order" SET total_price_minor=$2, updated_at=now() WHERE id=$1`, orderID, totalMinor)
+	if err != nil {
+		return fmt.Errorf("update order total: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return order.ErrOrderNotFound
+	}
+	return nil
+}
+
 // MarkReadyTx flips a placed/cutoff order to ready, stamping ready_at.
 func (r *OrderRepo) MarkReadyTx(ctx context.Context, tx pgx.Tx, id string) error {
 	tag, err := tx.Exec(ctx, `

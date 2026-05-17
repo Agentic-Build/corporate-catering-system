@@ -7,6 +7,8 @@
 
   let { data, form } = $props();
   const o = $derived(data.order);
+  // OrderDTO.items is nullable in the contract; the API always sends an array.
+  const items = $derived(o.items ?? []);
 
   const statusTone: Record<string, "info" | "neutral" | "warning" | "danger" | "success"> = {
     draft: "neutral",
@@ -65,6 +67,53 @@
   // ── rating form local state ──
   let starValue = $state(0);
   const submittedRating = $derived(form?.rating);
+
+  // ── modify (edit order items) state ──
+  let editing = $state(false);
+  let draft = $state<Record<string, number>>({});
+
+  // qty this order currently holds, keyed by menu_item_id.
+  const origQty = $derived(Object.fromEntries(items.map((it) => [it.menu_item_id, it.qty])));
+
+  // Rows for the edit form: the vendor's menu on the supply date, plus any
+  // item already on the order that is no longer listed that day.
+  const editRows = $derived.by(() => {
+    const rows = new Map<string, { id: string; name: string; price: number; remain: number }>();
+    for (const m of data.menu ?? []) {
+      rows.set(m.id, { id: m.id, name: m.name, price: m.price_minor, remain: m.remain });
+    }
+    for (const it of items) {
+      if (!rows.has(it.menu_item_id)) {
+        rows.set(it.menu_item_id, {
+          id: it.menu_item_id,
+          name: it.menu_item_id.slice(0, 8),
+          price: it.unit_price_minor,
+          remain: 0,
+        });
+      }
+    }
+    return [...rows.values()];
+  });
+
+  // Effective max for a row = quota still free + qty this order already holds.
+  function maxQty(row: { id: string; remain: number }): number {
+    return row.remain + (origQty[row.id] ?? 0);
+  }
+
+  const draftItems = $derived(
+    Object.entries(draft)
+      .filter(([, q]) => q > 0)
+      .map(([menu_item_id, qty]) => ({ menu_item_id, qty })),
+  );
+  const draftTotal = $derived(editRows.reduce((sum, r) => sum + r.price * (draft[r.id] ?? 0), 0));
+
+  function startEdit() {
+    draft = Object.fromEntries(items.map((it) => [it.menu_item_id, it.qty]));
+    editing = true;
+  }
+  function setQty(id: string, n: number) {
+    draft = { ...draft, [id]: Math.max(0, n) };
+  }
 </script>
 
 <a
@@ -107,20 +156,86 @@
     </div>
   </Card>
 
-  <Card title="訂購項目">
-    <ul class="divide-y divide-tb-slate-100 text-sm">
-      {#each o.items as it (it.id)}
-        <li class="flex items-center justify-between gap-3 py-3">
-          <span class="font-jetbrains-mono text-xs text-tb-slate-600">
-            {it.menu_item_id.slice(0, 8)}
+  {#if o.status === "placed" && editing}
+    <Card title="編輯訂單" description="調整數量或加點同商家的其他餐點，截單前皆可修改。">
+      {#if form?.modifyError}
+        <p class="mb-3 rounded-tb-xl bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">
+          {form.modifyError}
+        </p>
+      {/if}
+      <form method="POST" action="?/modify" class="space-y-3">
+        <input type="hidden" name="items" value={JSON.stringify(draftItems)} />
+        <ul class="divide-y divide-tb-slate-100 text-sm">
+          {#each editRows as row (row.id)}
+            <li class="flex items-center justify-between gap-3 py-2.5">
+              <div class="min-w-0">
+                <p class="truncate font-semibold text-tb-slate-900">{row.name}</p>
+                <p class="font-jetbrains-mono text-xs text-tb-slate-500">
+                  ${row.price.toLocaleString()} · 可訂 {maxQty(row)}
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  onclick={() => setQty(row.id, (draft[row.id] ?? 0) - 1)}
+                  disabled={(draft[row.id] ?? 0) <= 0}
+                  aria-label={`減少 ${row.name}`}
+                  class="h-7 w-7 rounded-tb-lg border border-tb-slate-300 text-lg leading-none text-tb-slate-700 transition hover:border-tb-slate-500 disabled:opacity-30"
+                >
+                  −
+                </button>
+                <span class="w-6 text-center font-jetbrains-mono tabular-nums">
+                  {draft[row.id] ?? 0}
+                </span>
+                <button
+                  type="button"
+                  onclick={() => setQty(row.id, (draft[row.id] ?? 0) + 1)}
+                  disabled={(draft[row.id] ?? 0) >= maxQty(row)}
+                  aria-label={`增加 ${row.name}`}
+                  class="h-7 w-7 rounded-tb-lg border border-tb-slate-300 text-lg leading-none text-tb-slate-700 transition hover:border-tb-slate-500 disabled:opacity-30"
+                >
+                  +
+                </button>
+              </div>
+            </li>
+          {/each}
+        </ul>
+        <div class="flex items-center justify-between border-t border-tb-slate-100 pt-3">
+          <span class="text-sm text-tb-slate-600">修改後合計</span>
+          <span class="font-jetbrains-mono text-xl font-black tabular-nums text-tb-slate-900">
+            ${draftTotal.toLocaleString()}
           </span>
-          <span class="font-jetbrains-mono tabular-nums">
-            × {it.qty} · ${(it.unit_price_minor * it.qty).toLocaleString()}
-          </span>
-        </li>
-      {/each}
-    </ul>
-  </Card>
+        </div>
+        <div class="flex gap-2">
+          <Button variant="primary" size="md" type="submit" disabled={draftItems.length === 0}>
+            儲存修改
+          </Button>
+          <button
+            type="button"
+            onclick={() => (editing = false)}
+            class="rounded-tb-lg border border-tb-slate-300 px-3.5 py-2 text-sm font-semibold text-tb-slate-700 transition hover:border-tb-slate-500"
+          >
+            取消編輯
+          </button>
+        </div>
+      </form>
+    </Card>
+  {:else}
+    <Card title="訂購項目">
+      <ul class="divide-y divide-tb-slate-100 text-sm">
+        {#each items as it (it.id)}
+          <li class="flex items-center justify-between gap-3 py-3">
+            <span class="font-jetbrains-mono text-xs text-tb-slate-600">
+              {it.menu_item_id.slice(0, 8)}
+            </span>
+            <span class="font-jetbrains-mono tabular-nums">
+              × {it.qty} · ${(it.unit_price_minor * it.qty).toLocaleString()}
+            </span>
+          </li>
+        {/each}
+      </ul>
+    </Card>
+  {/if}
 
   <div class="flex flex-wrap items-center gap-2">
     {#if o.status === "ready"}
@@ -131,7 +246,14 @@
         <Icon name="qr" class="h-4 w-4" />出示領餐碼
       </a>
     {/if}
-    {#if o.status === "placed"}
+    {#if o.status === "placed" && !editing}
+      <button
+        type="button"
+        onclick={startEdit}
+        class="inline-flex items-center gap-2 rounded-tb-lg border border-tb-slate-300 px-3.5 py-2 text-sm font-semibold text-tb-slate-800 transition hover:border-tb-slate-500"
+      >
+        <Icon name="doc" class="h-4 w-4" />編輯訂單
+      </button>
       <form method="POST" action="?/cancel">
         <Button variant="danger" size="md" type="submit">取消訂單</Button>
       </form>

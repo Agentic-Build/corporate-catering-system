@@ -1426,6 +1426,25 @@ components:
                 - last_error
                 - first_seen_at
             type: object
+        ModifyOrderInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ModifyOrderInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/Item'
+                    type:
+                        - array
+                        - "null"
+            required:
+                - items
+            type: object
         OpenDisputeInputBody:
             additionalProperties: false
             properties:
@@ -3740,6 +3759,40 @@ paths:
             security:
                 - bearer: []
             summary: Get an order by ID (owner only)
+            tags:
+                - employee
+                - order
+        put:
+            operationId: modifyMyOrder
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ModifyOrderInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrderOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Modify my order's items before cutoff (owner only)
             tags:
                 - employee
                 - order

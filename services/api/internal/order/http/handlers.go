@@ -102,6 +102,16 @@ type orderIDInput struct {
 	ID string `path:"id" format:"uuid"`
 }
 
+type modifyOrderInput struct {
+	ID   string `path:"id" format:"uuid"`
+	Body struct {
+		Items []struct {
+			MenuItemID string `json:"menu_item_id" format:"uuid"`
+			Qty        int    `json:"qty" minimum:"1"`
+		} `json:"items"`
+	}
+}
+
 type orderOutput struct {
 	Body struct {
 		Order orderDTO `json:"order"`
@@ -214,6 +224,15 @@ func (a *API) Register(api huma.API) {
 		Tags:        []string{"employee", "order"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.get)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "modifyMyOrder",
+		Method:      http.MethodPut,
+		Path:        "/api/employee/orders/{id}",
+		Summary:     "Modify my order's items before cutoff (owner only)",
+		Tags:        []string{"employee", "order"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.modify)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "cancelMyOrder",
@@ -354,6 +373,31 @@ func (a *API) get(ctx context.Context, in *orderIDInput) (*orderOutput, error) {
 	return &resp, nil
 }
 
+func (a *API) modify(ctx context.Context, in *modifyOrderInput) (*orderOutput, error) {
+	u, err := a.requireEmployee(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(in.Body.Items) == 0 {
+		return nil, huma.Error400BadRequest("items required")
+	}
+	items := make([]order.PlaceItem, 0, len(in.Body.Items))
+	for _, it := range in.Body.Items {
+		items = append(items, order.PlaceItem{MenuItemID: it.MenuItemID, Qty: it.Qty})
+	}
+	o, err := a.Svc.Modify(ctx, order.ModifyOrderInput{
+		OrderID: in.ID,
+		UserID:  u.ID,
+		Items:   items,
+	})
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp orderOutput
+	resp.Body.Order = toDTO(o)
+	return &resp, nil
+}
+
 func (a *API) cancel(ctx context.Context, in *orderIDInput) (*struct{}, error) {
 	u, err := a.requireEmployee(ctx)
 	if err != nil {
@@ -457,6 +501,7 @@ func mapErr(err error) error {
 		errors.Is(err, quota.ErrSupplyNotFound):
 		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, order.ErrEmptyOrder),
+		errors.Is(err, order.ErrMultiVendor),
 		errors.Is(err, order.ErrVendorPlantMismatch),
 		errors.Is(err, order.ErrPlantMismatch):
 		return huma.Error400BadRequest(err.Error())

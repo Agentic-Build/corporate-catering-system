@@ -33,7 +33,17 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     if (cr.data) complaint = (cr.data.items ?? []).find((c) => c.order_id === params.id);
   }
 
-  return { user: locals.user, order, complaint };
+  // For a still-editable order, load the vendor's menu on the supply date so
+  // the edit form can show item names and let the employee add dishes.
+  let menu = undefined;
+  if (order.status === "placed") {
+    const mr = await client.GET("/api/employee/menu", {
+      params: { query: { plant: order.plant, day: order.supply_date } },
+    });
+    if (mr.data) menu = (mr.data.items ?? []).filter((m) => m.vendor_id === order.vendor_id);
+  }
+
+  return { user: locals.user, order, complaint, menu };
 };
 
 export const actions: Actions = {
@@ -44,6 +54,43 @@ export const actions: Actions = {
       params: { path: { id: params.id } },
     });
     if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    throw redirect(303, `/orders/${params.id}`);
+  },
+
+  // Modify a placed order's items before cutoff. The form submits a JSON
+  // array of {menu_item_id, qty}; qty 0 entries are dropped so an item can be
+  // removed by setting it to zero in the edit UI.
+  modify: async ({ request, locals, params }) => {
+    if (!locals.user) return fail(401, { modifyError: "unauthenticated" });
+    const fd = await request.formData();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(String(fd.get("items") ?? "[]"));
+    } catch {
+      return fail(400, { modifyError: "資料格式錯誤，請重新操作。" });
+    }
+    const items = (Array.isArray(parsed) ? parsed : [])
+      .filter(
+        (it): it is { menu_item_id: string; qty: number } =>
+          !!it && typeof it.menu_item_id === "string" && Number.isInteger(it.qty) && it.qty > 0,
+      )
+      .map((it) => ({ menu_item_id: it.menu_item_id, qty: it.qty }));
+    if (items.length === 0) {
+      return fail(400, { modifyError: "訂單至少需保留一個餐點；若要清空請改用取消訂單。" });
+    }
+    const client = createApiClient(API_BASE_URL, locals.apiToken);
+    const r = await client.PUT("/api/employee/orders/{id}", {
+      params: { path: { id: params.id } },
+      body: { items },
+    });
+    if (r.error) {
+      const status = r.response.status;
+      const msg =
+        status === 409
+          ? (r.error.detail ?? "餐點數量超過剩餘供應量，或已過截單時間。")
+          : (r.error.detail ?? "修改訂單失敗，請稍後再試。");
+      return fail(status, { modifyError: msg });
+    }
     throw redirect(303, `/orders/${params.id}`);
   },
 
