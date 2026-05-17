@@ -1,7 +1,29 @@
 <script lang="ts">
-  import { PageHeader, Card, StateTag, EmptyState, Icon } from "@tbite/ui";
+  import { PageHeader, Card, StateTag, EmptyState, Icon, Button } from "@tbite/ui";
 
-  let { data } = $props();
+  let { data, form } = $props();
+
+  const docKinds = [
+    { id: "business_license", label: "營業登記" },
+    { id: "food_safety_permit", label: "食品安全許可" },
+    { id: "tax_registration", label: "稅籍登記" },
+    { id: "insurance", label: "保險證明" },
+    { id: "other", label: "其他" },
+  ];
+
+  // When set, the upload form is locked to resupplying this specific document.
+  let resupplyDoc = $state<{ id: string; kind: string } | null>(null);
+
+  // A document can be resupplied once it has been reviewed — rejected and
+  // expired docs need a fix; an approved doc may be renewed proactively.
+  function canResupply(status: string): boolean {
+    return status === "rejected" || status === "expired" || status === "approved";
+  }
+
+  function startResupply(doc: { id: string; kind: string }) {
+    resupplyDoc = { id: doc.id, kind: doc.kind };
+    document.getElementById("doc-upload-card")?.scrollIntoView({ behavior: "smooth" });
+  }
 
   // Vendor-status banner copy — one entry per `vendor.status` enum value.
   const statusBanner = {
@@ -45,6 +67,7 @@
     food_safety_permit: "食品安全許可",
     tax_registration: "稅籍登記",
     insurance: "保險證明",
+    other: "其他",
   } as Record<string, string>;
 
   const docStatusMeta = {
@@ -83,7 +106,7 @@
 <PageHeader
   eyebrow="Compliance · 商家合規自查"
   title="商家合規自查"
-  subtitle="查看您的商家審核狀態、合規文件與系統警示。文件補件目前由福委會代為處理。"
+  subtitle="查看您的商家審核狀態、合規文件與系統警示，並可自行上傳或補件。"
 />
 
 <!-- Status banner -->
@@ -151,7 +174,8 @@
             <th class="px-3 py-3">狀態</th>
             <th class="px-3 py-3">到期日</th>
             <th class="px-3 py-3">審核日</th>
-            <th class="px-5 py-3">備註</th>
+            <th class="px-3 py-3">備註</th>
+            <th class="px-5 py-3">操作</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-tb-slate-100">
@@ -171,11 +195,101 @@
               <td class="px-3 py-3 font-jetbrains-mono text-xs text-tb-slate-600">
                 {fmtDate(doc.reviewed_at)}
               </td>
-              <td class="px-5 py-3 text-xs text-tb-slate-500">{doc.notes || "—"}</td>
+              <td class="px-3 py-3 text-xs text-tb-slate-500">{doc.notes || "—"}</td>
+              <td class="px-5 py-3">
+                {#if canResupply(doc.status)}
+                  <button
+                    type="button"
+                    onclick={() => startResupply({ id: doc.id, kind: doc.kind })}
+                    class="rounded-tb-lg border border-tb-slate-300 px-2.5 py-1 text-xs font-semibold text-tb-slate-700 transition hover:border-tb-slate-500"
+                  >
+                    補件
+                  </button>
+                {/if}
+              </td>
             </tr>
           {/each}
         </tbody>
       </table>
     </div>
   {/if}
+</section>
+
+<!-- Upload / resupply -->
+<section class="mt-8" id="doc-upload-card">
+  <h2 class="mb-3 text-lg font-bold text-tb-slate-900">
+    {resupplyDoc ? "補件 · 重新上傳文件" : "上傳合規文件"}
+  </h2>
+  <Card>
+    {#if form?.uploadError}
+      <p class="mb-3 rounded-tb-xl bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">
+        {form.uploadError}
+      </p>
+    {/if}
+    {#if form?.uploadOk}
+      <p class="mb-3 rounded-tb-xl bg-tb-emerald-50 px-3 py-2 text-sm text-tb-emerald-700">
+        文件已送出，福委會將進行審核。
+      </p>
+    {/if}
+    {#if resupplyDoc}
+      <p
+        class="mb-3 flex items-center gap-2 rounded-tb-xl bg-tb-amber-50 px-3 py-2 text-sm text-tb-amber-800"
+      >
+        <Icon name="alert" class="h-4 w-4" />
+        補件對象：{docKindLabel[resupplyDoc.kind] ?? resupplyDoc.kind}
+        <button
+          type="button"
+          onclick={() => (resupplyDoc = null)}
+          class="ml-auto font-semibold underline">改為上傳新文件</button
+        >
+      </p>
+    {/if}
+    <form method="POST" action="?/uploadDocument" enctype="multipart/form-data" class="space-y-3">
+      {#if resupplyDoc}
+        <input type="hidden" name="supersedes" value={resupplyDoc.id} />
+        <input type="hidden" name="kind" value={resupplyDoc.kind} />
+      {:else}
+        <label class="flex flex-col gap-1.5 text-sm">
+          <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
+            文件種類
+          </span>
+          <select
+            name="kind"
+            required
+            class="rounded-tb-lg border border-tb-slate-300 px-3 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
+          >
+            <option value="" disabled selected>請選擇文件種類</option>
+            {#each docKinds as k (k.id)}
+              <option value={k.id}>{k.label}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
+      <label class="flex flex-col gap-1.5 text-sm">
+        <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
+          檔案（PDF 或圖片，上限 10MB）
+        </span>
+        <input
+          type="file"
+          name="file"
+          required
+          accept=".pdf,image/*"
+          class="text-sm text-tb-slate-700 file:mr-3 file:rounded-tb-lg file:border-0 file:bg-tb-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold"
+        />
+      </label>
+      <label class="flex flex-col gap-1.5 text-sm">
+        <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
+          到期日（選填）
+        </span>
+        <input
+          type="date"
+          name="expires_at"
+          class="rounded-tb-lg border border-tb-slate-300 px-3 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
+        />
+      </label>
+      <Button variant="primary" size="md" type="submit">
+        {resupplyDoc ? "送出補件" : "上傳文件"}
+      </Button>
+    </form>
+  </Card>
 </section>

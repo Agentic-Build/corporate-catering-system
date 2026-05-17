@@ -812,6 +812,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload or resupply a compliance document for own vendor */
+        post: operations["uploadMerchantDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/menu-items": {
         parameters: {
             query?: never;
@@ -1373,6 +1390,7 @@ export interface components {
             reviewed_at?: string;
             reviewed_by?: string;
             status: string;
+            supersedes?: string;
             uploaded_by?: string;
             vendor_id: string;
         };
@@ -1737,6 +1755,24 @@ export interface components {
             status: string;
             /** Format: int64 */
             total_price_minor: number;
+        };
+        MerchantUploadDocumentInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MerchantUploadDocumentInputBody.json
+             */
+            readonly $schema?: string;
+            content_base64: string;
+            expires_at?: string;
+            filename: string;
+            /** @enum {string} */
+            kind: "business_license" | "food_safety_permit" | "tax_registration" | "insurance" | "other";
+            /**
+             * Format: uuid
+             * @description ID of the document this upload replaces (resupply)
+             */
+            supersedes?: string;
         };
         MessageDTO: {
             first_seen_at: string;
@@ -4003,6 +4039,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MerchantComplianceOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    uploadMerchantDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MerchantUploadDocumentInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadDocumentOutputBody"];
                 };
             };
             /** @description Error */

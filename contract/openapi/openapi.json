@@ -772,6 +772,9 @@
           "status": {
             "type": "string"
           },
+          "supersedes": {
+            "type": "string"
+          },
           "uploaded_by": {
             "type": "string"
           },
@@ -1941,6 +1944,52 @@
           "total_price_minor",
           "notes",
           "items"
+        ],
+        "type": "object"
+      },
+      "MerchantUploadDocumentInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/MerchantUploadDocumentInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "content_base64": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "filename": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "business_license",
+              "food_safety_permit",
+              "tax_registration",
+              "insurance",
+              "other"
+            ],
+            "type": "string"
+          },
+          "supersedes": {
+            "description": "ID of the document this upload replaces (resupply)",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "filename",
+          "content_base64"
         ],
         "type": "object"
       },
@@ -6225,6 +6274,53 @@
           }
         ],
         "summary": "View own vendor compliance status, documents, and warnings",
+        "tags": [
+          "merchant",
+          "compliance"
+        ]
+      }
+    },
+    "/api/merchant/documents": {
+      "post": {
+        "operationId": "uploadMerchantDocument",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MerchantUploadDocumentInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadDocumentOutputBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload or resupply a compliance document for own vendor",
         "tags": [
           "merchant",
           "compliance"

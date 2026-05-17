@@ -50,6 +50,9 @@ type Document struct {
 	ReviewedBy *string
 	ReviewedAt *time.Time
 	Notes      string
+	// Supersedes points at the document this one replaces (resupply). A
+	// document is "superseded" iff another document's Supersedes references it.
+	Supersedes *string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }

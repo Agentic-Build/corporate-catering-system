@@ -16,7 +16,7 @@ type DocumentRepo struct{ pool *pgxpool.Pool }
 
 func NewDocumentRepo(p *pgxpool.Pool) *DocumentRepo { return &DocumentRepo{pool: p} }
 
-const docCols = `id, vendor_id, kind, blob_uri, filename, uploaded_by, expires_at, status, reviewed_by, reviewed_at, notes, created_at, updated_at`
+const docCols = `id, vendor_id, kind, blob_uri, filename, uploaded_by, expires_at, status, reviewed_by, reviewed_at, notes, supersedes, created_at, updated_at`
 
 func (r *DocumentRepo) Create(ctx context.Context, d *compliance.Document) error {
 	status := d.Status
@@ -24,10 +24,10 @@ func (r *DocumentRepo) Create(ctx context.Context, d *compliance.Document) error
 		status = compliance.DocStatusPending
 	}
 	err := r.pool.QueryRow(ctx, `
-INSERT INTO vendor_document (vendor_id, kind, blob_uri, filename, uploaded_by, expires_at, status, notes)
-VALUES ($1, $2::vendor_document_kind, $3, $4, $5, $6, $7::vendor_document_status, $8)
+INSERT INTO vendor_document (vendor_id, kind, blob_uri, filename, uploaded_by, expires_at, status, notes, supersedes)
+VALUES ($1, $2::vendor_document_kind, $3, $4, $5, $6, $7::vendor_document_status, $8, $9)
 RETURNING id, created_at, updated_at`,
-		d.VendorID, string(d.Kind), d.BlobURI, d.Filename, d.UploadedBy, d.ExpiresAt, string(status), d.Notes,
+		d.VendorID, string(d.Kind), d.BlobURI, d.Filename, d.UploadedBy, d.ExpiresAt, string(status), d.Notes, d.Supersedes,
 	).Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("create document: %w", err)
@@ -47,7 +47,7 @@ func (r *DocumentRepo) scanOne(ctx context.Context, where string, args ...any) (
 	err := r.pool.QueryRow(ctx, q, args...).Scan(
 		&d.ID, &d.VendorID, &kind, &d.BlobURI, &d.Filename, &d.UploadedBy,
 		&d.ExpiresAt, &status, &d.ReviewedBy, &d.ReviewedAt, &d.Notes,
-		&d.CreatedAt, &d.UpdatedAt,
+		&d.Supersedes, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, compliance.ErrDocumentNotFound
@@ -106,7 +106,7 @@ func (r *DocumentRepo) queryAll(ctx context.Context, where string, args ...any) 
 		var kind, status string
 		if err := rows.Scan(&d.ID, &d.VendorID, &kind, &d.BlobURI, &d.Filename, &d.UploadedBy,
 			&d.ExpiresAt, &status, &d.ReviewedBy, &d.ReviewedAt, &d.Notes,
-			&d.CreatedAt, &d.UpdatedAt); err != nil {
+			&d.Supersedes, &d.CreatedAt, &d.UpdatedAt); err != nil {
 			return nil, err
 		}
 		d.Kind = compliance.DocumentKind(kind)
