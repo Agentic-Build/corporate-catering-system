@@ -12,10 +12,12 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/feedback"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/settlement"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
@@ -39,16 +41,18 @@ type Deps struct {
 	Vendor     *vendor.Service
 	Payroll    *payroll.Service
 	Compliance *compliance.Service
+	Feedback   *feedback.Service
+	Settlement *settlement.Service
 	Users      identity.UserRepository
 	Sessions   identity.SessionStore
 }
 
 // New constructs the MCP server with all tools registered.
 //
-// P7 Tasks 2-4 register 12 tools total: 5 read-only + 3 employee write +
-// 4 admin write. Each handler parses arguments, enforces the same role rules
-// used by HTTP handlers, delegates to the underlying Service, and then writes
-// an audit_event row via auditAfter (request_id="mcp:<tool>").
+// New registers 15 tools total: 5 read-only + 5 employee write + 5 admin
+// write. Each handler parses arguments, enforces the same role rules used by
+// HTTP handlers, delegates to the underlying Service, and then writes an
+// audit_event row via auditAfter (request_id="mcp:<tool>").
 func New(deps Deps) *server.MCPServer {
 	s := server.NewMCPServer(
 		"T-Bite MCP",
@@ -59,6 +63,8 @@ func New(deps Deps) *server.MCPServer {
 	registerVendorTools(s, deps)
 	registerPayrollTools(s, deps)
 	registerAuditTools(s, deps)
+	registerFeedbackTools(s, deps)
+	registerSettlementTools(s, deps)
 	return s
 }
 

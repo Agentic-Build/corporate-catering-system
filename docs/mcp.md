@@ -47,7 +47,7 @@ as a stdio child process.
 
 ## Tools
 
-12 tools across 4 categories. Read-only: 5. Write: 7 (3 employee, 4 admin).
+15 tools across 6 categories. Read-only: 5. Write: 10 (5 employee, 5 admin).
 
 ### Order (5 tools)
 
@@ -80,6 +80,19 @@ as a stdio child process.
 | Tool | Role | Description |
 |---|---|---|
 | `audit.query` | welfare_admin | Filter `audit_event` by target_kind / target_id / since / limit |
+
+### Feedback (2 tools, employee)
+
+| Tool | Role | Description |
+|---|---|---|
+| `feedback.rate_order` | employee | Submit a 1-5 meal rating for a picked-up order |
+| `feedback.file_complaint` | employee | File a complaint for a picked-up order |
+
+### Settlement (1 tool, admin)
+
+| Tool | Role | Description |
+|---|---|---|
+| `settlement.close_period` | welfare_admin | Close a period: cut one vendor settlement per vendor with orders |
 
 ## Audit trail
 

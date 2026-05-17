@@ -66,6 +66,9 @@ type Service struct {
 	Outbox   OutboxTx
 	AuditQry AuditQuery
 	Clock    Clock
+	// Vendors backs the merchant compliance self-view (GET /api/merchant/compliance).
+	// Admin-only document/anomaly endpoints do not use it.
+	Vendors VendorReader
 }
 
 // UploadInput captures everything needed to upload+register a vendor doc.

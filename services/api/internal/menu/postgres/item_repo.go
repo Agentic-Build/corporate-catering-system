@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
+	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -120,8 +121,50 @@ SELECT mi.id, mi.vendor_id, mi.category_id, mi.name, mi.description, mi.price_mi
 	return out, rows.Err()
 }
 
-func (r *ItemRepo) ListActiveByPlant(ctx context.Context, plant string, day time.Time) ([]*menu.ActiveItemRow, error) {
-	rows, err := r.pool.Query(ctx, `
+// employeeMenuSortClauses maps the supported sort enum to a fixed, safe
+// ORDER BY clause. The empty key is the historical default ordering. Mapping
+// (rather than interpolating) keeps the sort whitelisted — no user input ever
+// reaches the SQL string.
+var employeeMenuSortClauses = map[menu.EmployeeMenuSort]string{
+	menu.EmployeeMenuSortDefault:   "ORDER BY v.display_name, mi.name",
+	menu.EmployeeMenuSortName:      "ORDER BY mi.name, v.display_name",
+	menu.EmployeeMenuSortPriceAsc:  "ORDER BY mi.price_minor ASC, v.display_name, mi.name",
+	menu.EmployeeMenuSortPriceDesc: "ORDER BY mi.price_minor DESC, v.display_name, mi.name",
+	menu.EmployeeMenuSortRemain:    "ORDER BY ms.remain DESC, v.display_name, mi.name",
+}
+
+func (r *ItemRepo) ListActiveByPlant(ctx context.Context, f menu.EmployeeMenuFilter) ([]*menu.ActiveItemRow, error) {
+	// $1 = plant, $2 = day are always present; optional filters append $3.. .
+	args := []any{f.Plant, f.Day}
+	where := []string{"mi.status = 'active'"}
+
+	if q := strings.TrimSpace(f.Q); q != "" {
+		args = append(args, q)
+		n := strconv.Itoa(len(args))
+		where = append(where, "(mi.name ILIKE '%' || $"+n+" || '%' OR mi.description ILIKE '%' || $"+n+" || '%')")
+	}
+	if len(f.Tags) > 0 {
+		args = append(args, f.Tags)
+		where = append(where, "mi.tags && $"+strconv.Itoa(len(args)))
+	}
+	if f.PriceMin != nil {
+		args = append(args, *f.PriceMin)
+		where = append(where, "mi.price_minor >= $"+strconv.Itoa(len(args)))
+	}
+	if f.PriceMax != nil {
+		args = append(args, *f.PriceMax)
+		where = append(where, "mi.price_minor <= $"+strconv.Itoa(len(args)))
+	}
+	if f.InStock != nil && *f.InStock {
+		where = append(where, "ms.remain > 0")
+	}
+
+	orderBy, ok := employeeMenuSortClauses[f.Sort]
+	if !ok {
+		orderBy = employeeMenuSortClauses[menu.EmployeeMenuSortDefault]
+	}
+
+	q := `
 SELECT
     mi.id, mi.vendor_id, mi.category_id, mi.name, mi.description, mi.price_minor,
     mi.tags, mi.badges, mi.status, mi.archived_at, mi.created_at, mi.updated_at,
@@ -131,8 +174,9 @@ FROM menu_item mi
 JOIN vendor v ON v.id = mi.vendor_id AND v.status = 'approved'
 JOIN vendor_plant_mapping vpm ON vpm.vendor_id = v.id AND vpm.plant = $1 AND vpm.active = true
 JOIN meal_supply ms ON ms.menu_item_id = mi.id AND ms.supply_date = $2
-WHERE mi.status = 'active'
-ORDER BY v.display_name, mi.name`, plant, day)
+WHERE ` + strings.Join(where, " AND ") + `
+` + orderBy
+	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

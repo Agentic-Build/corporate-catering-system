@@ -1,7 +1,10 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { redirect, fail } from "@sveltejs/kit";
-import { createApiClient } from "@tbite/api-client";
+import { createApiClient, type operations } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+
+type MenuQuery = NonNullable<operations["listEmployeeMenu"]["parameters"]["query"]>;
+type MenuSort = NonNullable<MenuQuery["sort"]>;
 
 const PLANTS = [
   { id: "F12B-3F", label: "F12B · 3F" },
@@ -31,6 +34,11 @@ function buildDays(today: Date, selectedISO?: string) {
   return out;
 }
 
+// F3 — keys the filter bar writes into the URL. The full-menu grid is
+// served from /api/employee/menu (filtered server-side) whenever any of
+// these is set; otherwise the home payload's day_menu is used as-is.
+const MENU_SORTS = new Set(["name", "price_asc", "price_desc", "remain"]);
+
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) {
     throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname + url.search));
@@ -38,6 +46,25 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const selectedPlant = url.searchParams.get("plant") ?? locals.user.plant ?? PLANTS[0].id;
   const dayOverride = url.searchParams.get("day") ?? undefined;
+
+  // ── F3 menu filter — parsed from the URL query ──
+  const sp = url.searchParams;
+  const sortParam = sp.get("sort") ?? "";
+  const menuFilter = {
+    q: sp.get("q")?.trim() ?? "",
+    tags: sp.getAll("tags").filter(Boolean),
+    priceMin: Number(sp.get("price_min") ?? "") || 0,
+    priceMax: Number(sp.get("price_max") ?? "") || 0,
+    inStock: sp.get("in_stock") === "1",
+    sort: (MENU_SORTS.has(sortParam) ? sortParam : "") as MenuSort | "",
+  };
+  const filterActive =
+    menuFilter.q !== "" ||
+    menuFilter.tags.length > 0 ||
+    menuFilter.priceMin > 0 ||
+    menuFilter.priceMax > 0 ||
+    menuFilter.inStock ||
+    menuFilter.sort !== "";
 
   let home: {
     target_day: string;
@@ -87,6 +114,35 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     error = e instanceof Error ? e.message : String(e);
   }
 
+  // ── F3 — when the filter bar is active, fetch the full-menu grid from the
+  //    filtered /api/employee/menu endpoint and use it in place of day_menu.
+  let filteredMenu: NonNullable<unknown>[] | undefined;
+  if (filterActive) {
+    try {
+      const client = createApiClient(API_BASE_URL, locals.apiToken);
+      const query: MenuQuery = {
+        plant: selectedPlant,
+        day: home.target_day,
+      };
+      if (menuFilter.q) query.q = menuFilter.q;
+      if (menuFilter.tags.length > 0) query.tags = menuFilter.tags;
+      if (menuFilter.priceMin > 0) query.price_min = menuFilter.priceMin;
+      if (menuFilter.priceMax > 0) query.price_max = menuFilter.priceMax;
+      if (menuFilter.inStock) query.in_stock = true;
+      if (menuFilter.sort) query.sort = menuFilter.sort;
+      const mr = await client.GET("/api/employee/menu", {
+        params: { query },
+      });
+      if (mr.data) {
+        filteredMenu = (mr.data.items ?? []) as NonNullable<unknown>[];
+      } else if (mr.error && !error) {
+        error = JSON.stringify(mr.error);
+      }
+    } catch (e) {
+      if (!error) error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
   // Build favoriteIds set so MealCards can highlight ⭐.
   const favoriteIds = new Set(
     (home.favorite_chips as Array<{ menu_item_id: string }>).map((c) => c.menu_item_id),
@@ -94,6 +150,15 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const today = new Date();
   const days = buildDays(today, home.target_day);
+
+  // Tag universe for the filter chips — distinct tags across the day's menu.
+  const tagPool = new Set<string>();
+  for (const m of home.day_menu as Array<{ tags?: string[] | null }>) {
+    for (const t of m.tags ?? []) tagPool.add(t);
+  }
+  for (const m of (filteredMenu ?? []) as Array<{ tags?: string[] | null }>) {
+    for (const t of m.tags ?? []) tagPool.add(t);
+  }
 
   return {
     user: locals.user,
@@ -103,6 +168,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     selectedDay: home.target_day,
     home,
     favoriteIds: Array.from(favoriteIds),
+    menuFilter,
+    filterActive,
+    filteredMenu,
+    tagPool: Array.from(tagPool).sort(),
     error,
   };
 };

@@ -184,7 +184,7 @@ func TestItemRepo_ListActiveByPlant(t *testing.T) {
 	require.NoError(t, repo.SetStatus(ctx, b1.ID, menu.ItemStatusActive))
 	seedMealSupply(t, pool, b1.ID, day, 10, 10)
 
-	rows, err := repo.ListActiveByPlant(ctx, "F12B-3F", day)
+	rows, err := repo.ListActiveByPlant(ctx, menu.EmployeeMenuFilter{Plant: "F12B-3F", Day: day})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, a1.ID, rows[0].Item.ID)
@@ -209,7 +209,7 @@ func TestItemRepo_ListActiveByPlant_SuspendedVendorExcluded(t *testing.T) {
 	require.NoError(t, repo.SetStatus(ctx, it.ID, menu.ItemStatusActive))
 	seedMealSupply(t, pool, it.ID, day, 5, 5)
 
-	rows, err := repo.ListActiveByPlant(ctx, "F12B-3F", day)
+	rows, err := repo.ListActiveByPlant(ctx, menu.EmployeeMenuFilter{Plant: "F12B-3F", Day: day})
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }
@@ -233,7 +233,7 @@ func TestItemRepo_ListActiveByPlant_NoSupplyExcluded(t *testing.T) {
 	other := day.AddDate(0, 0, 1)
 	seedMealSupply(t, pool, it.ID, other, 5, 5)
 
-	rows, err := repo.ListActiveByPlant(ctx, "F12B-3F", day)
+	rows, err := repo.ListActiveByPlant(ctx, menu.EmployeeMenuFilter{Plant: "F12B-3F", Day: day})
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }

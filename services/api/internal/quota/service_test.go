@@ -148,7 +148,7 @@ func (r *fakeItemRepo) GetByID(_ context.Context, id string) (*menu.Item, error)
 func (r *fakeItemRepo) ListByVendor(_ context.Context, _ string, _ bool) ([]*menu.MerchantItemRow, error) {
 	return nil, nil
 }
-func (r *fakeItemRepo) ListActiveByPlant(_ context.Context, _ string, _ time.Time) ([]*menu.ActiveItemRow, error) {
+func (r *fakeItemRepo) ListActiveByPlant(_ context.Context, _ menu.EmployeeMenuFilter) ([]*menu.ActiveItemRow, error) {
 	return nil, nil
 }
 

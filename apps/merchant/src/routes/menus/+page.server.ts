@@ -8,7 +8,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const client = apiFor(locals.apiToken);
   let items: any[] = [];
   try {
-    const r = await client.GET("/api/merchant/menu-items", { params: { query: { include_archived: includeArchived } } });
+    const r = await client.GET("/api/merchant/menu-items", {
+      params: { query: { include_archived: includeArchived } },
+    });
     if (r.data) items = (r.data as any).items ?? [];
   } catch {}
   return { user: locals.user, items, includeArchived };

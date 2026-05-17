@@ -27,7 +27,8 @@ export const actions: Actions = {
     const fd = await request.formData();
     const periodStart = String(fd.get("period_start") ?? "").trim();
     const periodEnd = String(fd.get("period_end") ?? "").trim();
-    if (!periodStart || !periodEnd) return fail(400, { error: "period_start and period_end required" });
+    if (!periodStart || !periodEnd)
+      return fail(400, { error: "period_start and period_end required" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/payroll/batches", {
       body: { period_start: periodStart, period_end: periodEnd } as any,

@@ -8,7 +8,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const client = apiFor(locals.apiToken);
   let vendors: any[] = [];
   try {
-    const r = await client.GET("/api/admin/vendors", { params: { query: (status ? { status } : {}) as any } });
+    const r = await client.GET("/api/admin/vendors", {
+      params: { query: (status ? { status } : {}) as any },
+    });
     if (r.data) vendors = (r.data as any).items ?? [];
   } catch {}
   return { user: locals.user, vendors, status };
@@ -18,8 +20,10 @@ export const actions: Actions = {
   create: async ({ request, locals }) => {
     const fd = await request.formData();
     const displayName = String(fd.get("display_name") ?? "").trim();
-    const legalName   = String(fd.get("legal_name") ?? "").trim();
-    const email       = String(fd.get("contact_email") ?? "").trim().toLowerCase();
+    const legalName = String(fd.get("legal_name") ?? "").trim();
+    const email = String(fd.get("contact_email") ?? "")
+      .trim()
+      .toLowerCase();
     if (!displayName || !legalName || !email) return fail(400, { error: "all fields required" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendors", {

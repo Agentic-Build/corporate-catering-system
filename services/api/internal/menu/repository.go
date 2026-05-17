@@ -2,7 +2,6 @@ package menu
 
 import (
 	"context"
-	"time"
 )
 
 type CategoryRepository interface {
@@ -19,7 +18,7 @@ type ItemRepository interface {
 	SetStatus(ctx context.Context, id string, status ItemStatus) error
 	GetByID(ctx context.Context, id string) (*Item, error)
 	ListByVendor(ctx context.Context, vendorID string, includeArchived bool) ([]*MerchantItemRow, error)
-	ListActiveByPlant(ctx context.Context, plant string, day time.Time) ([]*ActiveItemRow, error)
+	ListActiveByPlant(ctx context.Context, f EmployeeMenuFilter) ([]*ActiveItemRow, error)
 }
 
 type ImageRepository interface {
