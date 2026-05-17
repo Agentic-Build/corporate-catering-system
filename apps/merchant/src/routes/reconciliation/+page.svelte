@@ -1,22 +1,28 @@
 <script lang="ts">
   import { PageHeader, Card, StatCard, StateTag, EmptyState } from "@tbite/ui";
+  import type { components } from "@tbite/api-client";
   import { formatMinor } from "$lib/money";
+
+  type StatusBreakdownDTO = components["schemas"]["StatusBreakdownDTO"];
 
   let { data } = $props();
 
   const recon = $derived(data.reconciliation);
 
   // Status-breakdown rows for the live monthly summary.
-  const breakdownMeta = [
-    { key: "picked_up", label: "已領取", tone: "success" as const },
-    { key: "no_show", label: "未領取", tone: "danger" as const },
-    { key: "cancelled", label: "已取消", tone: "neutral" as const },
-    { key: "refunded", label: "已退款", tone: "warning" as const },
+  const breakdownMeta: {
+    key: keyof StatusBreakdownDTO;
+    label: string;
+    tone: "success" | "danger" | "neutral" | "warning";
+  }[] = [
+    { key: "picked_up", label: "已領取", tone: "success" },
+    { key: "no_show", label: "未領取", tone: "danger" },
+    { key: "cancelled", label: "已取消", tone: "neutral" },
+    { key: "refunded", label: "已退款", tone: "warning" },
   ];
 
-  function breakdownValue(key: string): number {
-    const b = recon?.status_breakdown ?? recon?.breakdown ?? {};
-    return b[key] ?? 0;
+  function breakdownValue(key: keyof StatusBreakdownDTO): number {
+    return recon?.breakdown?.[key] ?? 0;
   }
 
   function fmtPeriod(start: string | undefined, end: string | undefined): string {

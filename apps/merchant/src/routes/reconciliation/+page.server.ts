@@ -1,6 +1,10 @@
 import { redirect } from "@sveltejs/kit";
+import type { components } from "@tbite/api-client";
 import type { PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
+
+type ReconciliationDTO = components["schemas"]["ReconciliationDTO"];
+type SettlementDTO = components["schemas"]["SettlementDTO"];
 
 /** Current month as YYYY-MM. */
 function currentPeriod(): string {
@@ -15,19 +19,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const period = url.searchParams.get("period") ?? currentPeriod();
   const client = apiFor(locals.apiToken);
 
-  let reconciliation: any = null;
+  let reconciliation: ReconciliationDTO | null = null;
   try {
-    const r = await client.GET("/api/merchant/reconciliation" as any, {
-      params: { query: { period } } as any,
+    const r = await client.GET("/api/merchant/reconciliation", {
+      params: { query: { period } },
     });
     // The handler wraps the DTO: { "reconciliation": {...} }.
-    if ((r as any).data) reconciliation = (r as any).data.reconciliation ?? null;
+    if (r.data) reconciliation = r.data.reconciliation ?? null;
   } catch {}
 
-  let settlements: any[] = [];
+  let settlements: SettlementDTO[] = [];
   try {
-    const r = await client.GET("/api/merchant/settlements" as any, {});
-    if ((r as any).data) settlements = ((r as any).data as any).items ?? [];
+    const r = await client.GET("/api/merchant/settlements", {});
+    if (r.data) settlements = r.data.items ?? [];
   } catch {}
 
   return { user: locals.user, period, reconciliation, settlements };

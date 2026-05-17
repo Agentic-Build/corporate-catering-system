@@ -1,10 +1,9 @@
 import { redirect, fail } from "@sveltejs/kit";
+import type { components } from "@tbite/api-client";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
 
-// The /api/admin/vendor-settlements endpoints are new; @tbite/api-client's
-// typed `paths` does not cover them yet, so these calls go through an
-// untyped client.
+type Settlement = components["schemas"]["SettlementDTO"];
 
 /** Current month as YYYY-MM. */
 function currentMonth(): string {
@@ -32,13 +31,13 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const period = url.searchParams.get("period") || currentMonth();
 
-  const client = apiFor(locals.apiToken) as any;
-  let settlements: any[] = [];
+  const client = apiFor(locals.apiToken);
+  let settlements: Settlement[] = [];
   try {
     const r = await client.GET("/api/admin/vendor-settlements", {
       params: { query: { period } },
     });
-    if (r.data) settlements = (r.data as any).items ?? [];
+    if (r.data) settlements = r.data.items ?? [];
   } catch {}
 
   return { user: locals.user, period, settlements };
@@ -52,7 +51,7 @@ export const actions: Actions = {
     const bounds = monthBounds(period);
     if (!bounds) return fail(400, { error: "期間格式錯誤（YYYY-MM）" });
 
-    const client = apiFor(locals.apiToken) as any;
+    const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendor-settlements/close", {
       body: { period_start: bounds.start, period_end: bounds.end },
     });
@@ -66,7 +65,7 @@ export const actions: Actions = {
     const id = String(fd.get("id") ?? "");
     if (!id) return fail(400, { error: "缺少結算單編號" });
 
-    const client = apiFor(locals.apiToken) as any;
+    const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendor-settlements/{id}/void", {
       params: { path: { id } },
     });

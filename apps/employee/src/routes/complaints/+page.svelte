@@ -4,7 +4,9 @@
   // 24h have passed since filing (backend also enforces this); the 結案
   // button lets the employee close a complaint they are satisfied with.
   import { PageHeader, Card, StateTag, EmptyState, Button } from "@tbite/ui";
-  import type { MealComplaint } from "$lib/server/feedback";
+  import type { components } from "@tbite/api-client";
+
+  type MealComplaint = components["schemas"]["ComplaintDTO"];
 
   let { data, form } = $props();
 

@@ -1,7 +1,10 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { redirect, fail } from "@sveltejs/kit";
-import { createApiClient } from "@tbite/api-client";
+import { createApiClient, type operations } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+
+type MenuQuery = NonNullable<operations["listEmployeeMenu"]["parameters"]["query"]>;
+type MenuSort = NonNullable<MenuQuery["sort"]>;
 
 const PLANTS = [
   { id: "F12B-3F", label: "F12B · 3F" },
@@ -53,9 +56,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     priceMin: Number(sp.get("price_min") ?? "") || 0,
     priceMax: Number(sp.get("price_max") ?? "") || 0,
     inStock: sp.get("in_stock") === "1",
-    sort: MENU_SORTS.has(sortParam)
-      ? (sortParam as "name" | "price_asc" | "price_desc" | "remain")
-      : "",
+    sort: (MENU_SORTS.has(sortParam) ? sortParam : "") as MenuSort | "",
   };
   const filterActive =
     menuFilter.q !== "" ||
@@ -119,7 +120,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   if (filterActive) {
     try {
       const client = createApiClient(API_BASE_URL, locals.apiToken);
-      const query: Record<string, unknown> = {
+      const query: MenuQuery = {
         plant: selectedPlant,
         day: home.target_day,
       };
@@ -130,7 +131,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       if (menuFilter.inStock) query.in_stock = true;
       if (menuFilter.sort) query.sort = menuFilter.sort;
       const mr = await client.GET("/api/employee/menu", {
-        params: { query: query as never },
+        params: { query },
       });
       if (mr.data) {
         filteredMenu = (mr.data.items ?? []) as NonNullable<unknown>[];

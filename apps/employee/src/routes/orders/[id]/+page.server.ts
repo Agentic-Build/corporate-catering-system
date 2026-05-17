@@ -1,13 +1,9 @@
 import { redirect, fail, error } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
-import { createApiClient } from "@tbite/api-client";
+import { createApiClient, type components } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
-import {
-  listComplaints,
-  submitRating,
-  submitComplaint,
-  type ComplaintCategory,
-} from "$lib/server/feedback";
+
+type ComplaintCategory = components["schemas"]["FileComplaintInputBody"]["category"];
 
 const COMPLAINT_CATEGORIES: ComplaintCategory[] = [
   "wrong_item",
@@ -27,14 +23,14 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     params: { path: { id: params.id } },
   });
   if (r.error || !r.data) throw error(404, "order not found");
-  const order = (r.data as any).order;
+  const order = r.data.order;
 
   // Surface an already-filed complaint for this order (no per-order GET, so
   // pull the employee's complaint list and match on order_id).
   let complaint = undefined;
   if (order.status === "picked_up") {
-    const cr = await listComplaints(locals.apiToken);
-    if (cr.ok) complaint = (cr.data ?? []).find((c) => c.order_id === params.id);
+    const cr = await client.GET("/api/employee/complaints");
+    if (cr.data) complaint = (cr.data.items ?? []).find((c) => c.order_id === params.id);
   }
 
   return { user: locals.user, order, complaint };
@@ -63,13 +59,18 @@ export const actions: Actions = {
     if (comment.length > 500) {
       return fail(400, { ratingError: "留言不可超過 500 字" });
     }
-    const r = await submitRating(locals.apiToken, params.id, score, comment);
-    if (!r.ok) {
+    const client = createApiClient(API_BASE_URL, locals.apiToken);
+    const r = await client.POST("/api/employee/orders/{id}/rating", {
+      params: { path: { id: params.id } },
+      body: { score, comment },
+    });
+    if (r.error) {
+      const status = r.response.status;
       const msg =
-        r.status === 409 ? "此訂單已評分過了。" : (r.error ?? "送出評分失敗，請稍後再試。");
-      return fail(r.status === 0 ? 500 : r.status, { ratingError: msg });
+        status === 409 ? "此訂單已評分過了。" : (r.error.detail ?? "送出評分失敗，請稍後再試。");
+      return fail(status, { ratingError: msg });
     }
-    return { ratingOk: true, rating: r.data };
+    return { ratingOk: true, rating: r.data.rating };
   },
 
   // File a meal complaint (description 5–1000 chars).
@@ -84,12 +85,19 @@ export const actions: Actions = {
     if (description.length < 5 || description.length > 1000) {
       return fail(400, { complaintError: "問題描述需介於 5 至 1000 字" });
     }
-    const r = await submitComplaint(locals.apiToken, params.id, category, description);
-    if (!r.ok) {
+    const client = createApiClient(API_BASE_URL, locals.apiToken);
+    const r = await client.POST("/api/employee/orders/{id}/complaint", {
+      params: { path: { id: params.id } },
+      body: { category, description },
+    });
+    if (r.error) {
+      const status = r.response.status;
       const msg =
-        r.status === 409 ? "此訂單已有未結案的客訴。" : (r.error ?? "送出客訴失敗，請稍後再試。");
-      return fail(r.status === 0 ? 500 : r.status, { complaintError: msg });
+        status === 409
+          ? "此訂單已有未結案的客訴。"
+          : (r.error.detail ?? "送出客訴失敗，請稍後再試。");
+      return fail(status, { complaintError: msg });
     }
-    return { complaintOk: true, complaint: r.data };
+    return { complaintOk: true, complaint: r.data.complaint };
   },
 };
