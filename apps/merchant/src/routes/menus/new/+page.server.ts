@@ -25,8 +25,18 @@ export const actions: Actions = {
         name,
         description,
         price_minor: priceMinor,
-        tags: tagsStr ? tagsStr.split(",").map(s => s.trim()).filter(Boolean) : [],
-        badges: badgesStr ? badgesStr.split(",").map(s => s.trim()).filter(Boolean) : [],
+        tags: tagsStr
+          ? tagsStr
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [],
+        badges: badgesStr
+          ? badgesStr
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [],
       } as any,
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });

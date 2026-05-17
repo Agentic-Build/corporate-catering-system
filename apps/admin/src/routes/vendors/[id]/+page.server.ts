@@ -28,19 +28,25 @@ export const actions: Actions = {
   },
   suspend: async ({ params, locals }) => {
     const client = apiFor(locals.apiToken);
-    const r = await client.POST("/api/admin/vendors/{id}/suspend", { params: { path: { id: params.id } } });
+    const r = await client.POST("/api/admin/vendors/{id}/suspend", {
+      params: { path: { id: params.id } },
+    });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
   },
   reinstate: async ({ params, locals }) => {
     const client = apiFor(locals.apiToken);
-    const r = await client.POST("/api/admin/vendors/{id}/reinstate", { params: { path: { id: params.id } } });
+    const r = await client.POST("/api/admin/vendors/{id}/reinstate", {
+      params: { path: { id: params.id } },
+    });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
   },
   invite: async ({ params, locals }) => {
     const client = apiFor(locals.apiToken);
-    const r = await client.POST("/api/admin/vendors/{id}/invite", { params: { path: { id: params.id } } });
+    const r = await client.POST("/api/admin/vendors/{id}/invite", {
+      params: { path: { id: params.id } },
+    });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { invite: (r.data as any)?.code as string };
   },
