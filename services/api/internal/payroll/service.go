@@ -308,6 +308,12 @@ func (s *Service) ListMyDisputes(ctx context.Context, userID string) ([]*Dispute
 	return s.Disputes.ListByUser(ctx, userID)
 }
 
+// ListMyEntries returns the employee's salary-deduction entries across all
+// batches, newest period first.
+func (s *Service) ListMyEntries(ctx context.Context, userID string) ([]*EmployeeEntry, error) {
+	return s.Entries.ListByUser(ctx, userID)
+}
+
 // FlagExceptionInput records a manual deduction-failed exception.
 type FlagExceptionInput struct {
 	BatchID   string

@@ -744,6 +744,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/employee/payroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List my salary-deduction entries across batches */
+        get: operations["listMyPayrollEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/employee/recommendations": {
         parameters: {
             query?: never;
@@ -1521,6 +1538,21 @@ export interface components {
             uploaded_by?: string;
             vendor_id: string;
         };
+        EmployeeEntryDTO: {
+            /** Format: int64 */
+            amount_minor: number;
+            batch_id: string;
+            batch_status: string;
+            entry_id: string;
+            /** Format: int64 */
+            net_minor: number;
+            /** Format: int64 */
+            order_count: number;
+            period_end: string;
+            period_start: string;
+            /** Format: int64 */
+            refunded_minor: number;
+        };
         EmployeeMenuItemDTO: {
             badges: string[] | null;
             /** Format: int64 */
@@ -1801,6 +1833,15 @@ export interface components {
             readonly $schema?: string;
             date: string;
             items: components["schemas"]["MerchantOrderDTO"][] | null;
+        };
+        ListMyEntriesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListMyEntriesOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["EmployeeEntryDTO"][] | null;
         };
         ListOperatorsOutputBody: {
             /**
@@ -4168,6 +4209,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReorderOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listMyPayrollEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListMyEntriesOutputBody"];
                 };
             };
             /** @description Error */

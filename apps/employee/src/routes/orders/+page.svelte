@@ -78,7 +78,16 @@
   eyebrow="Orders · 我的訂單"
   title="訂單與行程"
   subtitle="進行中的訂單可在截單前自由修改份數或取消，不會產生費用。"
-/>
+>
+  {#snippet actions()}
+    <a
+      href="/payroll"
+      class="inline-flex items-center gap-1.5 rounded-tb-lg border border-tb-slate-300 px-3 py-2 text-sm font-semibold text-tb-slate-800 transition hover:border-tb-slate-500"
+    >
+      <Icon name="wallet" class="h-4 w-4" />薪資代扣明細
+    </a>
+  {/snippet}
+</PageHeader>
 
 <Tabs {tabs} active={tab} onChange={(id) => (tab = id)} />
 

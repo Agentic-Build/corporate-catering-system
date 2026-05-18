@@ -547,3 +547,39 @@ func TestService_Exceptions_DetectFlagResolve(t *testing.T) {
 	})
 	require.Error(t, err)
 }
+
+func TestService_ListMyEntries(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	userA := seedEmployeeUser(t, pool)
+	userB := seedEmployeeUser(t, pool)
+	vendorID := seedVendor(t, pool)
+	start := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, -1)
+	day := time.Date(2026, time.July, 9, 0, 0, 0, 0, time.UTC)
+	seedPickedUpOrder(t, pool, userA, vendorID, day, 12000)
+	seedPickedUpOrder(t, pool, userA, vendorID, day, 8000)
+	seedPickedUpOrder(t, pool, userB, vendorID, day, 5000)
+
+	batch, err := svc.BuildDraft(ctx, payroll.BuildDraftInput{PeriodStart: start, PeriodEnd: end})
+	require.NoError(t, err)
+
+	entries, err := svc.ListMyEntries(ctx, userA)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	e := entries[0]
+	assert.Equal(t, batch.ID, e.BatchID)
+	assert.Equal(t, int64(20000), e.AmountMinor)
+	assert.Equal(t, 2, e.OrderCount)
+	assert.Equal(t, int64(0), e.RefundedMinor)
+	assert.Equal(t, payroll.BatchStatusDraft, e.BatchStatus)
+	assert.True(t, e.PeriodStart.Equal(start))
+
+	// userB sees only their own entry.
+	bEntries, err := svc.ListMyEntries(ctx, userB)
+	require.NoError(t, err)
+	require.Len(t, bEntries, 1)
+	assert.Equal(t, int64(5000), bEntries[0].AmountMinor)
+}

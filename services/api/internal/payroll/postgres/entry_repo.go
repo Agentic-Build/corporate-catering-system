@@ -84,6 +84,34 @@ SELECT id FROM payroll_entry WHERE user_id=$1 AND $2 = ANY(order_ids) LIMIT 1`,
 	return id, nil
 }
 
+// ListByUser returns the user's payroll entries joined with their batches,
+// newest period first — the employee salary-deduction history view.
+func (r *EntryRepo) ListByUser(ctx context.Context, userID string) ([]*payroll.EmployeeEntry, error) {
+	rows, err := r.pool.Query(ctx, `
+SELECT e.id, e.batch_id, b.period_start, b.period_end, b.status,
+       cardinality(e.order_ids), e.amount_minor, e.refunded_minor, e.created_at
+  FROM payroll_entry e
+  JOIN payroll_batch b ON b.id = e.batch_id
+ WHERE e.user_id = $1
+ ORDER BY b.period_start DESC, e.created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*payroll.EmployeeEntry
+	for rows.Next() {
+		var e payroll.EmployeeEntry
+		var status string
+		if err := rows.Scan(&e.EntryID, &e.BatchID, &e.PeriodStart, &e.PeriodEnd, &status,
+			&e.OrderCount, &e.AmountMinor, &e.RefundedMinor, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		e.BatchStatus = payroll.BatchStatus(status)
+		out = append(out, &e)
+	}
+	return out, rows.Err()
+}
+
 func (r *EntryRepo) IncrementRefundedTx(ctx context.Context, tx pgx.Tx, id string, refund int64) error {
 	if tx == nil {
 		return errors.New("EntryRepo.IncrementRefundedTx requires a tx")

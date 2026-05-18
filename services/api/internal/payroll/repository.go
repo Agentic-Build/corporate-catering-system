@@ -28,6 +28,9 @@ type EntryRepository interface {
 	// orderID and whose user_id matches userID. Returns ErrEntryNotFound when
 	// no row matches.
 	FindByOrderForUser(ctx context.Context, userID, orderID string) (string, error)
+	// ListByUser returns a user's entries joined with their batches, newest
+	// period first — the employee deduction-history view.
+	ListByUser(ctx context.Context, userID string) ([]*EmployeeEntry, error)
 }
 
 type ExceptionRepository interface {

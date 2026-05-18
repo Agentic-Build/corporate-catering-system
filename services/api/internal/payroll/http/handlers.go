@@ -251,6 +251,24 @@ type exceptionOutput struct {
 	}
 }
 
+type employeeEntryDTO struct {
+	EntryID       string `json:"entry_id"`
+	BatchID       string `json:"batch_id"`
+	PeriodStart   string `json:"period_start"`
+	PeriodEnd     string `json:"period_end"`
+	BatchStatus   string `json:"batch_status"`
+	OrderCount    int    `json:"order_count"`
+	AmountMinor   int64  `json:"amount_minor"`
+	RefundedMinor int64  `json:"refunded_minor"`
+	NetMinor      int64  `json:"net_minor"`
+}
+
+type listMyEntriesOutput struct {
+	Body struct {
+		Items []employeeEntryDTO `json:"items"`
+	}
+}
+
 // ----- Registration -----
 
 func (a *API) Register(api huma.API) {
@@ -329,6 +347,15 @@ func (a *API) Register(api huma.API) {
 		Tags:        []string{"employee", "payroll"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.listMyDisputes)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "listMyPayrollEntries",
+		Method:      http.MethodGet,
+		Path:        "/api/employee/payroll",
+		Summary:     "List my salary-deduction entries across batches",
+		Tags:        []string{"employee", "payroll"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.listMyEntries)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "listPayrollExceptions",
@@ -576,6 +603,33 @@ func (a *API) resolveException(ctx context.Context, in *resolveExceptionInput) (
 		return nil, mapErr(err)
 	}
 	return &struct{}{}, nil
+}
+
+func (a *API) listMyEntries(ctx context.Context, _ *struct{}) (*listMyEntriesOutput, error) {
+	u, err := a.requireEmployee(ctx)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := a.Svc.ListMyEntries(ctx, u.ID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp listMyEntriesOutput
+	resp.Body.Items = make([]employeeEntryDTO, 0, len(entries))
+	for _, e := range entries {
+		resp.Body.Items = append(resp.Body.Items, employeeEntryDTO{
+			EntryID:       e.EntryID,
+			BatchID:       e.BatchID,
+			PeriodStart:   e.PeriodStart.UTC().Format("2006-01-02"),
+			PeriodEnd:     e.PeriodEnd.UTC().Format("2006-01-02"),
+			BatchStatus:   string(e.BatchStatus),
+			OrderCount:    e.OrderCount,
+			AmountMinor:   e.AmountMinor,
+			RefundedMinor: e.RefundedMinor,
+			NetMinor:      e.AmountMinor - e.RefundedMinor,
+		})
+	}
+	return &resp, nil
 }
 
 // mapErr translates payroll sentinels to huma HTTP errors.

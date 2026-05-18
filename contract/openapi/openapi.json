@@ -812,6 +812,54 @@
         ],
         "type": "object"
       },
+      "EmployeeEntryDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_minor": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "batch_id": {
+            "type": "string"
+          },
+          "batch_status": {
+            "type": "string"
+          },
+          "entry_id": {
+            "type": "string"
+          },
+          "net_minor": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "order_count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "period_end": {
+            "type": "string"
+          },
+          "period_start": {
+            "type": "string"
+          },
+          "refunded_minor": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entry_id",
+          "batch_id",
+          "period_start",
+          "period_end",
+          "batch_status",
+          "order_count",
+          "amount_minor",
+          "refunded_minor",
+          "net_minor"
+        ],
+        "type": "object"
+      },
       "EmployeeMenuItemDTO": {
         "additionalProperties": false,
         "properties": {
@@ -1679,6 +1727,33 @@
         },
         "required": [
           "date",
+          "items"
+        ],
+        "type": "object"
+      },
+      "ListMyEntriesOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ListMyEntriesOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmployeeEntryDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
           "items"
         ],
         "type": "object"
@@ -6479,6 +6554,43 @@
         "tags": [
           "employee",
           "feedback"
+        ]
+      }
+    },
+    "/api/employee/payroll": {
+      "get": {
+        "operationId": "listMyPayrollEntries",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListMyEntriesOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List my salary-deduction entries across batches",
+        "tags": [
+          "employee",
+          "payroll"
         ]
       }
     },
