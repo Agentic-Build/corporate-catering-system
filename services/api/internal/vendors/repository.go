@@ -15,6 +15,8 @@ type PlantMappingRepository interface {
 	ListByVendor(ctx context.Context, vendorID string) ([]*PlantMapping, error)
 	ListVendorsForPlant(ctx context.Context, plant string) ([]string, error)
 	Set(ctx context.Context, vendorID string, plants []string) error
+	// SetWindow sets the service window for one vendor×plant mapping.
+	SetWindow(ctx context.Context, vendorID, plant, window string) error
 }
 
 type OperatorRepository interface {

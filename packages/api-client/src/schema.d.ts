@@ -433,6 +433,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/vendors/{id}/plants/{plant}/window": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the service window for a vendor's plant mapping */
+        put: operations["setVendorPlantWindow"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/vendors/{id}/reinstate": {
         parameters: {
             query?: never;
@@ -2142,6 +2159,10 @@ export interface components {
             readonly $schema?: string;
             order: components["schemas"]["OrderDTO"];
         };
+        PlantMappingDTO: {
+            plant: string;
+            service_window: string;
+        };
         PrepSheetItemDTO: {
             menu_item_id: string;
             name: string;
@@ -2382,6 +2403,16 @@ export interface components {
             eta_label: string;
             pickup_window: string;
         };
+        SetPlantWindowInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SetPlantWindowInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description e.g. 11:30-13:00 */
+            service_window: string;
+        };
         SetSoldOutInputBody: {
             /**
              * Format: uri
@@ -2529,6 +2560,7 @@ export interface components {
             display_name: string;
             id: string;
             legal_name: string;
+            plant_mappings?: components["schemas"]["PlantMappingDTO"][] | null;
             plants?: string[] | null;
             status: string;
         };
@@ -3480,6 +3512,40 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    setVendorPlantWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                plant: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPlantWindowInputBody"];
+            };
+        };
         responses: {
             /** @description No Content */
             204: {

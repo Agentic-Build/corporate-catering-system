@@ -152,6 +152,20 @@ func (s *Service) ListPlants(ctx context.Context, id string) ([]string, error) {
 	return out, nil
 }
 
+// ListPlantMappings returns the vendor's active plant mappings, including each
+// plant's service window.
+func (s *Service) ListPlantMappings(ctx context.Context, id string) ([]*PlantMapping, error) {
+	return s.Plants.ListByVendor(ctx, id)
+}
+
+// SetPlantWindow sets the service window for one of a vendor's plant mappings.
+func (s *Service) SetPlantWindow(ctx context.Context, vendorID, plant, window string) error {
+	if _, err := s.Vendors.GetByID(ctx, vendorID); err != nil {
+		return err
+	}
+	return s.Plants.SetWindow(ctx, vendorID, plant, window)
+}
+
 func (s *Service) ListOperators(ctx context.Context, vendorID string) ([]*OperatorAccount, error) {
 	if _, err := s.Vendors.GetByID(ctx, vendorID); err != nil {
 		return nil, err

@@ -30,6 +30,19 @@ export const actions: Actions = {
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
   },
+  setPlantWindow: async ({ request, params, locals }) => {
+    const fd = await request.formData();
+    const plant = String(fd.get("plant") ?? "");
+    const serviceWindow = String(fd.get("service_window") ?? "").trim();
+    if (!plant) return fail(400, { error: "缺少廠區" });
+    const client = apiFor(locals.apiToken);
+    const r = await client.PUT("/api/admin/vendors/{id}/plants/{plant}/window", {
+      params: { path: { id: params.id, plant } },
+      body: { service_window: serviceWindow } as never,
+    });
+    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    throw redirect(303, `/vendors/${params.id}`);
+  },
   suspend: async ({ params, locals }) => {
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendors/{id}/suspend", {

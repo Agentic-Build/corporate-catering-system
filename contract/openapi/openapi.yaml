@@ -1895,6 +1895,17 @@ components:
             required:
                 - order
             type: object
+        PlantMappingDTO:
+            additionalProperties: false
+            properties:
+                plant:
+                    type: string
+                service_window:
+                    type: string
+            required:
+                - plant
+                - service_window
+            type: object
         PrepSheetItemDTO:
             additionalProperties: false
             properties:
@@ -2413,6 +2424,23 @@ components:
                 - eta_label
                 - cutoff_at
             type: object
+        SetPlantWindowInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/SetPlantWindowInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                service_window:
+                    description: e.g. 11:30-13:00
+                    maxLength: 100
+                    type: string
+            required:
+                - service_window
+            type: object
         SetSoldOutInputBody:
             additionalProperties: false
             properties:
@@ -2733,6 +2761,12 @@ components:
                     type: string
                 legal_name:
                     type: string
+                plant_mappings:
+                    items:
+                        $ref: '#/components/schemas/PlantMappingDTO'
+                    type:
+                        - array
+                        - "null"
                 plants:
                     items:
                         type: string
@@ -3723,6 +3757,42 @@ paths:
             security:
                 - bearer: []
             summary: Suspend a vendor operator
+            tags:
+                - admin
+                - vendor
+    /api/admin/vendors/{id}/plants/{plant}/window:
+        put:
+            operationId: setVendorPlantWindow
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - in: path
+                  name: plant
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetPlantWindowInputBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Set the service window for a vendor's plant mapping
             tags:
                 - admin
                 - vendor

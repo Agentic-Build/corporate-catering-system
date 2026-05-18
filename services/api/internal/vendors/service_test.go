@@ -106,9 +106,19 @@ func (r *fakeVendorRepo) List(_ context.Context, statuses []vendor.Status) ([]*v
 type fakePlantRepo struct {
 	mu       sync.Mutex
 	byVendor map[string][]string
+	windows  map[string]string // vendorID|plant -> window
 }
 
-func newFakePlantRepo() *fakePlantRepo { return &fakePlantRepo{byVendor: map[string][]string{}} }
+func newFakePlantRepo() *fakePlantRepo {
+	return &fakePlantRepo{byVendor: map[string][]string{}, windows: map[string]string{}}
+}
+
+func (r *fakePlantRepo) SetWindow(_ context.Context, vendorID, plant, window string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.windows[vendorID+"|"+plant] = window
+	return nil
+}
 
 func (r *fakePlantRepo) ListByVendor(_ context.Context, id string) ([]*vendor.PlantMapping, error) {
 	r.mu.Lock()
@@ -426,4 +436,18 @@ func TestService_UpdateSettings(t *testing.T) {
 	assert.ErrorIs(t, err, vendor.ErrInvalidSettings)
 	_, err = svc.UpdateSettings(ctx, v.ID, 12, 0)
 	assert.ErrorIs(t, err, vendor.ErrInvalidSettings)
+}
+
+func TestService_SetPlantWindow(t *testing.T) {
+	svc, _, pr, _, _ := newSvc()
+	ctx := context.Background()
+	v, err := svc.CreatePending(ctx, "稻禾", "稻禾股份", "rh-window@test.com")
+	require.NoError(t, err)
+
+	require.NoError(t, svc.SetPlantWindow(ctx, v.ID, "F12B-3F", "11:30-13:00"))
+	assert.Equal(t, "11:30-13:00", pr.windows[v.ID+"|F12B-3F"])
+
+	// Unknown vendor → not found.
+	err = svc.SetPlantWindow(ctx, "00000000-0000-0000-0000-000000000000", "F12B-3F", "11:00-12:00")
+	assert.ErrorIs(t, err, vendor.ErrVendorNotFound)
 }

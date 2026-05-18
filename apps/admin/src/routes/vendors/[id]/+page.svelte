@@ -105,6 +105,29 @@
   {/if}
 
   {#if v.status === "approved"}
+    {#if (v.plant_mappings ?? []).length > 0}
+      <Card title="廠區供餐時段" description="設定本商家對各廠區的供餐時段（如 11:30-13:00）。">
+        <div class="space-y-2">
+          {#each v.plant_mappings ?? [] as m (m.plant)}
+            <form method="POST" action="?/setPlantWindow" class="flex flex-wrap items-center gap-2">
+              <input type="hidden" name="plant" value={m.plant} />
+              <span class="w-24 font-jetbrains-mono text-sm font-semibold text-tb-slate-800">
+                {m.plant}
+              </span>
+              <input
+                name="service_window"
+                value={m.service_window}
+                placeholder="11:30-13:00"
+                maxlength="100"
+                class="flex-1 rounded-tb-lg border border-tb-slate-300 px-3 py-1.5 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
+              />
+              <Button variant="secondary" size="sm" type="submit">儲存</Button>
+            </form>
+          {/each}
+        </div>
+      </Card>
+    {/if}
+
     <Card title="商家操作">
       <div class="flex flex-wrap gap-2">
         <form method="POST" action="?/suspend">

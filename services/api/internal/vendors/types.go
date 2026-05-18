@@ -29,11 +29,12 @@ type Vendor struct {
 }
 
 type PlantMapping struct {
-	ID        string
-	VendorID  string
-	Plant     string
-	Active    bool
-	CreatedAt time.Time
+	ID            string
+	VendorID      string
+	Plant         string
+	Active        bool
+	ServiceWindow string
+	CreatedAt     time.Time
 }
 
 type OperatorStatus string
