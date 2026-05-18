@@ -4592,6 +4592,35 @@ paths:
             tags:
                 - merchant
                 - menu
+    /api/merchant/menu-items/{id}/copy:
+        post:
+            operationId: copyMerchantMenuItem
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ItemOutputBody'
+                    description: Created
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Duplicate a menu item into a fresh draft
+            tags:
+                - merchant
+                - menu
     /api/merchant/menu-items/{id}/publish:
         post:
             operationId: publishMerchantMenuItem

@@ -248,6 +248,36 @@ func TestService_Publish_WrongVendorIsForbidden(t *testing.T) {
 	assert.ErrorIs(t, err, menu.ErrForbidden)
 }
 
+func TestService_CopyItem_CreatesIndependentDraft(t *testing.T) {
+	svc, _, _, _ := newSvc()
+	src, err := svc.CreateItem(context.Background(), menu.CreateItemInput{
+		VendorID: "v1", Name: "雞腿便當", Description: "經典", PriceMinor: 11000,
+		Tags: []string{"halal"}, Badges: []string{"hot"},
+	})
+	require.NoError(t, err)
+	require.NoError(t, svc.Publish(context.Background(), src.ID, "v1")) // source is active
+
+	copied, err := svc.CopyItem(context.Background(), src.ID, "v1")
+	require.NoError(t, err)
+	assert.NotEqual(t, src.ID, copied.ID)
+	assert.Equal(t, "雞腿便當（複製）", copied.Name)
+	assert.Equal(t, menu.ItemStatusDraft, copied.Status, "copy is a draft even when source is active")
+	assert.Equal(t, src.PriceMinor, copied.PriceMinor)
+	assert.Equal(t, src.Description, copied.Description)
+	assert.Equal(t, []string{"halal"}, copied.Tags)
+	assert.Equal(t, []string{"hot"}, copied.Badges)
+}
+
+func TestService_CopyItem_WrongVendorIsForbidden(t *testing.T) {
+	svc, _, _, _ := newSvc()
+	src, err := svc.CreateItem(context.Background(), menu.CreateItemInput{
+		VendorID: "v-owner", Name: "X", PriceMinor: 9000,
+	})
+	require.NoError(t, err)
+	_, err = svc.CopyItem(context.Background(), src.ID, "v-other")
+	assert.ErrorIs(t, err, menu.ErrForbidden)
+}
+
 func TestService_Archive_OwnVendor_Succeeds(t *testing.T) {
 	svc, _, ir, _ := newSvc()
 	created, _ := svc.CreateItem(context.Background(), menu.CreateItemInput{

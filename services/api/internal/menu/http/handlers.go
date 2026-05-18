@@ -227,6 +227,16 @@ func (a *API) Register(api huma.API) {
 	}, a.archiveItem)
 
 	huma.Register(api, huma.Operation{
+		OperationID:   "copyMerchantMenuItem",
+		Method:        http.MethodPost,
+		Path:          "/api/merchant/menu-items/{id}/copy",
+		Summary:       "Duplicate a menu item into a fresh draft",
+		Tags:          []string{"merchant", "menu"},
+		Security:      []map[string][]string{{"bearer": {}}},
+		DefaultStatus: http.StatusCreated,
+	}, a.copyItem)
+
+	huma.Register(api, huma.Operation{
 		OperationID: "listEmployeeMenu",
 		Method:      http.MethodGet,
 		Path:        "/api/employee/menu",
@@ -355,6 +365,20 @@ func (a *API) updateItem(ctx context.Context, in *updateItemInput) (*itemOutput,
 		Badges:      in.Body.Badges,
 		CategoryID:  in.Body.CategoryID,
 	})
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp itemOutput
+	resp.Body.Item = toItemDTO(it)
+	return &resp, nil
+}
+
+func (a *API) copyItem(ctx context.Context, in *itemIDInput) (*itemOutput, error) {
+	_, vendorID, err := a.requireVendor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	it, err := a.Svc.CopyItem(ctx, in.ID, vendorID)
 	if err != nil {
 		return nil, mapErr(err)
 	}
