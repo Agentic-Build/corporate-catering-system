@@ -2562,6 +2562,141 @@
         ],
         "type": "object"
       },
+      "PrepSheetItemDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "menu_item_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "qty": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "menu_item_id",
+          "name",
+          "qty"
+        ],
+        "type": "object"
+      },
+      "PrepSheetOrderDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PrepSheetItemDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "total_price_minor": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "order_id",
+          "total_price_minor",
+          "notes",
+          "items"
+        ],
+        "type": "object"
+      },
+      "PrepSheetOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/PrepSheetOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "plants": {
+            "items": {
+              "$ref": "#/components/schemas/PrepSheetPlantDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "total_orders": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total_portions": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "total_orders",
+          "total_portions",
+          "plants"
+        ],
+        "type": "object"
+      },
+      "PrepSheetPlantDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PrepSheetItemDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "order_count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/PrepSheetOrderDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "plant": {
+            "type": "string"
+          },
+          "portion_count": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plant",
+          "order_count",
+          "portion_count",
+          "items",
+          "orders"
+        ],
+        "type": "object"
+      },
       "ProviderDTO": {
         "additionalProperties": false,
         "properties": {
@@ -7261,6 +7396,55 @@
           }
         ],
         "summary": "Verify TOTP code and mark order picked up",
+        "tags": [
+          "merchant",
+          "order"
+        ]
+      }
+    },
+    "/api/merchant/prep-sheet": {
+      "get": {
+        "operationId": "merchantPrepSheet",
+        "parameters": [
+          {
+            "description": "YYYY-MM-DD; defaults to today UTC",
+            "explode": false,
+            "in": "query",
+            "name": "date",
+            "schema": {
+              "description": "YYYY-MM-DD; defaults to today UTC",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrepSheetOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Prep \u0026 delivery output for a day: plant breakdown, labels, baskets",
         "tags": [
           "merchant",
           "order"

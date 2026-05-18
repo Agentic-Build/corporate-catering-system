@@ -1018,6 +1018,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/prep-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Prep & delivery output for a day: plant breakdown, labels, baskets */
+        get: operations["merchantPrepSheet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/reconciliation": {
         parameters: {
             query?: never;
@@ -2066,6 +2083,42 @@ export interface components {
              */
             readonly $schema?: string;
             order: components["schemas"]["OrderDTO"];
+        };
+        PrepSheetItemDTO: {
+            menu_item_id: string;
+            name: string;
+            /** Format: int64 */
+            qty: number;
+        };
+        PrepSheetOrderDTO: {
+            items: components["schemas"]["PrepSheetItemDTO"][] | null;
+            notes: string;
+            order_id: string;
+            /** Format: int64 */
+            total_price_minor: number;
+        };
+        PrepSheetOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PrepSheetOutputBody.json
+             */
+            readonly $schema?: string;
+            date: string;
+            plants: components["schemas"]["PrepSheetPlantDTO"][] | null;
+            /** Format: int64 */
+            total_orders: number;
+            /** Format: int64 */
+            total_portions: number;
+        };
+        PrepSheetPlantDTO: {
+            items: components["schemas"]["PrepSheetItemDTO"][] | null;
+            /** Format: int64 */
+            order_count: number;
+            orders: components["schemas"]["PrepSheetOrderDTO"][] | null;
+            plant: string;
+            /** Format: int64 */
+            portion_count: number;
         };
         ProviderDTO: {
             display_name: string;
@@ -4700,6 +4753,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    merchantPrepSheet: {
+        parameters: {
+            query?: {
+                /** @description YYYY-MM-DD; defaults to today UTC */
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrepSheetOutputBody"];
+                };
             };
             /** @description Error */
             default: {

@@ -70,6 +70,12 @@
   <p class="mt-1 text-sm text-tb-slate-500">
     {data.date} · {data.totalCount} 筆訂單 · 即時更新
   </p>
+  <a
+    href="/prep-sheet?date={data.date}"
+    class="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+  >
+    <Icon name="doc" class="h-3.5 w-3.5" />備餐與配送輸出（分區表 · 標籤 · 配送清單）
+  </a>
 </section>
 
 <div class="mb-4 flex flex-wrap gap-1 rounded-full bg-tb-slate-100 p-1">
