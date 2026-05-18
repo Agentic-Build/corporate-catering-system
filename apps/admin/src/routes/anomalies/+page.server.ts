@@ -32,11 +32,14 @@ export const actions: Actions = {
     const fd = await request.formData();
     const id = String(fd.get("id") ?? "");
     const notes = String(fd.get("notes") ?? "");
+    const action = String(fd.get("action") ?? "");
     if (!id) return fail(400, { error: "id required" });
+    const body: { notes: string; action?: string } = { notes };
+    if (action === "warn" || action === "suspend") body.action = action;
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/anomalies/{id}/triage", {
       params: { path: { id } },
-      body: { notes } as any,
+      body: body as never,
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { ok: true };

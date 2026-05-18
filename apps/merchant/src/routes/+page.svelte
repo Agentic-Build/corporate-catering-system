@@ -44,6 +44,7 @@
           cap: s.capacity,
           ordered: Math.max(0, s.capacity - s.remain),
           pickupWindow: s.pickup_window ?? "11:50-12:10",
+          soldOut: !!s.sold_out,
         };
       });
   }
@@ -66,6 +67,19 @@
     capValue = String(capacity);
     capPickup = pickupWindow;
     queueMicrotask(() => capForm?.requestSubmit());
+  }
+
+  // ── Hidden-form plumbing for the sold-out toggle ──
+  let soldOutForm = $state<HTMLFormElement>();
+  let soldOutItemId = $state("");
+  let soldOutDate = $state("");
+  let soldOutValue = $state("false");
+
+  function submitSoldOut(itemId: string, soldOut: boolean) {
+    soldOutItemId = itemId;
+    soldOutDate = selectedDay;
+    soldOutValue = String(soldOut);
+    queueMicrotask(() => soldOutForm?.requestSubmit());
   }
 
   /** Library "加入此日" — publish if archived, then schedule a default cap. */
@@ -171,6 +185,7 @@
       slots={selectedSlots}
       onOpenLibrary={() => (libraryOpen = true)}
       {submitCap}
+      {submitSoldOut}
     />
 
     <div
@@ -204,4 +219,9 @@
 </form>
 <form bind:this={publishForm} method="POST" action="?/publishItem" class="hidden" use:enhance>
   <input type="hidden" name="item_id" value={publishItemId} />
+</form>
+<form bind:this={soldOutForm} method="POST" action="?/toggleSoldOut" class="hidden" use:enhance>
+  <input type="hidden" name="item_id" value={soldOutItemId} />
+  <input type="hidden" name="date" value={soldOutDate} />
+  <input type="hidden" name="sold_out" value={soldOutValue} />
 </form>

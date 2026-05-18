@@ -47,6 +47,12 @@ type OutboxTx interface {
 // Clock allows tests to control "now" for cutoff checks.
 type Clock interface{ Now() time.Time }
 
+// VendorReader is the vendor read dependency Place needs to resolve a vendor's
+// per-vendor cutoff hour.
+type VendorReader interface {
+	GetByID(ctx context.Context, id string) (*vendor.Vendor, error)
+}
+
 // Service orchestrates Place / Cancel across order, state-event, outbox, audit,
 // and quota repos. All multi-table writes are wrapped in pgx.BeginFunc so a
 // failure at any step (including ErrOutOfStock) rolls the entire transaction
@@ -64,7 +70,11 @@ type Service struct {
 	QuotaTx     QuotaTx
 	Items       menu.ItemRepository
 	Plants      vendor.PlantMappingRepository
+	Vendors     VendorReader
 	Clock       Clock
+	// Location is the timezone for computing a vendor's cutoff hour. Nil means
+	// UTC; production wires time.Local.
+	Location *time.Location
 }
 
 type PlaceItem struct {
@@ -132,8 +142,17 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		return nil, ErrVendorPlantMismatch
 	}
 
-	// Cutoff: 17:00 UTC the day before the supply date (P3 default).
-	cutoffAt := time.Date(in.SupplyDate.Year(), in.SupplyDate.Month(), in.SupplyDate.Day()-1, 17, 0, 0, 0, time.UTC)
+	// Cutoff: the vendor's configured cutoff hour, local time, the day before
+	// the supply date.
+	v, err := s.Vendors.GetByID(ctx, vendorID)
+	if err != nil {
+		return nil, err
+	}
+	loc := s.Location
+	if loc == nil {
+		loc = time.UTC
+	}
+	cutoffAt := time.Date(in.SupplyDate.Year(), in.SupplyDate.Month(), in.SupplyDate.Day()-1, v.CutoffHour, 0, 0, 0, loc)
 	now := s.Clock.Now()
 	if !now.Before(cutoffAt) {
 		return nil, ErrCutoffPassed

@@ -1,4 +1,4 @@
-import { redirect } from "@sveltejs/kit";
+import { redirect, fail, type Actions } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
 
@@ -14,4 +14,20 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     if (r.data) items = (r.data as any).items ?? [];
   } catch {}
   return { user: locals.user, items, includeArchived };
+};
+
+export const actions: Actions = {
+  // Duplicate a menu item into a fresh draft and open it for editing.
+  copy: async ({ request, locals }) => {
+    if (!locals.user) return fail(401, { error: "unauthenticated" });
+    const id = String((await request.formData()).get("id") ?? "");
+    if (!id) return fail(400, { error: "缺少品項 id" });
+    const client = apiFor(locals.apiToken);
+    const r = await client.POST("/api/merchant/menu-items/{id}/copy", {
+      params: { path: { id } },
+    });
+    if (r.error) return fail(400, { error: "複製菜單失敗，請稍後再試。" });
+    const newId = (r.data as { item?: { id?: string } } | undefined)?.item?.id;
+    throw redirect(303, newId ? `/menus/${newId}` : "/menus");
+  },
 };

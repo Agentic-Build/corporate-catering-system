@@ -93,6 +93,7 @@ func setup(t *testing.T) (*pgxpool.Pool, *order.Service, func()) {
 		QuotaTx:     supplyRepo,
 		Items:       itemRepo,
 		Plants:      plantRepo,
+		Vendors:     vpg.NewVendorRepo(pool),
 		Clock:       fixedClock{T: testClockTime},
 	}
 	cleanup := func() {
@@ -231,6 +232,29 @@ func TestService_Place_PlantNotServed(t *testing.T) {
 		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
 	})
 	assert.ErrorIs(t, err, order.ErrVendorPlantMismatch)
+}
+
+func TestService_Place_UsesVendorCutoffHour(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	vendorID, itemID, userID := seedScenario(t, pool, 5)
+	// Vendor moves its cutoff earlier — 14:00 the day before supply.
+	_, err := pool.Exec(ctx, `UPDATE vendor SET cutoff_hour=14 WHERE id=$1`, vendorID)
+	require.NoError(t, err)
+
+	o, err := svc.Place(ctx, order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
+	})
+	require.NoError(t, err)
+	// Service.Location is nil in tests → UTC. supply 2026-05-14 → cutoff
+	// 2026-05-13 14:00 UTC.
+	want := time.Date(2026, 5, 13, 14, 0, 0, 0, time.UTC)
+	assert.True(t, o.CutoffAt.Equal(want), "cutoff %v, want %v", o.CutoffAt, want)
 }
 
 func TestService_Cancel_Happy(t *testing.T) {
@@ -408,7 +432,8 @@ func TestService_Modify_AfterCutoff(t *testing.T) {
 		Audit: opg.NewAuditRepo(pool), AuditTx: opg.NewAuditRepo(pool),
 		Outbox: opg.NewOutboxRepo(pool), OutboxTx: opg.NewOutboxRepo(pool),
 		QuotaTx: qpg.NewSupplyRepo(pool), Items: mpg.NewItemRepo(pool),
-		Plants: vpg.NewPlantMappingRepo(pool), Clock: fixedClock{T: testClockTime},
+		Plants: vpg.NewPlantMappingRepo(pool), Vendors: vpg.NewVendorRepo(pool),
+		Clock: fixedClock{T: testClockTime},
 	}
 	o, err := svcEarly.Place(context.Background(), order.PlaceOrderInput{
 		UserID: userID, Plant: testPlant, SupplyDate: testSupplyDate,

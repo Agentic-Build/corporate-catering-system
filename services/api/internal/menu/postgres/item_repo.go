@@ -136,7 +136,12 @@ var employeeMenuSortClauses = map[menu.EmployeeMenuSort]string{
 func (r *ItemRepo) ListActiveByPlant(ctx context.Context, f menu.EmployeeMenuFilter) ([]*menu.ActiveItemRow, error) {
 	// $1 = plant, $2 = day are always present; optional filters append $3.. .
 	args := []any{f.Plant, f.Day}
-	where := []string{"mi.status = 'active'"}
+	// A vendor's items only show within its preorder window: the requested
+	// day must be no further ahead than vendor.preorder_window_days.
+	where := []string{
+		"mi.status = 'active'",
+		"$2::date <= CURRENT_DATE + v.preorder_window_days",
+	}
 
 	if q := strings.TrimSpace(f.Q); q != "" {
 		args = append(args, q)
@@ -156,7 +161,7 @@ func (r *ItemRepo) ListActiveByPlant(ctx context.Context, f menu.EmployeeMenuFil
 		where = append(where, "mi.price_minor <= $"+strconv.Itoa(len(args)))
 	}
 	if f.InStock != nil && *f.InStock {
-		where = append(where, "ms.remain > 0")
+		where = append(where, "ms.remain > 0 AND ms.sold_out = false")
 	}
 
 	orderBy, ok := employeeMenuSortClauses[f.Sort]
@@ -169,7 +174,7 @@ SELECT
     mi.id, mi.vendor_id, mi.category_id, mi.name, mi.description, mi.price_minor,
     mi.tags, mi.badges, mi.status, mi.archived_at, mi.created_at, mi.updated_at,
     v.display_name,
-    ms.supply_date, ms.capacity, ms.remain, ms.pickup_window, ms.eta_label, ms.cutoff_at
+    ms.supply_date, ms.capacity, ms.remain, ms.sold_out, ms.pickup_window, ms.eta_label, ms.cutoff_at
 FROM menu_item mi
 JOIN vendor v ON v.id = mi.vendor_id AND v.status = 'approved'
 JOIN vendor_plant_mapping vpm ON vpm.vendor_id = v.id AND vpm.plant = $1 AND vpm.active = true
@@ -189,7 +194,7 @@ WHERE ` + strings.Join(where, " AND ") + `
 			&row.Item.ID, &row.Item.VendorID, &row.Item.CategoryID, &row.Item.Name, &row.Item.Description, &row.Item.PriceMinor,
 			&row.Item.Tags, &row.Item.Badges, &status, &row.Item.ArchivedAt, &row.Item.CreatedAt, &row.Item.UpdatedAt,
 			&row.VendorName,
-			&row.SupplyDate, &row.Capacity, &row.Remain, &row.PickupWindow, &row.ETALabel, &row.CutoffAt,
+			&row.SupplyDate, &row.Capacity, &row.Remain, &row.SoldOut, &row.PickupWindow, &row.ETALabel, &row.CutoffAt,
 		); err != nil {
 			return nil, err
 		}

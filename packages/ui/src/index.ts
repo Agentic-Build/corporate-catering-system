@@ -16,3 +16,4 @@ export { default as StatCard } from "./StatCard.svelte";
 export { default as Tabs } from "./Tabs.svelte";
 export { default as TBiteLogo } from "./TBiteLogo.svelte";
 export { default as Toggle } from "./Toggle.svelte";
+export { default as WeekCalendar } from "./WeekCalendar.svelte";

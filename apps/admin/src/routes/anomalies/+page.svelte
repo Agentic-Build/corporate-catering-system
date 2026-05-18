@@ -157,6 +157,16 @@
                     placeholder="標記為處理中的備註"
                     class="rounded-lg border border-tb-slate-300 px-2 py-1 text-xs focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
                   />
+                  <select
+                    name="action"
+                    class="rounded-lg border border-tb-slate-300 px-2 py-1 text-xs focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
+                  >
+                    <option value="">不附帶動作</option>
+                    {#if a.target_kind === "vendor"}
+                      <option value="warn">＋對商家發出警告</option>
+                      <option value="suspend">＋停權該商家</option>
+                    {/if}
+                  </select>
                   <Button variant="secondary" size="sm" type="submit">標記處理中</Button>
                 </form>
               {/if}

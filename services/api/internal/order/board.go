@@ -74,6 +74,50 @@ func (h *BoardHub) Publish(vendorID string, ev BoardEvent) {
 	}
 }
 
+// MenuHub broadcasts a "menu changed" signal to every subscribed employee
+// menu view. Unlike BoardHub it has no per-vendor key: any order activity can
+// change remaining quota, so every open menu refetches. It is safe for
+// concurrent use.
+type MenuHub struct {
+	mu   sync.Mutex
+	subs map[chan struct{}]struct{}
+}
+
+// NewMenuHub returns an empty broadcast hub.
+func NewMenuHub() *MenuHub {
+	return &MenuHub{subs: map[chan struct{}]struct{}{}}
+}
+
+// Subscribe registers a subscriber and returns its signal channel plus an
+// unsubscribe func the caller MUST invoke when done.
+func (h *MenuHub) Subscribe() (<-chan struct{}, func()) {
+	ch := make(chan struct{}, 1)
+	h.mu.Lock()
+	h.subs[ch] = struct{}{}
+	h.mu.Unlock()
+	return ch, func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if _, ok := h.subs[ch]; ok {
+			delete(h.subs, ch)
+			close(ch)
+		}
+	}
+}
+
+// Broadcast signals every subscriber. A subscriber whose buffer is already
+// full is skipped — one pending "refetch" signal is enough.
+func (h *MenuHub) Broadcast() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for ch := range h.subs {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
+
 // kindFromSubject extracts the event kind from a NATS subject such as
 // "order.placed.v1" -> "placed". Unrecognised shapes return the raw subject.
 func kindFromSubject(subject string) string {
@@ -85,10 +129,11 @@ func kindFromSubject(subject string) string {
 }
 
 // RunBoardConsumer taps the ORDERS_V1 stream and feeds order events into the
-// hub until ctx is cancelled. It uses an ephemeral, ack-none, deliver-new
-// consumer: the board is a live view, so missed or replayed events are
-// undesirable — only events that occur while a board is open matter.
-func RunBoardConsumer(ctx context.Context, js jetstream.JetStream, hub *BoardHub, logger *slog.Logger) error {
+// per-vendor board hub and (if non-nil) the broadcast menu hub, until ctx is
+// cancelled. It uses an ephemeral, ack-none, deliver-new consumer: the board
+// is a live view, so missed or replayed events are undesirable — only events
+// that occur while a board is open matter.
+func RunBoardConsumer(ctx context.Context, js jetstream.JetStream, hub *BoardHub, menuHub *MenuHub, logger *slog.Logger) error {
 	stream, err := js.Stream(ctx, "ORDERS_V1")
 	if err != nil {
 		return err
@@ -114,6 +159,9 @@ func RunBoardConsumer(ctx context.Context, js jetstream.JetStream, hub *BoardHub
 			return
 		}
 		hub.Publish(p.VendorID, BoardEvent{Kind: kindFromSubject(msg.Subject()), OrderID: p.OrderID})
+		if menuHub != nil {
+			menuHub.Broadcast()
+		}
 	})
 	if err != nil {
 		return err

@@ -78,6 +78,7 @@ type ActiveItemRow struct {
 	SupplyDate   time.Time
 	Capacity     int
 	Remain       int
+	SoldOut      bool
 	PickupWindow string
 	ETALabel     string
 	CutoffAt     time.Time

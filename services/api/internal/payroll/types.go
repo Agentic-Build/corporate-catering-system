@@ -43,6 +43,20 @@ type Entry struct {
 	CreatedAt     time.Time
 }
 
+// EmployeeEntry is a payroll entry joined with its batch, for the employee's
+// own salary-deduction history view.
+type EmployeeEntry struct {
+	EntryID       string
+	BatchID       string
+	PeriodStart   time.Time
+	PeriodEnd     time.Time
+	BatchStatus   BatchStatus
+	OrderCount    int
+	AmountMinor   int64
+	RefundedMinor int64
+	CreatedAt     time.Time
+}
+
 type ExceptionKind string
 
 const (

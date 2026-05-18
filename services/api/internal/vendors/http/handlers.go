@@ -20,14 +20,20 @@ type API struct {
 
 // ----- DTOs -----
 
+type plantMappingDTO struct {
+	Plant         string `json:"plant"`
+	ServiceWindow string `json:"service_window"`
+}
+
 type vendorDTO struct {
-	ID           string   `json:"id"`
-	DisplayName  string   `json:"display_name"`
-	LegalName    string   `json:"legal_name"`
-	ContactEmail string   `json:"contact_email"`
-	Status       string   `json:"status"`
-	ApprovedAt   *string  `json:"approved_at,omitempty"`
-	Plants       []string `json:"plants,omitempty"`
+	ID            string            `json:"id"`
+	DisplayName   string            `json:"display_name"`
+	LegalName     string            `json:"legal_name"`
+	ContactEmail  string            `json:"contact_email"`
+	Status        string            `json:"status"`
+	ApprovedAt    *string           `json:"approved_at,omitempty"`
+	Plants        []string          `json:"plants,omitempty"`
+	PlantMappings []plantMappingDTO `json:"plant_mappings,omitempty"`
 }
 
 type listVendorsInput struct {
@@ -56,6 +62,32 @@ type createVendorOutput struct {
 
 type vendorIDInput struct {
 	ID string `path:"id" format:"uuid"`
+}
+
+type vendorSettingsDTO struct {
+	CutoffHour         int `json:"cutoff_hour"`
+	PreorderWindowDays int `json:"preorder_window_days"`
+}
+
+type merchantSettingsOutput struct {
+	Body struct {
+		Settings vendorSettingsDTO `json:"settings"`
+	}
+}
+
+type updateMerchantSettingsInput struct {
+	Body struct {
+		CutoffHour         int `json:"cutoff_hour" minimum:"0" maximum:"23"`
+		PreorderWindowDays int `json:"preorder_window_days" minimum:"1" maximum:"30"`
+	}
+}
+
+type setPlantWindowInput struct {
+	ID    string `path:"id" format:"uuid"`
+	Plant string `path:"plant"`
+	Body  struct {
+		ServiceWindow string `json:"service_window" maxLength:"100" doc:"e.g. 11:30-13:00"`
+	}
 }
 
 type operatorIDInput struct {
@@ -192,6 +224,50 @@ func (a *API) Register(api huma.API) {
 		Security:      []map[string][]string{{"bearer": {}}},
 		DefaultStatus: http.StatusNoContent,
 	}, a.reinstateOperator)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "setVendorPlantWindow",
+		Method:        http.MethodPut,
+		Path:          "/api/admin/vendors/{id}/plants/{plant}/window",
+		Summary:       "Set the service window for a vendor's plant mapping",
+		Tags:          []string{"admin", "vendor"},
+		Security:      []map[string][]string{{"bearer": {}}},
+		DefaultStatus: http.StatusNoContent,
+	}, a.setPlantWindow)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "getMerchantSettings",
+		Method:      http.MethodGet,
+		Path:        "/api/merchant/settings",
+		Summary:     "Get own vendor's ordering settings",
+		Tags:        []string{"merchant", "vendor"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.merchantGetSettings)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "updateMerchantSettings",
+		Method:      http.MethodPut,
+		Path:        "/api/merchant/settings",
+		Summary:     "Update own vendor's cutoff hour and preorder window",
+		Tags:        []string{"merchant", "vendor"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.merchantUpdateSettings)
+}
+
+// requireVendor enforces a vendor_operator bound to a vendor, returning the
+// vendor_id from the session.
+func (a *API) requireVendor(ctx context.Context) (string, error) {
+	u, ok := idhttp.UserFromContext(ctx)
+	if !ok {
+		return "", huma.Error401Unauthorized("not authenticated")
+	}
+	if u.Role != identity.RoleVendorOperator {
+		return "", huma.Error403Forbidden("vendor operator required")
+	}
+	if u.VendorID == nil || *u.VendorID == "" {
+		return "", huma.Error403Forbidden("user is not bound to a vendor")
+	}
+	return *u.VendorID, nil
 }
 
 // ----- Auth guard -----
@@ -209,6 +285,50 @@ func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
 
 // ----- Handlers -----
 
+func (a *API) setPlantWindow(ctx context.Context, in *setPlantWindowInput) (*struct{}, error) {
+	if _, err := a.requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	if err := a.Svc.SetPlantWindow(ctx, in.ID, in.Plant, in.Body.ServiceWindow); err != nil {
+		return nil, mapErr(err)
+	}
+	return &struct{}{}, nil
+}
+
+func (a *API) merchantGetSettings(ctx context.Context, _ *struct{}) (*merchantSettingsOutput, error) {
+	vendorID, err := a.requireVendor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	v, err := a.Svc.Get(ctx, vendorID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp merchantSettingsOutput
+	resp.Body.Settings = vendorSettingsDTO{
+		CutoffHour:         v.CutoffHour,
+		PreorderWindowDays: v.PreorderWindowDays,
+	}
+	return &resp, nil
+}
+
+func (a *API) merchantUpdateSettings(ctx context.Context, in *updateMerchantSettingsInput) (*merchantSettingsOutput, error) {
+	vendorID, err := a.requireVendor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	v, err := a.Svc.UpdateSettings(ctx, vendorID, in.Body.CutoffHour, in.Body.PreorderWindowDays)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp merchantSettingsOutput
+	resp.Body.Settings = vendorSettingsDTO{
+		CutoffHour:         v.CutoffHour,
+		PreorderWindowDays: v.PreorderWindowDays,
+	}
+	return &resp, nil
+}
+
 func (a *API) list(ctx context.Context, in *listVendorsInput) (*listVendorsOutput, error) {
 	if _, err := a.requireAdmin(ctx); err != nil {
 		return nil, err
@@ -225,8 +345,16 @@ func (a *API) list(ctx context.Context, in *listVendorsInput) (*listVendorsOutpu
 	resp.Body.Items = make([]vendorDTO, 0, len(vs))
 	for _, v := range vs {
 		d := toDTO(v)
-		plants, _ := a.Svc.ListPlants(ctx, v.ID)
-		d.Plants = plants
+		mappings, _ := a.Svc.ListPlantMappings(ctx, v.ID)
+		for _, m := range mappings {
+			if !m.Active {
+				continue
+			}
+			d.Plants = append(d.Plants, m.Plant)
+			d.PlantMappings = append(d.PlantMappings, plantMappingDTO{
+				Plant: m.Plant, ServiceWindow: m.ServiceWindow,
+			})
+		}
 		resp.Body.Items = append(resp.Body.Items, d)
 	}
 	return &resp, nil
@@ -367,7 +495,7 @@ func mapErr(err error) error {
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, vendor.ErrAlreadyApproved), errors.Is(err, vendor.ErrInvalidStatus):
 		return huma.Error409Conflict(err.Error())
-	case errors.Is(err, vendor.ErrInvalidOperator):
+	case errors.Is(err, vendor.ErrInvalidOperator), errors.Is(err, vendor.ErrInvalidSettings):
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, vendor.ErrProvisioningSetup):
 		return huma.NewError(http.StatusBadGateway, err.Error())

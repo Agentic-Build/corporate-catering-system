@@ -812,6 +812,54 @@
         ],
         "type": "object"
       },
+      "EmployeeEntryDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_minor": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "batch_id": {
+            "type": "string"
+          },
+          "batch_status": {
+            "type": "string"
+          },
+          "entry_id": {
+            "type": "string"
+          },
+          "net_minor": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "order_count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "period_end": {
+            "type": "string"
+          },
+          "period_start": {
+            "type": "string"
+          },
+          "refunded_minor": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entry_id",
+          "batch_id",
+          "period_start",
+          "period_end",
+          "batch_status",
+          "order_count",
+          "amount_minor",
+          "refunded_minor",
+          "net_minor"
+        ],
+        "type": "object"
+      },
       "EmployeeMenuItemDTO": {
         "additionalProperties": false,
         "properties": {
@@ -1683,6 +1731,33 @@
         ],
         "type": "object"
       },
+      "ListMyEntriesOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ListMyEntriesOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmployeeEntryDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "ListOperatorsOutputBody": {
         "additionalProperties": false,
         "properties": {
@@ -2087,6 +2162,27 @@
           "total_price_minor",
           "notes",
           "items"
+        ],
+        "type": "object"
+      },
+      "MerchantSettingsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/MerchantSettingsOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/VendorSettingsDTO"
+          }
+        },
+        "required": [
+          "settings"
         ],
         "type": "object"
       },
@@ -2538,6 +2634,157 @@
         },
         "required": [
           "order"
+        ],
+        "type": "object"
+      },
+      "PlantMappingDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "plant": {
+            "type": "string"
+          },
+          "service_window": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "plant",
+          "service_window"
+        ],
+        "type": "object"
+      },
+      "PrepSheetItemDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "menu_item_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "qty": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "menu_item_id",
+          "name",
+          "qty"
+        ],
+        "type": "object"
+      },
+      "PrepSheetOrderDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PrepSheetItemDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "total_price_minor": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "order_id",
+          "total_price_minor",
+          "notes",
+          "items"
+        ],
+        "type": "object"
+      },
+      "PrepSheetOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/PrepSheetOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "plants": {
+            "items": {
+              "$ref": "#/components/schemas/PrepSheetPlantDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "total_orders": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total_portions": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "total_orders",
+          "total_portions",
+          "plants"
+        ],
+        "type": "object"
+      },
+      "PrepSheetPlantDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PrepSheetItemDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "order_count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/PrepSheetOrderDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "plant": {
+            "type": "string"
+          },
+          "portion_count": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plant",
+          "order_count",
+          "portion_count",
+          "items",
+          "orders"
         ],
         "type": "object"
       },
@@ -3121,6 +3368,50 @@
         ],
         "type": "object"
       },
+      "SetPlantWindowInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/SetPlantWindowInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "service_window": {
+            "description": "e.g. 11:30-13:00",
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_window"
+        ],
+        "type": "object"
+      },
+      "SetSoldOutInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/SetSoldOutInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "sold_out": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sold_out"
+        ],
+        "type": "object"
+      },
       "SettlementDTO": {
         "additionalProperties": false,
         "properties": {
@@ -3310,6 +3601,9 @@
             "format": "int64",
             "type": "integer"
           },
+          "sold_out": {
+            "type": "boolean"
+          },
           "supply_date": {
             "type": "string"
           }
@@ -3320,6 +3614,7 @@
           "supply_date",
           "capacity",
           "remain",
+          "sold_out",
           "pickup_window",
           "eta_label",
           "cutoff_at"
@@ -3344,6 +3639,36 @@
         },
         "required": [
           "supply"
+        ],
+        "type": "object"
+      },
+      "TriageAnomalyInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/TriageAnomalyInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "action": {
+            "description": "Optional governance action against the target vendor",
+            "enum": [
+              "warn",
+              "suspend",
+              ""
+            ],
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "notes"
         ],
         "type": "object"
       },
@@ -3419,6 +3744,37 @@
           "price_minor",
           "tags",
           "badges"
+        ],
+        "type": "object"
+      },
+      "UpdateMerchantSettingsInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/UpdateMerchantSettingsInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "cutoff_hour": {
+            "format": "int64",
+            "maximum": 23,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "preorder_window_days": {
+            "format": "int64",
+            "maximum": 30,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cutoff_hour",
+          "preorder_window_days"
         ],
         "type": "object"
       },
@@ -3502,6 +3858,15 @@
           "legal_name": {
             "type": "string"
           },
+          "plant_mappings": {
+            "items": {
+              "$ref": "#/components/schemas/PlantMappingDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "plants": {
             "items": {
               "type": "string"
@@ -3541,6 +3906,24 @@
           "id",
           "display_name",
           "status"
+        ],
+        "type": "object"
+      },
+      "VendorSettingsDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "cutoff_hour": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "preorder_window_days": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cutoff_hour",
+          "preorder_window_days"
         ],
         "type": "object"
       },
@@ -3738,7 +4121,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AnomalyActionInputBody"
+                "$ref": "#/components/schemas/TriageAnomalyInputBody"
               }
             }
           },
@@ -5086,6 +5469,65 @@
         ]
       }
     },
+    "/api/admin/vendors/{id}/plants/{plant}/window": {
+      "put": {
+        "operationId": "setVendorPlantWindow",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "plant",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPlantWindowInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set the service window for a vendor's plant mapping",
+        "tags": [
+          "admin",
+          "vendor"
+        ]
+      }
+    },
     "/api/admin/vendors/{id}/reinstate": {
       "post": {
         "operationId": "reinstateVendor",
@@ -5814,6 +6256,74 @@
         ]
       }
     },
+    "/api/employee/menu/events": {
+      "get": {
+        "operationId": "streamEmployeeMenuEvents",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "Each oneOf object in the array represents one possible Server Sent Events (SSE) message, serialized as UTF-8 text according to the SSE specification.",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "properties": {
+                          "data": {
+                            "$ref": "#/components/schemas/BoardEvent"
+                          },
+                          "event": {
+                            "const": "message",
+                            "description": "The event name.",
+                            "type": "string"
+                          },
+                          "id": {
+                            "description": "The event ID.",
+                            "type": "integer"
+                          },
+                          "retry": {
+                            "description": "The retry time in milliseconds.",
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "data"
+                        ],
+                        "title": "Event message",
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "title": "Server Sent Events",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Live menu-changed signal so the employee menu refetches stock (SSE)",
+        "tags": [
+          "employee",
+          "menu"
+        ]
+      }
+    },
     "/api/employee/orders": {
       "get": {
         "operationId": "listMyOrders",
@@ -6249,6 +6759,43 @@
         "tags": [
           "employee",
           "feedback"
+        ]
+      }
+    },
+    "/api/employee/payroll": {
+      "get": {
+        "operationId": "listMyPayrollEntries",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListMyEntriesOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List my salary-deduction entries across batches",
+        "tags": [
+          "employee",
+          "payroll"
         ]
       }
     },
@@ -6852,6 +7399,54 @@
         ]
       }
     },
+    "/api/merchant/menu-items/{id}/copy": {
+      "post": {
+        "operationId": "copyMerchantMenuItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemOutputBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Duplicate a menu item into a fresh draft",
+        "tags": [
+          "merchant",
+          "menu"
+        ]
+      }
+    },
     "/api/merchant/menu-items/{id}/publish": {
       "post": {
         "operationId": "publishMerchantMenuItem",
@@ -7124,6 +7719,55 @@
         ]
       }
     },
+    "/api/merchant/prep-sheet": {
+      "get": {
+        "operationId": "merchantPrepSheet",
+        "parameters": [
+          {
+            "description": "YYYY-MM-DD; defaults to today UTC",
+            "explode": false,
+            "in": "query",
+            "name": "date",
+            "schema": {
+              "description": "YYYY-MM-DD; defaults to today UTC",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrepSheetOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Prep \u0026 delivery output for a day: plant breakdown, labels, baskets",
+        "tags": [
+          "merchant",
+          "order"
+        ]
+      }
+    },
     "/api/merchant/reconciliation": {
       "get": {
         "operationId": "getMerchantReconciliation",
@@ -7174,6 +7818,88 @@
         "tags": [
           "merchant",
           "settlement"
+        ]
+      }
+    },
+    "/api/merchant/settings": {
+      "get": {
+        "operationId": "getMerchantSettings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MerchantSettingsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get own vendor's ordering settings",
+        "tags": [
+          "merchant",
+          "vendor"
+        ]
+      },
+      "put": {
+        "operationId": "updateMerchantSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMerchantSettingsInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MerchantSettingsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update own vendor's cutoff hour and preorder window",
+        "tags": [
+          "merchant",
+          "vendor"
         ]
       }
     },
@@ -7371,6 +8097,72 @@
           }
         ],
         "summary": "Set or update capacity for a menu item on a given date",
+        "tags": [
+          "merchant",
+          "quota"
+        ]
+      }
+    },
+    "/api/merchant/supply/{itemID}/{date}/sold-out": {
+      "post": {
+        "operationId": "setMerchantSupplySoldOut",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "itemID",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "date",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSoldOutInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplyOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mark a supply temporarily sold out (or back in stock)",
         "tags": [
           "merchant",
           "quota"

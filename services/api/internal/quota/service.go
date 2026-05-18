@@ -64,6 +64,25 @@ func (s *Service) SetCapacity(ctx context.Context, vendorID string, in SetCapaci
 	return sp, nil
 }
 
+// SetSoldOut flips the temporary sold-out flag for a vendor's supply on a
+// given day. Capacity and remain are untouched — this is a reversible "we've
+// run out today" switch, distinct from setting capacity to 0. Returns
+// menu.ErrForbidden if the item is not the vendor's, ErrSupplyNotFound if no
+// supply row exists for that day.
+func (s *Service) SetSoldOut(ctx context.Context, vendorID, itemID string, date time.Time, soldOut bool) (*Supply, error) {
+	item, err := s.Items.GetByID(ctx, itemID)
+	if err != nil {
+		return nil, err
+	}
+	if item.VendorID != vendorID {
+		return nil, menu.ErrForbidden
+	}
+	if err := s.Supplies.SetSoldOut(ctx, itemID, date, soldOut); err != nil {
+		return nil, err
+	}
+	return s.Supplies.Get(ctx, itemID, date)
+}
+
 // GetForItem returns the supply for a vendor's item on a given day.
 // Returns menu.ErrForbidden if the item does not belong to the vendor.
 func (s *Service) GetForItem(ctx context.Context, vendorID, itemID string, date time.Time) (*Supply, error) {

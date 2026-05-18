@@ -117,6 +117,26 @@ func (s *Service) List(ctx context.Context, statuses []Status) ([]*Vendor, error
 	return s.Vendors.List(ctx, statuses)
 }
 
+// Get returns a single vendor by id.
+func (s *Service) Get(ctx context.Context, id string) (*Vendor, error) {
+	return s.Vendors.GetByID(ctx, id)
+}
+
+// UpdateSettings updates a vendor's ordering settings (cutoff hour + preorder
+// window). cutoffHour must be 0-23 and preorderWindowDays 1-30.
+func (s *Service) UpdateSettings(ctx context.Context, id string, cutoffHour, preorderWindowDays int) (*Vendor, error) {
+	if cutoffHour < 0 || cutoffHour > 23 {
+		return nil, fmt.Errorf("%w: cutoff_hour must be 0-23", ErrInvalidSettings)
+	}
+	if preorderWindowDays < 1 || preorderWindowDays > 30 {
+		return nil, fmt.Errorf("%w: preorder_window_days must be 1-30", ErrInvalidSettings)
+	}
+	if err := s.Vendors.UpdateSettings(ctx, id, cutoffHour, preorderWindowDays); err != nil {
+		return nil, err
+	}
+	return s.Vendors.GetByID(ctx, id)
+}
+
 // ListPlants returns the active plant codes mapped to a vendor.
 func (s *Service) ListPlants(ctx context.Context, id string) ([]string, error) {
 	list, err := s.Plants.ListByVendor(ctx, id)
@@ -130,6 +150,20 @@ func (s *Service) ListPlants(ctx context.Context, id string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// ListPlantMappings returns the vendor's active plant mappings, including each
+// plant's service window.
+func (s *Service) ListPlantMappings(ctx context.Context, id string) ([]*PlantMapping, error) {
+	return s.Plants.ListByVendor(ctx, id)
+}
+
+// SetPlantWindow sets the service window for one of a vendor's plant mappings.
+func (s *Service) SetPlantWindow(ctx context.Context, vendorID, plant, window string) error {
+	if _, err := s.Vendors.GetByID(ctx, vendorID); err != nil {
+		return err
+	}
+	return s.Plants.SetWindow(ctx, vendorID, plant, window)
 }
 
 func (s *Service) ListOperators(ctx context.Context, vendorID string) ([]*OperatorAccount, error) {

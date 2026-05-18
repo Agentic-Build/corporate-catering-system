@@ -29,6 +29,7 @@ type supplyDTO struct {
 	SupplyDate   string `json:"supply_date"` // YYYY-MM-DD
 	Capacity     int    `json:"capacity"`
 	Remain       int    `json:"remain"`
+	SoldOut      bool   `json:"sold_out"`
 	PickupWindow string `json:"pickup_window"`
 	ETALabel     string `json:"eta_label"`
 	CutoffAt     string `json:"cutoff_at"`
@@ -41,6 +42,7 @@ func toDTO(s *quota.Supply) supplyDTO {
 		SupplyDate:   s.SupplyDate.Format("2006-01-02"),
 		Capacity:     s.Capacity,
 		Remain:       s.Remain,
+		SoldOut:      s.SoldOut,
 		PickupWindow: s.PickupWindow,
 		ETALabel:     s.ETALabel,
 		CutoffAt:     s.CutoffAt.UTC().Format(time.RFC3339),
@@ -63,6 +65,14 @@ type setCapacityInput struct {
 type supplyOutput struct {
 	Body struct {
 		Supply supplyDTO `json:"supply"`
+	}
+}
+
+type setSoldOutInput struct {
+	ItemID string `path:"itemID" format:"uuid"`
+	Date   string `path:"date"` // YYYY-MM-DD
+	Body   struct {
+		SoldOut bool `json:"sold_out"`
 	}
 }
 
@@ -97,6 +107,15 @@ func (a *API) Register(api huma.API) {
 		Tags:        []string{"merchant", "quota"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.list)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "setMerchantSupplySoldOut",
+		Method:      http.MethodPost,
+		Path:        "/api/merchant/supply/{itemID}/{date}/sold-out",
+		Summary:     "Mark a supply temporarily sold out (or back in stock)",
+		Tags:        []string{"merchant", "quota"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.setSoldOut)
 }
 
 // ----- Auth helper -----
@@ -149,6 +168,24 @@ func (a *API) setCapacity(ctx context.Context, in *setCapacityInput) (*supplyOut
 		ETALabel:     in.Body.ETALabel,
 		CutoffAt:     cutoff,
 	})
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp supplyOutput
+	resp.Body.Supply = toDTO(sp)
+	return &resp, nil
+}
+
+func (a *API) setSoldOut(ctx context.Context, in *setSoldOutInput) (*supplyOutput, error) {
+	_, vendorID, err := a.requireVendor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	day, err := parseDate(in.Date, time.Time{})
+	if err != nil {
+		return nil, err
+	}
+	sp, err := a.Svc.SetSoldOut(ctx, vendorID, in.ItemID, day, in.Body.SoldOut)
 	if err != nil {
 		return nil, mapErr(err)
 	}

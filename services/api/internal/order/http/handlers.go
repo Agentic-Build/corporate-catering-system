@@ -24,6 +24,9 @@ type API struct {
 	// optional: when nil (NATS not configured) the SSE endpoint stays open but
 	// emits only keep-alive pings.
 	Board *order.BoardHub
+	// MenuHub broadcasts a "menu changed" signal to employee menu views so
+	// they refetch when stock moves. Optional, same as Board.
+	MenuHub *order.MenuHub
 }
 
 // ----- DTOs -----
@@ -205,6 +208,48 @@ func toMerchantDTO(o *order.Order) merchantOrderDTO {
 	return d
 }
 
+type prepSheetItemDTO struct {
+	MenuItemID string `json:"menu_item_id"`
+	Name       string `json:"name"`
+	Qty        int    `json:"qty"`
+}
+
+type prepSheetOrderDTO struct {
+	OrderID         string             `json:"order_id"`
+	TotalPriceMinor int64              `json:"total_price_minor"`
+	Notes           string             `json:"notes"`
+	Items           []prepSheetItemDTO `json:"items"`
+}
+
+type prepSheetPlantDTO struct {
+	Plant        string              `json:"plant"`
+	OrderCount   int                 `json:"order_count"`
+	PortionCount int                 `json:"portion_count"`
+	Items        []prepSheetItemDTO  `json:"items"`
+	Orders       []prepSheetOrderDTO `json:"orders"`
+}
+
+type prepSheetInput struct {
+	Date string `query:"date" doc:"YYYY-MM-DD; defaults to today UTC"`
+}
+
+type prepSheetOutput struct {
+	Body struct {
+		Date          string              `json:"date"`
+		TotalOrders   int                 `json:"total_orders"`
+		TotalPortions int                 `json:"total_portions"`
+		Plants        []prepSheetPlantDTO `json:"plants"`
+	}
+}
+
+func prepItemDTOs(items []order.PrepSheetItem) []prepSheetItemDTO {
+	out := make([]prepSheetItemDTO, 0, len(items))
+	for _, it := range items {
+		out = append(out, prepSheetItemDTO{MenuItemID: it.MenuItemID, Name: it.Name, Qty: it.Qty})
+	}
+	return out
+}
+
 // ----- Registration -----
 
 func (a *API) Register(api huma.API) {
@@ -293,6 +338,15 @@ func (a *API) Register(api huma.API) {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.listMerchantOrders)
 
+	huma.Register(api, huma.Operation{
+		OperationID: "merchantPrepSheet",
+		Method:      http.MethodGet,
+		Path:        "/api/merchant/prep-sheet",
+		Summary:     "Prep & delivery output for a day: plant breakdown, labels, baskets",
+		Tags:        []string{"merchant", "order"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.prepSheet)
+
 	sse.Register(api, huma.Operation{
 		OperationID: "streamMerchantOrderEvents",
 		Method:      http.MethodGet,
@@ -303,6 +357,17 @@ func (a *API) Register(api huma.API) {
 	}, map[string]any{
 		"message": order.BoardEvent{},
 	}, a.streamMerchantOrderEvents)
+
+	sse.Register(api, huma.Operation{
+		OperationID: "streamEmployeeMenuEvents",
+		Method:      http.MethodGet,
+		Path:        "/api/employee/menu/events",
+		Summary:     "Live menu-changed signal so the employee menu refetches stock (SSE)",
+		Tags:        []string{"employee", "menu"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, map[string]any{
+		"message": order.BoardEvent{},
+	}, a.streamEmployeeMenuEvents)
 }
 
 // ----- Auth helper -----
@@ -509,6 +574,49 @@ func (a *API) listMerchantOrders(ctx context.Context, in *listMerchantOrdersInpu
 	return &resp, nil
 }
 
+func (a *API) prepSheet(ctx context.Context, in *prepSheetInput) (*prepSheetOutput, error) {
+	_, vendorID, err := a.requireVendor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	day := time.Now().UTC().Truncate(24 * time.Hour)
+	if in.Date != "" {
+		d, perr := time.Parse("2006-01-02", in.Date)
+		if perr != nil {
+			return nil, huma.Error400BadRequest("invalid date (want YYYY-MM-DD)")
+		}
+		day = d.UTC()
+	}
+	sheet, err := a.Svc.PrepSheet(ctx, vendorID, day)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp prepSheetOutput
+	resp.Body.Date = sheet.Date.Format("2006-01-02")
+	resp.Body.TotalOrders = sheet.TotalOrders
+	resp.Body.TotalPortions = sheet.TotalPortions
+	resp.Body.Plants = make([]prepSheetPlantDTO, 0, len(sheet.Plants))
+	for _, p := range sheet.Plants {
+		pd := prepSheetPlantDTO{
+			Plant:        p.Plant,
+			OrderCount:   p.OrderCount,
+			PortionCount: p.PortionCount,
+			Items:        prepItemDTOs(p.Items),
+			Orders:       make([]prepSheetOrderDTO, 0, len(p.Orders)),
+		}
+		for _, o := range p.Orders {
+			pd.Orders = append(pd.Orders, prepSheetOrderDTO{
+				OrderID:         o.OrderID,
+				TotalPriceMinor: o.TotalPriceMinor,
+				Notes:           o.Notes,
+				Items:           prepItemDTOs(o.Items),
+			})
+		}
+		resp.Body.Plants = append(resp.Body.Plants, pd)
+	}
+	return &resp, nil
+}
+
 // streamMerchantOrderEvents streams live order events for the caller's vendor
 // over SSE. The merchant prep board re-fetches its data on each event, so the
 // payload stays minimal. A 20s keep-alive ping holds the connection open.
@@ -539,6 +647,41 @@ func (a *API) streamMerchantOrderEvents(ctx context.Context, _ *struct{}, send s
 				return
 			}
 			if send.Data(ev) != nil {
+				return
+			}
+		}
+	}
+}
+
+// streamEmployeeMenuEvents streams a "menu changed" signal to the employee
+// menu view so it refetches when an order shifts available stock.
+func (a *API) streamEmployeeMenuEvents(ctx context.Context, _ *struct{}, send sse.Sender) {
+	u, ok := idhttp.UserFromContext(ctx)
+	if !ok || u.Role != identity.RoleEmployee {
+		return
+	}
+	if a.MenuHub == nil {
+		<-ctx.Done()
+		return
+	}
+	ch, unsub := a.MenuHub.Subscribe()
+	defer unsub()
+
+	heartbeat := time.NewTicker(20 * time.Second)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-heartbeat.C:
+			if send.Data(order.BoardEvent{Kind: "ping"}) != nil {
+				return
+			}
+		case _, open := <-ch:
+			if !open {
+				return
+			}
+			if send.Data(order.BoardEvent{Kind: "changed"}) != nil {
 				return
 			}
 		}

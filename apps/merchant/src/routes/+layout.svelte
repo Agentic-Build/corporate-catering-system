@@ -16,6 +16,7 @@
     { href: "/complaints", label: "客訴收件匣", icon: "bell" },
     { href: "/reconciliation", label: "對帳", icon: "wallet" },
     { href: "/compliance", label: "合規自查", icon: "check" },
+    { href: "/settings", label: "營運設定", icon: "cog" },
   ];
 
   /** A nav item is active when the path matches it or sits beneath it. */

@@ -69,12 +69,23 @@
               <StateTag tone={meta.tone}>{meta.label}</StateTag>
             </td>
             <td class="px-5 py-3 text-right">
-              <a
-                href="/menus/{item.id}"
-                class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
-              >
-                編輯
-              </a>
+              <div class="flex items-center justify-end gap-3">
+                <form method="POST" action="?/copy">
+                  <input type="hidden" name="id" value={item.id} />
+                  <button
+                    type="submit"
+                    class="text-sm font-semibold text-tb-slate-500 hover:text-tb-slate-800"
+                  >
+                    複製
+                  </button>
+                </form>
+                <a
+                  href="/menus/{item.id}"
+                  class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+                >
+                  編輯
+                </a>
+              </div>
             </td>
           </tr>
         {/each}

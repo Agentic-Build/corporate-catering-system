@@ -206,12 +206,15 @@ func main() {
 			QuotaTx:     supplyRepo,
 			Items:       itemRepo,
 			Plants:      plantRepo,
+			Vendors:     vpgrepo.NewVendorRepo(pool),
 			Clock:       clock.SystemClock{},
+			Location:    time.Local,
 		}
 		// BoardHub fans live order events to the merchant prep board over SSE.
 		// It is wired to NATS below when NATS_URL is configured.
 		boardHub := order.NewBoardHub()
-		orderAPI := &ohttp.API{Svc: orderService, Board: boardHub}
+		menuHub := order.NewMenuHub()
+		orderAPI := &ohttp.API{Svc: orderService, Board: boardHub, MenuHub: menuHub}
 
 		// 7f. Payroll service + admin/employee handlers
 		payrollService := &payroll.Service{
@@ -248,15 +251,16 @@ func main() {
 			logger.Warn("ensure bucket failed; uploads will fail until storage is reachable", "err", err)
 		}
 		complianceService := &compliance.Service{
-			Pool:     pool,
-			Docs:     cpgrepo.NewDocumentRepo(pool),
-			Anomaly:  cpgrepo.NewAnomalyRepo(pool),
-			Storage:  s3API,
-			Audit:    auditRepo,
-			Outbox:   outboxRepo,
-			AuditQry: auditRepo,
-			Vendors:  vpgrepo.NewVendorRepo(pool),
-			Clock:    clock.SystemClock{},
+			Pool:      pool,
+			Docs:      cpgrepo.NewDocumentRepo(pool),
+			Anomaly:   cpgrepo.NewAnomalyRepo(pool),
+			Storage:   s3API,
+			Audit:     auditRepo,
+			Outbox:    outboxRepo,
+			AuditQry:  auditRepo,
+			Vendors:   vpgrepo.NewVendorRepo(pool),
+			VendorGov: vendorService,
+			Clock:     clock.SystemClock{},
 		}
 		complianceAPI := &chttp.API{Svc: complianceService}
 
@@ -273,7 +277,7 @@ func main() {
 				// push live updates. Failure here is non-fatal: the board
 				// still works, just without push.
 				go func() {
-					if err := order.RunBoardConsumer(ctx, natsClient.JS, boardHub, logger); err != nil {
+					if err := order.RunBoardConsumer(ctx, natsClient.JS, boardHub, menuHub, logger); err != nil {
 						logger.Warn("board consumer stopped", "err", err)
 					}
 				}()
@@ -672,7 +676,9 @@ func main() {
 			QuotaTx:     supplyRepo,
 			Items:       itemRepo,
 			Plants:      plantRepo,
+			Vendors:     vpgrepo.NewVendorRepo(pool),
 			Clock:       clock.SystemClock{},
+			Location:    time.Local,
 		}
 		vendorService := &vendor.Service{
 			Vendors:     vpgrepo.NewVendorRepo(pool),
@@ -694,14 +700,15 @@ func main() {
 			Clock:    clock.SystemClock{},
 		}
 		complianceService := &compliance.Service{
-			Pool:     pool,
-			Docs:     cpgrepo.NewDocumentRepo(pool),
-			Anomaly:  cpgrepo.NewAnomalyRepo(pool),
-			Storage:  nil, // not needed for read-only MCP tools
-			Audit:    auditRepo,
-			Outbox:   outboxRepo,
-			AuditQry: auditRepo,
-			Clock:    clock.SystemClock{},
+			Pool:      pool,
+			Docs:      cpgrepo.NewDocumentRepo(pool),
+			Anomaly:   cpgrepo.NewAnomalyRepo(pool),
+			Storage:   nil, // not needed for read-only MCP tools
+			Audit:     auditRepo,
+			Outbox:    outboxRepo,
+			AuditQry:  auditRepo,
+			VendorGov: vendorService,
+			Clock:     clock.SystemClock{},
 		}
 		feedbackService := &feedback.Service{
 			Pool:       pool,

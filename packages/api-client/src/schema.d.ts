@@ -433,6 +433,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/vendors/{id}/plants/{plant}/window": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the service window for a vendor's plant mapping */
+        put: operations["setVendorPlantWindow"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/vendors/{id}/reinstate": {
         parameters: {
             query?: never;
@@ -623,6 +640,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/employee/menu/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live menu-changed signal so the employee menu refetches stock (SSE) */
+        get: operations["streamEmployeeMenuEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/employee/orders": {
         parameters: {
             query?: never;
@@ -738,6 +772,23 @@ export interface paths {
         put?: never;
         /** Clone a past order onto a new supply date (partial fallback) */
         post: operations["reorderMyOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/employee/payroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List my salary-deduction entries across batches */
+        get: operations["listMyPayrollEntries"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -916,6 +967,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/menu-items/{id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Duplicate a menu item into a fresh draft */
+        post: operations["copyMerchantMenuItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/menu-items/{id}/publish": {
         parameters: {
             query?: never;
@@ -1001,6 +1069,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/prep-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Prep & delivery output for a day: plant breakdown, labels, baskets */
+        get: operations["merchantPrepSheet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/reconciliation": {
         parameters: {
             query?: never;
@@ -1011,6 +1096,24 @@ export interface paths {
         /** Live monthly reconciliation summary for the calling vendor */
         get: operations["getMerchantReconciliation"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get own vendor's ordering settings */
+        get: operations["getMerchantSettings"];
+        /** Update own vendor's cutoff hour and preorder window */
+        put: operations["updateMerchantSettings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1080,6 +1183,23 @@ export interface paths {
         /** Set or update capacity for a menu item on a given date */
         put: operations["setMerchantSupply"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/supply/{itemID}/{date}/sold-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark a supply temporarily sold out (or back in stock) */
+        post: operations["setMerchantSupplySoldOut"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1452,6 +1572,21 @@ export interface components {
             uploaded_by?: string;
             vendor_id: string;
         };
+        EmployeeEntryDTO: {
+            /** Format: int64 */
+            amount_minor: number;
+            batch_id: string;
+            batch_status: string;
+            entry_id: string;
+            /** Format: int64 */
+            net_minor: number;
+            /** Format: int64 */
+            order_count: number;
+            period_end: string;
+            period_start: string;
+            /** Format: int64 */
+            refunded_minor: number;
+        };
         EmployeeMenuItemDTO: {
             badges: string[] | null;
             /** Format: int64 */
@@ -1733,6 +1868,15 @@ export interface components {
             date: string;
             items: components["schemas"]["MerchantOrderDTO"][] | null;
         };
+        ListMyEntriesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListMyEntriesOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["EmployeeEntryDTO"][] | null;
+        };
         ListOperatorsOutputBody: {
             /**
              * Format: uri
@@ -1855,6 +1999,15 @@ export interface components {
             status: string;
             /** Format: int64 */
             total_price_minor: number;
+        };
+        MerchantSettingsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MerchantSettingsOutputBody.json
+             */
+            readonly $schema?: string;
+            settings: components["schemas"]["VendorSettingsDTO"];
         };
         MerchantUploadDocumentInputBody: {
             /**
@@ -2005,6 +2158,46 @@ export interface components {
              */
             readonly $schema?: string;
             order: components["schemas"]["OrderDTO"];
+        };
+        PlantMappingDTO: {
+            plant: string;
+            service_window: string;
+        };
+        PrepSheetItemDTO: {
+            menu_item_id: string;
+            name: string;
+            /** Format: int64 */
+            qty: number;
+        };
+        PrepSheetOrderDTO: {
+            items: components["schemas"]["PrepSheetItemDTO"][] | null;
+            notes: string;
+            order_id: string;
+            /** Format: int64 */
+            total_price_minor: number;
+        };
+        PrepSheetOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PrepSheetOutputBody.json
+             */
+            readonly $schema?: string;
+            date: string;
+            plants: components["schemas"]["PrepSheetPlantDTO"][] | null;
+            /** Format: int64 */
+            total_orders: number;
+            /** Format: int64 */
+            total_portions: number;
+        };
+        PrepSheetPlantDTO: {
+            items: components["schemas"]["PrepSheetItemDTO"][] | null;
+            /** Format: int64 */
+            order_count: number;
+            orders: components["schemas"]["PrepSheetOrderDTO"][] | null;
+            plant: string;
+            /** Format: int64 */
+            portion_count: number;
         };
         ProviderDTO: {
             display_name: string;
@@ -2210,6 +2403,25 @@ export interface components {
             eta_label: string;
             pickup_window: string;
         };
+        SetPlantWindowInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SetPlantWindowInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description e.g. 11:30-13:00 */
+            service_window: string;
+        };
+        SetSoldOutInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SetSoldOutInputBody.json
+             */
+            readonly $schema?: string;
+            sold_out: boolean;
+        };
         SettlementDTO: {
             closed_at: string;
             closed_by?: string;
@@ -2276,6 +2488,7 @@ export interface components {
             pickup_window: string;
             /** Format: int64 */
             remain: number;
+            sold_out: boolean;
             supply_date: string;
         };
         SupplyOutputBody: {
@@ -2286,6 +2499,20 @@ export interface components {
              */
             readonly $schema?: string;
             supply: components["schemas"]["SupplyDTO"];
+        };
+        TriageAnomalyInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/TriageAnomalyInputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * @description Optional governance action against the target vendor
+             * @enum {string}
+             */
+            action?: "warn" | "suspend" | "";
+            notes: string;
         };
         UnavailableItemDTO: {
             menu_item_id: string;
@@ -2306,6 +2533,18 @@ export interface components {
             /** Format: int64 */
             price_minor: number;
             tags: string[] | null;
+        };
+        UpdateMerchantSettingsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateMerchantSettingsInputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            cutoff_hour: number;
+            /** Format: int64 */
+            preorder_window_days: number;
         };
         UploadDocumentInputBody: {
             /**
@@ -2335,6 +2574,7 @@ export interface components {
             display_name: string;
             id: string;
             legal_name: string;
+            plant_mappings?: components["schemas"]["PlantMappingDTO"][] | null;
             plants?: string[] | null;
             status: string;
         };
@@ -2342,6 +2582,12 @@ export interface components {
             display_name: string;
             id: string;
             status: string;
+        };
+        VendorSettingsDTO: {
+            /** Format: int64 */
+            cutoff_hour: number;
+            /** Format: int64 */
+            preorder_window_days: number;
         };
         VerifyPickupInputBody: {
             /**
@@ -2442,7 +2688,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AnomalyActionInputBody"];
+                "application/json": components["schemas"]["TriageAnomalyInputBody"];
             };
         };
         responses: {
@@ -3299,6 +3545,40 @@ export interface operations {
             };
         };
     };
+    setVendorPlantWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                plant: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPlantWindowInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     reinstateVendor: {
         parameters: {
             query?: never;
@@ -3748,6 +4028,46 @@ export interface operations {
             };
         };
     };
+    streamEmployeeMenuEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": {
+                        data: components["schemas"]["BoardEvent"];
+                        /**
+                         * @description The event name.
+                         * @constant
+                         */
+                        event?: "message";
+                        /** @description The event ID. */
+                        id?: number;
+                        /** @description The retry time in milliseconds. */
+                        retry?: number;
+                    }[];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     listMyOrders: {
         parameters: {
             query?: never;
@@ -4026,6 +4346,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReorderOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listMyPayrollEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListMyEntriesOutputBody"];
                 };
             };
             /** @description Error */
@@ -4426,6 +4775,37 @@ export interface operations {
             };
         };
     };
+    copyMerchantMenuItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     publishMerchantMenuItem: {
         parameters: {
             query?: never;
@@ -4592,6 +4972,38 @@ export interface operations {
             };
         };
     };
+    merchantPrepSheet: {
+        parameters: {
+            query?: {
+                /** @description YYYY-MM-DD; defaults to today UTC */
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrepSheetOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     getMerchantReconciliation: {
         parameters: {
             query?: {
@@ -4614,6 +5026,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReconciliationOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getMerchantSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantSettingsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    updateMerchantSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMerchantSettingsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantSettingsOutputBody"];
                 };
             };
             /** @description Error */
@@ -4732,6 +5206,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetCapacityInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplyOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    setMerchantSupplySoldOut: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemID: string;
+                date: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetSoldOutInputBody"];
             };
         };
         responses: {

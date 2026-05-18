@@ -248,6 +248,36 @@ func TestService_Publish_WrongVendorIsForbidden(t *testing.T) {
 	assert.ErrorIs(t, err, menu.ErrForbidden)
 }
 
+func TestService_CopyItem_CreatesIndependentDraft(t *testing.T) {
+	svc, _, _, _ := newSvc()
+	src, err := svc.CreateItem(context.Background(), menu.CreateItemInput{
+		VendorID: "v1", Name: "雞腿便當", Description: "經典", PriceMinor: 11000,
+		Tags: []string{"halal"}, Badges: []string{"hot"},
+	})
+	require.NoError(t, err)
+	require.NoError(t, svc.Publish(context.Background(), src.ID, "v1")) // source is active
+
+	copied, err := svc.CopyItem(context.Background(), src.ID, "v1")
+	require.NoError(t, err)
+	assert.NotEqual(t, src.ID, copied.ID)
+	assert.Equal(t, "雞腿便當（複製）", copied.Name)
+	assert.Equal(t, menu.ItemStatusDraft, copied.Status, "copy is a draft even when source is active")
+	assert.Equal(t, src.PriceMinor, copied.PriceMinor)
+	assert.Equal(t, src.Description, copied.Description)
+	assert.Equal(t, []string{"halal"}, copied.Tags)
+	assert.Equal(t, []string{"hot"}, copied.Badges)
+}
+
+func TestService_CopyItem_WrongVendorIsForbidden(t *testing.T) {
+	svc, _, _, _ := newSvc()
+	src, err := svc.CreateItem(context.Background(), menu.CreateItemInput{
+		VendorID: "v-owner", Name: "X", PriceMinor: 9000,
+	})
+	require.NoError(t, err)
+	_, err = svc.CopyItem(context.Background(), src.ID, "v-other")
+	assert.ErrorIs(t, err, menu.ErrForbidden)
+}
+
 func TestService_Archive_OwnVendor_Succeeds(t *testing.T) {
 	svc, _, ir, _ := newSvc()
 	created, _ := svc.CreateItem(context.Background(), menu.CreateItemInput{
@@ -307,6 +337,24 @@ func TestService_ListForEmployee_JoinsImagesAndMarksSoldOut(t *testing.T) {
 	assert.Equal(t, []string{"blob://1", "blob://2"}, got.Images)
 	assert.Equal(t, []string{"招牌"}, got.Tags)
 	assert.Equal(t, "12:00-12:30", got.PickupWindow)
+}
+
+func TestService_ListForEmployee_RespectsSoldOutFlag(t *testing.T) {
+	svc, _, ir, _ := newSvc()
+	ctx := context.Background()
+	item := &menu.Item{
+		ID: "item-7", VendorID: "v1", Name: "雞排飯", PriceMinor: 9000, Status: menu.ItemStatusActive,
+	}
+	ir.byID[item.ID] = item
+	day := time.Date(2026, 5, 14, 0, 0, 0, 0, time.UTC)
+	ir.activeByPlant["F12B-3F"] = []*menu.ActiveItemRow{
+		{Item: *item, VendorName: "X", SupplyDate: day, Capacity: 50, Remain: 20, SoldOut: true},
+	}
+	out, err := svc.ListForEmployee(ctx, menu.EmployeeMenuFilter{Plant: "F12B-3F", Day: day})
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	assert.True(t, out[0].SoldOut, "sold_out flag marks the item unavailable even with remain>0")
+	assert.Equal(t, 20, out[0].Remain)
 }
 
 func TestService_ListForEmployee_PassesFilterToRepo(t *testing.T) {

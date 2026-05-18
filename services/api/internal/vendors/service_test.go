@@ -72,6 +72,18 @@ func (r *fakeVendorRepo) UpdateStatus(_ context.Context, id string, s vendor.Sta
 	return nil
 }
 
+func (r *fakeVendorRepo) UpdateSettings(_ context.Context, id string, cutoffHour, preorderWindowDays int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	v, ok := r.byID[id]
+	if !ok {
+		return vendor.ErrVendorNotFound
+	}
+	v.CutoffHour = cutoffHour
+	v.PreorderWindowDays = preorderWindowDays
+	return nil
+}
+
 func (r *fakeVendorRepo) List(_ context.Context, statuses []vendor.Status) ([]*vendor.Vendor, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -94,9 +106,19 @@ func (r *fakeVendorRepo) List(_ context.Context, statuses []vendor.Status) ([]*v
 type fakePlantRepo struct {
 	mu       sync.Mutex
 	byVendor map[string][]string
+	windows  map[string]string // vendorID|plant -> window
 }
 
-func newFakePlantRepo() *fakePlantRepo { return &fakePlantRepo{byVendor: map[string][]string{}} }
+func newFakePlantRepo() *fakePlantRepo {
+	return &fakePlantRepo{byVendor: map[string][]string{}, windows: map[string]string{}}
+}
+
+func (r *fakePlantRepo) SetWindow(_ context.Context, vendorID, plant, window string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.windows[vendorID+"|"+plant] = window
+	return nil
+}
 
 func (r *fakePlantRepo) ListByVendor(_ context.Context, id string) ([]*vendor.PlantMapping, error) {
 	r.mu.Lock()
@@ -395,4 +417,37 @@ func hasOperatorStatus(items []vendor.OperatorStatus, status vendor.OperatorStat
 		}
 	}
 	return false
+}
+
+func TestService_UpdateSettings(t *testing.T) {
+	svc, _, _, _, _ := newSvc()
+	ctx := context.Background()
+	v, err := svc.CreatePending(ctx, "稻禾", "稻禾股份", "ricehouse@test.com")
+	require.NoError(t, err)
+	// Defaults are the DB defaults — the fake leaves them zero, so just check
+	// the update path here.
+	updated, err := svc.UpdateSettings(ctx, v.ID, 15, 5)
+	require.NoError(t, err)
+	assert.Equal(t, 15, updated.CutoffHour)
+	assert.Equal(t, 5, updated.PreorderWindowDays)
+
+	// Out-of-range values are rejected.
+	_, err = svc.UpdateSettings(ctx, v.ID, 24, 7)
+	assert.ErrorIs(t, err, vendor.ErrInvalidSettings)
+	_, err = svc.UpdateSettings(ctx, v.ID, 12, 0)
+	assert.ErrorIs(t, err, vendor.ErrInvalidSettings)
+}
+
+func TestService_SetPlantWindow(t *testing.T) {
+	svc, _, pr, _, _ := newSvc()
+	ctx := context.Background()
+	v, err := svc.CreatePending(ctx, "稻禾", "稻禾股份", "rh-window@test.com")
+	require.NoError(t, err)
+
+	require.NoError(t, svc.SetPlantWindow(ctx, v.ID, "F12B-3F", "11:30-13:00"))
+	assert.Equal(t, "11:30-13:00", pr.windows[v.ID+"|F12B-3F"])
+
+	// Unknown vendor → not found.
+	err = svc.SetPlantWindow(ctx, "00000000-0000-0000-0000-000000000000", "F12B-3F", "11:00-12:00")
+	assert.ErrorIs(t, err, vendor.ErrVendorNotFound)
 }

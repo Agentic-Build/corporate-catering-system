@@ -104,6 +104,30 @@ func (s *Service) UpdateItem(ctx context.Context, itemID, vendorID string, in Up
 	return existing, nil
 }
 
+// CopyItem duplicates an existing menu item into a fresh draft owned by the
+// same vendor — the merchant's quick "上架改量" path. The copy always starts
+// as a draft (even when the source is active) and its name is suffixed so the
+// two are distinguishable in the meal library. Returns ErrForbidden when the
+// source item does not belong to the supplied vendor.
+func (s *Service) CopyItem(ctx context.Context, itemID, vendorID string) (*Item, error) {
+	src, err := s.Items.GetByID(ctx, itemID)
+	if err != nil {
+		return nil, err
+	}
+	if src.VendorID != vendorID {
+		return nil, ErrForbidden
+	}
+	return s.CreateItem(ctx, CreateItemInput{
+		VendorID:    vendorID,
+		CategoryID:  src.CategoryID,
+		Name:        src.Name + "（複製）",
+		Description: src.Description,
+		PriceMinor:  src.PriceMinor,
+		Tags:        src.Tags,
+		Badges:      src.Badges,
+	})
+}
+
 // Publish transitions an item to active. Vendor must own the item.
 func (s *Service) Publish(ctx context.Context, itemID, vendorID string) error {
 	item, err := s.Items.GetByID(ctx, itemID)
@@ -198,7 +222,7 @@ func (s *Service) ListForEmployee(ctx context.Context, f EmployeeMenuFilter) ([]
 			Images:       uris,
 			Capacity:     r.Capacity,
 			Remain:       r.Remain,
-			SoldOut:      r.Remain == 0,
+			SoldOut:      r.Remain <= 0 || r.SoldOut,
 			PickupWindow: r.PickupWindow,
 			ETALabel:     r.ETALabel,
 		})

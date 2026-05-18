@@ -36,10 +36,10 @@ func (r *VendorRepo) GetByEmail(ctx context.Context, email string) (*vendor.Vend
 func (r *VendorRepo) one(ctx context.Context, where string, args ...any) (*vendor.Vendor, error) {
 	var v vendor.Vendor
 	var status string
-	q := `SELECT id, display_name, legal_name, contact_email, status, approved_at, approved_by, created_at, updated_at FROM vendor ` + where
+	q := `SELECT id, display_name, legal_name, contact_email, status, approved_at, approved_by, cutoff_hour, preorder_window_days, created_at, updated_at FROM vendor ` + where
 	err := r.pool.QueryRow(ctx, q, args...).Scan(
 		&v.ID, &v.DisplayName, &v.LegalName, &v.ContactEmail, &status,
-		&v.ApprovedAt, &v.ApprovedBy, &v.CreatedAt, &v.UpdatedAt,
+		&v.ApprovedAt, &v.ApprovedBy, &v.CutoffHour, &v.PreorderWindowDays, &v.CreatedAt, &v.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, vendor.ErrVendorNotFound
@@ -60,6 +60,20 @@ func (r *VendorRepo) UpdateStatus(ctx context.Context, id string, status vendor.
 	return err
 }
 
+// UpdateSettings updates the per-vendor ordering settings.
+func (r *VendorRepo) UpdateSettings(ctx context.Context, id string, cutoffHour, preorderWindowDays int) error {
+	tag, err := r.pool.Exec(ctx, `
+UPDATE vendor SET cutoff_hour=$2, preorder_window_days=$3, updated_at=now() WHERE id=$1`,
+		id, cutoffHour, preorderWindowDays)
+	if err != nil {
+		return fmt.Errorf("update vendor settings: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return vendor.ErrVendorNotFound
+	}
+	return nil
+}
+
 func (r *VendorRepo) List(ctx context.Context, statuses []vendor.Status) ([]*vendor.Vendor, error) {
 	args := []any{}
 	where := ""
@@ -71,7 +85,7 @@ func (r *VendorRepo) List(ctx context.Context, statuses []vendor.Status) ([]*ven
 		}
 		where = "WHERE status IN (" + strings.Join(placeholders, ",") + ")"
 	}
-	q := `SELECT id, display_name, legal_name, contact_email, status, approved_at, approved_by, created_at, updated_at FROM vendor ` + where + ` ORDER BY created_at DESC`
+	q := `SELECT id, display_name, legal_name, contact_email, status, approved_at, approved_by, cutoff_hour, preorder_window_days, created_at, updated_at FROM vendor ` + where + ` ORDER BY created_at DESC`
 	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -82,7 +96,7 @@ func (r *VendorRepo) List(ctx context.Context, statuses []vendor.Status) ([]*ven
 		var v vendor.Vendor
 		var status string
 		if err := rows.Scan(&v.ID, &v.DisplayName, &v.LegalName, &v.ContactEmail, &status,
-			&v.ApprovedAt, &v.ApprovedBy, &v.CreatedAt, &v.UpdatedAt); err != nil {
+			&v.ApprovedAt, &v.ApprovedBy, &v.CutoffHour, &v.PreorderWindowDays, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		v.Status = vendor.Status(status)
