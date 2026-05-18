@@ -36,6 +36,8 @@ URLs:
 - http://localhost:5174 — 商家
 - http://localhost:5175 — 福委會
 - http://localhost:8080/healthz — Go API
+- http://localhost:8080/docs — API reference (Stoplight Elements, served by huma)
+- http://localhost:8080/openapi.yaml — machine-readable OpenAPI 3.1 spec
 - http://localhost:9002 — Authentik (`akadmin` / `tbite-dev-admin`)
 - http://localhost:9001 — MinIO console (`tbite` / `tbite-dev-secret`)
 
