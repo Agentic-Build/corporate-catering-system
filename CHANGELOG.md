@@ -2,6 +2,21 @@
 
 All notable changes to T-Bite, by phase.
 
+## Remaining Audit Gaps — Menu / Settings / Prep / Governance (2026-05-18)
+- G 菜單複製: `POST /api/merchant/menu-items/{id}/copy` clones a menu item into a fresh draft
+- H 臨時缺貨: `meal_supply.sold_out` flag + `POST /api/merchant/supply/{itemID}/{date}/sold-out`; employee menu and `in_stock` filter honour it (migration 000014)
+- I 商家級截單設定: `vendor.cutoff_hour` + `preorder_window_days`; order cutoff is now per-vendor local time (fixes the hardcoded 17:00 UTC); `GET/PUT /api/merchant/settings` (migration 000015)
+- J 備餐與配送輸出: `GET /api/merchant/prep-sheet` — per-plant breakdown, meal labels, basket lists; print-friendly page + CSV export
+- K 員工扣款明細: `GET /api/employee/payroll` — the employee's salary-deduction history across batches
+- L 員工週檢視: a 7-day week-calendar date picker leads the employee home page
+- M 售完即時反應: `order.MenuHub` + `GET /api/employee/menu/events` SSE — the menu refetches live when stock moves
+- N 廠區時段: `vendor_plant_mapping.service_window` + `PUT /api/admin/vendors/{id}/plants/{plant}/window` (migration 000016)
+- O 異常治理動作: anomaly triage can carry a `warn` / `suspend` governance action against the target vendor
+- P API 文件: documented the built-in `/docs` (Stoplight Elements) + `/openapi.yaml` entry points
+- Q MCP 治理 tools: 5 new admin tools — `document.list/review`, `anomaly.list/triage/close` (21 tools total)
+- 9 new HTTP endpoints + 1 SSE endpoint + 5 MCP tools; migrations 000014–000016
+- design: `docs/plans/2026-05-18-remaining-audit-gaps-design.md`
+
 ## Order Modify / Live Board / Resupply / Settlement Exceptions (2026-05-18)
 - A 員工修改訂單: `PUT /api/employee/orders/{id}` — add/remove items + change quantity before cutoff; quota adjusted by per-item delta in one transaction; `order.modify` MCP tool (16 tools total)
 - B 訂單備註: per-order free-text `notes` carried from cart/edit to the merchant prep board (migration 000011)
