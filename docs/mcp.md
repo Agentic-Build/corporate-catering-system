@@ -47,9 +47,9 @@ as a stdio child process.
 
 ## Tools
 
-15 tools across 6 categories. Read-only: 5. Write: 10 (5 employee, 5 admin).
+21 tools across 7 categories. Read-only: 8. Write: 13 (5 employee, 8 admin).
 
-### Order (5 tools)
+### Order (6 tools)
 
 | Tool | Role | Description |
 |---|---|---|
@@ -57,6 +57,7 @@ as a stdio child process.
 | `order.get` | employee | Fetch one order by id (owner check enforced) |
 | `order.get_pickup_code` | employee | Generate the current TOTP for a `READY` order |
 | `order.place` | employee | Place a new order (same quota / cutoff rules as HTTP) |
+| `order.modify` | employee | Replace a placed order's items before cutoff |
 | `order.cancel` | employee | Cancel an own order (only when state allows) |
 
 ### Vendor (3 tools, admin)
@@ -93,6 +94,16 @@ as a stdio child process.
 | Tool | Role | Description |
 |---|---|---|
 | `settlement.close_period` | welfare_admin | Close a period: cut one vendor settlement per vendor with orders |
+
+### Compliance (5 tools, admin)
+
+| Tool | Role | Description |
+|---|---|---|
+| `document.list` | welfare_admin | List a vendor's compliance documents |
+| `document.review` | welfare_admin | Approve or reject a pending vendor document |
+| `anomaly.list` | welfare_admin | List anomaly alerts filtered by status / severity |
+| `anomaly.triage` | welfare_admin | Triage an anomaly, optionally warning or suspending the vendor |
+| `anomaly.close` | welfare_admin | Close an open or triaged anomaly |
 
 ## Audit trail
 

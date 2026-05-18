@@ -49,7 +49,7 @@ type Deps struct {
 
 // New constructs the MCP server with all tools registered.
 //
-// New registers 16 tools total: 6 read-only + 5 employee write + 5 admin
+// New registers 21 tools total: 8 read-only + 5 employee write + 8 admin
 // write. Each handler parses arguments, enforces the same role rules used by
 // HTTP handlers, delegates to the underlying Service, and then writes an
 // audit_event row via auditAfter (request_id="mcp:<tool>").
@@ -65,6 +65,7 @@ func New(deps Deps) *server.MCPServer {
 	registerAuditTools(s, deps)
 	registerFeedbackTools(s, deps)
 	registerSettlementTools(s, deps)
+	registerComplianceTools(s, deps)
 	return s
 }
 

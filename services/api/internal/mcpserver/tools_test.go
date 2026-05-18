@@ -11,7 +11,7 @@ import (
 )
 
 // TestMCPServer_RegistersExpectedTools is a structural smoke test: with empty
-// Deps (no DB / no services), the constructor must still register all 16 MCP
+// Deps (no DB / no services), the constructor must still register all 21 MCP
 // tools without nil-deref panics. Each handler defends against nil deps at
 // call time, so registration itself is safe even when services aren't wired.
 func TestMCPServer_RegistersExpectedTools(t *testing.T) {
@@ -26,7 +26,12 @@ func TestMCPServer_RegistersExpectedTools(t *testing.T) {
 	sort.Strings(got)
 
 	want := []string{
+		"anomaly.close",
+		"anomaly.list",
+		"anomaly.triage",
 		"audit.query",
+		"document.list",
+		"document.review",
 		"feedback.file_complaint",
 		"feedback.rate_order",
 		"order.cancel",
@@ -43,5 +48,5 @@ func TestMCPServer_RegistersExpectedTools(t *testing.T) {
 		"vendor.reinstate",
 		"vendor.suspend",
 	}
-	assert.Equal(t, want, got, "MCP server must register exactly the 16 MCP tools")
+	assert.Equal(t, want, got, "MCP server must register exactly the 21 MCP tools")
 }
