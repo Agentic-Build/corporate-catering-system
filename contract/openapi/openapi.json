@@ -3642,6 +3642,36 @@
         ],
         "type": "object"
       },
+      "TriageAnomalyInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/TriageAnomalyInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "action": {
+            "description": "Optional governance action against the target vendor",
+            "enum": [
+              "warn",
+              "suspend",
+              ""
+            ],
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "notes"
+        ],
+        "type": "object"
+      },
       "UnavailableItemDTO": {
         "additionalProperties": false,
         "properties": {
@@ -4091,7 +4121,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AnomalyActionInputBody"
+                "$ref": "#/components/schemas/TriageAnomalyInputBody"
               }
             }
           },

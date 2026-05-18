@@ -2500,6 +2500,20 @@ export interface components {
             readonly $schema?: string;
             supply: components["schemas"]["SupplyDTO"];
         };
+        TriageAnomalyInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/TriageAnomalyInputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * @description Optional governance action against the target vendor
+             * @enum {string}
+             */
+            action?: "warn" | "suspend" | "";
+            notes: string;
+        };
         UnavailableItemDTO: {
             menu_item_id: string;
             name: string;
@@ -2674,7 +2688,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AnomalyActionInputBody"];
+                "application/json": components["schemas"]["TriageAnomalyInputBody"];
             };
         };
         responses: {

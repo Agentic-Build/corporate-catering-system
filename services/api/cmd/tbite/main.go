@@ -251,15 +251,16 @@ func main() {
 			logger.Warn("ensure bucket failed; uploads will fail until storage is reachable", "err", err)
 		}
 		complianceService := &compliance.Service{
-			Pool:     pool,
-			Docs:     cpgrepo.NewDocumentRepo(pool),
-			Anomaly:  cpgrepo.NewAnomalyRepo(pool),
-			Storage:  s3API,
-			Audit:    auditRepo,
-			Outbox:   outboxRepo,
-			AuditQry: auditRepo,
-			Vendors:  vpgrepo.NewVendorRepo(pool),
-			Clock:    clock.SystemClock{},
+			Pool:      pool,
+			Docs:      cpgrepo.NewDocumentRepo(pool),
+			Anomaly:   cpgrepo.NewAnomalyRepo(pool),
+			Storage:   s3API,
+			Audit:     auditRepo,
+			Outbox:    outboxRepo,
+			AuditQry:  auditRepo,
+			Vendors:   vpgrepo.NewVendorRepo(pool),
+			VendorGov: vendorService,
+			Clock:     clock.SystemClock{},
 		}
 		complianceAPI := &chttp.API{Svc: complianceService}
 
@@ -699,14 +700,15 @@ func main() {
 			Clock:    clock.SystemClock{},
 		}
 		complianceService := &compliance.Service{
-			Pool:     pool,
-			Docs:     cpgrepo.NewDocumentRepo(pool),
-			Anomaly:  cpgrepo.NewAnomalyRepo(pool),
-			Storage:  nil, // not needed for read-only MCP tools
-			Audit:    auditRepo,
-			Outbox:   outboxRepo,
-			AuditQry: auditRepo,
-			Clock:    clock.SystemClock{},
+			Pool:      pool,
+			Docs:      cpgrepo.NewDocumentRepo(pool),
+			Anomaly:   cpgrepo.NewAnomalyRepo(pool),
+			Storage:   nil, // not needed for read-only MCP tools
+			Audit:     auditRepo,
+			Outbox:    outboxRepo,
+			AuditQry:  auditRepo,
+			VendorGov: vendorService,
+			Clock:     clock.SystemClock{},
 		}
 		feedbackService := &feedback.Service{
 			Pool:       pool,

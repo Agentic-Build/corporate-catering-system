@@ -12,7 +12,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
+	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
+
+// VendorSuspender lets anomaly governance suspend a vendor. *vendor.Service
+// satisfies it; kept narrow to avoid pulling the whole vendor service in.
+type VendorSuspender interface {
+	Suspend(ctx context.Context, vendorID string) error
+}
 
 // Clock lets tests pin "now".
 type Clock interface{ Now() time.Time }
@@ -67,8 +74,10 @@ type Service struct {
 	AuditQry AuditQuery
 	Clock    Clock
 	// Vendors backs the merchant compliance self-view (GET /api/merchant/compliance).
-	// Admin-only document/anomaly endpoints do not use it.
 	Vendors VendorReader
+	// VendorGov executes anomaly-triage governance actions (suspend). Optional;
+	// when nil a "suspend" action is recorded in audit but not carried out.
+	VendorGov VendorSuspender
 }
 
 // UploadInput captures everything needed to upload+register a vendor doc.
@@ -185,16 +194,51 @@ func (s *Service) OpenAnomaly(ctx context.Context, a *Anomaly) error {
 	return s.Anomaly.Open(ctx, a)
 }
 
-// TriageAnomaly marks an open anomaly as triaged + writes an audit row.
-func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes string) error {
+// Governance actions a welfare admin may attach when triaging an anomaly.
+const (
+	ActionNone    = ""
+	ActionWarn    = "warn"
+	ActionSuspend = "suspend"
+)
+
+// TriageAnomaly marks an open anomaly as triaged, writes an audit row, and
+// optionally carries out a governance action against the anomaly's target
+// vendor: "warn" records a warning, "suspend" suspends the vendor. Suspending
+// an already non-approved vendor is treated as a no-op success.
+func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes, action string) error {
+	if action != ActionNone && action != ActionWarn && action != ActionSuspend {
+		return ErrInvalidAction
+	}
+	a, err := s.Anomaly.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
 	if err := s.Anomaly.Triage(ctx, id, by, notes); err != nil {
 		return err
 	}
-	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		role := "welfare_admin"
-		payload := map[string]any{"anomaly_id": id, "notes": notes}
-		return s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.triage", "anomaly_alert", id, payload, "")
+	role := "welfare_admin"
+	auditErr := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		payload := map[string]any{"anomaly_id": id, "notes": notes, "action": action}
+		if werr := s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.triage", "anomaly_alert", id, payload, ""); werr != nil {
+			return werr
+		}
+		if action == ActionWarn && a.TargetKind == "vendor" {
+			wp := map[string]any{"anomaly_id": id, "anomaly_kind": a.Kind, "notes": notes}
+			return s.Audit.WriteTx(ctx, tx, &by, &role, "vendor.warning", "vendor", a.TargetID, wp, "")
+		}
+		return nil
 	})
+	if auditErr != nil {
+		return auditErr
+	}
+	if action == ActionSuspend && a.TargetKind == "vendor" && s.VendorGov != nil {
+		// An already-suspended/terminated vendor surfaces ErrInvalidStatus —
+		// the goal (vendor not operating) is already met, so treat as success.
+		if err := s.VendorGov.Suspend(ctx, a.TargetID); err != nil && !errors.Is(err, vendor.ErrInvalidStatus) {
+			return err
+		}
+	}
+	return nil
 }
 
 // CloseAnomaly closes an open/triaged anomaly + writes an audit row.

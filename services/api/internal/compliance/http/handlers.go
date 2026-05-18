@@ -200,6 +200,14 @@ type listAnomaliesOutput struct {
 	}
 }
 
+type triageAnomalyInput struct {
+	ID   string `path:"id" format:"uuid"`
+	Body struct {
+		Notes  string `json:"notes"`
+		Action string `json:"action,omitempty" enum:"warn,suspend," doc:"Optional governance action against the target vendor"`
+	}
+}
+
 type anomalyActionInput struct {
 	ID   string `path:"id" format:"uuid"`
 	Body struct {
@@ -393,12 +401,12 @@ func (a *API) listAnomalies(ctx context.Context, in *listAnomaliesInput) (*listA
 	return &resp, nil
 }
 
-func (a *API) triage(ctx context.Context, in *anomalyActionInput) (*struct{}, error) {
+func (a *API) triage(ctx context.Context, in *triageAnomalyInput) (*struct{}, error) {
 	u, err := a.requireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := a.Svc.TriageAnomaly(ctx, in.ID, u.ID, in.Body.Notes); err != nil {
+	if err := a.Svc.TriageAnomaly(ctx, in.ID, u.ID, in.Body.Notes, in.Body.Action); err != nil {
 		return nil, mapErr(err)
 	}
 	return &struct{}{}, nil
@@ -453,6 +461,8 @@ func mapErr(err error) error {
 	case errors.Is(err, compliance.ErrInvalidStatus),
 		errors.Is(err, compliance.ErrInvalidResupply):
 		return huma.Error409Conflict(err.Error())
+	case errors.Is(err, compliance.ErrInvalidAction):
+		return huma.Error400BadRequest(err.Error())
 	}
 	return huma.Error500InternalServerError("internal", err)
 }
