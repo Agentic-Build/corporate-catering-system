@@ -44,15 +44,16 @@ type Clock interface{ Now() time.Time }
 // across batch / entry / dispute repos plus audit + outbox. All multi-row
 // writes happen inside pgx.BeginFunc so partial failure rolls back atomically.
 type Service struct {
-	Pool     *pgxpool.Pool
-	Batches  BatchRepository
-	Entries  EntryRepository
-	Disputes DisputeRepository
-	Orders   OrderRepo
-	OrderTx  OrderTx
-	Audit    AuditTx
-	Outbox   OutboxTx
-	Clock    Clock
+	Pool       *pgxpool.Pool
+	Batches    BatchRepository
+	Entries    EntryRepository
+	Disputes   DisputeRepository
+	Exceptions ExceptionRepository
+	Orders     OrderRepo
+	OrderTx    OrderTx
+	Audit      AuditTx
+	Outbox     OutboxTx
+	Clock      Clock
 }
 
 // BuildDraftInput selects which supply dates roll into the draft batch.
@@ -118,6 +119,13 @@ func (s *Service) BuildDraft(ctx context.Context, in BuildDraftInput) (*Batch, e
 				AmountMinor: a.amount,
 			}
 			if err := s.Entries.CreateTx(ctx, tx, entry); err != nil {
+				return err
+			}
+		}
+		// Flag entries whose employee is no longer active so the welfare
+		// admin sees the exception list straight away.
+		if s.Exceptions != nil {
+			if err := s.Exceptions.UpsertDepartedTx(ctx, tx, batch.ID); err != nil {
 				return err
 			}
 		}
@@ -298,4 +306,76 @@ func (s *Service) ListDisputes(ctx context.Context, statuses []DisputeStatus) ([
 // ListMyDisputes returns the disputes a user opened. Employee view.
 func (s *Service) ListMyDisputes(ctx context.Context, userID string) ([]*Dispute, error) {
 	return s.Disputes.ListByUser(ctx, userID)
+}
+
+// FlagExceptionInput records a manual deduction-failed exception.
+type FlagExceptionInput struct {
+	BatchID   string
+	EntryID   string
+	Detail    string
+	FlaggedBy string
+}
+
+// ListExceptions re-runs departed-employee detection (idempotent) and returns
+// every exception on the batch. The batch must exist.
+func (s *Service) ListExceptions(ctx context.Context, batchID string) ([]*Exception, error) {
+	if _, err := s.Batches.GetByID(ctx, batchID); err != nil {
+		return nil, err
+	}
+	if err := s.Exceptions.UpsertDeparted(ctx, batchID); err != nil {
+		return nil, err
+	}
+	return s.Exceptions.ListByBatch(ctx, batchID)
+}
+
+// FlagException records a manual deduction_failed exception against a batch
+// entry. The entry must belong to the batch.
+func (s *Service) FlagException(ctx context.Context, in FlagExceptionInput) (*Exception, error) {
+	entry, err := s.Entries.GetByID(ctx, in.EntryID)
+	if err != nil {
+		return nil, err
+	}
+	if entry.BatchID != in.BatchID {
+		return nil, ErrInvalidException
+	}
+	e := &Exception{
+		BatchID: in.BatchID,
+		EntryID: in.EntryID,
+		UserID:  entry.UserID,
+		Kind:    ExceptionDeductionFailed,
+		Status:  ExceptionOpen,
+		Detail:  in.Detail,
+	}
+	if err := s.Exceptions.Create(ctx, e); err != nil {
+		return nil, err
+	}
+	role := "welfare_admin"
+	auditErr := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		return s.Audit.WriteTx(ctx, tx, &in.FlaggedBy, &role, "payroll.exception_flag", "payroll_exception", e.ID,
+			map[string]any{"batch_id": in.BatchID, "entry_id": in.EntryID, "kind": string(ExceptionDeductionFailed)}, "")
+	})
+	if auditErr != nil {
+		return nil, auditErr
+	}
+	return e, nil
+}
+
+// ResolveException marks an exception resolved (handled, still deducted) or
+// excluded (dropped from the HR deduction file).
+func (s *Service) ResolveException(ctx context.Context, id string, status ExceptionStatus, resolution, resolvedBy string) error {
+	if status != ExceptionResolved && status != ExceptionExcluded {
+		return ErrInvalidException
+	}
+	ex, err := s.Exceptions.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.Exceptions.Resolve(ctx, id, status, resolution, resolvedBy); err != nil {
+		return err
+	}
+	role := "welfare_admin"
+	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		return s.Audit.WriteTx(ctx, tx, &resolvedBy, &role, "payroll.exception_resolve", "payroll_exception", id,
+			map[string]any{"batch_id": ex.BatchID, "status": string(status)}, "")
+	})
 }

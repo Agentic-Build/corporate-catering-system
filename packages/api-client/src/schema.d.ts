@@ -209,6 +209,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/payroll/batches/{id}/exceptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a batch's settlement exceptions (re-runs departed-employee detection) */
+        get: operations["listPayrollExceptions"];
+        put?: never;
+        /** Flag a batch entry with a manual deduction-failed exception */
+        post: operations["flagPayrollException"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/payroll/batches/{id}/lock": {
         parameters: {
             query?: never;
@@ -254,6 +272,23 @@ export interface paths {
         put?: never;
         /** Resolve a payroll dispute (refund or reject) */
         post: operations["resolvePayrollDispute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/payroll/exceptions/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve a settlement exception (resolved or excluded) */
+        post: operations["resolvePayrollException"];
         delete?: never;
         options?: never;
         head?: never;
@@ -615,7 +650,8 @@ export interface paths {
         };
         /** Get an order by ID (owner only) */
         get: operations["getMyOrder"];
-        put?: never;
+        /** Modify my order's items before cutoff (owner only) */
+        put: operations["modifyMyOrder"];
         post?: never;
         delete?: never;
         options?: never;
@@ -811,6 +847,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload or resupply a compliance document for own vendor */
+        post: operations["uploadMerchantDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/menu-items": {
         parameters: {
             query?: never;
@@ -908,6 +961,23 @@ export interface paths {
         put?: never;
         /** Verify TOTP code and mark order picked up */
         post: operations["verifyPickup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/orders/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live order events for the merchant prep board (Server-Sent Events) */
+        get: operations["streamMerchantOrderEvents"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1201,6 +1271,12 @@ export interface components {
             batch: components["schemas"]["BatchDTO"];
             entries: components["schemas"]["EntryDTO"][] | null;
         };
+        BoardEvent: {
+            /** @description Order event kind, e.g. placed / modified / ready / cancelled */
+            kind: string;
+            /** @description Affected order id; empty for keep-alive pings */
+            order_id: string;
+        };
         CategoryDTO: {
             id: string;
             name: string;
@@ -1372,6 +1448,7 @@ export interface components {
             reviewed_at?: string;
             reviewed_by?: string;
             status: string;
+            supersedes?: string;
             uploaded_by?: string;
             vendor_id: string;
         };
@@ -1451,6 +1528,28 @@ export interface components {
              */
             type: string;
         };
+        ExceptionDTO: {
+            batch_id: string;
+            created_at: string;
+            detail: string;
+            entry_id: string;
+            id: string;
+            kind: string;
+            resolution: string;
+            resolved_at?: string;
+            resolved_by?: string;
+            status: string;
+            user_id: string;
+        };
+        ExceptionOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ExceptionOutputBody.json
+             */
+            readonly $schema?: string;
+            exception: components["schemas"]["ExceptionDTO"];
+        };
         FavoriteChipDTO: {
             available_today: boolean;
             menu_item_id: string;
@@ -1469,6 +1568,17 @@ export interface components {
             /** @enum {string} */
             category: "wrong_item" | "missing_item" | "quality" | "portion" | "hygiene" | "other";
             description: string;
+        };
+        FlagExceptionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/FlagExceptionInputBody.json
+             */
+            readonly $schema?: string;
+            detail: string;
+            /** Format: uuid */
+            entry_id: string;
         };
         HomeOutputBody: {
             /**
@@ -1584,6 +1694,15 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["EmployeeMenuItemDTO"][] | null;
+        };
+        ListExceptionsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListExceptionsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["ExceptionDTO"][] | null;
         };
         ListFavoritesOutputBody: {
             /**
@@ -1728,6 +1847,7 @@ export interface components {
         MerchantOrderDTO: {
             id: string;
             items: components["schemas"]["OrderItemDTO"][] | null;
+            notes: string;
             picked_up_at?: string;
             placed_at?: string;
             plant: string;
@@ -1735,6 +1855,24 @@ export interface components {
             status: string;
             /** Format: int64 */
             total_price_minor: number;
+        };
+        MerchantUploadDocumentInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MerchantUploadDocumentInputBody.json
+             */
+            readonly $schema?: string;
+            content_base64: string;
+            expires_at?: string;
+            filename: string;
+            /** @enum {string} */
+            kind: "business_license" | "food_safety_permit" | "tax_registration" | "insurance" | "other";
+            /**
+             * Format: uuid
+             * @description ID of the document this upload replaces (resupply)
+             */
+            supersedes?: string;
         };
         MessageDTO: {
             first_seen_at: string;
@@ -1752,6 +1890,17 @@ export interface components {
             source_consumer: string;
             source_stream: string;
             source_subject: string;
+        };
+        ModifyOrderInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ModifyOrderInputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["Item"][] | null;
+            /** @description Free-text special requirements shown on the merchant prep board */
+            notes?: string;
         };
         OpenDisputeInputBody: {
             /**
@@ -1780,6 +1929,7 @@ export interface components {
             cutoff_at: string;
             id: string;
             items: components["schemas"]["OrderItemDTO"][] | null;
+            notes: string;
             placed_at?: string;
             plant: string;
             status: string;
@@ -1842,6 +1992,8 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["Item"][] | null;
+            /** @description Free-text special requirements shown on the merchant prep board */
+            notes?: string;
             plant: string;
             supply_date: string;
         };
@@ -2003,6 +2155,17 @@ export interface components {
             resolution: string;
             /** @enum {string} */
             status: "resolved_refund" | "resolved_reject";
+        };
+        ResolveExceptionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ResolveExceptionInputBody.json
+             */
+            readonly $schema?: string;
+            resolution: string;
+            /** @enum {string} */
+            status: "resolved" | "excluded";
         };
         ResolveInputBody: {
             /**
@@ -2621,6 +2784,73 @@ export interface operations {
             };
         };
     };
+    listPayrollExceptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListExceptionsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    flagPayrollException: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Payroll batch id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FlagExceptionInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExceptionOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     lockPayrollBatch: {
         parameters: {
             query?: never;
@@ -2693,6 +2923,40 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ResolveDisputeInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    resolvePayrollException: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Payroll exception id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveExceptionInputBody"];
             };
         };
         responses: {
@@ -3577,6 +3841,41 @@ export interface operations {
             };
         };
     };
+    modifyMyOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModifyOrderInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     cancelMyOrder: {
         parameters: {
             query?: never;
@@ -3965,6 +4264,39 @@ export interface operations {
             };
         };
     };
+    uploadMerchantDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MerchantUploadDocumentInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadDocumentOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     listMerchantMenuItems: {
         parameters: {
             query?: {
@@ -4177,6 +4509,46 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    streamMerchantOrderEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": {
+                        data: components["schemas"]["BoardEvent"];
+                        /**
+                         * @description The event name.
+                         * @constant
+                         */
+                        event?: "message";
+                        /** @description The event ID. */
+                        id?: number;
+                        /** @description The retry time in milliseconds. */
+                        retry?: number;
+                    }[];
+                };
             };
             /** @description Error */
             default: {

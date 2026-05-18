@@ -208,19 +208,23 @@ func main() {
 			Plants:      plantRepo,
 			Clock:       clock.SystemClock{},
 		}
-		orderAPI := &ohttp.API{Svc: orderService}
+		// BoardHub fans live order events to the merchant prep board over SSE.
+		// It is wired to NATS below when NATS_URL is configured.
+		boardHub := order.NewBoardHub()
+		orderAPI := &ohttp.API{Svc: orderService, Board: boardHub}
 
 		// 7f. Payroll service + admin/employee handlers
 		payrollService := &payroll.Service{
-			Pool:     pool,
-			Batches:  payrollpgrepo.NewBatchRepo(pool),
-			Entries:  payrollpgrepo.NewEntryRepo(pool),
-			Disputes: payrollpgrepo.NewDisputeRepo(pool),
-			Orders:   orderRepo,
-			OrderTx:  orderRepo,
-			Audit:    auditRepo,
-			Outbox:   outboxRepo,
-			Clock:    clock.SystemClock{},
+			Pool:       pool,
+			Batches:    payrollpgrepo.NewBatchRepo(pool),
+			Entries:    payrollpgrepo.NewEntryRepo(pool),
+			Disputes:   payrollpgrepo.NewDisputeRepo(pool),
+			Exceptions: payrollpgrepo.NewExceptionRepo(pool),
+			Orders:     orderRepo,
+			OrderTx:    orderRepo,
+			Audit:      auditRepo,
+			Outbox:     outboxRepo,
+			Clock:      clock.SystemClock{},
 		}
 		payrollAPI := &payrollhttp.API{Svc: payrollService}
 
@@ -265,6 +269,14 @@ func main() {
 			if natsClient, err := messaging.New(ctx, cfg.NATSURL); err == nil {
 				dlqAPI.JS = natsClient.JS
 				defer natsClient.Close()
+				// Tap ORDERS_V1 so the merchant prep board SSE endpoint can
+				// push live updates. Failure here is non-fatal: the board
+				// still works, just without push.
+				go func() {
+					if err := order.RunBoardConsumer(ctx, natsClient.JS, boardHub, logger); err != nil {
+						logger.Warn("board consumer stopped", "err", err)
+					}
+				}()
 			} else {
 				logger.Warn("nats unavailable for dlq replay; /replay will return 503", "err", err)
 			}
@@ -440,15 +452,16 @@ func main() {
 		}
 
 		settler := &payrollsettler.Settler{
-			JS:      natsClient.JS,
-			Pool:    pool,
-			Batches: payrollpgrepo.NewBatchRepo(pool),
-			Entries: payrollpgrepo.NewEntryRepo(pool),
-			Users:   payrollsettler.NewPgUserLookup(pool),
-			Storage: s3Client,
-			Logger:  logger.With("component", "payroll-settler"),
-			Audit:   opgrepo.NewAuditRepo(pool),
-			Outbox:  outbox,
+			JS:         natsClient.JS,
+			Pool:       pool,
+			Batches:    payrollpgrepo.NewBatchRepo(pool),
+			Entries:    payrollpgrepo.NewEntryRepo(pool),
+			Users:      payrollsettler.NewPgUserLookup(pool),
+			Exceptions: payrollpgrepo.NewExceptionRepo(pool),
+			Storage:    s3Client,
+			Logger:     logger.With("component", "payroll-settler"),
+			Audit:      opgrepo.NewAuditRepo(pool),
+			Outbox:     outbox,
 		}
 
 		onTimeEval := &evaluator.OnTimeRateEvaluator{

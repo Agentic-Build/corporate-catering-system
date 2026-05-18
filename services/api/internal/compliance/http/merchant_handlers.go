@@ -1,11 +1,14 @@
-// Merchant-facing compliance endpoints. Read-only: a vendor_operator views its
-// own vendor status, documents, and computed compliance warnings. Document
-// upload remains admin-only (see design §6.3).
+// Merchant-facing compliance endpoints: a vendor_operator views its own vendor
+// status, documents, and computed compliance warnings, and may upload or
+// resupply its own compliance documents (self-service 補件).
 package chttp
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -64,8 +67,9 @@ func (a *API) requireVendor(ctx context.Context) (string, error) {
 
 // ----- Registration -----
 
-// registerMerchant attaches the merchant compliance self-view route. It is
-// called from API.Register so main.go needs no extra wiring.
+// registerMerchant attaches the merchant compliance self-view + self-service
+// document upload routes. Called from API.Register so main.go needs no extra
+// wiring.
 func (a *API) registerMerchant(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "getMerchantCompliance",
@@ -75,6 +79,29 @@ func (a *API) registerMerchant(api huma.API) {
 		Tags:        []string{"merchant", "compliance"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.merchantCompliance)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "uploadMerchantDocument",
+		Method:        http.MethodPost,
+		Path:          "/api/merchant/documents",
+		Summary:       "Upload or resupply a compliance document for own vendor",
+		Tags:          []string{"merchant", "compliance"},
+		Security:      []map[string][]string{{"bearer": {}}},
+		DefaultStatus: http.StatusCreated,
+	}, a.merchantUploadDocument)
+}
+
+// merchantUploadDocumentInput is the base64-in-JSON upload body for a vendor's
+// own document. Supersedes, when set, makes this a resupply of an existing
+// document (must be the same vendor's, and already reviewed).
+type merchantUploadDocumentInput struct {
+	Body struct {
+		Kind          string  `json:"kind" enum:"business_license,food_safety_permit,tax_registration,insurance,other"`
+		Filename      string  `json:"filename" minLength:"1"`
+		ContentBase64 string  `json:"content_base64" minLength:"1"`
+		ExpiresAt     *string `json:"expires_at,omitempty"`
+		Supersedes    *string `json:"supersedes,omitempty" format:"uuid" doc:"ID of the document this upload replaces (resupply)"`
+	}
 }
 
 // ----- Handlers -----
@@ -102,5 +129,44 @@ func (a *API) merchantCompliance(ctx context.Context, _ *struct{}) (*merchantCom
 	for _, w := range summary.Warnings {
 		resp.Body.Warnings = append(resp.Body.Warnings, warningToDTO(w))
 	}
+	return &resp, nil
+}
+
+// merchantUploadDocument lets a vendor_operator upload (or resupply) a
+// compliance document for its own vendor. The vendor_id is resolved from the
+// session, never from input, so a merchant can only ever touch its own docs.
+func (a *API) merchantUploadDocument(ctx context.Context, in *merchantUploadDocumentInput) (*uploadDocumentOutput, error) {
+	vendorID, err := a.requireVendor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	u, _ := idhttp.UserFromContext(ctx)
+	body, err := base64.StdEncoding.DecodeString(in.Body.ContentBase64)
+	if err != nil {
+		return nil, huma.Error400BadRequest("invalid base64 content")
+	}
+	var expires *time.Time
+	if in.Body.ExpiresAt != nil && *in.Body.ExpiresAt != "" {
+		t, perr := time.ParseInLocation("2006-01-02", *in.Body.ExpiresAt, time.UTC)
+		if perr != nil {
+			return nil, huma.Error400BadRequest("expires_at must be YYYY-MM-DD")
+		}
+		expires = &t
+	}
+	d, err := a.Svc.UploadDocument(ctx, compliance.UploadInput{
+		VendorID:   vendorID,
+		Kind:       compliance.DocumentKind(in.Body.Kind),
+		Filename:   in.Body.Filename,
+		Body:       strings.NewReader(string(body)),
+		ExpiresAt:  expires,
+		UploadedBy: u.ID,
+		ActorRole:  "vendor_operator",
+		Supersedes: in.Body.Supersedes,
+	})
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp uploadDocumentOutput
+	resp.Body.Document = docToDTO(d)
 	return &resp, nil
 }

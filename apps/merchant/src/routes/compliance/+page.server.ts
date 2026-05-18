@@ -1,7 +1,16 @@
-import { redirect } from "@sveltejs/kit";
+import { redirect, fail, type Actions } from "@sveltejs/kit";
 import type { components } from "@tbite/api-client";
 import type { PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
+
+const DOC_KINDS = [
+  "business_license",
+  "food_safety_permit",
+  "tax_registration",
+  "insurance",
+  "other",
+];
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 type VendorInfoDTO = components["schemas"]["VendorInfoDTO"];
 type DocumentDTO = components["schemas"]["DocumentDTO"];
@@ -25,4 +34,44 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   } catch {}
 
   return { user: locals.user, vendor, documents, warnings };
+};
+
+export const actions: Actions = {
+  // Self-service document upload / resupply. When `supersedes` is present the
+  // backend treats it as a resupply replacing that document.
+  uploadDocument: async ({ request, locals }) => {
+    if (!locals.user) return fail(401, { uploadError: "unauthenticated" });
+    const fd = await request.formData();
+    const kind = String(fd.get("kind") ?? "");
+    const file = fd.get("file");
+    const expiresAt = String(fd.get("expires_at") ?? "").trim();
+    const supersedes = String(fd.get("supersedes") ?? "").trim();
+
+    if (!DOC_KINDS.includes(kind)) return fail(400, { uploadError: "請選擇文件種類" });
+    if (!(file instanceof File) || file.size === 0) {
+      return fail(400, { uploadError: "請選擇要上傳的檔案" });
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return fail(400, { uploadError: "檔案大小不可超過 10MB" });
+    }
+
+    const contentBase64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+    const body: Record<string, string> = {
+      kind,
+      filename: file.name,
+      content_base64: contentBase64,
+    };
+    if (expiresAt) body.expires_at = expiresAt;
+    if (supersedes) body.supersedes = supersedes;
+
+    const client = apiFor(locals.apiToken);
+    const r = await client.POST("/api/merchant/documents", { body: body as never });
+    if (r.error) {
+      const err = r.error as { status?: number; detail?: string };
+      return fail(err.status ?? 400, {
+        uploadError: err.detail ?? "上傳文件失敗，請稍後再試。",
+      });
+    }
+    return { uploadOk: true };
+  },
 };

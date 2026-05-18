@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/sse"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
@@ -19,6 +20,10 @@ import (
 // All endpoints require the employee role.
 type API struct {
 	Svc *order.Service
+	// Board fans live order events to the merchant prep board over SSE. It is
+	// optional: when nil (NATS not configured) the SSE endpoint stays open but
+	// emits only keep-alive pings.
+	Board *order.BoardHub
 }
 
 // ----- DTOs -----
@@ -37,6 +42,7 @@ type orderDTO struct {
 	SupplyDate      string         `json:"supply_date"`
 	Status          string         `json:"status"`
 	TotalPriceMinor int64          `json:"total_price_minor"`
+	Notes           string         `json:"notes"`
 	PlacedAt        *string        `json:"placed_at,omitempty"`
 	CutoffAt        string         `json:"cutoff_at"`
 	CancelledAt     *string        `json:"cancelled_at,omitempty"`
@@ -51,6 +57,7 @@ func toDTO(o *order.Order) orderDTO {
 		SupplyDate:      o.SupplyDate.Format("2006-01-02"),
 		Status:          string(o.Status),
 		TotalPriceMinor: o.TotalPriceMinor,
+		Notes:           o.Notes,
 		CutoffAt:        o.CutoffAt.UTC().Format(time.RFC3339),
 		Items:           make([]orderItemDTO, 0, len(o.Items)),
 	}
@@ -79,6 +86,7 @@ type placeOrderInput struct {
 	Body struct {
 		Plant      string `json:"plant"`
 		SupplyDate string `json:"supply_date"` // YYYY-MM-DD
+		Notes      string `json:"notes,omitempty" maxLength:"500" doc:"Free-text special requirements shown on the merchant prep board"`
 		Items      []struct {
 			MenuItemID string `json:"menu_item_id" format:"uuid"`
 			Qty        int    `json:"qty" minimum:"1"`
@@ -100,6 +108,17 @@ type listOrdersOutput struct {
 
 type orderIDInput struct {
 	ID string `path:"id" format:"uuid"`
+}
+
+type modifyOrderInput struct {
+	ID   string `path:"id" format:"uuid"`
+	Body struct {
+		Notes string `json:"notes,omitempty" maxLength:"500" doc:"Free-text special requirements shown on the merchant prep board"`
+		Items []struct {
+			MenuItemID string `json:"menu_item_id" format:"uuid"`
+			Qty        int    `json:"qty" minimum:"1"`
+		} `json:"items"`
+	}
 }
 
 type orderOutput struct {
@@ -140,6 +159,7 @@ type merchantOrderDTO struct {
 	Plant           string         `json:"plant"`
 	Status          string         `json:"status"`
 	TotalPriceMinor int64          `json:"total_price_minor"`
+	Notes           string         `json:"notes"`
 	PlacedAt        *string        `json:"placed_at,omitempty"`
 	ReadyAt         *string        `json:"ready_at,omitempty"`
 	PickedUpAt      *string        `json:"picked_up_at,omitempty"`
@@ -159,6 +179,7 @@ func toMerchantDTO(o *order.Order) merchantOrderDTO {
 		Plant:           o.Plant,
 		Status:          string(o.Status),
 		TotalPriceMinor: o.TotalPriceMinor,
+		Notes:           o.Notes,
 		Items:           make([]orderItemDTO, 0, len(o.Items)),
 	}
 	if o.PlacedAt != nil {
@@ -216,6 +237,15 @@ func (a *API) Register(api huma.API) {
 	}, a.get)
 
 	huma.Register(api, huma.Operation{
+		OperationID: "modifyMyOrder",
+		Method:      http.MethodPut,
+		Path:        "/api/employee/orders/{id}",
+		Summary:     "Modify my order's items before cutoff (owner only)",
+		Tags:        []string{"employee", "order"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.modify)
+
+	huma.Register(api, huma.Operation{
 		OperationID:   "cancelMyOrder",
 		Method:        http.MethodPost,
 		Path:          "/api/employee/orders/{id}/cancel",
@@ -262,6 +292,17 @@ func (a *API) Register(api huma.API) {
 		Tags:        []string{"merchant", "order"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.listMerchantOrders)
+
+	sse.Register(api, huma.Operation{
+		OperationID: "streamMerchantOrderEvents",
+		Method:      http.MethodGet,
+		Path:        "/api/merchant/orders/events",
+		Summary:     "Live order events for the merchant prep board (Server-Sent Events)",
+		Tags:        []string{"merchant", "order"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, map[string]any{
+		"message": order.BoardEvent{},
+	}, a.streamMerchantOrderEvents)
 }
 
 // ----- Auth helper -----
@@ -314,6 +355,7 @@ func (a *API) place(ctx context.Context, in *placeOrderInput) (*placeOrderOutput
 		Plant:      in.Body.Plant,
 		SupplyDate: day,
 		Items:      items,
+		Notes:      in.Body.Notes,
 	})
 	if err != nil {
 		return nil, mapErr(err)
@@ -346,6 +388,32 @@ func (a *API) get(ctx context.Context, in *orderIDInput) (*orderOutput, error) {
 		return nil, err
 	}
 	o, err := a.Svc.Get(ctx, in.ID, u.ID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp orderOutput
+	resp.Body.Order = toDTO(o)
+	return &resp, nil
+}
+
+func (a *API) modify(ctx context.Context, in *modifyOrderInput) (*orderOutput, error) {
+	u, err := a.requireEmployee(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(in.Body.Items) == 0 {
+		return nil, huma.Error400BadRequest("items required")
+	}
+	items := make([]order.PlaceItem, 0, len(in.Body.Items))
+	for _, it := range in.Body.Items {
+		items = append(items, order.PlaceItem{MenuItemID: it.MenuItemID, Qty: it.Qty})
+	}
+	o, err := a.Svc.Modify(ctx, order.ModifyOrderInput{
+		OrderID: in.ID,
+		UserID:  u.ID,
+		Items:   items,
+		Notes:   in.Body.Notes,
+	})
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -441,6 +509,42 @@ func (a *API) listMerchantOrders(ctx context.Context, in *listMerchantOrdersInpu
 	return &resp, nil
 }
 
+// streamMerchantOrderEvents streams live order events for the caller's vendor
+// over SSE. The merchant prep board re-fetches its data on each event, so the
+// payload stays minimal. A 20s keep-alive ping holds the connection open.
+func (a *API) streamMerchantOrderEvents(ctx context.Context, _ *struct{}, send sse.Sender) {
+	u, ok := idhttp.UserFromContext(ctx)
+	if !ok || u.Role != identity.RoleVendorOperator || u.VendorID == nil || *u.VendorID == "" {
+		return
+	}
+	if a.Board == nil {
+		<-ctx.Done()
+		return
+	}
+	ch, unsub := a.Board.Subscribe(*u.VendorID)
+	defer unsub()
+
+	heartbeat := time.NewTicker(20 * time.Second)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-heartbeat.C:
+			if send.Data(order.BoardEvent{Kind: "ping"}) != nil {
+				return
+			}
+		case ev, open := <-ch:
+			if !open {
+				return
+			}
+			if send.Data(ev) != nil {
+				return
+			}
+		}
+	}
+}
+
 // mapErr translates domain errors to huma HTTP errors.
 // Conflict (409) for state / cutoff / stock / invalid pickup code; 400 for
 // bad input; 403 for ownership; 404 for missing; 500 fallback.
@@ -457,6 +561,7 @@ func mapErr(err error) error {
 		errors.Is(err, quota.ErrSupplyNotFound):
 		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, order.ErrEmptyOrder),
+		errors.Is(err, order.ErrMultiVendor),
 		errors.Is(err, order.ErrVendorPlantMismatch),
 		errors.Is(err, order.ErrPlantMismatch):
 		return huma.Error400BadRequest(err.Error())

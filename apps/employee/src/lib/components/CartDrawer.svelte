@@ -124,6 +124,16 @@
     >
       <input type="hidden" name="plant" value={plant} />
       <input type="hidden" name="supply_date" value={supplyDate} />
+      <label class="mb-2 flex flex-col gap-1 text-xs">
+        <span class="font-semibold text-tb-slate-600">特殊需求備註（選填）</span>
+        <textarea
+          name="notes"
+          rows="2"
+          maxlength="500"
+          placeholder="例如：不要辣、過敏原、餐具需求…"
+          class="rounded-tb-lg border border-tb-slate-300 px-3 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
+        ></textarea>
+      </label>
       {#each entries as [id, line] (id)}
         <input type="hidden" name="item_id" value={id} />
         <input type="hidden" name="qty" value={line.qty} />

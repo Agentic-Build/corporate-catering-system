@@ -38,6 +38,7 @@ type documentDTO struct {
 	ReviewedBy *string `json:"reviewed_by,omitempty"`
 	ReviewedAt *string `json:"reviewed_at,omitempty"`
 	Notes      string  `json:"notes"`
+	Supersedes *string `json:"supersedes,omitempty"`
 	CreatedAt  string  `json:"created_at"`
 }
 
@@ -70,14 +71,15 @@ type auditRowDTO struct {
 
 func docToDTO(d *compliance.Document) documentDTO {
 	out := documentDTO{
-		ID:        d.ID,
-		VendorID:  d.VendorID,
-		Kind:      string(d.Kind),
-		Filename:  d.Filename,
-		BlobURI:   d.BlobURI,
-		Status:    string(d.Status),
-		Notes:     d.Notes,
-		CreatedAt: d.CreatedAt.UTC().Format(time.RFC3339),
+		ID:         d.ID,
+		VendorID:   d.VendorID,
+		Kind:       string(d.Kind),
+		Filename:   d.Filename,
+		BlobURI:    d.BlobURI,
+		Status:     string(d.Status),
+		Notes:      d.Notes,
+		Supersedes: d.Supersedes,
+		CreatedAt:  d.CreatedAt.UTC().Format(time.RFC3339),
 	}
 	if d.ExpiresAt != nil {
 		s := d.ExpiresAt.UTC().Format("2006-01-02")
@@ -448,7 +450,8 @@ func mapErr(err error) error {
 		errors.Is(err, compliance.ErrAnomalyNotFound),
 		errors.Is(err, vendor.ErrVendorNotFound):
 		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, compliance.ErrInvalidStatus):
+	case errors.Is(err, compliance.ErrInvalidStatus),
+		errors.Is(err, compliance.ErrInvalidResupply):
 		return huma.Error409Conflict(err.Error())
 	}
 	return huma.Error500InternalServerError("internal", err)

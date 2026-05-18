@@ -23,6 +23,7 @@ type QuotaTx interface {
 type OrderTx interface {
 	CreateTx(ctx context.Context, tx pgx.Tx, o *Order) error
 	UpdateStatusTx(ctx context.Context, tx pgx.Tx, id string, from, to Status) error
+	ReplaceItemsTx(ctx context.Context, tx pgx.Tx, orderID string, items []Item, totalMinor int64, notes string) error
 	MarkReadyTx(ctx context.Context, tx pgx.Tx, id string) error
 	MarkPickedUpTx(ctx context.Context, tx pgx.Tx, id string) error
 	MarkNoShowTx(ctx context.Context, tx pgx.Tx, id string) error
@@ -76,6 +77,7 @@ type PlaceOrderInput struct {
 	Plant      string
 	SupplyDate time.Time
 	Items      []PlaceItem
+	Notes      string
 }
 
 // Place creates an order in PLACED state inside a single transaction.
@@ -104,7 +106,7 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		if vendorID == "" {
 			vendorID = mi.VendorID
 		} else if vendorID != mi.VendorID {
-			return nil, fmt.Errorf("order: items must be from the same vendor")
+			return nil, ErrMultiVendor
 		}
 		domainItems = append(domainItems, Item{
 			MenuItemID:     pi.MenuItemID,
@@ -153,6 +155,7 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		SupplyDate:      in.SupplyDate,
 		Status:          StatusPlaced,
 		TotalPriceMinor: totalPrice,
+		Notes:           in.Notes,
 		TOTPSecret:      secret,
 		PlacedAt:        &placedAt,
 		CutoffAt:        cutoffAt,
@@ -238,12 +241,108 @@ func (s *Service) Cancel(ctx context.Context, orderID, userID string) error {
 		}); err != nil {
 			return err
 		}
-		payload := map[string]any{"order_id": o.ID, "by": "user"}
+		payload := map[string]any{"order_id": o.ID, "vendor_id": o.VendorID, "by": "user"}
 		if err := s.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.cancelled.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
 		return s.AuditTx.WriteTx(ctx, tx, &userID, &role, "order.cancel", "order", o.ID, payload, "")
 	})
+}
+
+type ModifyOrderInput struct {
+	OrderID string
+	UserID  string
+	Items   []PlaceItem
+	Notes   string
+}
+
+// Modify replaces the items of a user-owned PLACED order before its cutoff.
+// The new item set fully supersedes the old one. Quota is adjusted by the
+// per-menu-item delta (desired qty minus currently-held qty) inside a single
+// transaction, so a failure at any step (including ErrOutOfStock) rolls back
+// without leaking quota. The order keeps its ID, TOTP secret, and status —
+// only items + total change — so no state event is written, only an audit
+// row and an order.modified.v1 outbox entry.
+func (s *Service) Modify(ctx context.Context, in ModifyOrderInput) (*Order, error) {
+	if len(in.Items) == 0 {
+		return nil, ErrEmptyOrder
+	}
+	o, err := s.Orders.GetByID(ctx, in.OrderID)
+	if err != nil {
+		return nil, err
+	}
+	if o.UserID != in.UserID {
+		return nil, ErrForbidden
+	}
+	if o.Status != StatusPlaced {
+		return nil, ErrInvalidTransition
+	}
+	if !s.Clock.Now().Before(o.CutoffAt) {
+		return nil, ErrCutoffPassed
+	}
+
+	// Resolve the new item set; every item must belong to the order's vendor.
+	var totalPrice int64
+	newItems := make([]Item, 0, len(in.Items))
+	for _, pi := range in.Items {
+		if pi.Qty <= 0 {
+			return nil, fmt.Errorf("order: item qty must be positive")
+		}
+		mi, err := s.Items.GetByID(ctx, pi.MenuItemID)
+		if err != nil {
+			return nil, err
+		}
+		if mi.VendorID != o.VendorID {
+			return nil, ErrMultiVendor
+		}
+		newItems = append(newItems, Item{
+			MenuItemID:     pi.MenuItemID,
+			Qty:            pi.Qty,
+			UnitPriceMinor: mi.PriceMinor,
+		})
+		totalPrice += mi.PriceMinor * int64(pi.Qty)
+	}
+
+	// Per-menu-item quota delta: desired qty minus currently-held qty. A
+	// positive delta decrements quota, negative restores it, zero is a no-op.
+	delta := map[string]int{}
+	for _, it := range o.Items {
+		delta[it.MenuItemID] -= it.Qty
+	}
+	for _, it := range newItems {
+		delta[it.MenuItemID] += it.Qty
+	}
+
+	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		for itemID, d := range delta {
+			switch {
+			case d > 0:
+				if _, err := s.QuotaTx.DecrementTx(ctx, tx, itemID, o.SupplyDate, d); err != nil {
+					return err
+				}
+			case d < 0:
+				if err := s.QuotaTx.RestoreTx(ctx, tx, itemID, o.SupplyDate, -d); err != nil {
+					return err
+				}
+			}
+		}
+		if err := s.OrdersTx.ReplaceItemsTx(ctx, tx, o.ID, newItems, totalPrice, in.Notes); err != nil {
+			return err
+		}
+		o.Items = newItems
+		o.TotalPriceMinor = totalPrice
+		o.Notes = in.Notes
+		payload := buildOrderPayload(o)
+		if err := s.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.modified.v1", payload, map[string]any{}); err != nil {
+			return err
+		}
+		role := "employee"
+		return s.AuditTx.WriteTx(ctx, tx, &in.UserID, &role, "order.modify", "order", o.ID, payload, "")
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.Orders.GetByID(ctx, o.ID)
 }
 
 // ListByUser returns the user's orders for the last 30 days.
@@ -382,7 +481,7 @@ func (s *Service) MarkNoShow(ctx context.Context, cutoffAge time.Duration) (int,
 			}); err != nil {
 				return err
 			}
-			payload := map[string]any{"order_id": o.ID}
+			payload := map[string]any{"order_id": o.ID, "vendor_id": o.VendorID}
 			if err := s.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.no_show.v1", payload, map[string]any{}); err != nil {
 				return err
 			}
@@ -412,6 +511,7 @@ func buildOrderPayload(o *Order) map[string]any {
 		"plant":             o.Plant,
 		"supply_date":       o.SupplyDate.Format("2006-01-02"),
 		"total_price_minor": o.TotalPriceMinor,
+		"notes":             o.Notes,
 		"items":             items,
 	}
 }

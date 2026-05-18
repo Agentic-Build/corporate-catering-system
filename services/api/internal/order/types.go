@@ -23,6 +23,7 @@ type Order struct {
 	SupplyDate      time.Time
 	Status          Status
 	TotalPriceMinor int64
+	Notes           string
 	TOTPSecret      []byte
 	PlacedAt        *time.Time
 	CutoffAt        time.Time

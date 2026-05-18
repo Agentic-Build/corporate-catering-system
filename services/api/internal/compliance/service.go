@@ -79,12 +79,31 @@ type UploadInput struct {
 	Body       io.Reader
 	ExpiresAt  *time.Time
 	UploadedBy string
+	// ActorRole is the audit actor role; defaults to "welfare_admin" when empty
+	// (admin upload). Merchant self-service resupply passes "vendor_operator".
+	ActorRole string
+	// Supersedes, when set, marks this upload as a resupply replacing an
+	// existing document of the same vendor.
+	Supersedes *string
 }
 
 // UploadDocument streams Body to S3 at vendor-docs/{vendor}/{ts}-{name},
 // then inserts a pending vendor_document row and emits an audit event.
 // Body is buffered fully so size + audit reflect the same bytes uploaded.
+//
+// When in.Supersedes is set the upload is a resupply: the referenced document
+// must belong to the same vendor and already be reviewed (validateResupplyTarget),
+// and the new row links back to it via vendor_document.supersedes.
 func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document, error) {
+	if in.Supersedes != nil {
+		target, err := s.Docs.GetByID(ctx, *in.Supersedes)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateResupplyTarget(target, in.VendorID); err != nil {
+			return nil, err
+		}
+	}
 	buf, err := io.ReadAll(in.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read upload: %w", err)
@@ -103,12 +122,16 @@ func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document
 		UploadedBy: &uploadedBy,
 		ExpiresAt:  in.ExpiresAt,
 		Status:     DocStatusPending,
+		Supersedes: in.Supersedes,
 	}
 	if err := s.Docs.Create(ctx, d); err != nil {
 		return nil, err
 	}
 
-	role := "welfare_admin"
+	role := in.ActorRole
+	if role == "" {
+		role = "welfare_admin"
+	}
 	auditErr := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		payload := map[string]any{
 			"vendor_id":  in.VendorID,
@@ -116,6 +139,9 @@ func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document
 			"filename":   in.Filename,
 			"uri":        uri,
 			"size_bytes": len(buf),
+		}
+		if in.Supersedes != nil {
+			payload["supersedes"] = *in.Supersedes
 		}
 		return s.Audit.WriteTx(ctx, tx, &uploadedBy, &role, "vendor_document.upload", "vendor_document", d.ID, payload, "")
 	})

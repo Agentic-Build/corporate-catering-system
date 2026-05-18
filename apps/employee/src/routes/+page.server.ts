@@ -182,9 +182,11 @@ export const actions: Actions = {
     const fd = await request.formData();
     const plant = String(fd.get("plant") ?? "");
     const supplyDate = String(fd.get("supply_date") ?? "");
+    const notes = String(fd.get("notes") ?? "").trim();
     const itemIDs = fd.getAll("item_id").map(String);
     const qtys = fd.getAll("qty").map((q) => parseInt(String(q), 10));
     if (itemIDs.length === 0) return fail(400, { error: "cart is empty" });
+    if (notes.length > 500) return fail(400, { error: "備註不可超過 500 字" });
 
     const items = itemIDs
       .map((id, i) => ({ menu_item_id: id, qty: qtys[i] ?? 0 }))
@@ -193,7 +195,7 @@ export const actions: Actions = {
 
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.POST("/api/employee/orders", {
-      body: { plant, supply_date: supplyDate, items } as never,
+      body: { plant, supply_date: supplyDate, notes, items } as never,
     });
     if (r.error) {
       // RFC 9457 problem-details — surface a calm Chinese message, not raw JSON.

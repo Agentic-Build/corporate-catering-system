@@ -179,6 +179,39 @@ func TestDocumentRepo_ListExpiringBefore(t *testing.T) {
 	assert.Equal(t, d2.ID, got[1].ID)
 }
 
+func TestDocumentRepo_SupersedesRoundtrip(t *testing.T) {
+	pool, cleanup := setupPostgres(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := pgrepo.NewDocumentRepo(pool)
+
+	vendorID := seedApprovedVendor(t, pool)
+
+	original := &compliance.Document{
+		VendorID: vendorID, Kind: compliance.DocKindBusinessLicense,
+		BlobURI: "s3://old", Filename: "old.pdf",
+	}
+	require.NoError(t, repo.Create(ctx, original))
+	assert.Nil(t, original.Supersedes)
+
+	replacement := &compliance.Document{
+		VendorID: vendorID, Kind: compliance.DocKindBusinessLicense,
+		BlobURI: "s3://new", Filename: "new.pdf",
+		Supersedes: &original.ID,
+	}
+	require.NoError(t, repo.Create(ctx, replacement))
+
+	// The replacement carries the supersedes link; the original does not.
+	got, err := repo.GetByID(ctx, replacement.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.Supersedes)
+	assert.Equal(t, original.ID, *got.Supersedes)
+
+	gotOrig, err := repo.GetByID(ctx, original.ID)
+	require.NoError(t, err)
+	assert.Nil(t, gotOrig.Supersedes)
+}
+
 func TestDocumentRepo_ListPastExpiry(t *testing.T) {
 	pool, cleanup := setupPostgres(t)
 	defer cleanup()

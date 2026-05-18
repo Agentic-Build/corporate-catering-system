@@ -2,6 +2,15 @@
 
 All notable changes to T-Bite, by phase.
 
+## Order Modify / Live Board / Resupply / Settlement Exceptions (2026-05-18)
+- A 員工修改訂單: `PUT /api/employee/orders/{id}` — add/remove items + change quantity before cutoff; quota adjusted by per-item delta in one transaction; `order.modify` MCP tool (16 tools total)
+- B 訂單備註: per-order free-text `notes` carried from cart/edit to the merchant prep board (migration 000011)
+- C 文件補件: merchant self-service `POST /api/merchant/documents`; `vendor_document.supersedes` links a resupply to the document it replaces (migration 000012)
+- D 即時看板: `GET /api/merchant/orders/events` Server-Sent Events backed by an ephemeral NATS `ORDERS_V1` tap (`order.BoardHub`); the board now pushes instead of polling every 15s
+- E 月結例外: `payroll_exception` — departed-employee auto-detection + manual deduction-failed flagging + resolve/exclude workflow; the settler CSV gains an `exception` column and drops excluded entries (migration 000013)
+- 6 new HTTP endpoints + 1 SSE endpoint + 1 MCP tool; migrations 000011–000013
+- design: `docs/plans/2026-05-18-order-modify-board-compliance-settlement-design.md`
+
 ## Feedback / Settlement / Menu Search / Compliance (2026-05-17)
 - F1 員工回饋: `meal_rating` + `meal_complaint` workflow (open → vendor_responded → escalated → resolved, 24h escalation gate)
 - FeedbackScanner opens `satisfaction_drop` / `complaint_spike` anomalies — the governance engine's two previously unbacked signals

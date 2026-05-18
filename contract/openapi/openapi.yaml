@@ -204,6 +204,19 @@ components:
                 - batch
                 - entries
             type: object
+        BoardEvent:
+            additionalProperties: false
+            properties:
+                kind:
+                    description: Order event kind, e.g. placed / modified / ready / cancelled
+                    type: string
+                order_id:
+                    description: Affected order id; empty for keep-alive pings
+                    type: string
+            required:
+                - kind
+                - order_id
+            type: object
         CategoryDTO:
             additionalProperties: false
             properties:
@@ -555,6 +568,8 @@ components:
                     type: string
                 status:
                     type: string
+                supersedes:
+                    type: string
                 uploaded_by:
                     type: string
                 vendor_id:
@@ -718,6 +733,57 @@ components:
                     format: uri
                     type: string
             type: object
+        ExceptionDTO:
+            additionalProperties: false
+            properties:
+                batch_id:
+                    type: string
+                created_at:
+                    type: string
+                detail:
+                    type: string
+                entry_id:
+                    type: string
+                id:
+                    type: string
+                kind:
+                    type: string
+                resolution:
+                    type: string
+                resolved_at:
+                    type: string
+                resolved_by:
+                    type: string
+                status:
+                    type: string
+                user_id:
+                    type: string
+            required:
+                - id
+                - batch_id
+                - entry_id
+                - user_id
+                - kind
+                - status
+                - detail
+                - resolution
+                - created_at
+            type: object
+        ExceptionOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ExceptionOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                exception:
+                    $ref: '#/components/schemas/ExceptionDTO'
+            required:
+                - exception
+            type: object
         FavoriteChipDTO:
             additionalProperties: false
             properties:
@@ -765,6 +831,26 @@ components:
             required:
                 - category
                 - description
+            type: object
+        FlagExceptionInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/FlagExceptionInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                detail:
+                    maxLength: 500
+                    type: string
+                entry_id:
+                    format: uuid
+                    type: string
+            required:
+                - entry_id
+                - detail
             type: object
         HomeOutputBody:
             additionalProperties: false
@@ -1035,6 +1121,25 @@ components:
                 items:
                     items:
                         $ref: '#/components/schemas/EmployeeMenuItemDTO'
+                    type:
+                        - array
+                        - "null"
+            required:
+                - items
+            type: object
+        ListExceptionsOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ListExceptionsOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/ExceptionDTO'
                     type:
                         - array
                         - "null"
@@ -1369,6 +1474,8 @@ components:
                     type:
                         - array
                         - "null"
+                notes:
+                    type: string
                 picked_up_at:
                     type: string
                 placed_at:
@@ -1387,7 +1494,43 @@ components:
                 - plant
                 - status
                 - total_price_minor
+                - notes
                 - items
+            type: object
+        MerchantUploadDocumentInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/MerchantUploadDocumentInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                content_base64:
+                    minLength: 1
+                    type: string
+                expires_at:
+                    type: string
+                filename:
+                    minLength: 1
+                    type: string
+                kind:
+                    enum:
+                        - business_license
+                        - food_safety_permit
+                        - tax_registration
+                        - insurance
+                        - other
+                    type: string
+                supersedes:
+                    description: ID of the document this upload replaces (resupply)
+                    format: uuid
+                    type: string
+            required:
+                - kind
+                - filename
+                - content_base64
             type: object
         MessageDTO:
             additionalProperties: false
@@ -1425,6 +1568,29 @@ components:
                 - headers
                 - last_error
                 - first_seen_at
+            type: object
+        ModifyOrderInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ModifyOrderInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                items:
+                    items:
+                        $ref: '#/components/schemas/Item'
+                    type:
+                        - array
+                        - "null"
+                notes:
+                    description: Free-text special requirements shown on the merchant prep board
+                    maxLength: 500
+                    type: string
+            required:
+                - items
             type: object
         OpenDisputeInputBody:
             additionalProperties: false
@@ -1490,6 +1656,8 @@ components:
                     type:
                         - array
                         - "null"
+                notes:
+                    type: string
                 placed_at:
                     type: string
                 plant:
@@ -1510,6 +1678,7 @@ components:
                 - supply_date
                 - status
                 - total_price_minor
+                - notes
                 - cutoff_at
                 - items
             type: object
@@ -1628,6 +1797,10 @@ components:
                     type:
                         - array
                         - "null"
+                notes:
+                    description: Free-text special requirements shown on the merchant prep board
+                    maxLength: 500
+                    type: string
                 plant:
                     type: string
                 supply_date:
@@ -1971,6 +2144,28 @@ components:
                 - status
                 - resolution
                 - refund_minor
+            type: object
+        ResolveExceptionInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/ResolveExceptionInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                resolution:
+                    maxLength: 500
+                    type: string
+                status:
+                    enum:
+                        - resolved
+                        - excluded
+                    type: string
+            required:
+                - status
+                - resolution
             type: object
         ResolveInputBody:
             additionalProperties: false
@@ -2816,6 +3011,71 @@ paths:
             tags:
                 - admin
                 - payroll
+    /api/admin/payroll/batches/{id}/exceptions:
+        get:
+            operationId: listPayrollExceptions
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExceptionsOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: List a batch's settlement exceptions (re-runs departed-employee detection)
+            tags:
+                - admin
+                - payroll
+        post:
+            operationId: flagPayrollException
+            parameters:
+                - description: Payroll batch id
+                  in: path
+                  name: id
+                  required: true
+                  schema:
+                    description: Payroll batch id
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FlagExceptionInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExceptionOutputBody'
+                    description: Created
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Flag a batch entry with a manual deduction-failed exception
+            tags:
+                - admin
+                - payroll
     /api/admin/payroll/batches/{id}/lock:
         post:
             operationId: lockPayrollBatch
@@ -2903,6 +3163,39 @@ paths:
             security:
                 - bearer: []
             summary: Resolve a payroll dispute (refund or reject)
+            tags:
+                - admin
+                - payroll
+    /api/admin/payroll/exceptions/{id}/resolve:
+        post:
+            operationId: resolvePayrollException
+            parameters:
+                - description: Payroll exception id
+                  in: path
+                  name: id
+                  required: true
+                  schema:
+                    description: Payroll exception id
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ResolveExceptionInputBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Resolve a settlement exception (resolved or excluded)
             tags:
                 - admin
                 - payroll
@@ -3743,6 +4036,40 @@ paths:
             tags:
                 - employee
                 - order
+        put:
+            operationId: modifyMyOrder
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ModifyOrderInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrderOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Modify my order's items before cutoff (owner only)
+            tags:
+                - employee
+                - order
     /api/employee/orders/{id}/cancel:
         post:
             operationId: cancelMyOrder
@@ -4120,6 +4447,34 @@ paths:
             tags:
                 - merchant
                 - compliance
+    /api/merchant/documents:
+        post:
+            operationId: uploadMerchantDocument
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MerchantUploadDocumentInputBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UploadDocumentOutputBody'
+                    description: Created
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Upload or resupply a compliance document for own vendor
+            tags:
+                - merchant
+                - compliance
     /api/merchant/menu-items:
         get:
             operationId: listMerchantMenuItems
@@ -4336,6 +4691,49 @@ paths:
             security:
                 - bearer: []
             summary: Verify TOTP code and mark order picked up
+            tags:
+                - merchant
+                - order
+    /api/merchant/orders/events:
+        get:
+            operationId: streamMerchantOrderEvents
+            responses:
+                "200":
+                    content:
+                        text/event-stream:
+                            schema:
+                                description: Each oneOf object in the array represents one possible Server Sent Events (SSE) message, serialized as UTF-8 text according to the SSE specification.
+                                items:
+                                    oneOf:
+                                        - properties:
+                                            data:
+                                                $ref: '#/components/schemas/BoardEvent'
+                                            event:
+                                                const: message
+                                                description: The event name.
+                                                type: string
+                                            id:
+                                                description: The event ID.
+                                                type: integer
+                                            retry:
+                                                description: The retry time in milliseconds.
+                                                type: integer
+                                          required:
+                                            - data
+                                          title: Event message
+                                          type: object
+                                title: Server Sent Events
+                                type: array
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Live order events for the merchant prep board (Server-Sent Events)
             tags:
                 - merchant
                 - order
