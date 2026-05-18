@@ -136,7 +136,12 @@ var employeeMenuSortClauses = map[menu.EmployeeMenuSort]string{
 func (r *ItemRepo) ListActiveByPlant(ctx context.Context, f menu.EmployeeMenuFilter) ([]*menu.ActiveItemRow, error) {
 	// $1 = plant, $2 = day are always present; optional filters append $3.. .
 	args := []any{f.Plant, f.Day}
-	where := []string{"mi.status = 'active'"}
+	// A vendor's items only show within its preorder window: the requested
+	// day must be no further ahead than vendor.preorder_window_days.
+	where := []string{
+		"mi.status = 'active'",
+		"$2::date <= CURRENT_DATE + v.preorder_window_days",
+	}
 
 	if q := strings.TrimSpace(f.Q); q != "" {
 		args = append(args, q)

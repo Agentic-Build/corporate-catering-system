@@ -2090,6 +2090,27 @@
         ],
         "type": "object"
       },
+      "MerchantSettingsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/MerchantSettingsOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/VendorSettingsDTO"
+          }
+        },
+        "required": [
+          "settings"
+        ],
+        "type": "object"
+      },
       "MerchantUploadDocumentInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -3447,6 +3468,37 @@
         ],
         "type": "object"
       },
+      "UpdateMerchantSettingsInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/UpdateMerchantSettingsInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "cutoff_hour": {
+            "format": "int64",
+            "maximum": 23,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "preorder_window_days": {
+            "format": "int64",
+            "maximum": 30,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cutoff_hour",
+          "preorder_window_days"
+        ],
+        "type": "object"
+      },
       "UploadDocumentInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -3566,6 +3618,24 @@
           "id",
           "display_name",
           "status"
+        ],
+        "type": "object"
+      },
+      "VendorSettingsDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "cutoff_hour": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "preorder_window_days": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cutoff_hour",
+          "preorder_window_days"
         ],
         "type": "object"
       },
@@ -7247,6 +7317,88 @@
         "tags": [
           "merchant",
           "settlement"
+        ]
+      }
+    },
+    "/api/merchant/settings": {
+      "get": {
+        "operationId": "getMerchantSettings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MerchantSettingsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get own vendor's ordering settings",
+        "tags": [
+          "merchant",
+          "vendor"
+        ]
+      },
+      "put": {
+        "operationId": "updateMerchantSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMerchantSettingsInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MerchantSettingsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update own vendor's cutoff hour and preorder window",
+        "tags": [
+          "merchant",
+          "vendor"
         ]
       }
     },

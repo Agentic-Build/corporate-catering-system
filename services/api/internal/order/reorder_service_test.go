@@ -148,6 +148,7 @@ func setupReorder(t *testing.T) reorderTestEnv {
 		QuotaTx:     supplyRepo,
 		Items:       itemRepo,
 		Plants:      plantRepo,
+		Vendors:     vpg.NewVendorRepo(pool),
 		Clock:       fixedClock{T: reorderClockTime},
 	}
 

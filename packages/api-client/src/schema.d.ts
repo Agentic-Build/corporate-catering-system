@@ -1035,6 +1035,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get own vendor's ordering settings */
+        get: operations["getMerchantSettings"];
+        /** Update own vendor's cutoff hour and preorder window */
+        put: operations["updateMerchantSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/settlements": {
         parameters: {
             query?: never;
@@ -1890,6 +1908,15 @@ export interface components {
             /** Format: int64 */
             total_price_minor: number;
         };
+        MerchantSettingsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MerchantSettingsOutputBody.json
+             */
+            readonly $schema?: string;
+            settings: components["schemas"]["VendorSettingsDTO"];
+        };
         MerchantUploadDocumentInputBody: {
             /**
              * Format: uri
@@ -2351,6 +2378,18 @@ export interface components {
             price_minor: number;
             tags: string[] | null;
         };
+        UpdateMerchantSettingsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateMerchantSettingsInputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            cutoff_hour: number;
+            /** Format: int64 */
+            preorder_window_days: number;
+        };
         UploadDocumentInputBody: {
             /**
              * Format: uri
@@ -2386,6 +2425,12 @@ export interface components {
             display_name: string;
             id: string;
             status: string;
+        };
+        VendorSettingsDTO: {
+            /** Format: int64 */
+            cutoff_hour: number;
+            /** Format: int64 */
+            preorder_window_days: number;
         };
         VerifyPickupInputBody: {
             /**
@@ -4689,6 +4734,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReconciliationOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getMerchantSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantSettingsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    updateMerchantSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMerchantSettingsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantSettingsOutputBody"];
                 };
             };
             /** @description Error */

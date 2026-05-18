@@ -206,7 +206,9 @@ func main() {
 			QuotaTx:     supplyRepo,
 			Items:       itemRepo,
 			Plants:      plantRepo,
+			Vendors:     vpgrepo.NewVendorRepo(pool),
 			Clock:       clock.SystemClock{},
+			Location:    time.Local,
 		}
 		// BoardHub fans live order events to the merchant prep board over SSE.
 		// It is wired to NATS below when NATS_URL is configured.
@@ -672,7 +674,9 @@ func main() {
 			QuotaTx:     supplyRepo,
 			Items:       itemRepo,
 			Plants:      plantRepo,
+			Vendors:     vpgrepo.NewVendorRepo(pool),
 			Clock:       clock.SystemClock{},
+			Location:    time.Local,
 		}
 		vendorService := &vendor.Service{
 			Vendors:     vpgrepo.NewVendorRepo(pool),

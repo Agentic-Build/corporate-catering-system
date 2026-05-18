@@ -72,6 +72,18 @@ func (r *fakeVendorRepo) UpdateStatus(_ context.Context, id string, s vendor.Sta
 	return nil
 }
 
+func (r *fakeVendorRepo) UpdateSettings(_ context.Context, id string, cutoffHour, preorderWindowDays int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	v, ok := r.byID[id]
+	if !ok {
+		return vendor.ErrVendorNotFound
+	}
+	v.CutoffHour = cutoffHour
+	v.PreorderWindowDays = preorderWindowDays
+	return nil
+}
+
 func (r *fakeVendorRepo) List(_ context.Context, statuses []vendor.Status) ([]*vendor.Vendor, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -395,4 +407,23 @@ func hasOperatorStatus(items []vendor.OperatorStatus, status vendor.OperatorStat
 		}
 	}
 	return false
+}
+
+func TestService_UpdateSettings(t *testing.T) {
+	svc, _, _, _, _ := newSvc()
+	ctx := context.Background()
+	v, err := svc.CreatePending(ctx, "稻禾", "稻禾股份", "ricehouse@test.com")
+	require.NoError(t, err)
+	// Defaults are the DB defaults — the fake leaves them zero, so just check
+	// the update path here.
+	updated, err := svc.UpdateSettings(ctx, v.ID, 15, 5)
+	require.NoError(t, err)
+	assert.Equal(t, 15, updated.CutoffHour)
+	assert.Equal(t, 5, updated.PreorderWindowDays)
+
+	// Out-of-range values are rejected.
+	_, err = svc.UpdateSettings(ctx, v.ID, 24, 7)
+	assert.ErrorIs(t, err, vendor.ErrInvalidSettings)
+	_, err = svc.UpdateSettings(ctx, v.ID, 12, 0)
+	assert.ErrorIs(t, err, vendor.ErrInvalidSettings)
 }

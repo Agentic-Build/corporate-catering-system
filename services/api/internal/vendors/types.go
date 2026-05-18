@@ -19,8 +19,13 @@ type Vendor struct {
 	Status       Status
 	ApprovedAt   *time.Time
 	ApprovedBy   *string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// CutoffHour is the local-time hour (0-23) on the day before supply by
+	// which an order must be placed or changed.
+	CutoffHour int
+	// PreorderWindowDays is how many days ahead employees may order.
+	PreorderWindowDays int
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type PlantMapping struct {
