@@ -85,3 +85,30 @@ func TestKindFromSubject(t *testing.T) {
 		}
 	}
 }
+
+func TestMenuHub_BroadcastReachesSubscribers(t *testing.T) {
+	hub := NewMenuHub()
+	a, unsubA := hub.Subscribe()
+	defer unsubA()
+	b, unsubB := hub.Subscribe()
+	defer unsubB()
+
+	hub.Broadcast()
+	for name, ch := range map[string]<-chan struct{}{"A": a, "B": b} {
+		select {
+		case <-ch:
+		case <-time.After(time.Second):
+			t.Fatalf("subscriber %s missed the broadcast", name)
+		}
+	}
+}
+
+func TestMenuHub_UnsubscribeStopsDelivery(t *testing.T) {
+	hub := NewMenuHub()
+	ch, unsub := hub.Subscribe()
+	unsub()
+	hub.Broadcast() // must not panic on a closed channel
+	if _, ok := <-ch; ok {
+		t.Fatal("channel should be closed after unsubscribe")
+	}
+}

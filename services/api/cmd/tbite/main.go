@@ -213,7 +213,8 @@ func main() {
 		// BoardHub fans live order events to the merchant prep board over SSE.
 		// It is wired to NATS below when NATS_URL is configured.
 		boardHub := order.NewBoardHub()
-		orderAPI := &ohttp.API{Svc: orderService, Board: boardHub}
+		menuHub := order.NewMenuHub()
+		orderAPI := &ohttp.API{Svc: orderService, Board: boardHub, MenuHub: menuHub}
 
 		// 7f. Payroll service + admin/employee handlers
 		payrollService := &payroll.Service{
@@ -275,7 +276,7 @@ func main() {
 				// push live updates. Failure here is non-fatal: the board
 				// still works, just without push.
 				go func() {
-					if err := order.RunBoardConsumer(ctx, natsClient.JS, boardHub, logger); err != nil {
+					if err := order.RunBoardConsumer(ctx, natsClient.JS, boardHub, menuHub, logger); err != nil {
 						logger.Warn("board consumer stopped", "err", err)
 					}
 				}()

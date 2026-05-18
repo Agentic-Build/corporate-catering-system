@@ -24,6 +24,9 @@ type API struct {
 	// optional: when nil (NATS not configured) the SSE endpoint stays open but
 	// emits only keep-alive pings.
 	Board *order.BoardHub
+	// MenuHub broadcasts a "menu changed" signal to employee menu views so
+	// they refetch when stock moves. Optional, same as Board.
+	MenuHub *order.MenuHub
 }
 
 // ----- DTOs -----
@@ -354,6 +357,17 @@ func (a *API) Register(api huma.API) {
 	}, map[string]any{
 		"message": order.BoardEvent{},
 	}, a.streamMerchantOrderEvents)
+
+	sse.Register(api, huma.Operation{
+		OperationID: "streamEmployeeMenuEvents",
+		Method:      http.MethodGet,
+		Path:        "/api/employee/menu/events",
+		Summary:     "Live menu-changed signal so the employee menu refetches stock (SSE)",
+		Tags:        []string{"employee", "menu"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, map[string]any{
+		"message": order.BoardEvent{},
+	}, a.streamEmployeeMenuEvents)
 }
 
 // ----- Auth helper -----
@@ -633,6 +647,41 @@ func (a *API) streamMerchantOrderEvents(ctx context.Context, _ *struct{}, send s
 				return
 			}
 			if send.Data(ev) != nil {
+				return
+			}
+		}
+	}
+}
+
+// streamEmployeeMenuEvents streams a "menu changed" signal to the employee
+// menu view so it refetches when an order shifts available stock.
+func (a *API) streamEmployeeMenuEvents(ctx context.Context, _ *struct{}, send sse.Sender) {
+	u, ok := idhttp.UserFromContext(ctx)
+	if !ok || u.Role != identity.RoleEmployee {
+		return
+	}
+	if a.MenuHub == nil {
+		<-ctx.Done()
+		return
+	}
+	ch, unsub := a.MenuHub.Subscribe()
+	defer unsub()
+
+	heartbeat := time.NewTicker(20 * time.Second)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-heartbeat.C:
+			if send.Data(order.BoardEvent{Kind: "ping"}) != nil {
+				return
+			}
+		case _, open := <-ch:
+			if !open {
+				return
+			}
+			if send.Data(order.BoardEvent{Kind: "changed"}) != nil {
 				return
 			}
 		}

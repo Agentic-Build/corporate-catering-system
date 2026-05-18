@@ -6,6 +6,7 @@
   import { MealCard, StateTag, WeekCalendar } from "@tbite/ui";
   import { invalidateAll, goto } from "$app/navigation";
   import { page } from "$app/stores";
+  import { onMount } from "svelte";
   import CategoryStrip from "$lib/components/CategoryStrip.svelte";
   import FeaturedRow from "$lib/components/FeaturedRow.svelte";
   import MenuFilterBar from "$lib/components/MenuFilterBar.svelte";
@@ -32,6 +33,22 @@
     u.searchParams.set("day", id);
     goto(u.pathname + u.search, { keepFocus: true, noScroll: true });
   }
+
+  // Live menu: an SSE stream signals when any order shifts available stock so
+  // the menu refetches and sold-out states surface without a manual refresh.
+  onMount(() => {
+    const es = new EventSource("/menu/events");
+    es.onmessage = (e) => {
+      let kind = "";
+      try {
+        kind = (JSON.parse(e.data)?.kind as string) ?? "";
+      } catch {
+        // unparseable payload still signals activity
+      }
+      if (kind && kind !== "ping") invalidateAll();
+    };
+    return () => es.close();
+  });
 
   // ── typed views over the /api/employee/home payload ──
   type ReorderC = {
