@@ -1103,6 +1103,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/supply/{itemID}/{date}/sold-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark a supply temporarily sold out (or back in stock) */
+        post: operations["setMerchantSupplySoldOut"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/{provider}/callback": {
         parameters: {
             query?: never;
@@ -2227,6 +2244,15 @@ export interface components {
             eta_label: string;
             pickup_window: string;
         };
+        SetSoldOutInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SetSoldOutInputBody.json
+             */
+            readonly $schema?: string;
+            sold_out: boolean;
+        };
         SettlementDTO: {
             closed_at: string;
             closed_by?: string;
@@ -2293,6 +2319,7 @@ export interface components {
             pickup_window: string;
             /** Format: int64 */
             remain: number;
+            sold_out: boolean;
             supply_date: string;
         };
         SupplyOutputBody: {
@@ -4780,6 +4807,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetCapacityInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplyOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    setMerchantSupplySoldOut: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                itemID: string;
+                date: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetSoldOutInputBody"];
             };
         };
         responses: {

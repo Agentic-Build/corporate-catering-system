@@ -11,6 +11,7 @@ type Supply struct {
 	PickupWindow string
 	ETALabel     string
 	CutoffAt     time.Time
+	SoldOut      bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

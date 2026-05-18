@@ -339,6 +339,24 @@ func TestService_ListForEmployee_JoinsImagesAndMarksSoldOut(t *testing.T) {
 	assert.Equal(t, "12:00-12:30", got.PickupWindow)
 }
 
+func TestService_ListForEmployee_RespectsSoldOutFlag(t *testing.T) {
+	svc, _, ir, _ := newSvc()
+	ctx := context.Background()
+	item := &menu.Item{
+		ID: "item-7", VendorID: "v1", Name: "雞排飯", PriceMinor: 9000, Status: menu.ItemStatusActive,
+	}
+	ir.byID[item.ID] = item
+	day := time.Date(2026, 5, 14, 0, 0, 0, 0, time.UTC)
+	ir.activeByPlant["F12B-3F"] = []*menu.ActiveItemRow{
+		{Item: *item, VendorName: "X", SupplyDate: day, Capacity: 50, Remain: 20, SoldOut: true},
+	}
+	out, err := svc.ListForEmployee(ctx, menu.EmployeeMenuFilter{Plant: "F12B-3F", Day: day})
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	assert.True(t, out[0].SoldOut, "sold_out flag marks the item unavailable even with remain>0")
+	assert.Equal(t, 20, out[0].Remain)
+}
+
 func TestService_ListForEmployee_PassesFilterToRepo(t *testing.T) {
 	svc, _, ir, _ := newSvc()
 	ctx := context.Background()

@@ -134,6 +134,22 @@ export const actions: Actions = {
     return { success: true };
   },
 
+  /** Toggle a supply's temporary sold-out flag for the given day. */
+  toggleSoldOut: async ({ request, locals }) => {
+    const fd = await request.formData();
+    const itemId = String(fd.get("item_id") ?? "");
+    const date = String(fd.get("date") ?? "");
+    const soldOut = String(fd.get("sold_out") ?? "") === "true";
+    if (!itemId || !date) return fail(400, { error: "缺少餐點或日期" });
+    const client = apiFor(locals.apiToken);
+    const r = await client.POST("/api/merchant/supply/{itemID}/{date}/sold-out", {
+      params: { path: { itemID: itemId, date } },
+      body: { sold_out: soldOut } as never,
+    });
+    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    return { success: true };
+  },
+
   /** Publish a menu item — used before adding an archived item to a day. */
   publishItem: async ({ request, locals }) => {
     const fd = await request.formData();

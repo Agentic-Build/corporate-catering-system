@@ -222,7 +222,7 @@ func (s *Service) ListForEmployee(ctx context.Context, f EmployeeMenuFilter) ([]
 			Images:       uris,
 			Capacity:     r.Capacity,
 			Remain:       r.Remain,
-			SoldOut:      r.Remain == 0,
+			SoldOut:      r.Remain <= 0 || r.SoldOut,
 			PickupWindow: r.PickupWindow,
 			ETALabel:     r.ETALabel,
 		})

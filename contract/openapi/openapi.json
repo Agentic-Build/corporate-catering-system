@@ -3121,6 +3121,27 @@
         ],
         "type": "object"
       },
+      "SetSoldOutInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/SetSoldOutInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "sold_out": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sold_out"
+        ],
+        "type": "object"
+      },
       "SettlementDTO": {
         "additionalProperties": false,
         "properties": {
@@ -3310,6 +3331,9 @@
             "format": "int64",
             "type": "integer"
           },
+          "sold_out": {
+            "type": "boolean"
+          },
           "supply_date": {
             "type": "string"
           }
@@ -3320,6 +3344,7 @@
           "supply_date",
           "capacity",
           "remain",
+          "sold_out",
           "pickup_window",
           "eta_label",
           "cutoff_at"
@@ -7419,6 +7444,72 @@
           }
         ],
         "summary": "Set or update capacity for a menu item on a given date",
+        "tags": [
+          "merchant",
+          "quota"
+        ]
+      }
+    },
+    "/api/merchant/supply/{itemID}/{date}/sold-out": {
+      "post": {
+        "operationId": "setMerchantSupplySoldOut",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "itemID",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "date",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSoldOutInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplyOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mark a supply temporarily sold out (or back in stock)",
         "tags": [
           "merchant",
           "quota"

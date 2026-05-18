@@ -110,6 +110,17 @@ func (r *fakeSupplyRepo) Restore(_ context.Context, itemID string, date time.Tim
 	return nil
 }
 
+func (r *fakeSupplyRepo) SetSoldOut(_ context.Context, itemID string, date time.Time, soldOut bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.byKey[supplyKey{itemID: itemID, date: date}]
+	if !ok {
+		return quota.ErrSupplyNotFound
+	}
+	s.SoldOut = soldOut
+	return nil
+}
+
 // itemVendorIndex is a tiny side-channel used by fakeSupplyRepo.ListByVendor
 // (which needs to know which vendor owns each item) and shared with fakeItemRepo.
 var itemVendorIndex = map[string]string{}
@@ -284,4 +295,33 @@ func TestService_ListForVendor_ReturnsSupplies(t *testing.T) {
 
 func vendorOf(itemID string) string {
 	return itemVendorIndex[itemID]
+}
+
+func TestService_SetSoldOut(t *testing.T) {
+	svc, _, ir := newSvc(t)
+	ir.seed("item-1", "v-owner")
+	ctx := context.Background()
+	d := day(2026, 5, 14)
+	_, err := svc.SetCapacity(ctx, "v-owner", quota.SetCapacityInput{
+		MenuItemID: "item-1", Date: d, Capacity: 50,
+		CutoffAt: time.Date(2026, 5, 13, 17, 0, 0, 0, time.UTC),
+	})
+	require.NoError(t, err)
+
+	sp, err := svc.SetSoldOut(ctx, "v-owner", "item-1", d, true)
+	require.NoError(t, err)
+	assert.True(t, sp.SoldOut)
+	assert.Equal(t, 50, sp.Capacity, "capacity untouched")
+	assert.Equal(t, 50, sp.Remain, "remain untouched")
+
+	sp, err = svc.SetSoldOut(ctx, "v-owner", "item-1", d, false)
+	require.NoError(t, err)
+	assert.False(t, sp.SoldOut)
+}
+
+func TestService_SetSoldOut_WrongVendorForbidden(t *testing.T) {
+	svc, _, ir := newSvc(t)
+	ir.seed("item-1", "v-owner")
+	_, err := svc.SetSoldOut(context.Background(), "v-other", "item-1", day(2026, 5, 14), true)
+	assert.ErrorIs(t, err, menu.ErrForbidden)
 }

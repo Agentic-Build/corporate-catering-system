@@ -15,6 +15,7 @@
     cap: number;
     ordered: number;
     pickupWindow: string;
+    soldOut: boolean;
   }
   interface Day {
     id: string;
@@ -28,8 +29,10 @@
     onOpenLibrary: () => void;
     /** Submits a `setSupply` post for `itemId` on `day.id` at `capacity`. */
     submitCap: (itemId: string, capacity: number, pickupWindow: string) => void;
+    /** Submits a `toggleSoldOut` post for `itemId` on `day.id`. */
+    submitSoldOut: (itemId: string, soldOut: boolean) => void;
   }
-  let { day, slots, onOpenLibrary, submitCap }: Props = $props();
+  let { day, slots, onOpenLibrary, submitCap, submitSoldOut }: Props = $props();
 
   const isToday = $derived(day.offset === 0);
   const isTomorrow = $derived(day.offset === 1);
@@ -149,7 +152,16 @@
                   </div>
                 {/if}
                 <div class="min-w-0">
-                  <div class="truncate font-bold text-tb-slate-900">{slot.name}</div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="truncate font-bold text-tb-slate-900">{slot.name}</span>
+                    {#if slot.soldOut}
+                      <span
+                        class="shrink-0 rounded-full bg-tb-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-tb-rose-700"
+                      >
+                        缺貨中
+                      </span>
+                    {/if}
+                  </div>
                   <div class="truncate text-[11px] text-tb-slate-500">
                     {slot.description}
                   </div>
@@ -202,7 +214,16 @@
             </td>
             <td class="px-5 py-3 text-right">
               {#if canEdit}
-                <Button variant="ghost" size="sm" onclick={() => remove(slot)}>移除</Button>
+                <div class="flex items-center justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onclick={() => submitSoldOut(slot.itemId, !slot.soldOut)}
+                  >
+                    {slot.soldOut ? "恢復供應" : "標記缺貨"}
+                  </Button>
+                  <Button variant="ghost" size="sm" onclick={() => remove(slot)}>移除</Button>
+                </div>
               {/if}
             </td>
           </tr>

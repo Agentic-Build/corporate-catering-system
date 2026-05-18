@@ -35,10 +35,10 @@ RETURNING id, created_at, updated_at`,
 func (r *SupplyRepo) Get(ctx context.Context, itemID string, date time.Time) (*quota.Supply, error) {
 	var s quota.Supply
 	err := r.pool.QueryRow(ctx, `
-SELECT id, menu_item_id, supply_date, capacity, remain, pickup_window, eta_label, cutoff_at, created_at, updated_at
+SELECT id, menu_item_id, supply_date, capacity, remain, pickup_window, eta_label, cutoff_at, sold_out, created_at, updated_at
   FROM meal_supply WHERE menu_item_id=$1 AND supply_date=$2`, itemID, date).Scan(
 		&s.ID, &s.MenuItemID, &s.SupplyDate, &s.Capacity, &s.Remain,
-		&s.PickupWindow, &s.ETALabel, &s.CutoffAt, &s.CreatedAt, &s.UpdatedAt,
+		&s.PickupWindow, &s.ETALabel, &s.CutoffAt, &s.SoldOut, &s.CreatedAt, &s.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, quota.ErrSupplyNotFound
@@ -51,7 +51,7 @@ SELECT id, menu_item_id, supply_date, capacity, remain, pickup_window, eta_label
 
 func (r *SupplyRepo) ListByVendor(ctx context.Context, vendorID string, date time.Time) ([]*quota.Supply, error) {
 	rows, err := r.pool.Query(ctx, `
-SELECT ms.id, ms.menu_item_id, ms.supply_date, ms.capacity, ms.remain, ms.pickup_window, ms.eta_label, ms.cutoff_at, ms.created_at, ms.updated_at
+SELECT ms.id, ms.menu_item_id, ms.supply_date, ms.capacity, ms.remain, ms.pickup_window, ms.eta_label, ms.cutoff_at, ms.sold_out, ms.created_at, ms.updated_at
   FROM meal_supply ms
   JOIN menu_item mi ON mi.id = ms.menu_item_id
  WHERE mi.vendor_id = $1 AND ms.supply_date = $2
@@ -64,12 +64,27 @@ SELECT ms.id, ms.menu_item_id, ms.supply_date, ms.capacity, ms.remain, ms.pickup
 	for rows.Next() {
 		var s quota.Supply
 		if err := rows.Scan(&s.ID, &s.MenuItemID, &s.SupplyDate, &s.Capacity, &s.Remain,
-			&s.PickupWindow, &s.ETALabel, &s.CutoffAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.PickupWindow, &s.ETALabel, &s.CutoffAt, &s.SoldOut, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, &s)
 	}
 	return out, rows.Err()
+}
+
+// SetSoldOut flips the temporary sold-out flag. Returns ErrSupplyNotFound when
+// no supply row exists for the (item, date) pair.
+func (r *SupplyRepo) SetSoldOut(ctx context.Context, itemID string, date time.Time, soldOut bool) error {
+	tag, err := r.pool.Exec(ctx, `
+UPDATE meal_supply SET sold_out=$3, updated_at=now()
+ WHERE menu_item_id=$1 AND supply_date=$2`, itemID, date, soldOut)
+	if err != nil {
+		return fmt.Errorf("set sold_out: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return quota.ErrSupplyNotFound
+	}
+	return nil
 }
 
 // Decrement is the source-of-truth quota operation.
