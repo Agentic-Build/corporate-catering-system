@@ -3,8 +3,8 @@
   // data-driven category strip, three featured rows, full MealCard grid.
   // Header / LocationBar / floating cart / cart drawer / TOTP modal all live
   // in +layout.svelte; this page owns the home content + its form actions.
-  import { MealCard, StateTag } from "@tbite/ui";
-  import { invalidateAll } from "$app/navigation";
+  import { MealCard, StateTag, WeekCalendar } from "@tbite/ui";
+  import { invalidateAll, goto } from "$app/navigation";
   import { page } from "$app/stores";
   import CategoryStrip from "$lib/components/CategoryStrip.svelte";
   import FeaturedRow from "$lib/components/FeaturedRow.svelte";
@@ -12,6 +12,26 @@
   import { cart } from "$lib/cart.svelte";
 
   let { data, form } = $props();
+
+  // ── week-view date picker ──
+  const selectedDay = $derived($page.url.searchParams.get("day") ?? data.home?.target_day ?? "");
+  const weekDays = $derived.by(() => {
+    const wk = ["日", "一", "二", "三", "四", "五", "六"];
+    const today = new Date();
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const id = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+        d.getDate(),
+      ).padStart(2, "0")}`;
+      return { id, weekday: wk[d.getDay()], dom: String(d.getDate()), isToday: i === 0 };
+    });
+  });
+  function pickDay(id: string) {
+    const u = new URL($page.url);
+    u.searchParams.set("day", id);
+    goto(u.pathname + u.search, { keepFocus: true, noScroll: true });
+  }
 
   // ── typed views over the /api/employee/home payload ──
   type ReorderC = {
@@ -253,6 +273,14 @@
         挑選你今天想預訂的餐點 · 可預訂未來 7 天
       {/if}
     </p>
+  </section>
+
+  <!-- Week-view date picker -->
+  <section class="mb-5">
+    <div class="mb-2 text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
+      選擇取餐日 · 可預訂未來 7 天
+    </div>
+    <WeekCalendar days={weekDays} {selectedDay} onSelect={pickDay} />
   </section>
 
   {#if form && "error" in form && form.error && !(form as { reorderToast?: string }).reorderToast}
