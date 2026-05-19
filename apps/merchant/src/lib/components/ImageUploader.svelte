@@ -10,6 +10,11 @@
   }
   let { images = $bindable() }: Props = $props();
 
+  // Mirrors the server's allow-list (menu/http/upload.go) so obviously-invalid
+  // files are rejected before a pointless upload round-trip.
+  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  const MAX_BYTES = 2 * 1024 * 1024;
+
   let fileInput = $state<HTMLInputElement>();
   let uploading = $state(false);
   let uploadError = $state<string | null>(null);
@@ -20,13 +25,18 @@
     if (files.length === 0) return;
     uploading = true;
     uploadError = null;
+    const failed: string[] = [];
     try {
       for (const file of files) {
+        if (!ALLOWED_TYPES.includes(file.type) || file.size > MAX_BYTES) {
+          failed.push(file.name);
+          continue;
+        }
         const fd = new FormData();
         fd.set("file", file);
         const r = await fetch("/api/uploads", { method: "POST", body: fd });
         if (!r.ok) {
-          uploadError = `「${file.name}」上傳失敗，請確認為 JPEG / PNG / WebP 且不超過 2MB。`;
+          failed.push(file.name);
           continue;
         }
         const data = (await r.json()) as { url: string };
@@ -35,6 +45,9 @@
     } finally {
       uploading = false;
       input.value = "";
+    }
+    if (failed.length > 0) {
+      uploadError = `${failed.length} 張圖片上傳失敗（${failed.join("、")}）：須為 JPEG / PNG / WebP 且不超過 2MB。`;
     }
   }
 

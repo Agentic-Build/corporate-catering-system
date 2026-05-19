@@ -19,10 +19,14 @@ import (
 // the employee read route requires an employee with a plant assignment.
 //
 // Storage backs the merchant image-upload endpoint; the orchestrator
-// (cmd/tbite/main.go) is responsible for wiring it.
+// (cmd/tbite/main.go) is responsible for wiring it. PublicBaseURL is the
+// API's own externally reachable base URL — uploaded images are served back
+// through GET {PublicBaseURL}/uploads/{key} (see ServeUpload), so the URL
+// returned to clients is one a browser <img> can actually load.
 type API struct {
-	Svc     *menu.Service
-	Storage *storage.S3Client
+	Svc           *menu.Service
+	Storage       *storage.S3Client
+	PublicBaseURL string
 }
 
 // ----- DTOs -----
@@ -367,6 +371,7 @@ func (a *API) createItem(ctx context.Context, in *createItemInput) (*itemOutput,
 	}
 	var resp itemOutput
 	resp.Body.Item = toItemDTO(it)
+	resp.Body.Item.Images = in.Body.Images
 	return &resp, nil
 }
 
@@ -389,6 +394,7 @@ func (a *API) updateItem(ctx context.Context, in *updateItemInput) (*itemOutput,
 	}
 	var resp itemOutput
 	resp.Body.Item = toItemDTO(it)
+	resp.Body.Item.Images = in.Body.Images
 	return &resp, nil
 }
 

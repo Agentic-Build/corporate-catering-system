@@ -3,8 +3,12 @@ package mhttp
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -47,13 +51,55 @@ func (a *API) uploadImage(ctx context.Context, in *uploadImageInput) (*uploadIma
 		return nil, verr
 	}
 	key := imageObjectKey(vendorID, ext)
-	url, err := a.Storage.PutObject(ctx, key, file, file.ContentType)
-	if err != nil {
+	if _, err := a.Storage.PutObject(ctx, key, file, file.ContentType); err != nil {
 		return nil, huma.Error500InternalServerError("failed to store image", err)
 	}
 	var resp uploadImageOutput
-	resp.Body.URL = url
+	resp.Body.URL = a.imageURL(key)
 	return &resp, nil
+}
+
+// imageURL builds the browser-loadable URL for a stored object key. PutObject
+// returns an s3://… URI that no <img> tag can render; instead we hand back a
+// GET {PublicBaseURL}/uploads/{key} URL served by ServeUpload. When
+// PublicBaseURL is unset the path is returned relative.
+func (a *API) imageURL(key string) string {
+	return strings.TrimRight(a.PublicBaseURL, "/") + "/uploads/" + key
+}
+
+// imageContentTypeByExt is the reverse of imageExtByContentType, used to set
+// the response content-type when streaming a stored image back.
+var imageContentTypeByExt = map[string]string{
+	"jpg":  "image/jpeg",
+	"png":  "image/png",
+	"webp": "image/webp",
+}
+
+// ServeUpload streams a previously uploaded menu image. It is a plain chi
+// handler (not a huma operation) registered at GET /uploads/* — images load
+// via an <img> tag with no auth header, so the route is public; only keys
+// under the menu-images/ prefix are served.
+func (a *API) ServeUpload(w http.ResponseWriter, r *http.Request) {
+	key := chi.URLParam(r, "*")
+	if !strings.HasPrefix(key, "menu-images/") || strings.Contains(key, "..") {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	ext := key[strings.LastIndex(key, ".")+1:]
+	ct, ok := imageContentTypeByExt[ext]
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	body, err := a.Storage.GetObject(r.Context(), key)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	defer body.Close()
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = io.Copy(w, body)
 }
 
 // validateImageUpload checks the content-type is an accepted image format and

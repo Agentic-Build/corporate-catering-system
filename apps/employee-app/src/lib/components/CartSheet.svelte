@@ -112,7 +112,13 @@
               type="button"
               aria-label="減少"
               class="grid h-7 w-7 place-items-center rounded-full bg-tb-slate-100 text-tb-slate-700"
-              onclick={() => cart.remove(id) ?? undefined}
+              onclick={() =>
+                cart.set(
+                  id,
+                  line.qty - 1,
+                  { name: line.name, price: line.price },
+                  { id: cart.vendorId ?? "", name: cart.vendorName },
+                )}
             >
               <AppIcon name="minus" class="h-3.5 w-3.5" />
             </button>

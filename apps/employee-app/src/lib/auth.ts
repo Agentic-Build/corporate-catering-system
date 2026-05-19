@@ -24,20 +24,29 @@ export function isTauri(): boolean {
 }
 
 /**
- * Begin login. Opens the OIDC start URL in the system browser.
+ * Begin login. `POST`s to the OIDC start endpoint to obtain the provider
+ * `auth_url`, then opens that URL in the system browser.
+ *
+ * The start endpoint is a POST that takes a JSON body `{ app, return_to }`
+ * and returns `{ auth_url, state }` — `app: "employee-app"` tells the backend
+ * (B4) to redirect the callback to our `tbite://` deep link.
  *
  * Native: replace `window.open` with `@tauri-apps/plugin-opener`'s `openUrl`.
- * Web (dev/preview): a normal `window.open` is good enough to exercise the
- * flow against a backend that supports the web landing fallback.
  */
 export async function startLogin(provider: string): Promise<void> {
-  const url = `${API_BASE_URL}/auth/${encodeURIComponent(provider)}/start?app=employee-app`;
+  const res = await fetch(`${API_BASE_URL}/auth/${encodeURIComponent(provider)}/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ app: "employee-app", return_to: "/" }),
+  });
+  if (!res.ok) throw new Error("登入啟動失敗");
+  const { auth_url } = (await res.json()) as { auth_url: string };
   if (isTauri()) {
     // TODO(M5): const { openUrl } = await import("@tauri-apps/plugin-opener");
-    //           await openUrl(url);
-    window.open(url, "_blank");
+    //           await openUrl(auth_url);
+    window.open(auth_url, "_blank");
   } else {
-    window.location.href = url;
+    window.location.href = auth_url;
   }
 }
 
