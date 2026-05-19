@@ -795,6 +795,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/employee/payroll/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List my in-progress payroll period's per-order lines */
+        get: operations["getEmployeeCurrentPayroll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/employee/recommendations": {
         parameters: {
             query?: never;
@@ -1206,6 +1223,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload a menu-item image and get its stored URL */
+        post: operations["uploadMerchantImage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/{provider}/callback": {
         parameters: {
             query?: never;
@@ -1489,6 +1523,8 @@ export interface components {
             badges: string[] | null;
             category_id?: string;
             description: string;
+            /** @description Image URIs returned by POST /api/merchant/uploads */
+            images?: string[] | null;
             name: string;
             /** Format: int64 */
             price_minor: number;
@@ -1534,6 +1570,28 @@ export interface components {
              */
             readonly $schema?: string;
             vendor: components["schemas"]["VendorDTO"];
+        };
+        CurrentPayrollLineDTO: {
+            /** Format: int64 */
+            amount_minor: number;
+            complaint_id?: string;
+            items_summary: string;
+            order_id: string;
+            rated: boolean;
+            status: string;
+            supply_date: string;
+            vendor_name: string;
+        };
+        CurrentPayrollOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CurrentPayrollOutputBody.json
+             */
+            readonly $schema?: string;
+            lines: components["schemas"]["CurrentPayrollLineDTO"][] | null;
+            /** Format: int64 */
+            total_minor: number;
         };
         DisputeDTO: {
             entry_id: string;
@@ -2455,7 +2513,7 @@ export interface components {
              */
             readonly $schema?: string;
             /** @enum {string} */
-            app: "employee" | "merchant" | "admin";
+            app: "employee" | "employee-app" | "merchant" | "admin";
             return_to?: string;
         };
         StartLoginOutputBody: {
@@ -2529,6 +2587,8 @@ export interface components {
             badges: string[] | null;
             category_id?: string;
             description: string;
+            /** @description Image URIs returned by POST /api/merchant/uploads */
+            images?: string[] | null;
             name: string;
             /** Format: int64 */
             price_minor: number;
@@ -2567,6 +2627,15 @@ export interface components {
              */
             readonly $schema?: string;
             document: components["schemas"]["DocumentDTO"];
+        };
+        UploadImageOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UploadImageOutputBody.json
+             */
+            readonly $schema?: string;
+            url: string;
         };
         VendorDTO: {
             approved_at?: string;
@@ -4388,6 +4457,35 @@ export interface operations {
             };
         };
     };
+    getEmployeeCurrentPayroll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentPayrollOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     listEmployeeRecommendations: {
         parameters: {
             query?: {
@@ -5252,6 +5350,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SupplyOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    uploadMerchantImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadImageOutputBody"];
                 };
             };
             /** @description Error */

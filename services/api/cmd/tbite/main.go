@@ -152,6 +152,7 @@ func main() {
 				"merchant": cfg.AppBaseURLMerchant,
 				"admin":    cfg.AppBaseURLAdmin,
 			},
+			DeepLinkScheme: cfg.AppDeepLinkScheme,
 		}
 
 		// 7b. Vendor service + admin handlers
@@ -250,6 +251,8 @@ func main() {
 		if err := s3API.EnsureBucket(ctx); err != nil {
 			logger.Warn("ensure bucket failed; uploads will fail until storage is reachable", "err", err)
 		}
+		// Merchant menu-item image uploads land in the same object storage.
+		menuAPI.Storage = s3API
 		complianceService := &compliance.Service{
 			Pool:      pool,
 			Docs:      cpgrepo.NewDocumentRepo(pool),
