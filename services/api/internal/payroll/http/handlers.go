@@ -269,6 +269,24 @@ type listMyEntriesOutput struct {
 	}
 }
 
+type currentPayrollLineDTO struct {
+	OrderID      string  `json:"order_id"`
+	SupplyDate   string  `json:"supply_date"`
+	VendorName   string  `json:"vendor_name"`
+	ItemsSummary string  `json:"items_summary"`
+	AmountMinor  int64   `json:"amount_minor"`
+	Status       string  `json:"status"`
+	Rated        bool    `json:"rated"`
+	ComplaintID  *string `json:"complaint_id,omitempty"`
+}
+
+type currentPayrollOutput struct {
+	Body struct {
+		Lines      []currentPayrollLineDTO `json:"lines"`
+		TotalMinor int64                   `json:"total_minor"`
+	}
+}
+
 // ----- Registration -----
 
 func (a *API) Register(api huma.API) {
@@ -356,6 +374,15 @@ func (a *API) Register(api huma.API) {
 		Tags:        []string{"employee", "payroll"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.listMyEntries)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "getEmployeeCurrentPayroll",
+		Method:      http.MethodGet,
+		Path:        "/api/employee/payroll/current",
+		Summary:     "List my in-progress payroll period's per-order lines",
+		Tags:        []string{"employee", "payroll"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.getEmployeeCurrentPayroll)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "listPayrollExceptions",
@@ -628,6 +655,39 @@ func (a *API) listMyEntries(ctx context.Context, _ *struct{}) (*listMyEntriesOut
 			RefundedMinor: e.RefundedMinor,
 			NetMinor:      e.AmountMinor - e.RefundedMinor,
 		})
+	}
+	return &resp, nil
+}
+
+// getEmployeeCurrentPayroll returns the calling employee's in-progress
+// (not-yet-locked) payroll period as per-order lines. total_minor sums only
+// the charged lines — no_show / reversed lines are excluded from the running
+// deduction total.
+func (a *API) getEmployeeCurrentPayroll(ctx context.Context, _ *struct{}) (*currentPayrollOutput, error) {
+	u, err := a.requireEmployee(ctx)
+	if err != nil {
+		return nil, err
+	}
+	lines, err := a.Svc.ListCurrentLines(ctx, u.ID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	var resp currentPayrollOutput
+	resp.Body.Lines = make([]currentPayrollLineDTO, 0, len(lines))
+	for _, l := range lines {
+		resp.Body.Lines = append(resp.Body.Lines, currentPayrollLineDTO{
+			OrderID:      l.OrderID,
+			SupplyDate:   l.SupplyDate,
+			VendorName:   l.VendorName,
+			ItemsSummary: l.ItemsSummary,
+			AmountMinor:  l.AmountMinor,
+			Status:       l.Status,
+			Rated:        l.Rated,
+			ComplaintID:  l.ComplaintID,
+		})
+		if l.Status == "charged" {
+			resp.Body.TotalMinor += l.AmountMinor
+		}
 	}
 	return &resp, nil
 }

@@ -33,6 +33,16 @@ type EntryRepository interface {
 	ListByUser(ctx context.Context, userID string) ([]*EmployeeEntry, error)
 }
 
+// CurrentLinesRepository loads the per-order lines for an employee's
+// in-progress (not-yet-locked) payroll period. Kept separate from
+// EntryRepository so the per-order detail query can evolve independently of
+// the batch/entry aggregates.
+type CurrentLinesRepository interface {
+	// ListCurrentLines returns one line per chargeable order belonging to
+	// userID whose supply_date falls after the latest locked batch period.
+	ListCurrentLines(ctx context.Context, userID string) ([]CurrentPayrollLine, error)
+}
+
 type ExceptionRepository interface {
 	// UpsertDepartedTx detects batch entries whose employee is no longer
 	// active and inserts an employee_departed exception for each. Idempotent
