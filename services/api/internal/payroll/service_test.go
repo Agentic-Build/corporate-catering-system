@@ -548,6 +548,167 @@ func TestService_Exceptions_DetectFlagResolve(t *testing.T) {
 	require.Error(t, err)
 }
 
+// ---------- ReverseOrder tests ----------
+
+// A charged order that is already part of a locked-batch entry, when reversed,
+// transitions to refunded and bumps the entry's refunded_minor by the order's
+// amount.
+func TestService_ReverseOrder_LockedBatchEntry(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	start, end := aprilPeriod()
+	vendor := seedVendor(t, pool)
+	user := seedEmployeeUser(t, pool)
+	orderID := seedPickedUpOrder(t, pool, user, vendor, start.AddDate(0, 0, 4), 15000)
+
+	batch, err := svc.BuildDraft(ctx, payroll.BuildDraftInput{PeriodStart: start, PeriodEnd: end})
+	require.NoError(t, err)
+	entries, err := svc.ListBatchEntries(ctx, batch.ID)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	entryID := entries[0].ID
+
+	require.NoError(t, svc.ReverseOrder(ctx, orderID))
+
+	// Order transitioned picked_up → refunded.
+	var orderStatus string
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT status::text FROM "order" WHERE id=$1`, orderID).Scan(&orderStatus))
+	assert.Equal(t, string(order.StatusRefunded), orderStatus)
+
+	// Entry refunded_minor bumped by the full order amount.
+	var refunded int64
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT refunded_minor FROM payroll_entry WHERE id=$1`, entryID).Scan(&refunded))
+	assert.Equal(t, int64(15000), refunded)
+
+	// Outbox + audit emitted.
+	var auditCount, outboxCount int
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT count(*) FROM audit_event WHERE target_id=$1 AND action='payroll.order_reverse'`, orderID).
+		Scan(&auditCount))
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT count(*) FROM outbox_event WHERE aggregate_id::text=$1 AND subject='payroll.order_reversed.v1'`,
+		orderID).Scan(&outboxCount))
+	assert.Equal(t, 1, auditCount)
+	assert.Equal(t, 1, outboxCount)
+}
+
+// Reversing a charged order that is NOT yet part of any payroll entry (it falls
+// in the in-progress, not-yet-locked period) just transitions it to refunded.
+// B2's current-lines query maps refunded → reversed, and BuildDraft excludes
+// refunded orders so it is never charged into a future batch.
+func TestService_ReverseOrder_CurrentPeriodNoEntry(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	vendor := seedVendor(t, pool)
+	user := seedEmployeeUser(t, pool)
+	// Order in the current period — no batch built yet, so no entry exists.
+	day := time.Date(2026, time.May, 12, 0, 0, 0, 0, time.UTC)
+	orderID := seedPickedUpOrder(t, pool, user, vendor, day, 9000)
+
+	require.NoError(t, svc.ReverseOrder(ctx, orderID))
+
+	var orderStatus string
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT status::text FROM "order" WHERE id=$1`, orderID).Scan(&orderStatus))
+	assert.Equal(t, string(order.StatusRefunded), orderStatus)
+
+	// The reversed order surfaces in the current-lines view with status=reversed.
+	lines, err := svc.ListCurrentLines(ctx, user)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, orderID, lines[0].OrderID)
+	assert.Equal(t, "reversed", lines[0].Status)
+
+	// A subsequent BuildDraft must NOT charge the refunded order.
+	mayStart := time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC)
+	mayEnd := mayStart.AddDate(0, 1, -1)
+	batch, err := svc.BuildDraft(ctx, payroll.BuildDraftInput{PeriodStart: mayStart, PeriodEnd: mayEnd})
+	require.NoError(t, err)
+	entries, err := svc.ListBatchEntries(ctx, batch.ID)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "refunded order must not be aggregated into a batch")
+}
+
+// Reversing the same order twice must be a no-op the second time: the order is
+// already refunded and refunded_minor must not double-count.
+func TestService_ReverseOrder_Idempotent(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	start, end := aprilPeriod()
+	vendor := seedVendor(t, pool)
+	user := seedEmployeeUser(t, pool)
+	orderID := seedPickedUpOrder(t, pool, user, vendor, start.AddDate(0, 0, 4), 15000)
+
+	batch, err := svc.BuildDraft(ctx, payroll.BuildDraftInput{PeriodStart: start, PeriodEnd: end})
+	require.NoError(t, err)
+	entries, err := svc.ListBatchEntries(ctx, batch.ID)
+	require.NoError(t, err)
+	entryID := entries[0].ID
+
+	require.NoError(t, svc.ReverseOrder(ctx, orderID))
+	// Second call: idempotent no-op.
+	require.NoError(t, svc.ReverseOrder(ctx, orderID))
+
+	var refunded int64
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT refunded_minor FROM payroll_entry WHERE id=$1`, entryID).Scan(&refunded))
+	assert.Equal(t, int64(15000), refunded, "replayed reversal must not double-count")
+
+	// Exactly one outbox + audit row — the no-op second call writes nothing.
+	var auditCount, outboxCount int
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT count(*) FROM audit_event WHERE target_id=$1 AND action='payroll.order_reverse'`, orderID).
+		Scan(&auditCount))
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT count(*) FROM outbox_event WHERE aggregate_id::text=$1 AND subject='payroll.order_reversed.v1'`,
+		orderID).Scan(&outboxCount))
+	assert.Equal(t, 1, auditCount)
+	assert.Equal(t, 1, outboxCount)
+}
+
+// A no_show order is also chargeable, so it too can be reversed.
+func TestService_ReverseOrder_NoShowOrder(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	vendor := seedVendor(t, pool)
+	user := seedEmployeeUser(t, pool)
+	day := time.Date(2026, time.May, 12, 0, 0, 0, 0, time.UTC)
+	orderID := seedOrderWithStatus(t, pool, user, vendor, day, 7000, order.StatusNoShow)
+
+	require.NoError(t, svc.ReverseOrder(ctx, orderID))
+
+	var orderStatus string
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT status::text FROM "order" WHERE id=$1`, orderID).Scan(&orderStatus))
+	assert.Equal(t, string(order.StatusRefunded), orderStatus)
+}
+
+// Reversing an order that was never charged (still placed) is rejected — there
+// is no deduction to reverse.
+func TestService_ReverseOrder_NotChargeable(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	vendor := seedVendor(t, pool)
+	user := seedEmployeeUser(t, pool)
+	day := time.Date(2026, time.May, 12, 0, 0, 0, 0, time.UTC)
+	orderID := seedOrderWithStatus(t, pool, user, vendor, day, 7000, order.StatusPlaced)
+
+	err := svc.ReverseOrder(ctx, orderID)
+	assert.ErrorIs(t, err, payroll.ErrInvalidTransition)
+}
+
 func TestService_ListMyEntries(t *testing.T) {
 	pool, svc, cleanup := setup(t)
 	defer cleanup()
