@@ -25,4 +25,7 @@ type ImageRepository interface {
 	Add(ctx context.Context, img *Image) error
 	Remove(ctx context.Context, id string) error
 	ListByItem(ctx context.Context, itemID string) ([]*Image, error)
+	// ReplaceForItem deletes all images for the item and re-inserts uris in
+	// order (sort_order = index). A nil/empty slice clears all images.
+	ReplaceForItem(ctx context.Context, itemID string, uris []string) error
 }
