@@ -17,6 +17,13 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 export const actions: Actions = {
   update: async ({ request, params, locals }) => {
     const fd = await request.formData();
+    let images: string[] = [];
+    try {
+      const parsed = JSON.parse(String(fd.get("images") ?? "[]"));
+      if (Array.isArray(parsed)) images = parsed.filter((s) => typeof s === "string");
+    } catch {
+      images = [];
+    }
     const body = {
       name: String(fd.get("name") ?? ""),
       description: String(fd.get("description") ?? ""),
@@ -29,6 +36,7 @@ export const actions: Actions = {
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
+      images,
     };
     const client = apiFor(locals.apiToken);
     const r = await client.PATCH("/api/merchant/menu-items/{id}", {
