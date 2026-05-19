@@ -41,6 +41,15 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      mock-oidc:
+        image: ghcr.io/navikt/mock-oauth2-server:4.0.0
+        ports:
+          - 8081:8080
+        options: >-
+          --health-cmd "wget -q -O /dev/null http://localhost:8080/default/.well-known/openid-configuration"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v4
@@ -83,11 +92,14 @@ jobs:
           DATABASE_RW_URL: postgres://tbite:tbite@localhost:5432/tbite?sslmode=disable
           REDIS_URL: redis://localhost:6379/0
           NATS_URL: nats://localhost:4222
-          OIDC_GOOGLE_CLIENT_ID: x
-          OIDC_GOOGLE_CLIENT_SECRET: x
-          OIDC_GITHUB_CLIENT_ID: x
-          OIDC_GITHUB_CLIENT_SECRET: x
+          AUTH_PROVIDER_SLUGS: mock
+          AUTH_PROVIDER_MOCK_ISSUER_URL: http://localhost:8081/default
+          AUTH_PROVIDER_MOCK_CLIENT_ID: tbite-load
+          AUTH_PROVIDER_MOCK_CLIENT_SECRET: tbite-load-secret
           OIDC_CALLBACK_BASE_URL: http://localhost:8080
+          # Vendor-operator provisioner is never exercised by the load test;
+          # the token only has to be non-empty to pass startup validation.
+          AUTHENTIK_API_TOKEN: tbite-load-token
           APP_BASE_URL_EMPLOYEE: http://localhost:5173
           APP_BASE_URL_MERCHANT: http://localhost:5174
           APP_BASE_URL_ADMIN: http://localhost:5175
