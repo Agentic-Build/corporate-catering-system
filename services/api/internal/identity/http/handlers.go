@@ -15,11 +15,19 @@ import (
 // AppBaseURLs maps app names ("employee"|"merchant"|"admin") to their public base URLs.
 type AppBaseURLs map[string]string
 
+// defaultDeepLinkScheme is used when DeepLinkScheme is left empty (matches
+// config.AppDeepLinkScheme's default).
+const defaultDeepLinkScheme = "tbite"
+
 type API struct {
 	Svc      *identity.Service
 	Sessions identity.SessionStore
 	Users    identity.UserRepository
 	AppURLs  AppBaseURLs
+
+	// DeepLinkScheme is the custom URL scheme used for the native mobile app's
+	// OIDC callback redirect. Empty falls back to defaultDeepLinkScheme.
+	DeepLinkScheme string
 }
 
 // ----- DTOs -----
@@ -27,7 +35,7 @@ type API struct {
 type startLoginInput struct {
 	Provider string `path:"provider" doc:"OIDC provider slug"`
 	Body     struct {
-		App      string `json:"app" enum:"employee,merchant,admin"`
+		App      string `json:"app" enum:"employee,employee-app,merchant,admin"`
 		ReturnTo string `json:"return_to,omitempty"`
 	}
 }
@@ -139,6 +147,23 @@ func (a *API) completeLogin(ctx context.Context, in *completeLoginInput) (*compl
 	if err != nil {
 		return nil, mapErr(err)
 	}
+
+	// The native mobile app cannot receive an HTTP redirect with a cookie, so
+	// it is redirected to a custom-scheme deep link instead. Any other (and
+	// unknown) app value falls back to the web-landing behavior.
+	if out.App == "employee-app" {
+		scheme := a.DeepLinkScheme
+		if scheme == "" {
+			scheme = defaultDeepLinkScheme
+		}
+		deepLink := fmt.Sprintf("%s://auth?token=%s&return_to=%s",
+			scheme,
+			url.QueryEscape(out.Session.Token),
+			url.QueryEscape(out.ReturnTo),
+		)
+		return &completeLoginOutput{Status: http.StatusFound, Url: deepLink}, nil
+	}
+
 	base, ok := a.AppURLs[out.App]
 	if !ok {
 		return nil, huma.Error500InternalServerError("unknown app base url for " + out.App)

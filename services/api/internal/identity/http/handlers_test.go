@@ -17,6 +17,7 @@ import (
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
 )
 
 // Reuse mocks from identity package via inline fakes here (smaller than re-exporting).
@@ -138,4 +139,106 @@ func TestAuthMiddleware_IgnoresInvalidToken(t *testing.T) {
 	defer resp.Body.Close()
 	// invalid bearer → treated as anonymous → 401 from /me
 	assert.Equal(t, 401, resp.StatusCode)
+}
+
+// ----- completeLogin redirect target (B4: mobile OIDC deep link) -----
+
+// fakeIdentities satisfies identity.UserIdentityRepository; the callback flow
+// always finds no existing identity and links a fresh one.
+type fakeIdentities struct{}
+
+func (fakeIdentities) GetByProviderSubject(context.Context, identity.Provider, string) (*identity.UserIdentity, error) {
+	return nil, identity.ErrIdentityNotFound
+}
+func (fakeIdentities) Link(context.Context, *identity.UserIdentity) error { return nil }
+func (fakeIdentities) ListByUser(context.Context, string) ([]*identity.UserIdentity, error) {
+	return nil, nil
+}
+
+// fakeStates is an in-memory oidc.StateStore.
+type fakeStates struct{ m map[string]*oidc.StatePayload }
+
+func (s *fakeStates) Put(_ context.Context, state string, p *oidc.StatePayload) error {
+	s.m[state] = p
+	return nil
+}
+func (s *fakeStates) Get(_ context.Context, state string) (*oidc.StatePayload, error) {
+	if p, ok := s.m[state]; ok {
+		return p, nil
+	}
+	return nil, oidc.ErrStateNotFound
+}
+func (s *fakeStates) Consume(_ context.Context, state string) error {
+	delete(s.m, state)
+	return nil
+}
+
+// fakeProvider returns a fixed employee Userinfo on Exchange.
+type fakeProvider struct{}
+
+func (fakeProvider) Name() string        { return "authentik" }
+func (fakeProvider) DisplayName() string { return "Authentik" }
+func (fakeProvider) BuildAuthURL(_ context.Context, state string) (*oidc.AuthURL, error) {
+	return &oidc.AuthURL{URL: "https://fake/" + state, PKCEVerifier: "v", Nonce: "n"}, nil
+}
+func (fakeProvider) Exchange(context.Context, string, string, string) (*oidc.Userinfo, error) {
+	return &oidc.Userinfo{
+		Provider: "authentik", ExternalSubject: "ak-1",
+		Email: "emp@tbite.test", EmailVerified: true, DisplayName: "Emp",
+		Raw: map[string]any{
+			"tbite_role":        "employee",
+			"tbite_employee_id": "E001",
+			"tbite_plant":       "F12B-3F",
+		},
+	}, nil
+}
+
+// completeLoginRedirect drives a GET /auth/authentik/callback and returns the
+// Location header. The OIDC state is pre-seeded with the given app value.
+func completeLoginRedirect(t *testing.T, app string) string {
+	t.Helper()
+	states := &fakeStates{m: map[string]*oidc.StatePayload{
+		"st1": {App: app, Provider: "authentik", ReturnTo: "/menu", PKCEVerifier: "v", Nonce: "n"},
+	}}
+	svc := &identity.Service{
+		Users:      &fakeUsers{byID: map[string]*identity.User{}},
+		Identities: fakeIdentities{},
+		Sessions:   newFakeSessions(),
+		Providers:  map[string]oidc.Provider{"authentik": fakeProvider{}},
+		States:     states,
+	}
+	api := &idhttp.API{
+		Svc:      svc,
+		Sessions: newFakeSessions(),
+		Users:    &fakeUsers{byID: map[string]*identity.User{}},
+		AppURLs:  idhttp.AppBaseURLs{"employee": "http://app.tbite.test"},
+		// DeepLinkScheme left empty → falls back to default "tbite".
+	}
+	srv := httptest.NewServer(buildHandler(api))
+	defer srv.Close()
+
+	// Don't follow the redirect; inspect the Location header directly.
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	req, _ := http.NewRequest("GET", srv.URL+"/auth/authentik/callback?state=st1&code=C", nil)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusFound, resp.StatusCode)
+	return resp.Header.Get("Location")
+}
+
+func TestCompleteLogin_EmployeeAppRedirectsToDeepLink(t *testing.T) {
+	loc := completeLoginRedirect(t, "employee-app")
+	assert.True(t, strings.HasPrefix(loc, "tbite://auth?token="),
+		"expected tbite:// deep link, got %q", loc)
+	assert.Contains(t, loc, "return_to=%2Fmenu")
+}
+
+func TestCompleteLogin_WebAppRedirectsToLanding(t *testing.T) {
+	loc := completeLoginRedirect(t, "employee")
+	assert.True(t, strings.HasPrefix(loc, "http://app.tbite.test/auth/landing?token="),
+		"expected web landing URL, got %q", loc)
+	assert.Contains(t, loc, "return_to=%2Fmenu")
 }
