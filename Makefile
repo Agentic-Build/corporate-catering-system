@@ -4,7 +4,7 @@ KUBECTL ?= kubectl
 
 .PHONY: help \
         dev dev-down dev-reset dev-logs \
-        migrate-up migrate-down migrate-new \
+        migrate-up migrate-down migrate-new seed \
         contract-sync test-go test-web test-e2e \
         render-overlay build clean \
         prod-up prod-down prod-status
@@ -32,6 +32,9 @@ migrate-down: ## Revert last migration
 
 migrate-new: ## Create new migration (name=xxx)
 	@scripts/db/migrate.sh create -ext sql -dir /migrations -seq $(name)
+
+seed: ## Seed/refresh the dev DB with demo data (idempotent)
+	@scripts/db/seed.sh
 
 contract-sync: ## Generate OpenAPI from Go and regenerate TS client
 	@go run ./services/api/cmd/contract-export
