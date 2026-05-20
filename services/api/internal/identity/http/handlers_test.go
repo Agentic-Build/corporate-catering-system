@@ -1,11 +1,14 @@
 package idhttp_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -193,9 +196,41 @@ func (fakeProvider) Exchange(context.Context, string, string, string) (*oidc.Use
 	}, nil
 }
 
+// fakeExchangeCodes is an in-memory ExchangeCodeStore that records puts so
+// tests can assert the deep-link `code` parameter maps back to the issued
+// session token.
+type fakeExchangeCodes struct {
+	mu sync.Mutex
+	m  map[string]string
+}
+
+func newFakeExchangeCodes() *fakeExchangeCodes {
+	return &fakeExchangeCodes{m: map[string]string{}}
+}
+
+func (f *fakeExchangeCodes) Put(_ context.Context, code, token string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.m[code] = token
+	return nil
+}
+
+func (f *fakeExchangeCodes) Consume(_ context.Context, code string) (string, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	tok, ok := f.m[code]
+	if !ok {
+		return "", false, nil
+	}
+	delete(f.m, code)
+	return tok, true, nil
+}
+
 // completeLoginRedirect drives a GET /auth/authentik/callback and returns the
-// Location header. The OIDC state is pre-seeded with the given app value.
-func completeLoginRedirect(t *testing.T, app string) string {
+// Location header along with the API instance (so callers can introspect the
+// exchange-code store). The OIDC state is pre-seeded with the given app
+// value.
+func completeLoginRedirect(t *testing.T, app string) (string, *idhttp.API, *fakeExchangeCodes) {
 	t.Helper()
 	states := &fakeStates{m: map[string]*oidc.StatePayload{
 		"st1": {App: app, Provider: "authentik", ReturnTo: "/menu", PKCEVerifier: "v", Nonce: "n"},
@@ -207,15 +242,17 @@ func completeLoginRedirect(t *testing.T, app string) string {
 		Providers:  map[string]oidc.Provider{"authentik": fakeProvider{}},
 		States:     states,
 	}
+	codes := newFakeExchangeCodes()
 	api := &idhttp.API{
-		Svc:      svc,
-		Sessions: newFakeSessions(),
-		Users:    &fakeUsers{byID: map[string]*identity.User{}},
-		AppURLs:  idhttp.AppBaseURLs{"employee": "http://app.tbite.test"},
+		Svc:           svc,
+		Sessions:      newFakeSessions(),
+		Users:         &fakeUsers{byID: map[string]*identity.User{}},
+		AppURLs:       idhttp.AppBaseURLs{"employee": "http://app.tbite.test"},
+		ExchangeCodes: codes,
 		// DeepLinkScheme left empty → falls back to default "tbite".
 	}
 	srv := httptest.NewServer(buildHandler(api))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 
 	// Don't follow the redirect; inspect the Location header directly.
 	client := &http.Client{
@@ -226,19 +263,104 @@ func completeLoginRedirect(t *testing.T, app string) string {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusFound, resp.StatusCode)
-	return resp.Header.Get("Location")
+	return resp.Header.Get("Location"), api, codes
 }
 
 func TestCompleteLogin_EmployeeAppRedirectsToDeepLink(t *testing.T) {
-	loc := completeLoginRedirect(t, "employee-app")
-	assert.True(t, strings.HasPrefix(loc, "tbite://auth?token="),
-		"expected tbite:// deep link, got %q", loc)
+	loc, _, codes := completeLoginRedirect(t, "employee-app")
+	assert.True(t, strings.HasPrefix(loc, "tbite://auth?code="),
+		"expected tbite:// deep link with code=, got %q", loc)
+	// The session token MUST NOT appear in the deep-link URL itself; it is
+	// only retrievable via POST /auth/exchange.
+	assert.NotContains(t, loc, "token=", "deep link must not expose session token")
 	assert.Contains(t, loc, "return_to=%2Fmenu")
+
+	u, err := url.Parse(loc)
+	require.NoError(t, err)
+	code := u.Query().Get("code")
+	require.NotEmpty(t, code, "deep link must include a non-empty code param")
+	// The minted code is a random 32-byte value (base64 URL-safe → 43 chars
+	// without padding); be lenient and just require ≥ 32 chars.
+	assert.GreaterOrEqual(t, len(code), 32)
+
+	// The code maps to a real session token in the exchange store.
+	tok, ok, err := codes.Consume(context.Background(), code)
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.True(t, strings.HasPrefix(tok, "tb_"), "exchange token should be a session token")
 }
 
 func TestCompleteLogin_WebAppRedirectsToLanding(t *testing.T) {
-	loc := completeLoginRedirect(t, "employee")
+	loc, _, _ := completeLoginRedirect(t, "employee")
 	assert.True(t, strings.HasPrefix(loc, "http://app.tbite.test/auth/landing?token="),
 		"expected web landing URL, got %q", loc)
 	assert.Contains(t, loc, "return_to=%2Fmenu")
+}
+
+// ----- POST /auth/exchange (PKCE-style code → token swap) -----
+
+func buildExchangeAPI(t *testing.T) (*idhttp.API, *fakeExchangeCodes, http.Handler) {
+	t.Helper()
+	codes := newFakeExchangeCodes()
+	api := &idhttp.API{
+		Sessions:      newFakeSessions(),
+		Users:         &fakeUsers{byID: map[string]*identity.User{}},
+		AppURLs:       idhttp.AppBaseURLs{},
+		ExchangeCodes: codes,
+	}
+	return api, codes, buildHandler(api)
+}
+
+func postExchange(t *testing.T, h http.Handler, code string) *http.Response {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"code": code})
+	req := httptest.NewRequest(http.MethodPost, "/auth/exchange", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	return w.Result()
+}
+
+func TestExchange_Success(t *testing.T) {
+	_, codes, h := buildExchangeAPI(t)
+	require.NoError(t, codes.Put(context.Background(), "ok-code", "tb_swapped"))
+
+	resp := postExchange(t, h, "ok-code")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var body struct {
+		Token string `json:"token"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "tb_swapped", body.Token)
+}
+
+func TestExchange_OneTimeUse(t *testing.T) {
+	_, codes, h := buildExchangeAPI(t)
+	require.NoError(t, codes.Put(context.Background(), "burn-once", "tb_burn"))
+
+	resp := postExchange(t, h, "burn-once")
+	resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Second exchange of the same code must fail.
+	resp2 := postExchange(t, h, "burn-once")
+	resp2.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp2.StatusCode)
+}
+
+func TestExchange_UnknownCode(t *testing.T) {
+	_, _, h := buildExchangeAPI(t)
+	resp := postExchange(t, h, "no-such-code")
+	resp.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestExchange_EmptyCode(t *testing.T) {
+	_, _, h := buildExchangeAPI(t)
+	resp := postExchange(t, h, "")
+	resp.Body.Close()
+	// Empty code is rejected — either as a validation error or as
+	// unauthorized; both are acceptable so long as it is NOT a 200.
+	assert.NotEqual(t, http.StatusOK, resp.StatusCode)
 }

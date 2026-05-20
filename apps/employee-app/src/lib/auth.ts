@@ -1,13 +1,22 @@
 // Deep-link auth flow for the Tauri mobile app.
 //
-// Flow (per design doc Part B' — Auth):
+// Flow (per design doc Part B' — Auth, PKCE-style hardening):
 //  1. App opens the system browser at the API's OIDC start endpoint,
 //     passing `app=employee-app` so the backend (B4) knows to redirect
 //     the callback to our custom scheme instead of the web landing page.
-//  2. After OIDC the backend redirects to `tbite://auth?token=...`.
+//  2. After OIDC the backend redirects to `tbite://auth?code=<one-time>`.
+//     The long-lived session token is intentionally NOT in the URL —
+//     anything that can sniff the custom-scheme URL would otherwise
+//     capture the bearer token.
 //  3. The OS routes that URL back into the app; the deep-link plugin's
 //     handler calls `completeLogin(url)` below.
-//  4. The token is stored securely and the session store is updated.
+//  4. `completeLogin` POSTs the code to `/auth/exchange` to swap it for
+//     the session token (one-time-use, ~60s TTL). The token is then
+//     stored securely and the session store is updated.
+//
+// As a fallback, if the deep link still carries a raw `token` (legacy /
+// emergency rollback path), we accept it directly. The primary path is
+// `code`.
 //
 // The Tauri plugin calls (`@tauri-apps/plugin-opener`,
 // `@tauri-apps/plugin-deep-link`, `@tauri-apps/plugin-stronghold`) are
@@ -51,15 +60,45 @@ export async function startLogin(provider: string): Promise<void> {
 }
 
 /**
- * Handle the `tbite://auth?token=...` deep link. Registered as the
+ * Handle the `tbite://auth?code=...` deep link. Registered as the
  * deep-link plugin's `onOpenUrl` handler in native builds.
+ *
+ * Primary path: read `code` from the URL and POST it to `/auth/exchange`
+ * to swap it for a session token (the code is one-time-use, ~60s TTL).
+ *
+ * Fallback: if the URL still carries a raw `token` (legacy / emergency
+ * rollback variant), use it directly. The primary path is `code`.
  */
 export async function completeLogin(deepLinkUrl: string): Promise<boolean> {
-  let token: string | null = null;
+  let code: string | null = null;
+  let legacyToken: string | null = null;
   try {
-    token = new URL(deepLinkUrl).searchParams.get("token");
+    const params = new URL(deepLinkUrl).searchParams;
+    code = params.get("code");
+    legacyToken = params.get("token");
   } catch {
     return false;
+  }
+
+  let token: string | null = null;
+  if (code) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/exchange`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      if (!res.ok) return false;
+      const data = (await res.json()) as { token?: string };
+      token = data.token ?? null;
+    } catch {
+      return false;
+    }
+  } else if (legacyToken) {
+    // Fallback: the deep link carried the token directly. Kept so a
+    // server-side rollback to the pre-PKCE redirect format does not brick
+    // already-deployed app builds.
+    token = legacyToken;
   }
   if (!token) return false;
 

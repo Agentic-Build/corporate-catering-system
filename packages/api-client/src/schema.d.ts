@@ -1274,6 +1274,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange a one-time deep-link code for a session token */
+        post: operations["exchangeAuthCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/logout": {
         parameters: {
             query?: never;
@@ -1346,6 +1363,7 @@ export interface components {
              * @example https://example.com/schemas/AdminResolveInputBody.json
              */
             readonly $schema?: string;
+            compensate?: boolean;
             resolution: string;
         };
         AnomalyActionInputBody: {
@@ -1742,6 +1760,25 @@ export interface components {
              */
             readonly $schema?: string;
             exception: components["schemas"]["ExceptionDTO"];
+        };
+        ExchangeAuthCodeInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ExchangeAuthCodeInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description One-time exchange code from the deep-link callback */
+            code: string;
+        };
+        ExchangeAuthCodeOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ExchangeAuthCodeOutputBody.json
+             */
+            readonly $schema?: string;
+            token: string;
         };
         FavoriteChipDTO: {
             available_today: boolean;
@@ -5455,6 +5492,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StartLoginOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    exchangeAuthCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExchangeAuthCodeInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExchangeAuthCodeOutputBody"];
                 };
             };
             /** @description Error */

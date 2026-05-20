@@ -149,6 +149,7 @@ type adminResolveInput struct {
 	ID   string `path:"id" format:"uuid"`
 	Body struct {
 		Resolution string `json:"resolution" minLength:"5"`
+		Compensate bool   `json:"compensate,omitempty"`
 	}
 }
 
@@ -399,7 +400,7 @@ func (a *API) adminResolveComplaint(ctx context.Context, in *adminResolveInput) 
 	if err != nil {
 		return nil, err
 	}
-	if err := a.Svc.AdminResolveComplaint(ctx, in.ID, u.ID, in.Body.Resolution); err != nil {
+	if err := a.Svc.AdminResolveComplaint(ctx, in.ID, u.ID, in.Body.Resolution, in.Body.Compensate); err != nil {
 		return nil, mapErr(err)
 	}
 	return &struct{}{}, nil

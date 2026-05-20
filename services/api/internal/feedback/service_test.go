@@ -524,7 +524,7 @@ func TestService_AdminResolveComplaint_Happy(t *testing.T) {
 	backdateComplaint(t, pool, c.ID, 25*time.Hour)
 	require.NoError(t, svc.EscalateComplaint(ctx, c.ID, user))
 
-	require.NoError(t, svc.AdminResolveComplaint(ctx, c.ID, admin, "welfare committee resolved this"))
+	require.NoError(t, svc.AdminResolveComplaint(ctx, c.ID, admin, "welfare committee resolved this", false))
 	got, err := svc.GetComplaint(ctx, c.ID)
 	require.NoError(t, err)
 	assert.Equal(t, feedback.StatusResolved, got.Status)
@@ -542,7 +542,7 @@ func TestService_AdminResolveComplaint_NotEscalated(t *testing.T) {
 	admin := seedAdmin(t, pool)
 	c := fileComplaint(t, ctx, svc, user, seedPickedUpOrder(t, pool, user, vendor))
 
-	err := svc.AdminResolveComplaint(ctx, c.ID, admin, "trying to resolve early")
+	err := svc.AdminResolveComplaint(ctx, c.ID, admin, "trying to resolve early", false)
 	assert.ErrorIs(t, err, feedback.ErrInvalidTransition)
 }
 
@@ -558,8 +558,88 @@ func TestService_AdminResolveComplaint_ShortResolution(t *testing.T) {
 	backdateComplaint(t, pool, c.ID, 25*time.Hour)
 	require.NoError(t, svc.EscalateComplaint(ctx, c.ID, user))
 
-	err := svc.AdminResolveComplaint(ctx, c.ID, admin, "no")
+	err := svc.AdminResolveComplaint(ctx, c.ID, admin, "no", false)
 	assert.ErrorIs(t, err, feedback.ErrValidation)
+}
+
+// recordingReverser captures every ReverseOrder call so tests can assert the
+// payroll-reversal hook fires (or doesn't) for AdminResolveComplaint.
+type recordingReverser struct {
+	calls []string
+}
+
+func (r *recordingReverser) ReverseOrder(_ context.Context, orderID string) error {
+	r.calls = append(r.calls, orderID)
+	return nil
+}
+
+func TestService_AdminResolveComplaint_CompensateFalse_DoesNotReverse(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	rev := &recordingReverser{}
+	svc.Reverser = rev
+
+	user := seedEmployee(t, pool)
+	vendor := seedVendor(t, pool)
+	admin := seedAdmin(t, pool)
+	c := fileComplaint(t, ctx, svc, user, seedPickedUpOrder(t, pool, user, vendor))
+	backdateComplaint(t, pool, c.ID, 25*time.Hour)
+	require.NoError(t, svc.EscalateComplaint(ctx, c.ID, user))
+
+	require.NoError(t, svc.AdminResolveComplaint(ctx, c.ID, admin, "no compensation needed here", false))
+	assert.Empty(t, rev.calls)
+
+	got, err := svc.GetComplaint(ctx, c.ID)
+	require.NoError(t, err)
+	assert.Equal(t, feedback.StatusResolved, got.Status)
+}
+
+func TestService_AdminResolveComplaint_CompensateTrue_ReversesOrder(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	rev := &recordingReverser{}
+	svc.Reverser = rev
+
+	user := seedEmployee(t, pool)
+	vendor := seedVendor(t, pool)
+	admin := seedAdmin(t, pool)
+	orderID := seedPickedUpOrder(t, pool, user, vendor)
+	c := fileComplaint(t, ctx, svc, user, orderID)
+	backdateComplaint(t, pool, c.ID, 25*time.Hour)
+	require.NoError(t, svc.EscalateComplaint(ctx, c.ID, user))
+
+	require.NoError(t, svc.AdminResolveComplaint(ctx, c.ID, admin, "compensate the employee fully", true))
+	require.Equal(t, []string{orderID}, rev.calls)
+
+	got, err := svc.GetComplaint(ctx, c.ID)
+	require.NoError(t, err)
+	assert.Equal(t, feedback.StatusResolved, got.Status)
+}
+
+func TestService_AdminResolveComplaint_CompensateTrue_NilReverser_Errors(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Service.Reverser left nil intentionally.
+
+	user := seedEmployee(t, pool)
+	vendor := seedVendor(t, pool)
+	admin := seedAdmin(t, pool)
+	c := fileComplaint(t, ctx, svc, user, seedPickedUpOrder(t, pool, user, vendor))
+	backdateComplaint(t, pool, c.ID, 25*time.Hour)
+	require.NoError(t, svc.EscalateComplaint(ctx, c.ID, user))
+
+	err := svc.AdminResolveComplaint(ctx, c.ID, admin, "compensate the employee fully", true)
+	require.Error(t, err)
+
+	got, err := svc.GetComplaint(ctx, c.ID)
+	require.NoError(t, err)
+	assert.Equal(t, feedback.StatusEscalated, got.Status, "complaint state must not change when reverser is missing")
 }
 
 // ---------- Queries ----------

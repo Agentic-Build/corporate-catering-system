@@ -133,6 +133,8 @@ func main() {
 		// 5. Session store + OIDC state store
 		sessStore := idredis.NewSessionStore(rdb, 7*24*time.Hour)
 		stateStore := oidc.NewRedisStateStore(rdb, 5*time.Minute)
+		// One-time-use exchange codes for the mobile PKCE-style flow (B4 hardening).
+		exchangeCodeStore := idredis.NewExchangeCodeStore(rdb, 60*time.Second)
 
 		// 6. Identity service
 		svc := &identity.Service{
@@ -154,6 +156,7 @@ func main() {
 				"admin":    cfg.AppBaseURLAdmin,
 			},
 			DeepLinkScheme: cfg.AppDeepLinkScheme,
+			ExchangeCodes:  exchangeCodeStore,
 		}
 
 		// 7b. Vendor service + admin handlers
@@ -352,6 +355,8 @@ func main() {
 		homeAPI := &mhttp.HomeAPI{Home: homeSvc, MenuSvc: menuService}
 
 		// 7j. Feedback (F1): employee meal ratings + complaint workflow.
+		// Reverser wires admin "resolve with compensation" to ReverseOrder so a
+		// complaint resolved with `compensate=true` reverses the salary deduction.
 		feedbackService := &feedback.Service{
 			Pool:       pool,
 			Ratings:    fpg.NewRatingRepo(pool),
@@ -359,6 +364,7 @@ func main() {
 			Orders:     fpg.NewOrderReader(pool),
 			Audit:      auditRepo,
 			Clock:      clock.SystemClock{},
+			Reverser:   payrollService,
 		}
 		feedbackAPI := &feedbackhttp.API{Svc: feedbackService}
 

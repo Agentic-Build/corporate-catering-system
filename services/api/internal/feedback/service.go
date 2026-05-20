@@ -36,6 +36,13 @@ type Service struct {
 	Orders     OrderReader
 	Audit      AuditTx
 	Clock      Clock
+	// Reverser is the payroll-reversal hook used by AdminResolveComplaint
+	// when the welfare admin resolves a complaint with compensation. It is
+	// optional at construction time and wired by the orchestrator (typically
+	// to payroll.Service). When AdminResolveComplaint is called with
+	// compensate=true and Reverser is nil, the call fails — silently
+	// no-opping a money-movement request would mask a misconfiguration.
+	Reverser OrderReverser
 }
 
 // ----- Rating -----
@@ -230,7 +237,14 @@ func (s *Service) EmployeeResolveComplaint(ctx context.Context, complaintID, use
 
 // AdminResolveComplaint is the welfare-committee close of an escalated
 // complaint: escalated → resolved. Resolution text must be at least 5 chars.
-func (s *Service) AdminResolveComplaint(ctx context.Context, complaintID, adminUserID, resolution string) error {
+//
+// When compensate is true, after the complaint state transition succeeds the
+// payroll deduction for the complaint's order is reversed (full refund) via
+// Service.Reverser. ReverseOrder is idempotent, so a replay of this call with
+// compensate=true does not double-refund. A nil Reverser combined with
+// compensate=true is a configuration error and returns an error rather than
+// silently skipping the money movement.
+func (s *Service) AdminResolveComplaint(ctx context.Context, complaintID, adminUserID, resolution string, compensate bool) error {
 	c, err := s.Complaints.GetByID(ctx, complaintID)
 	if err != nil {
 		return err
@@ -241,10 +255,19 @@ func (s *Service) AdminResolveComplaint(ctx context.Context, complaintID, adminU
 	if len(strings.TrimSpace(resolution)) < minResponseLen {
 		return fmt.Errorf("%w: resolution must be at least %d characters", ErrValidation, minResponseLen)
 	}
-	return s.transition(ctx, c, StatusEscalated, StatusResolved,
+	if compensate && s.Reverser == nil {
+		return fmt.Errorf("compensation requested but reverser not configured")
+	}
+	if err := s.transition(ctx, c, StatusEscalated, StatusResolved,
 		ComplaintUpdate{Resolution: strings.TrimSpace(resolution), ResolvedBy: &adminUserID},
 		adminUserID, "welfare_admin", "feedback.complaint_resolve",
-		map[string]any{"resolved_by_role": "welfare_admin"})
+		map[string]any{"resolved_by_role": "welfare_admin", "compensate": compensate}); err != nil {
+		return err
+	}
+	if compensate {
+		return s.Reverser.ReverseOrder(ctx, c.OrderID)
+	}
+	return nil
 }
 
 // transition applies a complaint status change + audit row in one transaction.
