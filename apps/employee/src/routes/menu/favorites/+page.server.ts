@@ -56,7 +56,7 @@ export const actions: Actions = {
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const h = await client.GET("/api/employee/home", { params: { query: {} } });
     const supplyDate = h.data?.target_day ?? new Date().toISOString().slice(0, 10);
-    const plant = locals.user.plant ?? "F12B-3F";
+    const plant = locals.user.plant ?? "tn-a";
     const r = await client.POST("/api/employee/orders", {
       body: {
         plant,

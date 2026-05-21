@@ -57,6 +57,19 @@ type EmployeeEntry struct {
 	CreatedAt     time.Time
 }
 
+// CurrentPayrollLine is one per-order line in the employee's in-progress
+// (not-yet-locked) payroll period — see Service.ListCurrentLines.
+type CurrentPayrollLine struct {
+	OrderID      string
+	SupplyDate   string // YYYY-MM-DD
+	VendorName   string
+	ItemsSummary string
+	AmountMinor  int64
+	Status       string // charged | reversed | no_show
+	Rated        bool
+	ComplaintID  *string
+}
+
 type ExceptionKind string
 
 const (

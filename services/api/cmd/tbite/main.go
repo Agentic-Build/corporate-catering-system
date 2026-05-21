@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/pflag"
@@ -132,6 +133,8 @@ func main() {
 		// 5. Session store + OIDC state store
 		sessStore := idredis.NewSessionStore(rdb, 7*24*time.Hour)
 		stateStore := oidc.NewRedisStateStore(rdb, 5*time.Minute)
+		// One-time-use exchange codes for the mobile PKCE-style flow (B4 hardening).
+		exchangeCodeStore := idredis.NewExchangeCodeStore(rdb, 60*time.Second)
 
 		// 6. Identity service
 		svc := &identity.Service{
@@ -152,6 +155,8 @@ func main() {
 				"merchant": cfg.AppBaseURLMerchant,
 				"admin":    cfg.AppBaseURLAdmin,
 			},
+			DeepLinkScheme: cfg.AppDeepLinkScheme,
+			ExchangeCodes:  exchangeCodeStore,
 		}
 
 		// 7b. Vendor service + admin handlers
@@ -250,6 +255,10 @@ func main() {
 		if err := s3API.EnsureBucket(ctx); err != nil {
 			logger.Warn("ensure bucket failed; uploads will fail until storage is reachable", "err", err)
 		}
+		// Merchant menu-item image uploads land in the same object storage and
+		// are served back through GET {PublicBaseURL}/uploads/{key}.
+		menuAPI.Storage = s3API
+		menuAPI.PublicBaseURL = cfg.OIDCCallbackBaseURL
 		complianceService := &compliance.Service{
 			Pool:      pool,
 			Docs:      cpgrepo.NewDocumentRepo(pool),
@@ -346,6 +355,8 @@ func main() {
 		homeAPI := &mhttp.HomeAPI{Home: homeSvc, MenuSvc: menuService}
 
 		// 7j. Feedback (F1): employee meal ratings + complaint workflow.
+		// Reverser wires admin "resolve with compensation" to ReverseOrder so a
+		// complaint resolved with `compensate=true` reverses the salary deduction.
 		feedbackService := &feedback.Service{
 			Pool:       pool,
 			Ratings:    fpg.NewRatingRepo(pool),
@@ -353,6 +364,7 @@ func main() {
 			Orders:     fpg.NewOrderReader(pool),
 			Audit:      auditRepo,
 			Clock:      clock.SystemClock{},
+			Reverser:   payrollService,
 		}
 		feedbackAPI := &feedbackhttp.API{Svc: feedbackService}
 
@@ -385,7 +397,10 @@ func main() {
 			Sessions:   sessStore,
 		})
 
-		srv := httpserver.New(cfg.HTTPAddr, logger, api, nil, mcpSrv,
+		srv := httpserver.New(cfg.HTTPAddr, logger, api, func(r chi.Router) {
+			// Public image streaming for merchant-uploaded menu images.
+			r.Get("/uploads/*", menuAPI.ServeUpload)
+		}, mcpSrv,
 			vendorAPI.Register,
 			menuAPI.Register,
 			quotaAPI.Register,

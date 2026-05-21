@@ -19,6 +19,14 @@ export const actions: Actions = {
     const priceMinor = parseInt(priceStr, 10);
     if (!Number.isFinite(priceMinor) || priceMinor < 0) return fail(400, { error: "price 非數字" });
 
+    let images: string[] = [];
+    try {
+      const parsed = JSON.parse(String(fd.get("images") ?? "[]"));
+      if (Array.isArray(parsed)) images = parsed.filter((s) => typeof s === "string");
+    } catch {
+      images = [];
+    }
+
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/merchant/menu-items", {
       body: {
@@ -37,6 +45,7 @@ export const actions: Actions = {
               .map((s) => s.trim())
               .filter(Boolean)
           : [],
+        images,
       } as any,
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });

@@ -60,6 +60,16 @@ type OrderReader interface {
 	GetOrderInfo(ctx context.Context, id string) (*OrderInfo, error)
 }
 
+// OrderReverser reverses (沖銷) the salary deduction tied to a single order.
+// It is the hook used by AdminResolveComplaint when the welfare committee
+// resolves an escalated complaint with compensation. The payroll.Service
+// already exposes a matching ReverseOrder method; the orchestrator wires it
+// into Service.Reverser at startup. Implementations must be idempotent: the
+// same orderID may be passed more than once for the same complaint.
+type OrderReverser interface {
+	ReverseOrder(ctx context.Context, orderID string) error
+}
+
 // AuditTx mirrors the audit-repo shape used by order/payroll/compliance
 // services so the same postgres impl serves feedback writes.
 type AuditTx interface {

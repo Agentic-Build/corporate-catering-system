@@ -1,7 +1,10 @@
 <script lang="ts">
   import { PageHeader, Card, Button, StateTag } from "@tbite/ui";
+  import ImageUploader from "$lib/components/ImageUploader.svelte";
   let { data, form } = $props();
   const item = $derived(data.item);
+
+  let images = $state<string[]>([...((data.item.images as string[] | null) ?? [])]);
 
   const statusMeta = {
     active: { tone: "success", label: "上架中" },
@@ -50,6 +53,13 @@
         徽章（逗號分隔）
         <input name="badges" value={(item.badges ?? []).join(",")} class={fieldClass} />
       </label>
+      <div class="block text-sm font-semibold text-tb-slate-800">
+        餐點圖片
+        <div class="mt-1.5">
+          <input type="hidden" name="images" value={JSON.stringify(images)} />
+          <ImageUploader bind:images />
+        </div>
+      </div>
       {#if form?.error}
         <p class="rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">
           {form.error}

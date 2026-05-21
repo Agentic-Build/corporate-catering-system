@@ -10,6 +10,7 @@
   import CategoryStrip from "$lib/components/CategoryStrip.svelte";
   import FeaturedRow from "$lib/components/FeaturedRow.svelte";
   import MenuFilterBar from "$lib/components/MenuFilterBar.svelte";
+  import MenuViewToggle from "$lib/components/MenuViewToggle.svelte";
   import { cart } from "$lib/cart.svelte";
 
   let { data, form } = $props();
@@ -151,6 +152,35 @@
           return true;
         }),
   );
+
+  // ── A4 — 全部餐點 檢視切換（依餐點 / 依店家），persisted in ?view= + localStorage ──
+  let menuView = $state<"meal" | "vendor">("meal");
+  onMount(() => {
+    const fromUrl = $page.url.searchParams.get("view");
+    const stored = localStorage.getItem("tb:menuView");
+    const initial = fromUrl ?? stored;
+    if (initial === "vendor" || initial === "meal") menuView = initial;
+  });
+  function setMenuView(next: "meal" | "vendor") {
+    menuView = next;
+    localStorage.setItem("tb:menuView", next);
+    const u = new URL($page.url);
+    u.searchParams.set("view", next);
+    goto(u.pathname + u.search, { keepFocus: true, noScroll: true, replaceState: true });
+  }
+  // 依店家 — group the (already category/search-filtered) menu by vendor.
+  const vendorGroups = $derived.by(() => {
+    const groups = new Map<string, { vendorId: string; vendor: string; items: DayMenuItem[] }>();
+    for (const m of filteredMenu) {
+      let g = groups.get(m.vendor_id);
+      if (!g) {
+        g = { vendorId: m.vendor_id, vendor: m.vendor, items: [] };
+        groups.set(m.vendor_id, g);
+      }
+      g.items.push(m);
+    }
+    return [...groups.values()];
+  });
 
   // ── enrich recommend / favorite chips with full MealCard data from the
   //    day_menu when the item is on sale today (else show as unavailable). ──
@@ -508,6 +538,7 @@
         </h2>
         <p class="text-sm text-tb-slate-500">配送至 {plantLabel}</p>
       </div>
+      <MenuViewToggle view={menuView} onChange={setMenuView} />
     </div>
 
     <!-- F3 篩選列 -->
@@ -532,6 +563,39 @@
         class="rounded-tb-2xl border border-dashed border-tb-slate-300 bg-white p-6 text-center text-sm text-tb-slate-500"
       >
         沒有符合條件的餐點。試試其他分類或清除搜尋。
+      </div>
+    {:else if menuView === "vendor"}
+      <div class="space-y-6">
+        {#each vendorGroups as group (group.vendorId)}
+          <div>
+            <div class="mb-3 flex items-baseline gap-2">
+              <h3 class="text-base font-extrabold tracking-tight text-tb-slate-900">
+                {group.vendor}
+              </h3>
+              <span class="text-xs text-tb-slate-500">{group.items.length} 項</span>
+            </div>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {#each group.items as item (item.id)}
+                <MealCard
+                  name={item.name}
+                  vendor={item.vendor}
+                  priceMinor={item.price_minor}
+                  remain={item.remain}
+                  capacity={item.capacity}
+                  pickupWindow={item.pickup_window}
+                  badges={item.badges ?? []}
+                  image={(item.images ?? [])[0]}
+                  qty={cart.qty(item.id)}
+                  soldOut={item.sold_out}
+                  onIncrement={() => addMenuItem(item)}
+                  onDecrement={() => cart.dec(item.id)}
+                  isFavorite={favoritesSet.has(item.id)}
+                  onToggleFavorite={() => toggleFavorite(item.id)}
+                />
+              {/each}
+            </div>
+          </div>
+        {/each}
       </div>
     {:else}
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

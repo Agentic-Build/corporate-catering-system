@@ -21,6 +21,14 @@
     suspended: "停權",
     terminated: "已終止",
   } as Record<string, string>;
+
+  const plantLabel: Record<string, string> = {
+    "tn-a": "台南廠 A 區",
+    "tn-b": "台南廠 B 區",
+    "tn-c": "台南廠 C 區",
+    "tn-d": "台南廠 D 區",
+  };
+  const fmtPlants = (ids: string[]) => ids.map((p) => plantLabel[p] ?? p).join(" · ");
 </script>
 
 <PageHeader
@@ -110,7 +118,7 @@
                   </StateTag>
                 </td>
                 <td class="px-4 py-3 text-xs text-tb-slate-500">
-                  {(v.plants ?? []).join(" · ") || "—"}
+                  {fmtPlants(v.plants ?? []) || "—"}
                 </td>
                 <td class="px-4 py-3 text-right">
                   <a

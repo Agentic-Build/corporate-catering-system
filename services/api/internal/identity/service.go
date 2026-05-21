@@ -224,7 +224,8 @@ func claimString(claims map[string]any, key string) string {
 
 func roleForApp(app string) Role {
 	switch app {
-	case "employee":
+	case "employee", "employee-app":
+		// "employee-app" is the native mobile app; it serves the same employees.
 		return RoleEmployee
 	case "merchant":
 		return RoleVendorOperator
@@ -236,7 +237,8 @@ func roleForApp(app string) Role {
 }
 
 func validApp(app string) bool {
-	return app == "employee" || app == "merchant" || app == "admin"
+	return app == "employee" || app == "employee-app" ||
+		app == "merchant" || app == "admin"
 }
 
 func validRole(role Role) bool {

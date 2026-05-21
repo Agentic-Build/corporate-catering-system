@@ -11,13 +11,22 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
 )
 
 // API exposes merchant CRUD + employee read endpoints for the menu domain.
 // Merchant routes require a vendor_operator bound to a vendor (user.VendorID);
 // the employee read route requires an employee with a plant assignment.
+//
+// Storage backs the merchant image-upload endpoint; the orchestrator
+// (cmd/tbite/main.go) is responsible for wiring it. PublicBaseURL is the
+// API's own externally reachable base URL — uploaded images are served back
+// through GET {PublicBaseURL}/uploads/{key} (see ServeUpload), so the URL
+// returned to clients is one a browser <img> can actually load.
 type API struct {
-	Svc *menu.Service
+	Svc           *menu.Service
+	Storage       *storage.S3Client
+	PublicBaseURL string
 }
 
 // ----- DTOs -----
@@ -104,6 +113,7 @@ type createItemInput struct {
 		PriceMinor  int64    `json:"price_minor" minimum:"0"`
 		Tags        []string `json:"tags"`
 		Badges      []string `json:"badges"`
+		Images      []string `json:"images,omitempty" doc:"Image URIs returned by POST /api/merchant/uploads"`
 	}
 }
 
@@ -122,6 +132,7 @@ type updateItemInput struct {
 		PriceMinor  int64    `json:"price_minor" minimum:"0"`
 		Tags        []string `json:"tags"`
 		Badges      []string `json:"badges"`
+		Images      []string `json:"images,omitempty" doc:"Image URIs returned by POST /api/merchant/uploads"`
 	}
 }
 
@@ -244,6 +255,16 @@ func (a *API) Register(api huma.API) {
 		Tags:        []string{"employee", "menu"},
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.listEmployeeMenu)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "uploadMerchantImage",
+		Method:        http.MethodPost,
+		Path:          "/api/merchant/uploads",
+		Summary:       "Upload a menu-item image and get its stored URL",
+		Tags:          []string{"merchant", "menu"},
+		Security:      []map[string][]string{{"bearer": {}}},
+		DefaultStatus: http.StatusCreated,
+	}, a.uploadImage)
 }
 
 // ----- Auth helpers -----
@@ -343,12 +364,14 @@ func (a *API) createItem(ctx context.Context, in *createItemInput) (*itemOutput,
 		PriceMinor:  in.Body.PriceMinor,
 		Tags:        in.Body.Tags,
 		Badges:      in.Body.Badges,
+		Images:      in.Body.Images,
 	})
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	var resp itemOutput
 	resp.Body.Item = toItemDTO(it)
+	resp.Body.Item.Images = in.Body.Images
 	return &resp, nil
 }
 
@@ -364,12 +387,14 @@ func (a *API) updateItem(ctx context.Context, in *updateItemInput) (*itemOutput,
 		Tags:        in.Body.Tags,
 		Badges:      in.Body.Badges,
 		CategoryID:  in.Body.CategoryID,
+		Images:      in.Body.Images,
 	})
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	var resp itemOutput
 	resp.Body.Item = toItemDTO(it)
+	resp.Body.Item.Images = in.Body.Images
 	return &resp, nil
 }
 

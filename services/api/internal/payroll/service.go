@@ -44,16 +44,17 @@ type Clock interface{ Now() time.Time }
 // across batch / entry / dispute repos plus audit + outbox. All multi-row
 // writes happen inside pgx.BeginFunc so partial failure rolls back atomically.
 type Service struct {
-	Pool       *pgxpool.Pool
-	Batches    BatchRepository
-	Entries    EntryRepository
-	Disputes   DisputeRepository
-	Exceptions ExceptionRepository
-	Orders     OrderRepo
-	OrderTx    OrderTx
-	Audit      AuditTx
-	Outbox     OutboxTx
-	Clock      Clock
+	Pool         *pgxpool.Pool
+	Batches      BatchRepository
+	Entries      EntryRepository
+	Disputes     DisputeRepository
+	Exceptions   ExceptionRepository
+	CurrentLines CurrentLinesRepository
+	Orders       OrderRepo
+	OrderTx      OrderTx
+	Audit        AuditTx
+	Outbox       OutboxTx
+	Clock        Clock
 }
 
 // BuildDraftInput selects which supply dates roll into the draft batch.
@@ -312,6 +313,27 @@ func (s *Service) ListMyDisputes(ctx context.Context, userID string) ([]*Dispute
 // batches, newest period first.
 func (s *Service) ListMyEntries(ctx context.Context, userID string) ([]*EmployeeEntry, error) {
 	return s.Entries.ListByUser(ctx, userID)
+}
+
+// ListCurrentLines returns the per-order lines for the employee's in-progress
+// (not-yet-locked) payroll period.
+//
+// "Current period" is defined as every chargeable order of the employee whose
+// supply_date falls *after* the latest locked batch's period_end (or all such
+// orders when no locked batch exists yet). We deliberately do NOT key off a
+// draft batch row: draft batches are built ad-hoc by a welfare admin via
+// BuildDraft, so until an admin acts there is no draft to read — yet the
+// employee still has accumulating deductions to show. Anchoring to the last
+// *locked* boundary keeps the view correct regardless of whether a draft has
+// been built, and never double-counts orders already locked into HR export.
+//
+// When CurrentLines is left unset, the query runs directly against Pool —
+// keeping the endpoint functional without extra wiring.
+func (s *Service) ListCurrentLines(ctx context.Context, userID string) ([]CurrentPayrollLine, error) {
+	if s.CurrentLines != nil {
+		return s.CurrentLines.ListCurrentLines(ctx, userID)
+	}
+	return QueryCurrentLines(ctx, s.Pool, userID)
 }
 
 // FlagExceptionInput records a manual deduction-failed exception.

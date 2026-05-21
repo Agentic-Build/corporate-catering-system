@@ -26,6 +26,7 @@ type CreateItemInput struct {
 	PriceMinor  int64
 	Tags        []string
 	Badges      []string
+	Images      []string
 }
 
 type UpdateItemInput struct {
@@ -35,6 +36,7 @@ type UpdateItemInput struct {
 	Tags        []string
 	Badges      []string
 	CategoryID  *string
+	Images      []string
 }
 
 // CreateCategory creates a new category owned by the supplied vendor.
@@ -73,6 +75,11 @@ func (s *Service) CreateItem(ctx context.Context, in CreateItemInput) (*Item, er
 	if err := s.Items.Create(ctx, item); err != nil {
 		return nil, err
 	}
+	if len(in.Images) > 0 {
+		if err := s.Images.ReplaceForItem(ctx, item.ID, in.Images); err != nil {
+			return nil, err
+		}
+	}
 	return item, nil
 }
 
@@ -99,6 +106,11 @@ func (s *Service) UpdateItem(ctx context.Context, itemID, vendorID string, in Up
 		existing.Badges = []string{}
 	}
 	if err := s.Items.Update(ctx, existing); err != nil {
+		return nil, err
+	}
+	// The merchant edit form submits the full image set; replace unconditionally
+	// so an empty slice clears all images.
+	if err := s.Images.ReplaceForItem(ctx, existing.ID, in.Images); err != nil {
 		return nil, err
 	}
 	return existing, nil

@@ -2,6 +2,8 @@ package idhttp
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -15,11 +17,34 @@ import (
 // AppBaseURLs maps app names ("employee"|"merchant"|"admin") to their public base URLs.
 type AppBaseURLs map[string]string
 
+// defaultDeepLinkScheme is used when DeepLinkScheme is left empty (matches
+// config.AppDeepLinkScheme's default).
+const defaultDeepLinkScheme = "tbite"
+
+// ExchangeCodeStore backs the PKCE-style one-time exchange-code → session-
+// token swap used by the native mobile app deep-link flow. The OIDC callback
+// stores a freshly-minted code, then the app POSTs to /auth/exchange to
+// redeem it for the session token. Consume is one-time-use: it returns
+// ok=false if the code is unknown or already redeemed.
+type ExchangeCodeStore interface {
+	Put(ctx context.Context, code, token string) error
+	Consume(ctx context.Context, code string) (token string, ok bool, err error)
+}
+
 type API struct {
 	Svc      *identity.Service
 	Sessions identity.SessionStore
 	Users    identity.UserRepository
 	AppURLs  AppBaseURLs
+
+	// DeepLinkScheme is the custom URL scheme used for the native mobile app's
+	// OIDC callback redirect. Empty falls back to defaultDeepLinkScheme.
+	DeepLinkScheme string
+
+	// ExchangeCodes backs the deep-link one-time code exchange used by the
+	// native mobile app (app=employee-app). Required for the employee-app
+	// callback path and for the POST /auth/exchange endpoint.
+	ExchangeCodes ExchangeCodeStore
 }
 
 // ----- DTOs -----
@@ -27,7 +52,7 @@ type API struct {
 type startLoginInput struct {
 	Provider string `path:"provider" doc:"OIDC provider slug"`
 	Body     struct {
-		App      string `json:"app" enum:"employee,merchant,admin"`
+		App      string `json:"app" enum:"employee,employee-app,merchant,admin"`
 		ReturnTo string `json:"return_to,omitempty"`
 	}
 }
@@ -46,6 +71,18 @@ type completeLoginInput struct {
 type completeLoginOutput struct {
 	Status int
 	Url    string `header:"Location"`
+}
+
+type exchangeAuthCodeInput struct {
+	Body struct {
+		Code string `json:"code" minLength:"1" doc:"One-time exchange code from the deep-link callback"`
+	}
+}
+
+type exchangeAuthCodeOutput struct {
+	Body struct {
+		Token string `json:"token"`
+	}
 }
 
 type meOutput struct {
@@ -100,6 +137,16 @@ func (a *API) Register(api huma.API) {
 	}, a.completeLogin)
 
 	huma.Register(api, huma.Operation{
+		OperationID: "exchangeAuthCode",
+		Method:      http.MethodPost,
+		Path:        "/auth/exchange",
+		Summary:     "Exchange a one-time deep-link code for a session token",
+		Tags:        []string{"auth"},
+		// No `Security`: this is the pre-token step of the mobile login
+		// handshake and must remain anonymous-callable.
+	}, a.exchangeAuthCode)
+
+	huma.Register(api, huma.Operation{
 		OperationID:   "logout",
 		Method:        http.MethodPost,
 		Path:          "/auth/logout",
@@ -139,6 +186,36 @@ func (a *API) completeLogin(ctx context.Context, in *completeLoginInput) (*compl
 	if err != nil {
 		return nil, mapErr(err)
 	}
+
+	// The native mobile app cannot receive an HTTP redirect with a cookie, so
+	// it is redirected to a custom-scheme deep link instead. The deep link
+	// carries a one-time exchange `code` (NOT the session token) which the
+	// app swaps for the token via POST /auth/exchange — this keeps the
+	// long-lived session token off the wire of any process that can sniff
+	// the custom-scheme URL.
+	if out.App == "employee-app" {
+		if a.ExchangeCodes == nil {
+			return nil, huma.Error500InternalServerError("exchange code store not configured")
+		}
+		code, err := newExchangeCode()
+		if err != nil {
+			return nil, huma.Error500InternalServerError("mint exchange code", err)
+		}
+		if err := a.ExchangeCodes.Put(ctx, code, out.Session.Token); err != nil {
+			return nil, huma.Error500InternalServerError("store exchange code", err)
+		}
+		scheme := a.DeepLinkScheme
+		if scheme == "" {
+			scheme = defaultDeepLinkScheme
+		}
+		deepLink := fmt.Sprintf("%s://auth?code=%s&return_to=%s",
+			scheme,
+			url.QueryEscape(code),
+			url.QueryEscape(out.ReturnTo),
+		)
+		return &completeLoginOutput{Status: http.StatusFound, Url: deepLink}, nil
+	}
+
 	base, ok := a.AppURLs[out.App]
 	if !ok {
 		return nil, huma.Error500InternalServerError("unknown app base url for " + out.App)
@@ -149,6 +226,37 @@ func (a *API) completeLogin(ctx context.Context, in *completeLoginInput) (*compl
 		url.QueryEscape(out.ReturnTo),
 	)
 	return &completeLoginOutput{Status: http.StatusFound, Url: landing}, nil
+}
+
+func (a *API) exchangeAuthCode(ctx context.Context, in *exchangeAuthCodeInput) (*exchangeAuthCodeOutput, error) {
+	if a.ExchangeCodes == nil {
+		return nil, huma.Error500InternalServerError("exchange code store not configured")
+	}
+	if in.Body.Code == "" {
+		return nil, huma.Error401Unauthorized("invalid or expired exchange code")
+	}
+	tok, ok, err := a.ExchangeCodes.Consume(ctx, in.Body.Code)
+	if err != nil {
+		// Don't leak Redis-level details: any error from Consume becomes a
+		// 401. Logging is the caller's responsibility (huma middleware).
+		return nil, huma.Error401Unauthorized("invalid or expired exchange code")
+	}
+	if !ok {
+		return nil, huma.Error401Unauthorized("invalid or expired exchange code")
+	}
+	var resp exchangeAuthCodeOutput
+	resp.Body.Token = tok
+	return &resp, nil
+}
+
+// newExchangeCode mints a random URL-safe 32-byte one-time code used by the
+// mobile deep-link auth handshake.
+func newExchangeCode() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func (a *API) providers(_ context.Context, _ *struct{}) (*providersOutput, error) {

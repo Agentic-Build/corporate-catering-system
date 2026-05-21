@@ -1,5 +1,8 @@
 <script lang="ts">
   import { PageHeader, Card, StateTag, EmptyState, Icon } from "@tbite/ui";
+  import PayrollEntrySheet, {
+    type PayrollLine,
+  } from "$lib/components/PayrollEntrySheet.svelte";
 
   let { data } = $props();
 
@@ -16,7 +19,28 @@
     closed: "已結帳",
   };
 
+  // 本月進行中 — per-order line status display.
+  const lineStatusTone: Record<string, "info" | "neutral" | "warning" | "danger" | "success"> = {
+    charged: "info",
+    reversed: "neutral",
+    no_show: "danger",
+  };
+  const lineStatusLabel: Record<string, string> = {
+    charged: "已扣",
+    reversed: "已沖銷",
+    no_show: "未領",
+  };
+
   const totalNet = $derived(data.entries.reduce((s, e) => s + e.net_minor, 0));
+  const currentLines = $derived((data.currentLines as PayrollLine[]) ?? []);
+
+  // ── feedback sheet ──
+  let sheetOpen = $state(false);
+  let activeLine = $state<PayrollLine | null>(null);
+  function openSheet(line: PayrollLine) {
+    activeLine = line;
+    sheetOpen = true;
+  }
 </script>
 
 <a
@@ -32,6 +56,64 @@
   subtitle="查詢每月由薪資代扣的餐費、退款與淨額。"
 />
 
+<!-- 本月進行中 — accumulating, not-yet-settled period -->
+<section class="mb-6">
+  <h2 class="mb-2 text-base font-extrabold tracking-tight text-tb-slate-900">本月進行中</h2>
+  <div class="mb-3">
+    <Card>
+      <div class="flex items-end justify-between">
+        <span class="text-sm text-tb-slate-600">本月即時累計扣款</span>
+        <span class="font-jetbrains-mono text-2xl font-black tabular-nums text-tb-slate-900">
+          ${data.currentTotalMinor.toLocaleString()}
+        </span>
+      </div>
+    </Card>
+  </div>
+
+  {#if currentLines.length === 0}
+    <div
+      class="rounded-tb-2xl border border-dashed border-tb-slate-300 bg-white p-6 text-center text-sm text-tb-slate-500"
+    >
+      本月尚無代扣訂單。完成取餐後，扣款明細會即時顯示於此。
+    </div>
+  {:else}
+    <ul class="grid gap-2">
+      {#each currentLines as line (line.order_id)}
+        {@const reversed = line.status === "reversed"}
+        <li>
+          <button
+            type="button"
+            onclick={() => openSheet(line)}
+            class="flex w-full items-center justify-between gap-3 rounded-tb-2xl border border-tb-slate-200 bg-white p-3.5 text-left shadow-tb-sm transition hover:border-tb-slate-400 hover:shadow-tb-md"
+          >
+            <div class="min-w-0">
+              <p class="truncate text-sm font-bold text-tb-slate-900">{line.vendor_name}</p>
+              <p class="mt-0.5 truncate text-xs text-tb-slate-500">{line.items_summary}</p>
+              <p class="mt-0.5 font-jetbrains-mono text-[11px] text-tb-slate-400">
+                {line.supply_date}
+              </p>
+            </div>
+            <div class="flex shrink-0 flex-col items-end gap-1">
+              <span
+                class="font-jetbrains-mono text-sm font-black tabular-nums {reversed
+                  ? 'text-tb-rose-700 line-through'
+                  : 'text-tb-slate-900'}"
+              >
+                {reversed ? "-" : ""}${line.amount_minor.toLocaleString()}
+              </span>
+              <StateTag tone={lineStatusTone[line.status] ?? "neutral"}>
+                {lineStatusLabel[line.status] ?? line.status}
+              </StateTag>
+            </div>
+          </button>
+        </li>
+      {/each}
+    </ul>
+    <p class="mt-2 text-xs text-tb-slate-500">點選任一筆訂單可評分或回報問題。</p>
+  {/if}
+</section>
+
+<h2 class="mb-2 text-base font-extrabold tracking-tight text-tb-slate-900">月結批次</h2>
 {#if data.entries.length === 0}
   <EmptyState icon="wallet" title="尚無代扣紀錄" hint="完成取餐並月結後，扣款明細會顯示於此。" />
 {:else}
@@ -92,3 +174,5 @@
     對扣款金額有疑問?可於「我的訂單」對個別訂單提出申訴。
   </p>
 {/if}
+
+<PayrollEntrySheet open={sheetOpen} line={activeLine} onClose={() => (sheetOpen = false)} />

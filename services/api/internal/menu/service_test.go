@@ -199,6 +199,24 @@ func (r *fakeImageRepo) ListByItem(_ context.Context, itemID string) ([]*menu.Im
 	return r.byItem[itemID], nil
 }
 
+func (r *fakeImageRepo) ReplaceForItem(_ context.Context, itemID string, uris []string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	imgs := make([]*menu.Image, 0, len(uris))
+	for i, uri := range uris {
+		r.nextID++
+		imgs = append(imgs, &menu.Image{
+			ID:        "img-" + strconv.Itoa(r.nextID),
+			ItemID:    itemID,
+			BlobURI:   uri,
+			SortOrder: i,
+			CreatedAt: time.Now().UTC(),
+		})
+	}
+	r.byItem[itemID] = imgs
+	return nil
+}
+
 // ----- Helpers -----
 
 func newSvc() (*menu.Service, *fakeCategoryRepo, *fakeItemRepo, *fakeImageRepo) {
@@ -225,6 +243,57 @@ func TestService_CreateItem_DefaultsToDraftAndNormalizesSlices(t *testing.T) {
 	assert.Equal(t, []string{}, got.Tags)
 	assert.NotNil(t, got.Badges)
 	assert.Equal(t, []string{}, got.Badges)
+}
+
+func TestService_CreateItem_PersistsImages(t *testing.T) {
+	svc, _, _, gr := newSvc()
+	ctx := context.Background()
+	got, err := svc.CreateItem(ctx, menu.CreateItemInput{
+		VendorID:   "v1",
+		Name:       "雞腿便當",
+		PriceMinor: 11000,
+		Images:     []string{"s3://b/1.jpg", "s3://b/2.jpg"},
+	})
+	require.NoError(t, err)
+	imgs, err := gr.ListByItem(ctx, got.ID)
+	require.NoError(t, err)
+	require.Len(t, imgs, 2)
+	assert.Equal(t, "s3://b/1.jpg", imgs[0].BlobURI)
+	assert.Equal(t, "s3://b/2.jpg", imgs[1].BlobURI)
+}
+
+func TestService_CreateItem_NoImagesLeavesNone(t *testing.T) {
+	svc, _, _, gr := newSvc()
+	ctx := context.Background()
+	got, err := svc.CreateItem(ctx, menu.CreateItemInput{
+		VendorID: "v1", Name: "X", PriceMinor: 9000,
+	})
+	require.NoError(t, err)
+	imgs, err := gr.ListByItem(ctx, got.ID)
+	require.NoError(t, err)
+	assert.Empty(t, imgs)
+}
+
+func TestService_UpdateItem_ReplacesImages(t *testing.T) {
+	svc, _, _, gr := newSvc()
+	ctx := context.Background()
+	created, err := svc.CreateItem(ctx, menu.CreateItemInput{
+		VendorID: "v1", Name: "X", PriceMinor: 9000,
+		Images: []string{"s3://b/old.jpg"},
+	})
+	require.NoError(t, err)
+
+	_, err = svc.UpdateItem(ctx, created.ID, "v1", menu.UpdateItemInput{
+		Name: "X", PriceMinor: 9000,
+		Images: []string{"s3://b/new1.jpg", "s3://b/new2.jpg"},
+	})
+	require.NoError(t, err)
+
+	imgs, err := gr.ListByItem(ctx, created.ID)
+	require.NoError(t, err)
+	require.Len(t, imgs, 2)
+	assert.Equal(t, "s3://b/new1.jpg", imgs[0].BlobURI)
+	assert.Equal(t, "s3://b/new2.jpg", imgs[1].BlobURI)
 }
 
 func TestService_UpdateItem_WrongVendorIsForbidden(t *testing.T) {

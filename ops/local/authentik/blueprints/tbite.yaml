@@ -85,6 +85,7 @@ entries:
       client_id: tbite-local
       client_secret: tbite-local-client-secret
       include_claims_in_id_token: true
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, "authentik Self-signed Certificate"]]
       issuer_mode: per_provider
       sub_mode: user_uuid
       redirect_uris:
@@ -124,7 +125,7 @@ entries:
       attributes:
         tbite_role: employee
         tbite_employee_id: E2E001
-        tbite_plant: F12B-3F
+        tbite_plant: tn-a
         tbite_department: IT
 
   - id: tbite-dev-admin
