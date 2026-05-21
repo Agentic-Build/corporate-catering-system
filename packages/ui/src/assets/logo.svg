@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none">
+  <rect width="1024" height="1024" rx="230" ry="230" fill="#F94D4D"></rect>
+  <mask id="bite">
+    <rect width="1024" height="1024" fill="white"></rect>
+    <circle cx="672" cy="785" r="130" fill="black"></circle>
+  </mask>
+  <g fill="#FFFFFF" mask="url(#bite)">
+    <rect x="245" y="245" width="535" height="225" rx="45" ry="45"></rect>
+    <rect x="397" y="430" width="230" height="350" rx="20" ry="20"></rect>
+  </g>
+</svg>

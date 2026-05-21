@@ -1,8 +1,7 @@
 <script lang="ts">
-  // Calibrated against reference_src/ui.jsx + components.jsx TBiteLogo —
-  // gradient tile mark with an amber accent dot + wordmark.
-  // `size` (px of the tile) is kept for the existing callers; `small`
-  // hides the wordmark, `light` is for dark backgrounds.
+  import logoSvg from './assets/logo.svg';
+  import logoPng from './assets/logo.png';
+
   interface Props {
     size?: number;
     small?: boolean;
@@ -12,15 +11,10 @@
 </script>
 
 <a href="/" class="inline-flex items-center gap-2.5 font-noto-tc" aria-label="T-Bite home">
-  <span
-    class="relative grid place-items-center rounded-tb-2xl bg-gradient-to-br from-tb-red-500 to-tb-rose-700 text-white shadow-tb-sm"
-    style="height: {size}px; width: {size}px;"
-  >
-    <span class="text-lg font-black tracking-tight">T</span>
-    <span
-      class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-tb-amber-400 ring-2 ring-white"
-    ></span>
-  </span>
+  <picture>
+    <source srcset={logoSvg} type="image/svg+xml" />
+    <img src={logoPng} alt="T-Bite" style="height: {size}px; width: auto;" />
+  </picture>
   {#if !small}
     <span class="leading-none">
       <span
