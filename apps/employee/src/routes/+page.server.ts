@@ -7,10 +7,10 @@ type MenuQuery = NonNullable<operations["listEmployeeMenu"]["parameters"]["query
 type MenuSort = NonNullable<MenuQuery["sort"]>;
 
 const PLANTS = [
-  { id: "F12B-3F", label: "F12B · 3F" },
-  { id: "F12B-1F", label: "F12B · 1F" },
-  { id: "F15-2F", label: "F15 · 2F" },
-  { id: "F18-RF", label: "F18 · RF" },
+  { id: "tn-a", label: "台南廠 A 區" },
+  { id: "tn-b", label: "台南廠 B 區" },
+  { id: "tn-c", label: "台南廠 C 區" },
+  { id: "tn-d", label: "台南廠 D 區" },
 ];
 
 function buildDays(today: Date, selectedISO?: string) {

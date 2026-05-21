@@ -47,7 +47,7 @@ VALUES (
   'employee',
   'active',
   'E2E001',
-  'F12B-3F',
+  'tn-a',
   'IT'
 )
 ON CONFLICT (primary_email) DO NOTHING;
@@ -68,7 +68,7 @@ VALUES
   ('d0000000-0000-0000-0000-000000000001',
    'c0000000-0000-0000-0000-0000000000e1',
    'a1111111-1111-1111-1111-111111111111',
-   'F12B-3F', CURRENT_DATE, 'placed', 110,
+   'tn-a', CURRENT_DATE, 'placed', 110,
    now() - INTERVAL '2 hours',
    (CURRENT_DATE + INTERVAL '17 hours')::timestamptz,
    NULL, NULL),
@@ -76,7 +76,7 @@ VALUES
   ('d0000000-0000-0000-0000-000000000002',
    'c0000000-0000-0000-0000-0000000000e1',
    'a2222222-2222-2222-2222-222222222222',
-   'F12B-3F', CURRENT_DATE, 'ready', 145,
+   'tn-a', CURRENT_DATE, 'ready', 145,
    now() - INTERVAL '3 hours',
    (CURRENT_DATE + INTERVAL '17 hours')::timestamptz,
    now() - INTERVAL '30 minutes', NULL),
@@ -84,7 +84,7 @@ VALUES
   ('d0000000-0000-0000-0000-000000000003',
    'c0000000-0000-0000-0000-0000000000e1',
    'a3333333-3333-3333-3333-333333333333',
-   'F12B-3F', CURRENT_DATE - 1, 'picked_up', 95,
+   'tn-a', CURRENT_DATE - 1, 'picked_up', 95,
    (CURRENT_DATE - 1 + INTERVAL '9 hours')::timestamptz,
    (CURRENT_DATE - 1 + INTERVAL '17 hours')::timestamptz,
    (CURRENT_DATE - 1 + INTERVAL '11 hours')::timestamptz,

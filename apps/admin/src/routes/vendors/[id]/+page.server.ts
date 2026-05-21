@@ -2,7 +2,7 @@ import { redirect, fail, error } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
 
-const KNOWN_PLANTS = ["F12B-3F", "F12B-1F", "F15-2F", "F18-RF"];
+const KNOWN_PLANTS = ["tn-a", "tn-b", "tn-c", "tn-d"];
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
   if (!locals.user || locals.user.role !== "welfare_admin") throw redirect(303, "/login");

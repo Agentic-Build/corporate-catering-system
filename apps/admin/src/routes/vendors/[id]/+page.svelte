@@ -4,6 +4,14 @@
   const v = $derived(data.vendor);
   const currentPlants = $derived(new Set<string>(v.plants ?? []));
 
+  const plantLabel: Record<string, string> = {
+    "tn-a": "台南廠 A 區",
+    "tn-b": "台南廠 B 區",
+    "tn-c": "台南廠 C 區",
+    "tn-d": "台南廠 D 區",
+  };
+  const labelFor = (id: string) => plantLabel[id] ?? id;
+
   const statusTone = {
     approved: "success",
     pending: "warning",
@@ -66,7 +74,7 @@
                 class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-tb-slate-300 px-3 py-1 text-xs font-semibold text-tb-slate-700 hover:border-tb-slate-500"
               >
                 <input type="checkbox" name="plants" value={p} checked={currentPlants.has(p)} />
-                {p}
+                {labelFor(p)}
               </label>
             {/each}
           </div>
@@ -89,7 +97,7 @@
               <span
                 class="inline-flex items-center rounded-full border border-tb-slate-300 px-3 py-1 text-xs font-semibold text-tb-slate-700"
               >
-                {p}
+                {labelFor(p)}
               </span>
             {:else}
               <span class="text-sm text-tb-slate-500">未設定廠區</span>
@@ -111,8 +119,8 @@
           {#each v.plant_mappings ?? [] as m (m.plant)}
             <form method="POST" action="?/setPlantWindow" class="flex flex-wrap items-center gap-2">
               <input type="hidden" name="plant" value={m.plant} />
-              <span class="w-24 font-jetbrains-mono text-sm font-semibold text-tb-slate-800">
-                {m.plant}
+              <span class="w-24 text-sm font-semibold text-tb-slate-800">
+                {labelFor(m.plant)}
               </span>
               <input
                 name="service_window"
