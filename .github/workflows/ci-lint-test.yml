@@ -17,6 +17,11 @@ jobs:
           node-version-file: ".nvmrc"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Seed per-app .env from .env.example for build-time PUBLIC_* imports
+        run: |
+          for ex in apps/*/.env.example; do
+            cp -n "$ex" "$(dirname "$ex")/.env"
+          done
       - run: pnpm -r --filter "./apps/*" exec svelte-kit sync
       - run: pnpm -r check
       - run: pnpm -r lint || true   # P0: prettier check is non-blocking until we standardize
