@@ -46,8 +46,8 @@
     </p>
   {:else}
     <Card>
-      <div class="overflow-hidden rounded-xl border border-tb-slate-200">
-        <table class="w-full text-sm">
+      <div class="overflow-x-auto rounded-xl border border-tb-slate-200">
+        <table class="w-full min-w-[44rem] text-sm">
           <thead
             class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
           >

@@ -39,10 +39,6 @@ type Config struct {
 	AppBaseURLMerchant string
 	AppBaseURLAdmin    string
 
-	// Custom URL scheme used to build the OIDC deep-link redirect for the
-	// native mobile app (Tauri). The callback redirects to "{scheme}://auth".
-	AppDeepLinkScheme string
-
 	// S3-compatible object storage (MinIO local / AWS S3 / GCS HMAC). Used by
 	// the payroll settler worker. Optional at boot — only the worker role
 	// actually requires it, so we don't validate here.
@@ -98,7 +94,6 @@ func FromEnv() (Config, error) {
 		AppBaseURLEmployee: getenv("APP_BASE_URL_EMPLOYEE", "http://app.tbite.test"),
 		AppBaseURLMerchant: getenv("APP_BASE_URL_MERCHANT", "http://merchant.tbite.test"),
 		AppBaseURLAdmin:    getenv("APP_BASE_URL_ADMIN", "http://admin.tbite.test"),
-		AppDeepLinkScheme:  getenv("APP_DEEP_LINK_SCHEME", "tbite"),
 
 		S3Endpoint:        os.Getenv("S3_ENDPOINT"),
 		S3Region:          os.Getenv("S3_REGION"),

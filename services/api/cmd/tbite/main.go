@@ -136,8 +136,6 @@ func main() {
 		// 5. Session store + OIDC state store
 		sessStore := idredis.NewSessionStore(rdb, 7*24*time.Hour)
 		stateStore := oidc.NewRedisStateStore(rdb, 5*time.Minute)
-		// One-time-use exchange codes for the mobile PKCE-style flow (B4 hardening).
-		exchangeCodeStore := idredis.NewExchangeCodeStore(rdb, 60*time.Second)
 
 		// 6. Identity service
 		svc := &identity.Service{
@@ -158,8 +156,6 @@ func main() {
 				"merchant": cfg.AppBaseURLMerchant,
 				"admin":    cfg.AppBaseURLAdmin,
 			},
-			DeepLinkScheme: cfg.AppDeepLinkScheme,
-			ExchangeCodes:  exchangeCodeStore,
 		}
 
 		// 7a-bis. Hydra OAuth bridge — only wired when HYDRA_PUBLIC_URL is
@@ -169,9 +165,9 @@ func main() {
 		// doc and the iss claim it signs into tokens line up with what
 		// clients fetch from our /.well-known/openid-configuration.
 		var (
-			hydraBridge      *hydra.Bridge
-			hydraProxy       http.Handler
-			hydraDiscovery   *hydra.DiscoveryShim
+			hydraBridge    *hydra.Bridge
+			hydraProxy     http.Handler
+			hydraDiscovery *hydra.DiscoveryShim
 		)
 		if cfg.HydraPublicURL != "" {
 			// JWT iss claim is OIDCCallbackBaseURL (our advertised host),

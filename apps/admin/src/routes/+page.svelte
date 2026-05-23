@@ -120,7 +120,35 @@
       {batch ? "本批次尚無代扣明細" : "尚未建立月結批次"}
     </p>
   {:else}
-    <div class="overflow-hidden rounded-xl border border-tb-slate-200">
+    <!-- Mobile: card list. -->
+    <div class="divide-y divide-tb-slate-100 md:hidden">
+      {#each entries.slice(0, 8) as e (e.id)}
+        <div class="py-3 first:pt-0 last:pb-0">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-jetbrains-mono text-xs text-tb-slate-700"
+              >{e.user_id.slice(0, 8)}</span
+            >
+            {#if Number(e.refunded_minor) > 0}
+              <StateTag tone="warning">部分退款</StateTag>
+            {:else}
+              <StateTag tone="success">已對帳</StateTag>
+            {/if}
+          </div>
+          <div class="mt-2 flex items-center justify-between gap-2 text-xs text-tb-slate-500">
+            <span>{(e.order_ids ?? []).length} 筆訂單</span>
+            <span class="font-jetbrains-mono">
+              {#if Number(e.refunded_minor) > 0}退款 {ntd(Number(e.refunded_minor))} ·{/if}
+              <span class="font-bold text-tb-slate-900 tabular-nums"
+                >{ntd(Number(e.amount_minor))}</span
+              >
+            </span>
+          </div>
+        </div>
+      {/each}
+    </div>
+
+    <!-- Desktop: table (unchanged). -->
+    <div class="hidden overflow-hidden rounded-xl border border-tb-slate-200 md:block">
       <table class="w-full text-sm">
         <thead
           class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
