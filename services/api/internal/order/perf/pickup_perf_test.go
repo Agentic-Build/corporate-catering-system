@@ -25,7 +25,6 @@ import (
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 	opg "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/pickup/totp"
 )
 
 func migrationsDir() string {
@@ -71,8 +70,9 @@ func setupPgWithHighConns(t *testing.T) (*pgxpool.Pool, func()) {
 }
 
 // seedReadyOrders inserts n orders for a shared (vendor, user) pair, each in
-// READY status with its own TOTP secret. Returns orderIDs, secrets, supplyDate.
-func seedReadyOrders(t *testing.T, pool *pgxpool.Pool, n int) ([]string, [][]byte, time.Time) {
+// READY status. The user is the order owner, so each can self-serve pickup.
+// Returns orderIDs, the owner userID, and supplyDate.
+func seedReadyOrders(t *testing.T, pool *pgxpool.Pool, n int) ([]string, string, time.Time) {
 	t.Helper()
 	ctx := context.Background()
 	var vendorID string
@@ -91,23 +91,19 @@ func seedReadyOrders(t *testing.T, pool *pgxpool.Pool, n int) ([]string, [][]byt
 	cutoffAt := time.Date(2026, 5, 13, 17, 0, 0, 0, time.UTC)
 
 	orderIDs := make([]string, n)
-	secrets := make([][]byte, n)
 	for i := 0; i < n; i++ {
-		secret, err := totp.NewSecret()
-		require.NoError(t, err)
 		var id string
 		require.NoError(t, pool.QueryRow(ctx, `
-INSERT INTO "order" (user_id, vendor_id, plant, supply_date, status, total_price_minor, placed_at, cutoff_at, ready_at, totp_secret)
-VALUES ($1, $2, 'F12B-3F', $3, 'ready', 100, now(), $4, now(), $5)
+INSERT INTO "order" (user_id, vendor_id, plant, supply_date, status, total_price_minor, placed_at, cutoff_at, ready_at)
+VALUES ($1, $2, 'F12B-3F', $3, 'ready', 100, now(), $4, now())
 RETURNING id`,
-			userID, vendorID, supplyDate, cutoffAt, secret).Scan(&id))
+			userID, vendorID, supplyDate, cutoffAt).Scan(&id))
 		orderIDs[i] = id
-		secrets[i] = secret
 	}
-	return orderIDs, secrets, supplyDate
+	return orderIDs, userID, supplyDate
 }
 
-func TestPickupVerify_1000RacersPercentiles(t *testing.T) {
+func TestPickup_1000RacersPercentiles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("perf test skipped under -short")
 	}
@@ -117,7 +113,7 @@ func TestPickupVerify_1000RacersPercentiles(t *testing.T) {
 	ctx := context.Background()
 
 	const N = 1000
-	orderIDs, secrets, _ := seedReadyOrders(t, pool, N)
+	orderIDs, userID, _ := seedReadyOrders(t, pool, N)
 
 	orderRepo := opg.NewOrderRepo(pool)
 	stateRepo := opg.NewStateEventRepo(pool)
@@ -133,19 +129,6 @@ func TestPickupVerify_1000RacersPercentiles(t *testing.T) {
 		Clock:    fixedClock{T: time.Now()},
 	}
 
-	// Generate codes BEFORE the goroutines start so all racers fire immediately.
-	codes := make([]string, N)
-	now := time.Now()
-	for i, s := range secrets {
-		codes[i] = totp.Generate(s, now)
-	}
-
-	var actorID string
-	require.NoError(t, pool.QueryRow(ctx,
-		`INSERT INTO "user" (primary_email, display_name, role, status)
-         VALUES ('actor-'||gen_random_uuid()||'@x.com', 'A', 'vendor_operator', 'active')
-         RETURNING id`).Scan(&actorID))
-
 	durations := make([]time.Duration, N)
 	var wg sync.WaitGroup
 	wg.Add(N)
@@ -155,10 +138,10 @@ func TestPickupVerify_1000RacersPercentiles(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			t0 := time.Now()
-			err := svc.VerifyPickup(ctx, orderIDs[i], codes[i], actorID)
+			err := svc.Pickup(ctx, orderIDs[i], userID)
 			durations[i] = time.Since(t0)
 			if err != nil {
-				t.Errorf("verify pickup [%d] failed: %v", i, err)
+				t.Errorf("pickup [%d] failed: %v", i, err)
 			}
 		}()
 	}
@@ -182,15 +165,11 @@ func TestPickupVerify_1000RacersPercentiles(t *testing.T) {
 	t.Logf("PERF: N=%d total=%v throughput=%.0f/s p50=%v p95=%v p99=%v max=%v",
 		N, total, float64(N)/total.Seconds(), p50, p95, p99, maxD)
 
-	// Design SLO (§9.2) is p95 < 100ms for a SINGLE VerifyPickup. This perf
-	// gate fires 1000 simultaneously — under that synthetic stress the per-op
-	// numbers are dominated by pool/Postgres queue contention rather than
-	// service time. On a 2024-era Mac (Docker Desktop, max_connections=300,
-	// pool MaxConns=250) we measured roughly:
-	//   p50 ≈ 930ms, p95 ≈ 1.25s, p99 ≈ 1.45s, throughput ≈ 324 ops/s
-	// implying ~3ms of actual service time per op once the queue drains —
-	// well under the 100ms design SLO at realistic concurrency. The thresholds
-	// below are regression guards for the saturated case, not the design SLO.
+	// Design SLO (§9.2) is p95 < 100ms for a SINGLE Pickup. This perf gate fires
+	// 1000 simultaneously — under that synthetic stress the per-op numbers are
+	// dominated by pool/Postgres queue contention rather than service time.
+	// The thresholds below are regression guards for the saturated case, not the
+	// design SLO.
 	require.Less(t, p50.Milliseconds(), int64(2000), "p50 regressed beyond 2s (got %v)", p50)
 	require.Less(t, p95.Milliseconds(), int64(3000), "p95 regressed beyond 3s (got %v)", p95)
 	require.Less(t, p99.Milliseconds(), int64(5000), "p99 regressed beyond 5s (got %v)", p99)

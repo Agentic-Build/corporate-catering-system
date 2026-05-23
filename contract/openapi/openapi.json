@@ -2675,36 +2675,6 @@
         ],
         "type": "object"
       },
-      "PickupCodeOutputBody": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/PickupCodeOutputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "code": {
-            "type": "string"
-          },
-          "expires_in_seconds": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "order_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "order_id",
-          "code",
-          "expires_in_seconds"
-        ],
-        "type": "object"
-      },
       "PlaceOrderInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -4085,29 +4055,6 @@
         "required": [
           "cutoff_hour",
           "preorder_window_days"
-        ],
-        "type": "object"
-      },
-      "VerifyPickupInputBody": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/VerifyPickupInputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "code": {
-            "maxLength": 6,
-            "minLength": 6,
-            "type": "string"
-          }
-        },
-        "required": [
-          "code"
         ],
         "type": "object"
       },
@@ -6817,9 +6764,9 @@
         ]
       }
     },
-    "/api/employee/orders/{id}/pickup-code": {
-      "get": {
-        "operationId": "getPickupCode",
+    "/api/employee/orders/{id}/pickup": {
+      "post": {
+        "operationId": "pickupOrder",
         "parameters": [
           {
             "in": "path",
@@ -6832,15 +6779,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PickupCodeOutputBody"
-                }
-              }
-            },
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -6858,7 +6798,7 @@
             "bearer": []
           }
         ],
-        "summary": "Get current TOTP pickup code for an order (owner, ready only)",
+        "summary": "Self-service pickup: scan the meal QR to mark your order picked up",
         "tags": [
           "employee",
           "order"
@@ -7860,57 +7800,6 @@
           }
         ],
         "summary": "Mark one or more orders as ready for pickup",
-        "tags": [
-          "merchant",
-          "order"
-        ]
-      }
-    },
-    "/api/merchant/orders/{id}/verify-pickup": {
-      "post": {
-        "operationId": "verifyPickup",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/VerifyPickupInputBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                }
-              }
-            },
-            "description": "Error"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Verify TOTP code and mark order picked up",
         "tags": [
           "merchant",
           "order"

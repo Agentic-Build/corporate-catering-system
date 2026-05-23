@@ -727,17 +727,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/employee/orders/{id}/pickup-code": {
+    "/api/employee/orders/{id}/pickup": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get current TOTP pickup code for an order (owner, ready only) */
-        get: operations["getPickupCode"];
+        get?: never;
         put?: never;
-        post?: never;
+        /** Self-service pickup: scan the meal QR to mark your order picked up */
+        post: operations["pickupOrder"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1029,23 +1029,6 @@ export interface paths {
         get: operations["listMerchantOrders"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/merchant/orders/{id}/verify-pickup": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Verify TOTP code and mark order picked up */
-        post: operations["verifyPickup"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2220,18 +2203,6 @@ export interface components {
             total_price_minor: number;
             vendor_id: string;
         };
-        PickupCodeOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/PickupCodeOutputBody.json
-             */
-            readonly $schema?: string;
-            code: string;
-            /** Format: int64 */
-            expires_in_seconds: number;
-            order_id: string;
-        };
         PlaceOrderInputBody: {
             /**
              * Format: uri
@@ -2694,15 +2665,6 @@ export interface components {
             cutoff_hour: number;
             /** Format: int64 */
             preorder_window_days: number;
-        };
-        VerifyPickupInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/VerifyPickupInputBody.json
-             */
-            readonly $schema?: string;
-            code: string;
         };
         WarningDTO: {
             kind: string;
@@ -4366,7 +4328,7 @@ export interface operations {
             };
         };
     };
-    getPickupCode: {
+    pickupOrder: {
         parameters: {
             query?: never;
             header?: never;
@@ -4377,14 +4339,12 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
-            200: {
+            /** @description No Content */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["PickupCodeOutputBody"];
-                };
+                content?: never;
             };
             /** @description Error */
             default: {
@@ -4991,39 +4951,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ListMerchantOrdersOutputBody"];
                 };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    verifyPickup: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VerifyPickupInputBody"];
-            };
-        };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Error */
             default: {

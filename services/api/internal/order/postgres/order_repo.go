@@ -44,13 +44,16 @@ func (r *OrderRepo) CreateTx(ctx context.Context, tx pgx.Tx, o *order.Order) err
 	if tx == nil {
 		return errors.New("OrderRepo.CreateTx requires a tx")
 	}
+	// totp_secret is intentionally omitted: the TOTP pickup mechanism was
+	// removed (employees now self-serve via QR scan). The column is retained
+	// but disabled — its NOT NULL DEFAULT fills the unused value.
 	err := tx.QueryRow(ctx, `
 INSERT INTO "order"
-  (user_id, vendor_id, plant, supply_date, status, total_price_minor, notes, placed_at, cutoff_at, totp_secret)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+  (user_id, vendor_id, plant, supply_date, status, total_price_minor, notes, placed_at, cutoff_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 RETURNING id, created_at, updated_at`,
 		o.UserID, o.VendorID, o.Plant, o.SupplyDate, string(o.Status),
-		o.TotalPriceMinor, o.Notes, o.PlacedAt, o.CutoffAt, o.TOTPSecret,
+		o.TotalPriceMinor, o.Notes, o.PlacedAt, o.CutoffAt,
 	).Scan(&o.ID, &o.CreatedAt, &o.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert order: %w", err)
