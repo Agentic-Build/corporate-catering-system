@@ -7,7 +7,7 @@ Deploys the full T-Bite stack (Postgres, Redis, NATS, MinIO, API, three web apps
 - A reachable Kubernetes cluster (`kubectl cluster-info` succeeds)
 - `kubectl` configured against that cluster
 - `kustomize` (bundled with recent `kubectl`)
-- Container images for `tbite/api`, `tbite/web-employee`, `tbite/web-merchant`, `tbite/web-admin` available to the cluster (build via `ci-build-images.yml` or `docker buildx`)
+- Container images for `tbite/api`, `tbite/web-employee`, `tbite/web-merchant`, `tbite/web-admin` available to the cluster (build via `cd-publish-images.yml` or `docker buildx`)
 
 ## Deploy
 
@@ -51,3 +51,7 @@ make prod-down env=single-node
 ```
 
 Removes every resource the overlay declares. `emptyDir` volumes vanish with the pods.
+
+## GitOps (ArgoCD)
+
+To deploy this overlay continuously via ArgoCD + GHCR images instead of `make prod-up`, see [argocd.md](./argocd.md).

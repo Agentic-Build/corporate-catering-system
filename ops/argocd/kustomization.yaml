@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Bootstrap the T-Bite CD root: the AppProject + the single-node Application.
+# Apply against a cluster that already has ArgoCD installed in `argocd`:
+#   kubectl apply -k ops/argocd/
+#
+# The optional GHCR pull Secret template is intentionally NOT listed here
+# (it carries a placeholder token). See ghcr-pull-secret.example.yaml and
+# docs/deployment/argocd.md for when/how to apply it.
+namespace: argocd
+
+resources:
+  - project.yaml
+  - application-single-node.yaml
