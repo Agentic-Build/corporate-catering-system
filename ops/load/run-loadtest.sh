@@ -21,7 +21,7 @@ trap cleanup EXIT
 
 if [ "${PRE_RUNNING:-0}" != "1" ]; then
   echo "starting containers..."
-  docker run -d --name "${CONTAINER_PREFIX}-pg" -e POSTGRES_USER=tbite -e POSTGRES_PASSWORD=tbite -e POSTGRES_DB=tbite -p 55432:5432 postgres:16-alpine
+  docker run -d --name "${CONTAINER_PREFIX}-pg" -e POSTGRES_USER=tbite -e POSTGRES_PASSWORD=tbite -e POSTGRES_DB=tbite -p 55432:5432 postgres:18-alpine
   docker run -d --name "${CONTAINER_PREFIX}-rd" -p 56379:6379 redis:7-alpine
   docker run -d --name "${CONTAINER_PREFIX}-nats" -p 54222:4222 nats:2.10-alpine -js
   sleep 5
