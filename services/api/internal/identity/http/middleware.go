@@ -16,6 +16,14 @@ const (
 	tokenCtxKey
 )
 
+// JWTVerifier is the small surface AuthMiddleware needs from the Hydra
+// access-token verifier so we don't import a hydra package here and create
+// a cycle. The hydra package wires the concrete implementation; tests
+// substitute a stub.
+type JWTVerifier interface {
+	Verify(ctx context.Context, raw string) (subject string, err error)
+}
+
 func UserFromContext(ctx context.Context) (*identity.User, bool) {
 	u, ok := ctx.Value(userCtxKey).(*identity.User)
 	return u, ok
@@ -34,26 +42,67 @@ func TokenFromContext(ctx context.Context) (string, bool) {
 	return t, ok
 }
 
+// AuthMiddleware authenticates the caller by Bearer token. It tries two
+// token shapes in order:
+//
+//  1. T-Bite session token (the `tb_…` value the SvelteKit frontends use,
+//     and the historical MCP credential). Looked up in Redis.
+//  2. Hydra-issued JWT access token (`eyJ…`), validated against Hydra's
+//     JWKS. Subject claim is the T-Bite user ID.
+//
+// JWT validation is skipped when API.JWT is nil — the api role wires it,
+// the mcp-stdio role doesn't.
+//
+// On either successful lookup the user is loaded and attached to ctx;
+// failures fall through to anonymous handling (matching the historical
+// behaviour for invalid session tokens).
 func (a *API) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := r.Header.Get("Authorization")
-		if h == "" || !strings.HasPrefix(h, "Bearer ") {
+		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || tok == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
-		tok := strings.TrimPrefix(h, "Bearer ")
+
+		// 1. Session-token path (legacy + web).
 		sess, err := a.Sessions.Get(r.Context(), tok)
-		if err != nil {
-			if errors.Is(err, identity.ErrSessionNotFound) {
-				next.ServeHTTP(w, r)
+		switch {
+		case err == nil:
+			u, lookupErr := a.Users.GetByID(r.Context(), sess.UserID)
+			if lookupErr != nil {
+				http.Error(w, "user lookup", http.StatusInternalServerError)
 				return
 			}
+			if u.Status != identity.StatusActive {
+				http.Error(w, "account suspended", http.StatusLocked)
+				return
+			}
+			ctx := context.WithValue(r.Context(), userCtxKey, u)
+			ctx = context.WithValue(ctx, tokenCtxKey, tok)
+			_ = a.Sessions.Touch(ctx, tok)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		case errors.Is(err, identity.ErrSessionNotFound):
+			// fallthrough to JWT path
+		default:
 			http.Error(w, "auth error", http.StatusInternalServerError)
 			return
 		}
-		u, err := a.Users.GetByID(r.Context(), sess.UserID)
+
+		// 2. Hydra JWT path. Only attempted when the api role wired a
+		// verifier; mcp-stdio and tests skip this branch.
+		if a.JWT == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		subject, err := a.JWT.Verify(r.Context(), tok)
 		if err != nil {
-			http.Error(w, "user lookup", http.StatusInternalServerError)
+			next.ServeHTTP(w, r)
+			return
+		}
+		u, err := a.Users.GetByID(r.Context(), subject)
+		if err != nil {
+			next.ServeHTTP(w, r)
 			return
 		}
 		if u.Status != identity.StatusActive {
@@ -62,7 +111,6 @@ func (a *API) AuthMiddleware(next http.Handler) http.Handler {
 		}
 		ctx := context.WithValue(r.Context(), userCtxKey, u)
 		ctx = context.WithValue(ctx, tokenCtxKey, tok)
-		_ = a.Sessions.Touch(ctx, tok)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

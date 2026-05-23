@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -32,6 +34,7 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idauthentik "github.com/takalawang/corporate-catering-system/services/api/internal/identity/authentik"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/hydra"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
 	pgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/identity/postgres"
 	idredis "github.com/takalawang/corporate-catering-system/services/api/internal/identity/redis"
@@ -157,6 +160,79 @@ func main() {
 			},
 			DeepLinkScheme: cfg.AppDeepLinkScheme,
 			ExchangeCodes:  exchangeCodeStore,
+		}
+
+		// 7a-bis. Hydra OAuth bridge — only wired when HYDRA_PUBLIC_URL is
+		// set. We reverse-proxy Hydra's OAuth surface under our own host
+		// so MCP clients see a single issuer and CORS-clean origin. Hydra
+		// is configured with URLS_SELF_ISSUER=our_host so its discovery
+		// doc and the iss claim it signs into tokens line up with what
+		// clients fetch from our /.well-known/openid-configuration.
+		var (
+			hydraBridge      *hydra.Bridge
+			hydraProxy       http.Handler
+			hydraDiscovery   *hydra.DiscoveryShim
+		)
+		if cfg.HydraPublicURL != "" {
+			// JWT iss claim is OIDCCallbackBaseURL (our advertised host),
+			// but the verifier needs a reachable URL to fetch the
+			// discovery doc at boot — that's the Hydra container's
+			// directly-reachable URL.
+			publicIssuer := strings.TrimRight(cfg.OIDCCallbackBaseURL, "/") + "/"
+			tokVerifier, err := hydra.NewAccessTokenVerifier(ctx, cfg.HydraPublicURL, publicIssuer)
+			if err != nil {
+				logger.Error("hydra access token verifier", "err", err)
+				os.Exit(1)
+			}
+			api.JWT = hydra.SubjectVerifier{V: tokVerifier}
+			// Build a dedicated OIDC client for the MCP bridge with its own
+			// redirect_uri (/oauth/callback). The web-frontend OIDC client
+			// uses /auth/{slug}/callback; both clients are the same logical
+			// Authentik application but they need separate redirect URI
+			// registrations.
+			var bridgeOIDC *oidc.OIDCProvider
+			var bridgeOIDCSlug string
+			if len(cfg.AuthProviders) > 0 {
+				p := cfg.AuthProviders[0]
+				bp, err := oidc.New(ctx, oidc.Config{
+					Slug:         p.Slug,
+					DisplayName:  p.DisplayName,
+					IssuerURL:    p.IssuerURL,
+					ClientID:     p.ClientID,
+					ClientSecret: p.ClientSecret,
+					RedirectURL:  strings.TrimRight(cfg.OIDCCallbackBaseURL, "/") + "/oauth/callback",
+					Scopes:       p.Scopes,
+				})
+				if err != nil {
+					logger.Error("mcp oidc provider", "err", err)
+					os.Exit(1)
+				}
+				bridgeOIDC = bp
+				bridgeOIDCSlug = p.Slug
+			}
+			hydraBridge = &hydra.Bridge{
+				Hydra:            hydra.NewAdminClient(cfg.HydraAdminURL),
+				Sessions:         sessStore,
+				Users:            userRepo,
+				Identities:       idRepo,
+				OIDCProvider:     bridgeOIDC,
+				OIDCProviderName: bridgeOIDCSlug,
+				States:           stateStore,
+				PublicBaseURL:    cfg.OIDCCallbackBaseURL,
+			}
+			hydraDiscovery = hydra.NewDiscoveryShim(cfg.HydraPublicURL)
+			hydraDiscovery.PublicBaseURL = strings.TrimRight(cfg.OIDCCallbackBaseURL, "/")
+			proxy, err := hydra.ReverseProxy(cfg.HydraPublicURL)
+			if err != nil {
+				logger.Error("hydra reverse proxy", "err", err)
+				os.Exit(1)
+			}
+			hydraProxy = proxy
+			logger.Info("hydra bridge wired",
+				"public_url", cfg.HydraPublicURL,
+				"admin_url", cfg.HydraAdminURL,
+				"issuer", publicIssuer,
+			)
 		}
 
 		// 7b. Vendor service + admin handlers
@@ -389,6 +465,7 @@ func main() {
 			Audit:      auditRepo,
 			Order:      orderService,
 			Vendor:     vendorService,
+			Menu:       menuService,
 			Payroll:    payrollService,
 			Compliance: complianceService,
 			Feedback:   feedbackService,
@@ -397,10 +474,61 @@ func main() {
 			Sessions:   sessStore,
 		})
 
+		// MCP OAuth metadata. When the Hydra sidecar is wired, advertise
+		// OUR host as the authorization server: Hydra is configured with
+		// URLS_SELF_ISSUER pointing at us, and the /.well-known/openid-
+		// configuration discovery + DCR + /oauth2/* endpoints are reverse-
+		// proxied at our host — so the JWT iss claim, discovery doc, and
+		// PRM all line up on one origin. This is what makes Claude.ai /
+		// ChatGPT's strict OAuth client trust Hydra-issued tokens via DCR.
+		// When Hydra isn't wired, fall back to Authentik's issuer (bearer-
+		// paste only, no DCR).
+		var mcpAuthServers []string
+		if cfg.HydraPublicURL != "" {
+			mcpAuthServers = []string{strings.TrimRight(cfg.OIDCCallbackBaseURL, "/") + "/"}
+		} else {
+			mcpAuthServers = make([]string, 0, len(cfg.AuthProviders))
+			for _, p := range cfg.AuthProviders {
+				mcpAuthServers = append(mcpAuthServers, p.IssuerURL)
+			}
+		}
+		mcpOpts := httpserver.MCPOpts{
+			PublicBaseURL:        cfg.OIDCCallbackBaseURL,
+			AuthorizationServers: mcpAuthServers,
+		}
+
 		srv := httpserver.New(cfg.HTTPAddr, logger, api, func(r chi.Router) {
 			// Public image streaming for merchant-uploaded menu images.
 			r.Get("/uploads/*", menuAPI.ServeUpload)
-		}, mcpSrv,
+			// Hydra OAuth bridge — only mounted when the sidecar is wired.
+			// These endpoints are anonymous: they're the URLs Hydra
+			// redirects the user's browser to during the login/consent
+			// dance, before any session exists.
+			if hydraBridge != nil {
+				r.Get("/oauth/login", hydraBridge.LoginHandler)
+				r.Get("/oauth/callback", hydraBridge.CallbackHandler)
+				r.Get("/oauth/consent", hydraBridge.ConsentHandler)
+				// Discovery shim — wraps Hydra's /.well-known/openid-
+				// configuration and injects registration_endpoint
+				// (Hydra v2.2-2.3 omits it from the published doc).
+				r.Get("/.well-known/openid-configuration", hydraDiscovery.ServeHTTP)
+				r.Get("/.well-known/oauth-authorization-server", hydraDiscovery.ServeHTTP)
+				// DCR (RFC 7591) — sanitizing proxy strips empty-string
+				// optional URI fields from Hydra's response. Strict OAuth
+				// clients (Claude Code, Claude.ai web, ChatGPT) reject
+				// empty policy_uri/tos_uri/etc and would otherwise mark
+				// the connection as failed during the registration step.
+				dcrProxy := &hydra.SanitizingDCRProxy{HydraURL: cfg.HydraPublicURL}
+				r.Handle("/oauth2/register", dcrProxy)
+				r.Handle("/oauth2/register/*", dcrProxy)
+				// Reverse proxy — Hydra's OAuth surface served under our
+				// own host so URLs in the discovery doc and the iss
+				// claim in JWTs line up.
+				r.Handle("/oauth2/*", hydraProxy)
+				r.Get("/.well-known/jwks.json", hydraProxy.ServeHTTP)
+				r.Get("/userinfo", hydraProxy.ServeHTTP)
+			}
+		}, mcpSrv, mcpOpts,
 			vendorAPI.Register,
 			menuAPI.Register,
 			quotaAPI.Register,
@@ -703,6 +831,11 @@ func main() {
 			Users:       userRepo,
 			Sessions:    sessStore,
 		}
+		menuService := &menu.Service{
+			Categories: mpgrepo.NewCategoryRepo(pool),
+			Items:      itemRepo,
+			Images:     mpgrepo.NewImageRepo(pool),
+		}
 		payrollService := &payroll.Service{
 			Pool:     pool,
 			Batches:  payrollpgrepo.NewBatchRepo(pool),
@@ -746,6 +879,7 @@ func main() {
 			Audit:      auditRepo,
 			Order:      orderService,
 			Vendor:     vendorService,
+			Menu:       menuService,
 			Payroll:    payrollService,
 			Compliance: complianceService,
 			Feedback:   feedbackService,
