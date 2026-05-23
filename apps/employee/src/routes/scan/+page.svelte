@@ -1,8 +1,7 @@
 <script lang="ts">
-  // 掃描核銷 — employee self-service pickup. Browser camera scans the meal
-  // sticker QR (html5-qrcode, dynamically imported to avoid SSR); the parsed
-  // order id is posted to the `scan` action. A manual order-number fallback
-  // (?/manual) covers desktops / denied camera permission.
+  // Self-service pickup. The camera scan posts the order id to the `scan`
+  // action; the `manual` order-number fallback covers desktops / denied camera
+  // permission. html5-qrcode is imported client-side (avoids SSR).
   import { PageHeader, Card, Button, Icon } from "@tbite/ui";
   import { enhance } from "$app/forms";
   import { onMount, onDestroy } from "svelte";
@@ -83,7 +82,9 @@
   {#if form?.ok}
     <Card tone="success">
       <div class="flex items-center gap-3">
-        <span class="grid h-10 w-10 flex-shrink-0 place-items-center rounded-full bg-tb-emerald-100">
+        <span
+          class="grid h-10 w-10 flex-shrink-0 place-items-center rounded-full bg-tb-emerald-100"
+        >
           <Icon name="check" class="h-5 w-5 text-tb-emerald-700" />
         </span>
         <div>
@@ -125,7 +126,12 @@
       </Card>
 
       <Card title="手動輸入訂單編號" description="無法掃描時，輸入貼紙上的訂單編號（前 8 碼）。">
-        <form method="POST" action="?/manual" class="flex flex-col gap-3 sm:flex-row sm:items-end" use:enhance>
+        <form
+          method="POST"
+          action="?/manual"
+          class="flex flex-col gap-3 sm:flex-row sm:items-end"
+          use:enhance
+        >
           <label class="flex flex-1 flex-col gap-1.5 text-sm">
             <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
               訂單編號
@@ -154,12 +160,18 @@
   {/if}
 
   <!-- Hidden form: scanned full order id → `scan` action. -->
-  <form bind:this={scanForm} method="POST" action="?/scan" class="hidden" use:enhance={() => {
-    return async ({ update }) => {
-      await update();
-      submitting = false;
-    };
-  }}>
+  <form
+    bind:this={scanForm}
+    method="POST"
+    action="?/scan"
+    class="hidden"
+    use:enhance={() => {
+      return async ({ update }) => {
+        await update();
+        submitting = false;
+      };
+    }}
+  >
     <input type="hidden" name="orderId" value={scannedId} />
   </form>
 </div>

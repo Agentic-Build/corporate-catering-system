@@ -1,11 +1,8 @@
 <script lang="ts">
-  // ScanScreen — self-service pickup. Opens the device camera (html5-qrcode),
-  // scans the meal-sticker QR, parses the order id with `parsePickupQR`, then
-  // POSTs to /api/employee/orders/{id}/pickup. The backend verifies the order
-  // belongs to the logged-in employee, so scanning someone else's sticker is
-  // rejected. On success/failure we show a result card and let the user scan
-  // again. html5-qrcode is loaded client-side in onMount (it touches the DOM /
-  // getUserMedia and must not run during SSR or in the Tauri webview prerender).
+  // Self-service pickup. The backend verifies the order belongs to the
+  // logged-in employee, so scanning someone else's sticker is rejected.
+  // html5-qrcode is imported client-side in onMount (touches getUserMedia —
+  // must not run during SSR / Tauri prerender).
   import { onDestroy, onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { pickupOrder } from "$lib/api";
@@ -62,7 +59,7 @@
   async function onScan(decodedText: string) {
     if (busy) return;
     const parsed = parsePickupQR(decodedText);
-    if (!parsed) return; // not our QR — keep scanning
+    if (!parsed) return;
     busy = true;
     lastOrderId = parsed.orderId;
     await stopScanner();
@@ -125,7 +122,9 @@
       </div>
     {:else if phase === "redeeming"}
       <div class="flex flex-col items-center gap-3">
-        <div class="h-12 w-12 animate-spin rounded-full border-4 border-white/20 border-t-white"></div>
+        <div
+          class="h-12 w-12 animate-spin rounded-full border-4 border-white/20 border-t-white"
+        ></div>
         <p class="text-sm text-tb-slate-300">核銷中…</p>
       </div>
     {:else if phase === "success"}

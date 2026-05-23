@@ -27,7 +27,8 @@ export const actions: Actions = {
 
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const err = await pickup(client, id);
-    if (err) return fail(400, { error: "核銷失敗，請確認這是您本人的餐點且尚未領取。", orderId: id });
+    if (err)
+      return fail(400, { error: "核銷失敗，請確認這是您本人的餐點且尚未領取。", orderId: id });
     return { ok: true, pickedUpId: id };
   },
 
@@ -57,7 +58,10 @@ export const actions: Actions = {
       return fail(404, { error: "找不到符合的待領訂單，請確認編號或改用相機掃描。", manual: true });
     }
     if (matches.length > 1) {
-      return fail(400, { error: "有多筆訂單符合此編號，請輸入完整訂單編號或改用相機掃描。", manual: true });
+      return fail(400, {
+        error: "有多筆訂單符合此編號，請輸入完整訂單編號或改用相機掃描。",
+        manual: true,
+      });
     }
 
     const err = await pickup(client, matches[0].id);
