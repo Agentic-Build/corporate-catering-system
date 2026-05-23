@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: tbite
+  namespace: argocd
+  # Finalizer ensures the project's child Applications are cleaned up first.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: T-Bite corporate catering platform
+
+  # Only this repo may be used as an Application source.
+  sourceRepos:
+    - https://github.com/Agentic-Build/corporate-catering-system.git
+
+  # Deploy only into the in-cluster `tbite` namespace.
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: tbite
+
+  # Namespaced resources the apps need (apps, deployments, services,
+  # ingress, configmaps, secrets, HPAs, PDBs, networkpolicies, SAs, ...).
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+
+  # Cluster-scoped resources the single-node overlay renders:
+  #   - Namespace (also created by CreateNamespace=true)
+  #   - IngressClass (shipped by the overlay's nginx-ingress)
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: networking.k8s.io
+      kind: IngressClass

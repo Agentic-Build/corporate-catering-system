@@ -1,0 +1,80 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tbite-single-node
+  namespace: argocd
+  annotations:
+    # --- ArgoCD Image Updater -------------------------------------------------
+    # Track the four GHCR images. Each alias maps to a logical name used below.
+    argocd-image-updater.argoproj.io/image-list: >-
+      api=ghcr.io/agentic-build/tbite-api,
+      web-employee=ghcr.io/agentic-build/tbite-web-employee,
+      web-merchant=ghcr.io/agentic-build/tbite-web-merchant,
+      web-admin=ghcr.io/agentic-build/tbite-web-admin
+
+    # Follow the immutable `sha-<short-sha>` tags published by
+    # cd-publish-images.yml. `latest` is mutable and unsuitable for an
+    # update strategy, so we sort newest-build wins on the sha- prefix.
+    argocd-image-updater.argoproj.io/api.update-strategy: newest-build
+    argocd-image-updater.argoproj.io/api.allow-tags: regexp:^sha-[0-9a-f]+$
+    argocd-image-updater.argoproj.io/web-employee.update-strategy: newest-build
+    argocd-image-updater.argoproj.io/web-employee.allow-tags: regexp:^sha-[0-9a-f]+$
+    argocd-image-updater.argoproj.io/web-merchant.update-strategy: newest-build
+    argocd-image-updater.argoproj.io/web-merchant.allow-tags: regexp:^sha-[0-9a-f]+$
+    argocd-image-updater.argoproj.io/web-admin.update-strategy: newest-build
+    argocd-image-updater.argoproj.io/web-admin.allow-tags: regexp:^sha-[0-9a-f]+$
+
+    # Map each alias onto the base image name kustomize knows about, so the
+    # Image Updater rewrites the right `kustomize.images` entry.
+    argocd-image-updater.argoproj.io/api.kustomize.image-name: tbite/api
+    argocd-image-updater.argoproj.io/web-employee.kustomize.image-name: tbite/web-employee
+    argocd-image-updater.argoproj.io/web-merchant.kustomize.image-name: tbite/web-merchant
+    argocd-image-updater.argoproj.io/web-admin.kustomize.image-name: tbite/web-admin
+
+    # Write the new tags back into Git (this Application's kustomize.images)
+    # rather than mutating live cluster state, so the repo stays the source
+    # of truth and selfHeal does not fight the updater. The write-back target
+    # is the kustomization at source.path (its `images:` get the new tags).
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/write-back-target: kustomization
+    argocd-image-updater.argoproj.io/git-branch: main
+    # Git credentials are environment-specific: create a Secret with repo
+    # write access and reference it here, e.g.
+    #   argocd-image-updater.argoproj.io/git-credentials: argocd/git-creds
+    # See docs/deployment/argocd.md "Git write-back 認證".
+spec:
+  project: tbite
+  source:
+    repoURL: https://github.com/Agentic-Build/corporate-catering-system.git
+    targetRevision: main
+    path: ops/kubernetes/overlays/single-node
+    kustomize:
+      # Repoint the four app images at GHCR WITHOUT editing the overlay,
+      # so `make dev` keeps its local `:dev` semantics. `tbite/api` also
+      # backs the scheduler + worker Deployments, so this covers all of them.
+      # The Image Updater rewrites the tags here on each new build.
+      images:
+        - tbite/api=ghcr.io/agentic-build/tbite-api:latest
+        - tbite/web-employee=ghcr.io/agentic-build/tbite-web-employee:latest
+        - tbite/web-merchant=ghcr.io/agentic-build/tbite-web-merchant:latest
+        - tbite/web-admin=ghcr.io/agentic-build/tbite-web-admin:latest
+      # Force a re-pull of the mutable `:latest` tag on every sync. Once the
+      # Image Updater pins immutable `sha-*` tags this becomes a no-op, but it
+      # keeps the very first bootstrap (before any updater run) honest.
+      patches:
+        - target:
+            kind: Deployment
+          patch: |-
+            - op: replace
+              path: /spec/template/spec/containers/0/imagePullPolicy
+              value: Always
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tbite
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
