@@ -24,12 +24,6 @@ export interface CurrentPayroll {
   lines: PayrollLine[];
 }
 
-export interface PickupCode {
-  code: string;
-  order_id: string;
-  expires_in_seconds: number;
-}
-
 /** A vendor card aggregated client-side from the day's flat menu list. */
 export interface VendorGroup {
   vendor_id: string;
@@ -112,14 +106,15 @@ export async function placeOrder(input: PlaceOrderInput): Promise<string> {
   return id;
 }
 
-// ── Pickup code (TOTP) ──────────────────────────────────────────────────
+// ── Pickup (self-service QR scan) ─────────────────────────────────────────
 
-export async function getPickupCode(orderId: string): Promise<PickupCode> {
-  const res = await client().GET("/api/employee/orders/{id}/pickup-code", {
+/** Mark the order picked up by scanning its meal sticker QR. The backend
+ *  verifies the order belongs to the logged-in employee. */
+export async function pickupOrder(orderId: string): Promise<void> {
+  const res = await client().POST("/api/employee/orders/{id}/pickup", {
     params: { path: { id: orderId } },
   });
   if (res.error) throw new Error(problem(res.error));
-  return res.data;
 }
 
 // ── Payroll ─────────────────────────────────────────────────────────────

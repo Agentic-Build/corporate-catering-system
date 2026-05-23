@@ -32,7 +32,7 @@
   const path = $derived($page.url.pathname);
   const isLogin = $derived(path === "/login");
   const isImmersive = $derived(
-    isLogin || path === "/totp" || path.startsWith("/vendor/"),
+    isLogin || path === "/scan" || path.startsWith("/vendor/"),
   );
 
   // Auth gate — runs once the session store has hydrated.

@@ -1,6 +1,6 @@
 // Static sample data for screens whose endpoints are not wired in this
 // scaffold (notifications, the 7-day strip, category pills, profile rows).
-// Real-data screens (home/orders/payroll/totp) fetch from `api.ts`.
+// Real-data screens (home/orders/payroll/scan) fetch from `api.ts`.
 
 export type PlateColor = "warm" | "green" | "cool" | "rose" | "stone";
 
