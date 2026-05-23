@@ -1,7 +1,7 @@
 <script lang="ts">
   // Employee app shell — ported from EmployeeView.jsx without the role
   // switcher: sticky header (top-0), 240px sidebar + main body, with the
-  // 領餐碼 modal and cart drawer mounted globally.
+  // cart drawer mounted globally.
   import "../app.css";
   import { TBiteLogo, LocationBar, SearchInput, Button, Icon } from "@tbite/ui";
   import { goto } from "$app/navigation";

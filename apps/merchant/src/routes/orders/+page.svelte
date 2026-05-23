@@ -52,12 +52,16 @@
   let markReadyForm = $state<HTMLFormElement>();
   let scannedID = $state("");
   let scanner: import("html5-qrcode").Html5Qrcode | null = null;
+  // Guards against html5-qrcode's decode callback firing again before
+  // stopScan() resolves, which would submit mark-ready twice.
+  let scanBusy = false;
 
   const SCAN_REGION_ID = "serve-scan-region";
 
   async function startScan() {
     scanError = "";
     scannedID = "";
+    scanBusy = false;
     const { Html5Qrcode } = await import("html5-qrcode");
     scanner = new Html5Qrcode(SCAN_REGION_ID);
     try {
@@ -84,13 +88,14 @@
   }
 
   function onDecoded(text: string) {
+    if (scanBusy) return;
     const parsed = parsePickupQR(text);
     if (!parsed) {
       scanError = "無法辨識的 QR，請掃描餐點貼紙。";
       return;
     }
+    scanBusy = true;
     scannedID = parsed.orderId;
-    // Hand off to the existing markReady action (single order).
     stopScan().then(() => {
       scanOpen = false;
       markReadyForm?.requestSubmit();

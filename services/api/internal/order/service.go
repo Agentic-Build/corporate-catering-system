@@ -269,9 +269,9 @@ type ModifyOrderInput struct {
 // The new item set fully supersedes the old one. Quota is adjusted by the
 // per-menu-item delta (desired qty minus currently-held qty) inside a single
 // transaction, so a failure at any step (including ErrOutOfStock) rolls back
-// without leaking quota. The order keeps its ID, TOTP secret, and status —
-// only items + total change — so no state event is written, only an audit
-// row and an order.modified.v1 outbox entry.
+// without leaking quota. The order keeps its ID and status — only items +
+// total change — so no state event is written, only an audit row and an
+// order.modified.v1 outbox entry.
 func (s *Service) Modify(ctx context.Context, in ModifyOrderInput) (*Order, error) {
 	if len(in.Items) == 0 {
 		return nil, ErrEmptyOrder
