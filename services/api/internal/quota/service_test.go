@@ -226,13 +226,13 @@ func TestService_SetCapacity_LowerCapacity_ClampsRemainDown(t *testing.T) {
 	_, err = sr.Decrement(ctx, "item-1", d, 30)
 	require.NoError(t, err)
 
-	// Now drop capacity to 50: remain must clamp down to 50.
+	// Now drop capacity to 50: sold=30, so remain = 50-30 = 20.
 	got, err := svc.SetCapacity(ctx, "v-owner", quota.SetCapacityInput{
 		MenuItemID: "item-1", Date: d, Capacity: 50,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 50, got.Capacity)
-	assert.Equal(t, 50, got.Remain)
+	assert.Equal(t, 20, got.Remain)
 }
 
 func TestService_SetCapacity_HigherCapacity_RemainStays(t *testing.T) {
@@ -250,13 +250,13 @@ func TestService_SetCapacity_HigherCapacity_RemainStays(t *testing.T) {
 	_, err = sr.Decrement(ctx, "item-1", d, 40)
 	require.NoError(t, err)
 
-	// Raise capacity to 200: remain must NOT bounce back up — stays at 60.
+	// Raise capacity to 200: sold=40, so remain = 200-40 = 160.
 	got, err := svc.SetCapacity(ctx, "v-owner", quota.SetCapacityInput{
 		MenuItemID: "item-1", Date: d, Capacity: 200,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 200, got.Capacity)
-	assert.Equal(t, 60, got.Remain)
+	assert.Equal(t, 160, got.Remain)
 }
 
 func TestService_GetForItem_WrongVendor_Forbidden(t *testing.T) {
