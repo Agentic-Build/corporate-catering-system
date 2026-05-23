@@ -38,11 +38,14 @@
   {/snippet}
 </PageHeader>
 
-<div class="flex flex-wrap items-center gap-1 rounded-full bg-tb-slate-100 p-1">
+<div
+  class="no-scrollbar flex items-center gap-1 overflow-x-auto rounded-full bg-tb-slate-100 p-1 md:flex-wrap"
+>
   {#each filters as f}
     <a
       href={f.id ? `?status=${f.id}` : "?"}
-      class="rounded-full px-3.5 py-1.5 text-xs font-semibold transition {data.status === f.id
+      class="flex-shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition {data.status ===
+      f.id
         ? 'bg-tb-slate-900 text-white'
         : 'text-tb-slate-700 hover:bg-tb-slate-200'}"
     >
@@ -60,7 +63,45 @@
     </p>
   {:else}
     <Card>
-      <div class="overflow-hidden rounded-xl border border-tb-slate-200">
+      <!-- Mobile: card list. -->
+      <div class="divide-y divide-tb-slate-100 md:hidden">
+        {#each data.batches as b (b.id)}
+          <div class="py-3 first:pt-0 last:pb-0">
+            <div class="flex items-start justify-between gap-2">
+              <div class="font-jetbrains-mono text-xs font-semibold text-tb-slate-800">
+                {b.period_start} — {b.period_end}
+              </div>
+              <a
+                href="/payroll/{b.id}"
+                class="flex-shrink-0 text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+                >詳細</a
+              >
+            </div>
+            <div class="mt-2 flex items-center gap-2">
+              <StateTag tone={statusTone[b.status] ?? "neutral"} pulse={b.status === "locked"}>
+                {statusLabel[b.status] ?? b.status}
+              </StateTag>
+            </div>
+            <dl class="mt-2 grid grid-cols-2 gap-1 text-xs text-tb-slate-500">
+              <div>
+                <dt class="text-tb-slate-400">鎖定時間</dt>
+                <dd class="font-jetbrains-mono">
+                  {b.locked_at ? b.locked_at.slice(0, 16).replace("T", " ") : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-tb-slate-400">匯出時間</dt>
+                <dd class="font-jetbrains-mono">
+                  {b.exported_at ? b.exported_at.slice(0, 16).replace("T", " ") : "—"}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        {/each}
+      </div>
+
+      <!-- Desktop: table (unchanged). -->
+      <div class="hidden overflow-hidden rounded-xl border border-tb-slate-200 md:block">
         <table class="w-full text-sm">
           <thead
             class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"

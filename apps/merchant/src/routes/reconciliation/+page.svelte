@@ -98,7 +98,56 @@
   {#if data.settlements.length === 0}
     <EmptyState icon="doc" title="尚無已關帳對帳單" hint="福委會關帳後，每月對帳單會列於此。" />
   {:else}
-    <div class="overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm">
+    <!-- Mobile: stacked cards -->
+    <div class="space-y-3 md:hidden">
+      {#each data.settlements as s (s.id)}
+        {@const meta = settlementStatusMeta[s.status] ?? { tone: "neutral", label: s.status }}
+        <div class="rounded-tb-2xl border border-tb-slate-200 bg-white p-4 shadow-tb-sm">
+          <div class="mb-2 flex items-start justify-between gap-3">
+            <div class="font-semibold text-tb-slate-900">
+              {fmtPeriod(s.period_start, s.period_end)}
+            </div>
+            <StateTag tone={meta.tone}>{meta.label}</StateTag>
+          </div>
+          <dl class="grid grid-cols-3 gap-2 text-xs">
+            <div>
+              <dt class="text-tb-slate-400">訂單數</dt>
+              <dd class="font-jetbrains-mono tabular-nums text-tb-slate-700">
+                {s.order_count ?? 0}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-tb-slate-400">份數</dt>
+              <dd class="font-jetbrains-mono tabular-nums text-tb-slate-700">
+                {s.portion_count ?? 0}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-tb-slate-400">金額</dt>
+              <dd class="font-jetbrains-mono tabular-nums text-tb-slate-900">
+                {formatMinor(s.gross_minor)}
+              </dd>
+            </div>
+          </dl>
+          <div class="mt-2 flex items-center justify-between">
+            <span class="font-jetbrains-mono text-xs text-tb-slate-500">
+              關帳日 {fmtDate(s.closed_at)}
+            </span>
+            <a
+              href="/reconciliation/{s.id}"
+              class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+            >
+              明細
+            </a>
+          </div>
+        </div>
+      {/each}
+    </div>
+
+    <!-- Desktop: table -->
+    <div
+      class="hidden overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm md:block"
+    >
       <table class="w-full text-sm">
         <thead
           class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"

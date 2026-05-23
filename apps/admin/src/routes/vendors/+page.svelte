@@ -37,11 +37,14 @@
   subtitle="入駐審核、廠區配對與停復權 · 操作會自動寫入稽核日誌"
 />
 
-<div class="flex flex-wrap items-center gap-1 rounded-full bg-tb-slate-100 p-1">
+<div
+  class="no-scrollbar flex items-center gap-1 overflow-x-auto rounded-full bg-tb-slate-100 p-1 md:flex-wrap"
+>
   {#each filters as f}
     <a
       href={f.id ? `?status=${f.id}` : "?"}
-      class="rounded-full px-3.5 py-1.5 text-xs font-semibold transition {data.status === f.id
+      class="flex-shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition {data.status ===
+      f.id
         ? 'bg-tb-slate-900 text-white'
         : 'text-tb-slate-700 hover:bg-tb-slate-200'}"
     >
@@ -92,7 +95,35 @@
     </p>
   {:else}
     <Card>
-      <div class="overflow-hidden rounded-xl border border-tb-slate-200">
+      <!-- Mobile: card list (mockup style). -->
+      <div class="divide-y divide-tb-slate-100 md:hidden">
+        {#each data.vendors as v (v.id)}
+          <div class="py-3 first:pt-0 last:pb-0">
+            <div class="flex items-start justify-between gap-2">
+              <div class="font-semibold text-tb-slate-900">{v.display_name}</div>
+              <a
+                href="/vendors/{v.id}"
+                class="flex-shrink-0 text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+                >詳細</a
+              >
+            </div>
+            <div class="mt-1 break-all font-jetbrains-mono text-xs text-tb-slate-500">
+              {v.contact_email}
+            </div>
+            <div class="mt-2 flex items-center justify-between gap-2">
+              <StateTag tone={statusTone[v.status] ?? "neutral"}>
+                {statusLabel[v.status] ?? v.status}
+              </StateTag>
+              <div class="text-right text-xs text-tb-slate-500">
+                {fmtPlants(v.plants ?? []) || "—"}
+              </div>
+            </div>
+          </div>
+        {/each}
+      </div>
+
+      <!-- Desktop: table (unchanged). -->
+      <div class="hidden overflow-hidden rounded-xl border border-tb-slate-200 md:block">
         <table class="w-full text-sm">
           <thead
             class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"

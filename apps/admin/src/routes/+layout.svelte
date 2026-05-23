@@ -4,6 +4,7 @@
   import "../app.css";
   import { page } from "$app/stores";
   import { TBiteLogo, Button, Icon, type IconName } from "@tbite/ui";
+  import BottomNav from "$lib/components/BottomNav.svelte";
   let { data, children } = $props();
 
   const navItems: { href: string; label: string; icon: IconName }[] = [
@@ -31,7 +32,7 @@
         >福委會後台 · 管理員</span
       >
       {#if data.user}
-        <div class="ml-auto flex items-center gap-2">
+        <div class="ml-auto hidden items-center gap-2 md:flex">
           <a href="/audit">
             <Button variant="secondary" size="sm">
               <Icon name="download" class="h-4 w-4" />稽核紀錄
@@ -52,6 +53,10 @@
             福
           </div>
         </div>
+        <!-- Mobile: keep a reachable logout (desktop group is md+ only). -->
+        <form method="POST" action="/auth/logout" class="ml-auto md:hidden">
+          <Button variant="ghost" size="sm" type="submit">登出</Button>
+        </form>
       {:else}
         <a href="/login" class="ml-auto text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
           >登入</a
@@ -59,7 +64,7 @@
       {/if}
     </div>
     {#if data.user}
-      <nav class="mx-auto max-w-[1400px] px-4 md:px-8">
+      <nav class="mx-auto hidden max-w-[1400px] px-4 md:block md:px-8">
         <div class="flex gap-1 overflow-x-auto">
           {#each navItems as item (item.href)}
             {@const on = isActive(item.href, $page.url.pathname)}
@@ -78,7 +83,11 @@
     {/if}
   </header>
 
-  <main class="mx-auto grid max-w-[1400px] gap-6 px-4 py-6 md:px-8">
+  <main class="mx-auto grid max-w-[1400px] gap-6 px-4 pb-24 pt-6 md:px-8 md:py-6">
     {@render children()}
   </main>
+
+  {#if data.user}
+    <BottomNav />
+  {/if}
 </div>

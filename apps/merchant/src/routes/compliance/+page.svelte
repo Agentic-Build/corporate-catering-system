@@ -163,7 +163,50 @@
       hint="您的商家目前沒有任何已上傳文件，請聯繫福委會協助補件。"
     />
   {:else}
-    <div class="overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm">
+    <!-- Mobile: stacked cards -->
+    <div class="space-y-3 md:hidden">
+      {#each data.documents as doc (doc.id)}
+        {@const meta = docStatusMeta[doc.status] ?? { tone: "neutral", label: doc.status }}
+        <div class="rounded-tb-2xl border border-tb-slate-200 bg-white p-4 shadow-tb-sm">
+          <div class="mb-2 flex items-start justify-between gap-3">
+            <div class="font-semibold text-tb-slate-900">
+              {docKindLabel[doc.kind] ?? doc.kind}
+            </div>
+            <StateTag tone={meta.tone}>{meta.label}</StateTag>
+          </div>
+          <div class="text-sm text-tb-slate-600">{doc.filename}</div>
+          <dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-tb-slate-500">
+            <div>
+              <dt class="text-tb-slate-400">到期日</dt>
+              <dd class="font-jetbrains-mono text-tb-slate-600">{fmtDate(doc.expires_at)}</dd>
+            </div>
+            <div>
+              <dt class="text-tb-slate-400">審核日</dt>
+              <dd class="font-jetbrains-mono text-tb-slate-600">{fmtDate(doc.reviewed_at)}</dd>
+            </div>
+          </dl>
+          {#if doc.notes}
+            <p class="mt-2 text-xs text-tb-slate-500">備註：{doc.notes}</p>
+          {/if}
+          {#if canResupply(doc.status)}
+            <div class="mt-3">
+              <button
+                type="button"
+                onclick={() => startResupply({ id: doc.id, kind: doc.kind })}
+                class="rounded-tb-lg border border-tb-slate-300 px-2.5 py-1 text-xs font-semibold text-tb-slate-700 transition hover:border-tb-slate-500"
+              >
+                補件
+              </button>
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </div>
+
+    <!-- Desktop: table -->
+    <div
+      class="hidden overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm md:block"
+    >
       <table class="w-full text-sm">
         <thead
           class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"

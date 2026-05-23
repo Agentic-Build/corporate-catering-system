@@ -19,6 +19,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Seed per-app .env from .env.example for build-time PUBLIC_* imports
         run: |
+          shopt -s nullglob
           for ex in apps/*/.env.example; do
             cp -n "$ex" "$(dirname "$ex")/.env"
           done

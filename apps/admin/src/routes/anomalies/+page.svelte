@@ -65,12 +65,15 @@
   <p class="rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">{form.error}</p>
 {/if}
 
-<div class="flex flex-wrap gap-2">
-  <div class="flex flex-wrap items-center gap-1 rounded-full bg-tb-slate-100 p-1">
+<div class="flex flex-col gap-2 md:flex-row md:flex-wrap">
+  <div
+    class="no-scrollbar flex items-center gap-1 overflow-x-auto rounded-full bg-tb-slate-100 p-1 md:flex-wrap"
+  >
     {#each statusFilters as f}
       <a
         href={hrefWith("status", f.id)}
-        class="rounded-full px-3.5 py-1.5 text-xs font-semibold transition {data.status === f.id
+        class="flex-shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition {data.status ===
+        f.id
           ? 'bg-tb-slate-900 text-white'
           : 'text-tb-slate-700 hover:bg-tb-slate-200'}"
       >
@@ -78,11 +81,14 @@
       </a>
     {/each}
   </div>
-  <div class="flex flex-wrap items-center gap-1 rounded-full bg-tb-slate-100 p-1">
+  <div
+    class="no-scrollbar flex items-center gap-1 overflow-x-auto rounded-full bg-tb-slate-100 p-1 md:flex-wrap"
+  >
     {#each severityFilters as f}
       <a
         href={hrefWith("severity", f.id)}
-        class="rounded-full px-3.5 py-1.5 text-xs font-semibold transition {data.severity === f.id
+        class="flex-shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition {data.severity ===
+        f.id
           ? 'bg-tb-slate-900 text-white'
           : 'text-tb-slate-700 hover:bg-tb-slate-200'}"
       >

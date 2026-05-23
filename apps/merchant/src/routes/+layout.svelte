@@ -2,6 +2,7 @@
   import "../app.css";
   import { page } from "$app/stores";
   import { TBiteLogo, Button, Icon, type IconName } from "@tbite/ui";
+  import BottomNav from "$lib/components/BottomNav.svelte";
   let { data, children } = $props();
 
   // No vendor-name field on the merchant `Me` payload — the operator's
@@ -57,7 +58,7 @@
       {/if}
     </div>
     {#if data.user}
-      <nav class="mx-auto max-w-[1400px] px-4 md:px-8">
+      <nav class="mx-auto hidden max-w-[1400px] px-4 md:block md:px-8">
         <div class="flex gap-1 overflow-x-auto">
           {#each navItems as item (item.href)}
             {@const on = isActive(item.href, $page.url.pathname)}
@@ -76,5 +77,8 @@
     {/if}
   </header>
 
-  <main class="mx-auto max-w-[1400px] px-4 py-6 md:px-8">{@render children()}</main>
+  <main class="mx-auto max-w-[1400px] px-4 pb-24 pt-6 md:px-8 md:py-6">{@render children()}</main>
+  {#if data.user}
+    <BottomNav />
+  {/if}
 </div>

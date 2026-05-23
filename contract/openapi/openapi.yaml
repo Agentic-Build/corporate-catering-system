@@ -881,38 +881,6 @@ components:
             required:
                 - exception
             type: object
-        ExchangeAuthCodeInputBody:
-            additionalProperties: false
-            properties:
-                $schema:
-                    description: A URL to the JSON Schema for this object.
-                    examples:
-                        - https://example.com/schemas/ExchangeAuthCodeInputBody.json
-                    format: uri
-                    readOnly: true
-                    type: string
-                code:
-                    description: One-time exchange code from the deep-link callback
-                    minLength: 1
-                    type: string
-            required:
-                - code
-            type: object
-        ExchangeAuthCodeOutputBody:
-            additionalProperties: false
-            properties:
-                $schema:
-                    description: A URL to the JSON Schema for this object.
-                    examples:
-                        - https://example.com/schemas/ExchangeAuthCodeOutputBody.json
-                    format: uri
-                    readOnly: true
-                    type: string
-                token:
-                    type: string
-            required:
-                - token
-            type: object
         FavoriteChipDTO:
             additionalProperties: false
             properties:
@@ -2599,7 +2567,6 @@ components:
                 app:
                     enum:
                         - employee
-                        - employee-app
                         - merchant
                         - admin
                     type: string
@@ -5610,31 +5577,6 @@ paths:
                                 $ref: '#/components/schemas/ErrorModel'
                     description: Error
             summary: Start OIDC login
-            tags:
-                - auth
-    /auth/exchange:
-        post:
-            operationId: exchangeAuthCode
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/ExchangeAuthCodeInputBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ExchangeAuthCodeOutputBody'
-                    description: OK
-                default:
-                    content:
-                        application/problem+json:
-                            schema:
-                                $ref: '#/components/schemas/ErrorModel'
-                    description: Error
-            summary: Exchange a one-time deep-link code for a session token
             tags:
                 - auth
     /auth/logout:

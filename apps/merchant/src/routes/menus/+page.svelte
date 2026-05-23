@@ -45,7 +45,45 @@
 {#if data.items.length === 0}
   <EmptyState icon="doc" title="尚未建立任何餐點" hint="點「新增餐點」建立第一道菜色。" />
 {:else}
-  <div class="overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm">
+  <!-- Mobile: stacked cards -->
+  <div class="space-y-3 md:hidden">
+    {#each data.items as item (item.id)}
+      {@const meta = statusMeta[item.status] ?? { tone: "neutral", label: item.status }}
+      <div class="rounded-tb-2xl border border-tb-slate-200 bg-white p-4 shadow-tb-sm">
+        <div class="mb-2 flex items-start justify-between gap-3">
+          <div class="font-semibold text-tb-slate-900">{item.name}</div>
+          <div class="font-jetbrains-mono tabular-nums font-bold text-tb-slate-900">
+            ${item.price_minor.toLocaleString()}
+          </div>
+        </div>
+        <div class="flex items-center justify-between">
+          <StateTag tone={meta.tone}>{meta.label}</StateTag>
+          <div class="flex items-center gap-3">
+            <form method="POST" action="?/copy">
+              <input type="hidden" name="id" value={item.id} />
+              <button
+                type="submit"
+                class="text-sm font-semibold text-tb-slate-500 hover:text-tb-slate-800"
+              >
+                複製
+              </button>
+            </form>
+            <a
+              href="/menus/{item.id}"
+              class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+            >
+              編輯
+            </a>
+          </div>
+        </div>
+      </div>
+    {/each}
+  </div>
+
+  <!-- Desktop: table -->
+  <div
+    class="hidden overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm md:block"
+  >
     <table class="w-full text-sm">
       <thead
         class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"

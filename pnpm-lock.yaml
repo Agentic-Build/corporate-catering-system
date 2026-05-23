@@ -131,64 +131,6 @@ importers:
         specifier: ^5.4.0
         version: 5.4.21(@types/node@25.7.0)
 
-  apps/employee-app:
-    dependencies:
-      '@sveltejs/adapter-static':
-        specifier: ^3.0.0
-        version: 3.0.10(@sveltejs/kit@2.59.1(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.55.5)(vite@5.4.21(@types/node@25.7.0)))(svelte@5.55.5)(typescript@5.9.3)(vite@5.4.21(@types/node@25.7.0)))
-      '@tbite/api-client':
-        specifier: workspace:*
-        version: link:../../packages/api-client
-      '@tbite/pickup':
-        specifier: workspace:*
-        version: link:../../packages/pickup
-      '@tbite/tokens':
-        specifier: workspace:*
-        version: link:../../packages/tokens
-      '@tbite/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
-      html5-qrcode:
-        specifier: ^2.3.8
-        version: 2.3.8
-      openapi-fetch:
-        specifier: ^0.13.8
-        version: 0.13.8
-      qrcode:
-        specifier: ^1.5.4
-        version: 1.5.4
-    devDependencies:
-      '@sveltejs/kit':
-        specifier: ^2.7.0
-        version: 2.59.1(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.55.5)(vite@5.4.21(@types/node@25.7.0)))(svelte@5.55.5)(typescript@5.9.3)(vite@5.4.21(@types/node@25.7.0))
-      '@sveltejs/vite-plugin-svelte':
-        specifier: ^4.0.0
-        version: 4.0.4(svelte@5.55.5)(vite@5.4.21(@types/node@25.7.0))
-      '@types/qrcode':
-        specifier: ^1.5.6
-        version: 1.5.6
-      autoprefixer:
-        specifier: ^10.4.20
-        version: 10.5.0(postcss@8.5.14)
-      postcss:
-        specifier: ^8.4.47
-        version: 8.5.14
-      svelte:
-        specifier: ^5.0.0
-        version: 5.55.5
-      svelte-check:
-        specifier: ^4.0.0
-        version: 4.4.8(picomatch@4.0.4)(svelte@5.55.5)(typescript@5.9.3)
-      tailwindcss:
-        specifier: ^3.4.13
-        version: 3.4.19
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vite:
-        specifier: ^5.4.0
-        version: 5.4.21(@types/node@25.7.0)
-
   apps/merchant:
     dependencies:
       '@sveltejs/adapter-node':
@@ -673,11 +615,6 @@ packages:
     resolution: {integrity: sha512-45X92CXW+2J8ZUzPv3eLlKWEzINKiiGeFWTjyER4ZN4sGgNoaoeSkCY/QYNxHpPXy71QPsctwccBo9jJs0ySPQ==}
     peerDependencies:
       '@sveltejs/kit': ^2.4.0
-
-  '@sveltejs/adapter-static@3.0.10':
-    resolution: {integrity: sha512-7D9lYFWJmB7zxZyTE/qxjksvMqzMuYrrsyh1f4AlZqeZeACPRySjbC3aFiY55wb1tWUaKOQG9PVbm74JcN2Iew==}
-    peerDependencies:
-      '@sveltejs/kit': ^2.0.0
 
   '@sveltejs/kit@2.59.1':
     resolution: {integrity: sha512-d8OON70AphLdDesuTIl//M2O6fRTIicX8aYv8vhCiYEhTTI2OboKqey0Hu1A4VFhqwgqtq0vKDmPFGkw8kKmgw==}
@@ -1851,10 +1788,6 @@ snapshots:
       '@rollup/plugin-node-resolve': 16.0.3(rollup@4.60.3)
       '@sveltejs/kit': 2.59.1(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.55.5)(vite@5.4.21(@types/node@25.7.0)))(svelte@5.55.5)(typescript@5.9.3)(vite@5.4.21(@types/node@25.7.0))
       rollup: 4.60.3
-
-  '@sveltejs/adapter-static@3.0.10(@sveltejs/kit@2.59.1(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.55.5)(vite@5.4.21(@types/node@25.7.0)))(svelte@5.55.5)(typescript@5.9.3)(vite@5.4.21(@types/node@25.7.0)))':
-    dependencies:
-      '@sveltejs/kit': 2.59.1(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.55.5)(vite@5.4.21(@types/node@25.7.0)))(svelte@5.55.5)(typescript@5.9.3)(vite@5.4.21(@types/node@25.7.0))
 
   '@sveltejs/kit@2.59.1(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.55.5)(vite@5.4.21(@types/node@25.7.0)))(svelte@5.55.5)(typescript@5.9.3)(vite@5.4.21(@types/node@25.7.0))':
     dependencies:

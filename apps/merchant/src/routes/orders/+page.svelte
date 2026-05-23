@@ -138,11 +138,14 @@
   </a>
 </section>
 
-<div class="mb-4 flex flex-wrap gap-1 rounded-full bg-tb-slate-100 p-1">
+<div
+  class="no-scrollbar mb-4 flex gap-1 overflow-x-auto rounded-full bg-tb-slate-100 p-1 md:flex-wrap"
+>
   {#each data.days as d (d.id)}
     <a
       href="?date={d.id}"
-      class="rounded-full px-3 py-1 text-xs font-semibold {data.date === d.id
+      class="shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold {data.date ===
+      d.id
         ? 'bg-tb-slate-900 text-white'
         : 'text-tb-slate-700 hover:text-tb-slate-900'}"
     >

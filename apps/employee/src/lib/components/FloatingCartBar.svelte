@@ -11,7 +11,8 @@
 </script>
 
 {#if cart.count > 0}
-  <div class="fixed inset-x-0 bottom-5 z-40 px-4">
+  <!-- bottom-20 on mobile clears the fixed BottomNav; lg restores bottom-5. -->
+  <div class="fixed inset-x-0 bottom-20 z-40 px-4 lg:bottom-5">
     <div
       class="mx-auto flex max-w-md items-center justify-between gap-3 rounded-full border border-tb-slate-800 bg-tb-slate-900 px-2 py-2 pl-5 text-white shadow-tb-md"
     >

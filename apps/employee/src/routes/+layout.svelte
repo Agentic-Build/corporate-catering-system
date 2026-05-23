@@ -7,6 +7,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import Sidebar from "$lib/components/Sidebar.svelte";
+  import BottomNav from "$lib/components/BottomNav.svelte";
   import CartDrawer from "$lib/components/CartDrawer.svelte";
   import FloatingCartBar from "$lib/components/FloatingCartBar.svelte";
   import { cart } from "$lib/cart.svelte";
@@ -128,7 +129,7 @@
 
     <div class="mx-auto flex max-w-[1400px] gap-6 px-4 py-6 md:px-8">
       <Sidebar ordersBadge={data.activeOrders} />
-      <main class="min-w-0 flex-1 pb-32">{@render children()}</main>
+      <main class="min-w-0 flex-1 pb-40 lg:pb-32">{@render children()}</main>
     </div>
   </div>
 
@@ -139,6 +140,7 @@
     plant={selectedPlant}
     supplyDate={selectedDay}
   />
+  <BottomNav ordersBadge={data.activeOrders} />
 {:else}
   <main class="min-h-screen bg-white">{@render children()}</main>
 {/if}
