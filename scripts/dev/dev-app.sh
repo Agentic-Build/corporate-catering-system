@@ -39,6 +39,19 @@ if [ -z "$authentik_ready" ]; then
   exit 1
 fi
 
+echo "==> waiting for hydra"
+hydra_ready=
+for i in {1..40}; do
+  if curl -fsS http://localhost:4444/health/ready >/dev/null 2>&1; then
+    hydra_ready=1; break
+  fi
+  sleep 0.5
+done
+if [ -z "$hydra_ready" ]; then
+  echo "hydra did not become ready in 20s — check 'make dev-logs svc=hydra'" >&2
+  exit 1
+fi
+
 echo "==> migrate"
 DATABASE_URL="$DB_DSN" scripts/db/migrate.sh up
 
@@ -86,6 +99,10 @@ export AUTHENTIK_VENDOR_OPERATOR_GROUP="tbite:role:vendor_operator"
 export APP_BASE_URL_EMPLOYEE="http://localhost:5173"
 export APP_BASE_URL_MERCHANT="http://localhost:5174"
 export APP_BASE_URL_ADMIN="http://localhost:5175"
+
+# Ory Hydra sidecar — OAuth + DCR for MCP remote clients.
+export HYDRA_PUBLIC_URL="http://localhost:4444"
+export HYDRA_ADMIN_URL="http://localhost:4445"
 
 go run ./services/api/cmd/tbite --role=api &
 pnpm --filter @tbite/employee dev &

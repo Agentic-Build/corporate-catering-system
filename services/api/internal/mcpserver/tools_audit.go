@@ -32,6 +32,7 @@ func registerAuditTools(s *server.MCPServer, deps Deps) {
 			mcp.WithNumber("limit",
 				mcp.Description("Default 100; service may clamp"),
 			),
+			annoReadOnly(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)

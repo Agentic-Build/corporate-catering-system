@@ -11,9 +11,15 @@ import (
 )
 
 // TestMCPServer_RegistersExpectedTools is a structural smoke test: with empty
-// Deps (no DB / no services), the constructor must still register all 21 MCP
-// tools without nil-deref panics. Each handler defends against nil deps at
+// Deps (no DB / no services), the constructor must still register every MCP
+// tool without nil-deref panics. Each handler defends against nil deps at
 // call time, so registration itself is safe even when services aren't wired.
+//
+// Tool inventory (27 total):
+//   - 6 order · 3 menu (list_for_day, search, get_item) · 1 vendor discovery
+//   - 2 ChatGPT-convention (search, fetch)
+//   - 3 vendor admin · 3 payroll · 1 audit · 2 feedback
+//   - 1 settlement · 5 compliance
 func TestMCPServer_RegistersExpectedTools(t *testing.T) {
 	s := mcpserver.New(mcpserver.Deps{})
 	require.NotNil(t, s)
@@ -34,6 +40,10 @@ func TestMCPServer_RegistersExpectedTools(t *testing.T) {
 		"document.review",
 		"feedback.file_complaint",
 		"feedback.rate_order",
+		"fetch",
+		"menu.get_item",
+		"menu.list_for_day",
+		"menu.search",
 		"order.cancel",
 		"order.get",
 		"order.get_pickup_code",
@@ -43,10 +53,12 @@ func TestMCPServer_RegistersExpectedTools(t *testing.T) {
 		"payroll.list_batches",
 		"payroll.lock_batch",
 		"payroll.resolve_dispute",
+		"search",
 		"settlement.close_period",
 		"vendor.list",
+		"vendor.list_open",
 		"vendor.reinstate",
 		"vendor.suspend",
 	}
-	assert.Equal(t, want, got, "MCP server must register exactly the 21 MCP tools")
+	assert.Equal(t, want, got, "MCP server must register every MCP tool")
 }

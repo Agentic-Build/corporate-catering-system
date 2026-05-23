@@ -24,6 +24,7 @@ func registerPayrollTools(s *server.MCPServer, deps Deps) {
 			mcp.WithString("status",
 				mcp.Description("Optional: draft | locked | exported | closed"),
 			),
+			annoReadOnly(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -58,6 +59,7 @@ func registerPayrollTools(s *server.MCPServer, deps Deps) {
 				mcp.Required(),
 				mcp.Description("UUID of the batch to lock"),
 			),
+			annoHighRiskAdmin(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -100,6 +102,7 @@ func registerPayrollTools(s *server.MCPServer, deps Deps) {
 			mcp.WithNumber("refund_minor",
 				mcp.Description("Refund amount in minor units; 0 for reject"),
 			),
+			annoStateChange(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)

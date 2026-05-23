@@ -25,6 +25,7 @@ func registerComplianceTools(s *server.MCPServer, deps Deps) {
 			mcp.WithDescription("List a vendor's compliance documents (welfare_admin only)"),
 			mcp.WithString("vendor_id", mcp.Required(), mcp.Description("UUID of the vendor")),
 			mcp.WithBoolean("include_all", mcp.Description("Include expired documents")),
+			annoReadOnly(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -58,6 +59,7 @@ func registerComplianceTools(s *server.MCPServer, deps Deps) {
 			mcp.WithString("document_id", mcp.Required(), mcp.Description("UUID of the document")),
 			mcp.WithString("status", mcp.Required(), mcp.Description("approved | rejected")),
 			mcp.WithString("notes", mcp.Description("Review notes (recorded on the document)")),
+			annoStateChange(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -93,6 +95,7 @@ func registerComplianceTools(s *server.MCPServer, deps Deps) {
 			mcp.WithDescription("List anomaly alerts filtered by status/severity (welfare_admin only)"),
 			mcp.WithString("status", mcp.Description("Optional: open | triaged | closed")),
 			mcp.WithString("severity", mcp.Description("Optional: low | medium | high | critical")),
+			annoReadOnly(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -130,6 +133,7 @@ func registerComplianceTools(s *server.MCPServer, deps Deps) {
 			mcp.WithString("anomaly_id", mcp.Required(), mcp.Description("UUID of the anomaly")),
 			mcp.WithString("notes", mcp.Description("Triage notes")),
 			mcp.WithString("action", mcp.Description("Optional governance action: warn | suspend")),
+			annoStateChange(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -161,6 +165,7 @@ func registerComplianceTools(s *server.MCPServer, deps Deps) {
 			mcp.WithDescription("Close an open or triaged anomaly (welfare_admin only)"),
 			mcp.WithString("anomaly_id", mcp.Required(), mcp.Description("UUID of the anomaly")),
 			mcp.WithString("notes", mcp.Description("Closing notes")),
+			annoHighRiskAdmin(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)

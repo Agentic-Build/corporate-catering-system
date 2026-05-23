@@ -62,14 +62,14 @@ spec:
         app.kubernetes.io/part-of: tbite
         app.kubernetes.io/managed-by: kustomize
     spec:
-      # NOTE: Postgres image (postgres:16-alpine) manages its own non-root postgres user (uid 70/999).
+      # NOTE: Postgres image (postgres:18-alpine) manages its own non-root postgres user (uid 70/999).
       # We deliberately do NOT set runAsNonRoot: true here so the entrypoint can chown the PGDATA
       # volume before dropping privileges. fsGroup ensures the mounted PVC is group-writable.
       securityContext:
         fsGroup: 999
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: postgres:18-alpine
           ports:
             - name: postgres
               containerPort: 5432
@@ -90,11 +90,16 @@ spec:
                 secretKeyRef:
                   name: tbite-dev-secrets
                   key: POSTGRES_PASSWORD
+            # PG 18+ Docker image uses /var/lib/postgresql/<major>/docker
+            # as the data directory by default. We mount the PVC one level
+            # up so the entry point can manage major-version directories
+            # (and so a future pg_upgrade --link can find both versions
+            # under the same mount).
             - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
+              value: /var/lib/postgresql/18/pgdata
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql/data
+              mountPath: /var/lib/postgresql
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "tbite", "-d", "tbite"]

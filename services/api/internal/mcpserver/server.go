@@ -15,6 +15,7 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/feedback"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/settlement"
@@ -39,6 +40,7 @@ type Deps struct {
 	Audit      AuditTx
 	Order      *order.Service
 	Vendor     *vendor.Service
+	Menu       *menu.Service
 	Payroll    *payroll.Service
 	Compliance *compliance.Service
 	Feedback   *feedback.Service
@@ -60,12 +62,14 @@ func New(deps Deps) *server.MCPServer {
 		server.WithToolCapabilities(true),
 	)
 	registerOrderTools(s, deps)
+	registerMenuTools(s, deps)
 	registerVendorTools(s, deps)
 	registerPayrollTools(s, deps)
 	registerAuditTools(s, deps)
 	registerFeedbackTools(s, deps)
 	registerSettlementTools(s, deps)
 	registerComplianceTools(s, deps)
+	registerChatGPTTools(s, deps)
 	return s
 }
 
