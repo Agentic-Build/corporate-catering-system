@@ -180,7 +180,7 @@
                 >
                   <button
                     type="button"
-                    disabled={cap <= 5}
+                    disabled={cap <= Math.max(slot.ordered, 5)}
                     onclick={() => step(slot, -5)}
                     class="grid h-8 w-8 place-items-center text-tb-slate-500 hover:bg-tb-slate-50 disabled:opacity-30"
                     aria-label="減少上限"

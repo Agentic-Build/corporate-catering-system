@@ -44,9 +44,13 @@ func (s *Service) SetCapacity(ctx context.Context, vendorID string, in SetCapaci
 	} else if err != nil {
 		return nil, err
 	} else {
-		newRemain = existing.Remain
-		if newRemain > in.Capacity {
-			newRemain = in.Capacity
+		// Preserve the number of already-sold units across capacity changes.
+		// sold = how many units have been purchased (capacity - remain).
+		// new remain = new capacity - sold, clamped to [0, new capacity].
+		sold := existing.Capacity - existing.Remain
+		newRemain = in.Capacity - sold
+		if newRemain < 0 {
+			newRemain = 0
 		}
 	}
 	sp := &Supply{
