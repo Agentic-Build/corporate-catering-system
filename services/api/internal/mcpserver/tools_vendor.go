@@ -25,6 +25,7 @@ func registerVendorTools(s *server.MCPServer, deps Deps) {
 			mcp.WithString("status",
 				mcp.Description("Optional: pending | approved | suspended | terminated"),
 			),
+			annoReadOnly(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -62,6 +63,7 @@ func registerVendorTools(s *server.MCPServer, deps Deps) {
 			mcp.WithString("reason",
 				mcp.Description("Optional reason (recorded in audit_event payload)"),
 			),
+			annoHighRiskAdmin(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -99,6 +101,7 @@ func registerVendorTools(s *server.MCPServer, deps Deps) {
 				mcp.Required(),
 				mcp.Description("UUID of the suspended vendor"),
 			),
+			annoReversible(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)

@@ -52,6 +52,15 @@ type Config struct {
 	S3SecretAccessKey string
 	S3Bucket          string
 	S3UsePathStyle    bool
+
+	// HydraPublicURL / HydraAdminURL configure the Ory Hydra sidecar that
+	// fronts our OAuth surface so MCP clients (Claude.ai, ChatGPT) get
+	// real Dynamic Client Registration (RFC 7591) — Authentik 2026.2 still
+	// lacks DCR (scheduled for 2026.8). When HydraPublicURL is empty the
+	// MCP /.well-known/oauth-protected-resource falls back to advertising
+	// the Authentik issuer directly (no DCR).
+	HydraPublicURL string
+	HydraAdminURL  string
 }
 
 type AuthProviderConfig struct {
@@ -97,6 +106,9 @@ func FromEnv() (Config, error) {
 		S3SecretAccessKey: os.Getenv("S3_SECRET_ACCESS_KEY"),
 		S3Bucket:          getenv("S3_BUCKET", "tbite"),
 		S3UsePathStyle:    os.Getenv("S3_USE_PATH_STYLE") == "1",
+
+		HydraPublicURL: strings.TrimRight(os.Getenv("HYDRA_PUBLIC_URL"), "/"),
+		HydraAdminURL:  strings.TrimRight(os.Getenv("HYDRA_ADMIN_URL"), "/"),
 	}
 	if c.DatabaseRW == "" {
 		return c, fmt.Errorf("config: DATABASE_RW_URL is required")
