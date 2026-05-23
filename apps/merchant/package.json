@@ -12,9 +12,11 @@
   "dependencies": {
     "@sveltejs/adapter-node": "^5.2.0",
     "@tbite/api-client": "workspace:*",
+    "@tbite/pickup": "workspace:*",
     "@tbite/tokens": "workspace:*",
     "@tbite/ui": "workspace:*",
     "@tbite/web-auth": "workspace:*",
+    "html5-qrcode": "^2.3.8",
     "openapi-fetch": "^0.13.8"
   },
   "devDependencies": {
