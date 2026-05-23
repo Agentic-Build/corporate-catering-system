@@ -13,8 +13,10 @@
   "dependencies": {
     "@sveltejs/adapter-static": "^3.0.0",
     "@tbite/api-client": "workspace:*",
+    "@tbite/pickup": "workspace:*",
     "@tbite/tokens": "workspace:*",
     "@tbite/ui": "workspace:*",
+    "html5-qrcode": "^2.3.8",
     "openapi-fetch": "^0.13.8",
     "qrcode": "^1.5.4"
   },

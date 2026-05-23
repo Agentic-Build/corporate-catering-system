@@ -1,4 +1,4 @@
-import { redirect, fail, type Actions } from "@sveltejs/kit";
+import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
 
@@ -14,13 +14,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     if (r.data) items = (r.data as any).items ?? [];
   } catch {}
 
-  // Group by plant
-  const byPlant: Record<string, any[]> = {};
-  for (const o of items) {
-    (byPlant[o.plant] ??= []).push(o);
-  }
-
-  // 7-day picker (today + next 6)
+  // 7-day picker (today + next 6) — mirrors the prep board.
   const today = new Date();
   const days: { id: string; label: string }[] = [];
   for (let i = 0; i < 7; i++) {
@@ -31,19 +25,5 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     days.push({ id, label });
   }
 
-  return { user: locals.user, date, days, byPlant, totalCount: items.length };
-};
-
-export const actions: Actions = {
-  markReady: async ({ request, locals }) => {
-    const fd = await request.formData();
-    const ids = fd.getAll("order_id").map(String);
-    if (ids.length === 0) return fail(400, { error: "no orders selected" });
-    const client = apiFor(locals.apiToken);
-    const r = await client.POST("/api/merchant/orders/mark-ready", {
-      body: { order_ids: ids } as any,
-    });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
-    return { success: true, count: ids.length };
-  },
+  return { user: locals.user, date, days, orders: items, totalCount: items.length };
 };

@@ -1,6 +1,6 @@
 <script lang="ts">
   // OrdersScreen — 預訂中 / 歷史 tabs, order cards. "ready" orders get a
-  // "show pickup code" CTA that jumps to the TOTP screen for that order.
+  // "scan to pick up" CTA that opens the scan screen.
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { listOrders, type Order } from "$lib/api";
@@ -136,10 +136,10 @@
             {#if o.status === "ready"}
               <button
                 type="button"
-                onclick={() => goto(`/totp?order=${o.id}`)}
+                onclick={() => goto("/scan")}
                 class="w-full rounded-2xl bg-tb-emerald-600 py-3 text-sm font-extrabold text-white"
               >
-                出示領餐碼 →
+                掃描領餐 →
               </button>
             {/if}
           </article>

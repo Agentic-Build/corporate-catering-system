@@ -6,6 +6,7 @@
   const o = $derived(data.order);
 
   const statusLabel: Record<string, string> = {
+    ready: "備餐完成",
     picked_up: "已領取",
     no_show: "未領取",
   };
@@ -50,7 +51,7 @@
   {#if !data.disputable}
     <Card tone="danger">
       <p class="text-sm text-tb-rose-700">
-        此訂單狀態為「{o.status}」，無法提出申訴。可申訴狀態：已領取、未領取。
+        此訂單狀態為「{o.status}」，無法提出申訴。可申訴狀態：備餐完成、已領取、未領取。
       </p>
       <a
         href="/disputes"

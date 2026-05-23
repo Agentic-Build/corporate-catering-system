@@ -12,14 +12,18 @@
   "dependencies": {
     "@sveltejs/adapter-node": "^5.2.0",
     "@tbite/api-client": "workspace:*",
+    "@tbite/pickup": "workspace:*",
     "@tbite/tokens": "workspace:*",
     "@tbite/ui": "workspace:*",
     "@tbite/web-auth": "workspace:*",
-    "openapi-fetch": "^0.13.8"
+    "html5-qrcode": "^2.3.8",
+    "openapi-fetch": "^0.13.8",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@sveltejs/kit": "^2.7.0",
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "@types/qrcode": "^1.5.6",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
     "svelte": "^5.0.0",

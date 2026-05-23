@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Single order detail. Lists items and offers the pickup-code action
+  // Single order detail. Lists items and offers the scan-to-pickup action
   // when the order is ready. Reached from the orders list.
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
@@ -90,10 +90,10 @@
       {#if order.status === "ready"}
         <button
           type="button"
-          onclick={() => goto(`/totp?order=${order?.id}`)}
+          onclick={() => goto("/scan")}
           class="mt-4 w-full rounded-2xl bg-tb-emerald-600 py-3.5 text-sm font-extrabold text-white"
         >
-          出示領餐碼 →
+          掃描領餐 →
         </button>
       {/if}
     {/if}

@@ -6,7 +6,7 @@
   const TABS: { href: string; label: string; icon: AppIconName }[] = [
     { href: "/", label: "首頁", icon: "home" },
     { href: "/orders", label: "訂單", icon: "orders" },
-    { href: "/totp", label: "領餐碼", icon: "qr" },
+    { href: "/scan", label: "掃描領餐", icon: "qr" },
     { href: "/payroll", label: "薪資", icon: "wallet" },
     { href: "/profile", label: "個人", icon: "profile" },
   ];

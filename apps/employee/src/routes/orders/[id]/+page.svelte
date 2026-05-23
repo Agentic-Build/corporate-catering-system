@@ -257,10 +257,10 @@
   <div class="flex flex-wrap items-center gap-2">
     {#if o.status === "ready"}
       <a
-        href={`/orders/${o.id}/pickup`}
+        href="/scan"
         class="inline-flex items-center gap-2 rounded-tb-lg bg-tb-red-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-tb-red-700"
       >
-        <Icon name="qr" class="h-4 w-4" />出示領餐碼
+        <Icon name="qr" class="h-4 w-4" />掃描領餐
       </a>
     {/if}
     {#if o.status === "placed" && !editing}
@@ -275,12 +275,14 @@
         <Button variant="danger" size="md" type="submit">取消訂單</Button>
       </form>
     {/if}
-    {#if o.status === "picked_up" || o.status === "no_show"}
+    {#if o.status === "ready" || o.status === "picked_up" || o.status === "no_show"}
       <a
         href={`/orders/${o.id}/dispute`}
         class="inline-flex items-center gap-2 rounded-tb-lg border border-tb-slate-300 px-3.5 py-2 text-sm font-semibold text-tb-slate-800 transition hover:border-tb-slate-500"
       >
-        <Icon name="alert" class="h-4 w-4 text-tb-amber-600" />提出申訴
+        <Icon name="alert" class="h-4 w-4 text-tb-amber-600" />{o.status === "ready"
+          ? "找不到餐？提出申訴"
+          : "提出申訴"}
       </a>
     {/if}
   </div>

@@ -1,21 +1,20 @@
 <script lang="ts">
   // Left navigation rail — ported from EmployeeView.jsx TbSidebar, with the
   // reference's no-backend items (薪資代扣/通知中心/設定) dropped. Items map
-  // 1:1 to real routes; 領餐碼 opens the global TOTP modal instead of routing.
+  // 1:1 to real routes.
   import { Icon, type IconName } from "@tbite/ui";
   import { page } from "$app/stores";
 
   interface Props {
-    onOpenTotp: () => void;
     ordersBadge?: number;
   }
-  let { onOpenTotp, ordersBadge = 0 }: Props = $props();
+  let { ordersBadge = 0 }: Props = $props();
 
   type NavItem = { id: string; label: string; icon: IconName; href?: string };
   const nav: NavItem[] = [
     { id: "home", label: "今日首頁", icon: "home", href: "/" },
     { id: "orders", label: "我的訂單", icon: "doc", href: "/orders" },
-    { id: "totp", label: "領餐碼", icon: "qr" },
+    { id: "scan", label: "掃描領餐", icon: "qr", href: "/scan" },
     { id: "favorites", label: "我的常點", icon: "heart", href: "/menu/favorites" },
     { id: "complaints", label: "我的客訴", icon: "bell", href: "/complaints" },
     { id: "disputes", label: "申訴", icon: "alert", href: "/disputes" },
@@ -52,15 +51,6 @@
             >
           {/if}
         </a>
-      {:else}
-        <button
-          type="button"
-          onclick={onOpenTotp}
-          class="group flex items-center gap-3 rounded-tb-xl px-3.5 py-2.5 text-left text-sm font-semibold text-tb-slate-700 transition hover:bg-tb-slate-100"
-        >
-          <Icon name={n.icon} class="h-5 w-5 text-tb-slate-500 group-hover:text-tb-slate-900" />
-          <span class="flex-1">{n.label}</span>
-        </button>
       {/if}
     {/each}
 

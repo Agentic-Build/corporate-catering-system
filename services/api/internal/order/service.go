@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
-	totp "github.com/takalawang/corporate-catering-system/services/api/internal/pickup/totp"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
@@ -158,14 +157,6 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		return nil, ErrCutoffPassed
 	}
 
-	// Generate the per-order TOTP secret once, before the tx. The secret is
-	// persisted as part of the order row (Step 3 in CreateTx) and used later
-	// by VerifyPickup.
-	secret, err := totp.NewSecret()
-	if err != nil {
-		return nil, fmt.Errorf("generate totp: %w", err)
-	}
-
 	placedAt := now
 	o := &Order{
 		UserID:          in.UserID,
@@ -175,7 +166,6 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		Status:          StatusPlaced,
 		TotalPriceMinor: totalPrice,
 		Notes:           in.Notes,
-		TOTPSecret:      secret,
 		PlacedAt:        &placedAt,
 		CutoffAt:        cutoffAt,
 		Items:           domainItems,
@@ -279,9 +269,9 @@ type ModifyOrderInput struct {
 // The new item set fully supersedes the old one. Quota is adjusted by the
 // per-menu-item delta (desired qty minus currently-held qty) inside a single
 // transaction, so a failure at any step (including ErrOutOfStock) rolls back
-// without leaking quota. The order keeps its ID, TOTP secret, and status —
-// only items + total change — so no state event is written, only an audit
-// row and an order.modified.v1 outbox entry.
+// without leaking quota. The order keeps its ID and status — only items +
+// total change — so no state event is written, only an audit row and an
+// order.modified.v1 outbox entry.
 func (s *Service) Modify(ctx context.Context, in ModifyOrderInput) (*Order, error) {
 	if len(in.Items) == 0 {
 		return nil, ErrEmptyOrder
@@ -431,20 +421,21 @@ func (s *Service) MarkReady(ctx context.Context, vendorID string, orderIDs []str
 	})
 }
 
-// VerifyPickup atomically transitions an order from READY → PICKED_UP.
-// The conditional UPDATE inside MarkPickedUpTx guarantees that exactly one
-// concurrent call wins even if many goroutines submit the same valid code
-// (proven by the 1000-racer test).
-func (s *Service) VerifyPickup(ctx context.Context, orderID, code, vendorActorID string) error {
+// Pickup atomically transitions READY → PICKED_UP for the order's OWNER.
+// Employee self-service: the scanned QR carries only the order id; ownership
+// is enforced here (o.UserID != employeeID → ErrForbidden). The conditional
+// UPDATE inside MarkPickedUpTx guarantees one-time idempotency — exactly one
+// concurrent call wins, all others see ErrInvalidTransition.
+func (s *Service) Pickup(ctx context.Context, orderID, employeeID string) error {
 	o, err := s.Orders.GetByID(ctx, orderID)
 	if err != nil {
 		return err
 	}
+	if o.UserID != employeeID {
+		return ErrForbidden
+	}
 	if o.Status != StatusReady {
 		return ErrInvalidTransition
-	}
-	if !totp.Verify(o.TOTPSecret, code, s.Clock.Now()) {
-		return ErrInvalidPickupCode
 	}
 
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
@@ -452,14 +443,14 @@ func (s *Service) VerifyPickup(ctx context.Context, orderID, code, vendorActorID
 			return err
 		}
 		from := StatusReady
-		evRole := "vendor_operator"
+		evRole := "employee"
 		if err := s.StateTx.AppendTx(ctx, tx, &StateEvent{
 			OrderID:   orderID,
 			FromState: &from,
 			ToState:   StatusPickedUp,
-			ActorID:   &vendorActorID,
+			ActorID:   &employeeID,
 			ActorRole: &evRole,
-			Reason:    "totp_verify",
+			Reason:    "qr_pickup",
 			Payload:   map[string]any{},
 		}); err != nil {
 			return err
@@ -468,7 +459,7 @@ func (s *Service) VerifyPickup(ctx context.Context, orderID, code, vendorActorID
 		if err := s.OutboxTx.AppendTx(ctx, tx, "order", orderID, "order.picked_up.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
-		return s.AuditTx.WriteTx(ctx, tx, &vendorActorID, &evRole, "order.picked_up", "order", orderID, payload, "")
+		return s.AuditTx.WriteTx(ctx, tx, &employeeID, &evRole, "order.picked_up", "order", orderID, payload, "")
 	})
 }
 

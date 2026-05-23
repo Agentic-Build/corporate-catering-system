@@ -15,8 +15,8 @@ import (
 // tool without nil-deref panics. Each handler defends against nil deps at
 // call time, so registration itself is safe even when services aren't wired.
 //
-// Tool inventory (27 total):
-//   - 6 order · 3 menu (list_for_day, search, get_item) · 1 vendor discovery
+// Tool inventory (26 total):
+//   - 5 order · 3 menu (list_for_day, search, get_item) · 1 vendor discovery
 //   - 2 ChatGPT-convention (search, fetch)
 //   - 3 vendor admin · 3 payroll · 1 audit · 2 feedback
 //   - 1 settlement · 5 compliance
@@ -46,7 +46,6 @@ func TestMCPServer_RegistersExpectedTools(t *testing.T) {
 		"menu.search",
 		"order.cancel",
 		"order.get",
-		"order.get_pickup_code",
 		"order.list_mine",
 		"order.modify",
 		"order.place",

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { StateTag, Card, Button, Modal, Icon } from "@tbite/ui";
   import { invalidateAll } from "$app/navigation";
+  import { parsePickupQR } from "@tbite/pickup";
   import { onMount } from "svelte";
 
   let { data, form } = $props();
@@ -43,33 +44,92 @@
     cancelled: "已取消",
   } as Record<string, string>;
 
-  // Verify-pickup modal state.
-  let verifyOpen = $state(false);
-  let verifyOrderID = $state("");
-  let verifyOrderLabel = $state("");
-  let codeInput = $state<HTMLInputElement>();
+  // Scan-to-serve: open the camera, decode the meal-sticker QR, mark that
+  // single order ready (placed/cutoff → ready). html5-qrcode is loaded only
+  // in the browser to avoid SSR failures.
+  let scanOpen = $state(false);
+  let scanError = $state("");
+  let markReadyForm = $state<HTMLFormElement>();
+  let scannedID = $state("");
+  let scanner: import("html5-qrcode").Html5Qrcode | null = null;
+  // Guards against html5-qrcode's decode callback firing again before
+  // stopScan() resolves, which would submit mark-ready twice.
+  let scanBusy = false;
 
-  function openVerify(orderID: string, plant: string, total: number) {
-    verifyOrderID = orderID;
-    verifyOrderLabel = `${plant} · $${total.toLocaleString()}`;
-    verifyOpen = true;
+  const SCAN_REGION_ID = "serve-scan-region";
+
+  async function startScan() {
+    scanError = "";
+    scannedID = "";
+    scanBusy = false;
+    const { Html5Qrcode } = await import("html5-qrcode");
+    scanner = new Html5Qrcode(SCAN_REGION_ID);
+    try {
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        (decoded: string) => onDecoded(decoded),
+        () => {},
+      );
+    } catch {
+      scanError = "無法開啟相機，請確認瀏覽器相機權限。";
+    }
   }
 
-  // The shared Modal focuses its close button on open; move focus to the
-  // code input once the dialog has mounted so merchants can type at once.
+  async function stopScan() {
+    if (scanner) {
+      try {
+        await scanner.stop();
+      } catch {
+        // already stopped
+      }
+      scanner = null;
+    }
+  }
+
+  function onDecoded(text: string) {
+    if (scanBusy) return;
+    const parsed = parsePickupQR(text);
+    if (!parsed) {
+      scanError = "無法辨識的 QR，請掃描餐點貼紙。";
+      return;
+    }
+    scanBusy = true;
+    scannedID = parsed.orderId;
+    stopScan().then(() => {
+      scanOpen = false;
+      markReadyForm?.requestSubmit();
+    });
+  }
+
+  // Open the scan modal and mount the camera once the region exists.
   $effect(() => {
-    if (verifyOpen) requestAnimationFrame(() => codeInput?.focus());
+    if (scanOpen) {
+      requestAnimationFrame(() => startScan());
+    }
   });
+
+  function closeScan() {
+    stopScan();
+    scanOpen = false;
+  }
 </script>
 
 <section class="mb-6">
-  <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-red-600">
-    Prep Board · 備餐看板
+  <div class="flex items-start justify-between gap-3">
+    <div>
+      <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-red-600">
+        Prep Board · 備餐看板
+      </div>
+      <h1 class="mt-1 text-3xl font-black tracking-tight text-tb-slate-900">備餐看板</h1>
+      <p class="mt-1 text-sm text-tb-slate-500">
+        {data.date} · {data.totalCount} 筆訂單 · 即時更新
+      </p>
+    </div>
+    <Button variant="primary" size="md" onclick={() => (scanOpen = true)}>
+      <Icon name="qr" class="h-4 w-4" />掃描出餐
+    </Button>
   </div>
-  <h1 class="mt-1 text-3xl font-black tracking-tight text-tb-slate-900">備餐看板</h1>
-  <p class="mt-1 text-sm text-tb-slate-500">
-    {data.date} · {data.totalCount} 筆訂單 · 即時更新
-  </p>
   <a
     href="/prep-sheet?date={data.date}"
     class="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
@@ -101,9 +161,11 @@
     已標記 {form.count} 筆為備餐完成
   </p>
 {/if}
-{#if form?.success && form?.verifiedID}
-  <p class="mb-4 rounded-lg bg-tb-emerald-50 px-3 py-2 text-sm text-tb-emerald-700">已核銷訂單</p>
-{/if}
+
+<!-- Single-order serve form, submitted programmatically after a successful scan. -->
+<form method="POST" action="?/markReady" bind:this={markReadyForm} class="hidden">
+  <input type="hidden" name="order_id" value={scannedID} />
+</form>
 
 {#if Object.keys(data.byPlant).length === 0}
   <div
@@ -135,7 +197,6 @@
                   <th class="pb-2 text-right">項目數</th>
                   <th class="pb-2 text-right">金額</th>
                   <th class="pb-2">狀態</th>
-                  <th class="pb-2"></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-tb-slate-100">
@@ -169,22 +230,11 @@
                         {statusLabel[o.status] ?? o.status}
                       </StateTag>
                     </td>
-                    <td class="py-2.5 text-right">
-                      {#if o.status === "ready"}
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onclick={() => openVerify(o.id, o.plant, o.total_price_minor)}
-                        >
-                          <Icon name="qr" class="h-3.5 w-3.5" />核銷
-                        </Button>
-                      {/if}
-                    </td>
                   </tr>
                   {#if o.notes}
                     <tr class="bg-tb-amber-50/70">
                       <td></td>
-                      <td colspan="5" class="pb-2.5 text-xs text-tb-amber-800">
+                      <td colspan="4" class="pb-2.5 text-xs text-tb-amber-800">
                         <span class="font-bold">特殊需求：</span>{o.notes}
                       </td>
                     </tr>
@@ -206,28 +256,23 @@
   </div>
 {/if}
 
-<Modal open={verifyOpen} onClose={() => (verifyOpen = false)} title="核銷取餐">
+<Modal open={scanOpen} onClose={closeScan} title="掃描出餐">
   {#snippet children()}
-    <p class="mb-4 text-xs text-tb-slate-500">{verifyOrderLabel}</p>
-    <form method="POST" action="?/verifyPickup" class="space-y-3">
-      <input type="hidden" name="order_id" value={verifyOrderID} />
-      <label class="block text-sm">
-        <span class="font-semibold text-tb-slate-800">員工出示的 6 位數動態碼</span>
-        <input
-          bind:this={codeInput}
-          name="code"
-          required
-          pattern="\d{6}"
-          inputmode="numeric"
-          class="mt-1 w-full rounded-lg border border-tb-slate-300 px-3 py-2 text-center font-jetbrains-mono text-2xl tabular-nums tracking-widest focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
-        />
-      </label>
-      <div class="flex justify-end gap-2">
-        <Button variant="secondary" onclick={() => (verifyOpen = false)}>取消</Button>
-        <Button variant="primary" type="submit">
-          <Icon name="check" class="h-4 w-4" />完成核銷
-        </Button>
-      </div>
-    </form>
+    <p class="mb-3 text-xs text-tb-slate-500">
+      掃描餐點貼紙上的 QR，將該筆訂單標記為備餐完成（出餐）。
+    </p>
+    <div
+      id={SCAN_REGION_ID}
+      class="mx-auto aspect-square w-full max-w-xs overflow-hidden rounded-tb-2xl bg-tb-slate-900"
+    ></div>
+    {#if scanError}
+      <p class="mt-3 rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">{scanError}</p>
+    {/if}
+    <p class="mt-3 text-xs text-tb-slate-400">
+      相機被拒或無法使用時，仍可改用看板上的「標記選取為備餐完成」批次按鈕。
+    </p>
+  {/snippet}
+  {#snippet footer()}
+    <Button variant="secondary" onclick={closeScan}>關閉</Button>
   {/snippet}
 </Modal>

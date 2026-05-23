@@ -18,7 +18,6 @@ import (
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	totp "github.com/takalawang/corporate-catering-system/services/api/internal/pickup/totp"
 )
 
 func registerOrderTools(s *server.MCPServer, deps Deps) {
@@ -280,51 +279,6 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 				"items_count": len(items),
 			}, u)
 			data, _ := json.Marshal(o)
-			return mcp.NewToolResultText(string(data)), nil
-		},
-	)
-
-	// -------- order.get_pickup_code --------
-	s.AddTool(
-		mcp.NewTool("order.get_pickup_code",
-			mcp.WithDescription("Get the current TOTP pickup code for a READY order (employee owner only)"),
-			mcp.WithString("order_id",
-				mcp.Required(),
-				mcp.Description("UUID of the order"),
-			),
-			annoReadOnly(),
-		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleEmployee {
-				return mcp.NewToolResultError("only employee can get pickup code"), nil
-			}
-			if deps.Order == nil {
-				return mcp.NewToolResultError("order service not configured"), nil
-			}
-			orderID, err := req.RequireString("order_id")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			o, err := deps.Order.Get(ctx, orderID, u.ID)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			if o.Status != order.StatusReady {
-				return mcp.NewToolResultError("order is not ready for pickup"), nil
-			}
-			now := time.Now()
-			code := totp.Generate(o.TOTPSecret, now)
-			expiresIn := totp.StepSeconds - int(now.Unix()%int64(totp.StepSeconds))
-			auditAfter(ctx, deps, "order.get_pickup_code", "order", o.ID, nil, u)
-			data, _ := json.Marshal(map[string]any{
-				"order_id":           o.ID,
-				"code":               code,
-				"expires_in_seconds": expiresIn,
-			})
 			return mcp.NewToolResultText(string(data)), nil
 		},
 	)

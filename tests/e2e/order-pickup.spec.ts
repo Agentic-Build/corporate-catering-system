@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { loginEmployee } from "./auth";
 
-test("pickup page redirects to order detail when not ready", async ({ page }) => {
+test("scan page manual fallback rejects an order that is not ready", async ({ page }) => {
   await loginEmployee(page);
 
   // The default cutoff is 17:00 UTC the day BEFORE supply_date, so "today" is
@@ -24,8 +24,13 @@ test("pickup page redirects to order detail when not ready", async ({ page }) =>
   expect(m).not.toBeNull();
   const orderID = m![1];
 
-  // Order is in 'placed' status → /pickup should redirect back to /orders/[id]
-  await page.goto(`/orders/${orderID}/pickup`);
-  await page.waitForURL(`**/orders/${orderID}`, { timeout: 5_000 });
-  await expect(page.getByText("訂單詳情")).toBeVisible();
+  // New flow: pickup is employee self-scan at /scan. The camera is unavailable
+  // in headless E2E, so exercise the manual order-number fallback instead. The
+  // order is still 'placed' (the vendor hasn't scanned it to 'ready'), so the
+  // fallback must not find a matching ready order and must reject the pickup.
+  await page.goto("/scan");
+  await page.getByPlaceholder(/3f9a1c4b/).fill(orderID.slice(0, 8));
+  await page.getByRole("button", { name: "核銷" }).click();
+
+  await expect(page.getByText(/找不到符合的待領訂單/)).toBeVisible({ timeout: 5_000 });
 });

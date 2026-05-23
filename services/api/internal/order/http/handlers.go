@@ -12,7 +12,6 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	totp "github.com/takalawang/corporate-catering-system/services/api/internal/pickup/totp"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
 )
 
@@ -127,21 +126,6 @@ type modifyOrderInput struct {
 type orderOutput struct {
 	Body struct {
 		Order orderDTO `json:"order"`
-	}
-}
-
-type pickupCodeOutput struct {
-	Body struct {
-		OrderID          string `json:"order_id"`
-		Code             string `json:"code"`
-		ExpiresInSeconds int    `json:"expires_in_seconds"`
-	}
-}
-
-type verifyPickupInput struct {
-	ID   string `path:"id" format:"uuid"`
-	Body struct {
-		Code string `json:"code" minLength:"6" maxLength:"6"`
 	}
 }
 
@@ -301,23 +285,14 @@ func (a *API) Register(api huma.API) {
 	}, a.cancel)
 
 	huma.Register(api, huma.Operation{
-		OperationID: "getPickupCode",
-		Method:      http.MethodGet,
-		Path:        "/api/employee/orders/{id}/pickup-code",
-		Summary:     "Get current TOTP pickup code for an order (owner, ready only)",
-		Tags:        []string{"employee", "order"},
-		Security:    []map[string][]string{{"bearer": {}}},
-	}, a.getPickupCode)
-
-	huma.Register(api, huma.Operation{
-		OperationID:   "verifyPickup",
+		OperationID:   "pickupOrder",
 		Method:        http.MethodPost,
-		Path:          "/api/merchant/orders/{id}/verify-pickup",
-		Summary:       "Verify TOTP code and mark order picked up",
-		Tags:          []string{"merchant", "order"},
+		Path:          "/api/employee/orders/{id}/pickup",
+		Summary:       "Self-service pickup: scan the meal QR to mark your order picked up",
+		Tags:          []string{"employee", "order"},
 		Security:      []map[string][]string{{"bearer": {}}},
 		DefaultStatus: http.StatusNoContent,
-	}, a.verifyPickup)
+	}, a.pickup)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "markOrdersReady",
@@ -498,33 +473,12 @@ func (a *API) cancel(ctx context.Context, in *orderIDInput) (*struct{}, error) {
 	return &struct{}{}, nil
 }
 
-func (a *API) getPickupCode(ctx context.Context, in *orderIDInput) (*pickupCodeOutput, error) {
+func (a *API) pickup(ctx context.Context, in *orderIDInput) (*struct{}, error) {
 	u, err := a.requireEmployee(ctx)
 	if err != nil {
 		return nil, err
 	}
-	o, err := a.Svc.Get(ctx, in.ID, u.ID)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	if o.Status != order.StatusReady {
-		return nil, huma.Error409Conflict("order is not ready for pickup")
-	}
-	now := time.Now()
-	code := totp.Generate(o.TOTPSecret, now)
-	var resp pickupCodeOutput
-	resp.Body.OrderID = o.ID
-	resp.Body.Code = code
-	resp.Body.ExpiresInSeconds = totp.StepSeconds - int(now.Unix()%int64(totp.StepSeconds))
-	return &resp, nil
-}
-
-func (a *API) verifyPickup(ctx context.Context, in *verifyPickupInput) (*struct{}, error) {
-	u, _, err := a.requireVendor(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := a.Svc.VerifyPickup(ctx, in.ID, in.Body.Code, u.ID); err != nil {
+	if err := a.Svc.Pickup(ctx, in.ID, u.ID); err != nil {
 		return nil, mapErr(err)
 	}
 	return &struct{}{}, nil
@@ -689,7 +643,7 @@ func (a *API) streamEmployeeMenuEvents(ctx context.Context, _ *struct{}, send ss
 }
 
 // mapErr translates domain errors to huma HTTP errors.
-// Conflict (409) for state / cutoff / stock / invalid pickup code; 400 for
+// Conflict (409) for state / cutoff / stock; 400 for
 // bad input; 403 for ownership; 404 for missing; 500 fallback.
 func mapErr(err error) error {
 	switch {
@@ -699,7 +653,6 @@ func mapErr(err error) error {
 		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, order.ErrInvalidTransition),
 		errors.Is(err, order.ErrCutoffPassed),
-		errors.Is(err, order.ErrInvalidPickupCode),
 		errors.Is(err, quota.ErrOutOfStock),
 		errors.Is(err, quota.ErrSupplyNotFound):
 		return huma.Error409Conflict(err.Error())

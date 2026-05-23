@@ -1,8 +1,8 @@
 <script lang="ts">
   // Employee home — recreated from EmployeeView.jsx: greeting header,
   // data-driven category strip, three featured rows, full MealCard grid.
-  // Header / LocationBar / floating cart / cart drawer / TOTP modal all live
-  // in +layout.svelte; this page owns the home content + its form actions.
+  // Header / LocationBar / floating cart / cart drawer all live in
+  // +layout.svelte; this page owns the home content + its form actions.
   import { MealCard, StateTag, WeekCalendar } from "@tbite/ui";
   import { invalidateAll, goto } from "$app/navigation";
   import { page } from "$app/stores";

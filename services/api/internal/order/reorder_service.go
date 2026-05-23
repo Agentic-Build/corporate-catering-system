@@ -8,8 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	totp "github.com/takalawang/corporate-catering-system/services/api/internal/pickup/totp"
 )
 
 // ReorderMenuItem is the menu_item view ReorderService needs. We mirror just
@@ -224,10 +222,6 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 	}
 
 	// Build the new order shell. ID/CreatedAt/UpdatedAt are filled in by CreateTx.
-	secret, err := totp.NewSecret()
-	if err != nil {
-		return nil, fmt.Errorf("reorder: generate totp: %w", err)
-	}
 	domainItems := make([]Item, 0, len(survivors))
 	var totalPrice int64
 	for _, c := range survivors {
@@ -251,7 +245,6 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 		SupplyDate:      targetDay,
 		Status:          StatusPlaced,
 		TotalPriceMinor: totalPrice,
-		TOTPSecret:      secret,
 		PlacedAt:        &placedAt,
 		CutoffAt:        newCutoff,
 		Items:           domainItems,
