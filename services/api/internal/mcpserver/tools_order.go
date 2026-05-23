@@ -26,6 +26,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 	s.AddTool(
 		mcp.NewTool("order.list_mine",
 			mcp.WithDescription("List the authenticated employee's recent orders (last 30 days)"),
+			annoReadOnly(),
 		),
 		func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -59,6 +60,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 				mcp.Required(),
 				mcp.Description("UUID of the order to fetch"),
 			),
+			annoReadOnly(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -112,6 +114,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 			mcp.WithString("notes",
 				mcp.Description("Optional free-text special requirements shown on the merchant prep board"),
 			),
+			annoCreate(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -183,6 +186,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 				mcp.Required(),
 				mcp.Description("UUID of the order to cancel"),
 			),
+			annoReversible(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -230,6 +234,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 			mcp.WithString("notes",
 				mcp.Description("Optional free-text special requirements; replaces the order's existing note"),
 			),
+			annoStateChange(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -287,6 +292,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 				mcp.Required(),
 				mcp.Description("UUID of the order"),
 			),
+			annoReadOnly(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)

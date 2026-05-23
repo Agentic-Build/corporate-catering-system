@@ -31,6 +31,7 @@ func registerSettlementTools(s *server.MCPServer, deps Deps) {
 				mcp.Required(),
 				mcp.Description("Period end date in YYYY-MM-DD"),
 			),
+			annoHighRiskAdmin(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)

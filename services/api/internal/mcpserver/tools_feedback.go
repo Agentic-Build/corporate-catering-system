@@ -34,6 +34,7 @@ func registerFeedbackTools(s *server.MCPServer, deps Deps) {
 			mcp.WithString("comment",
 				mcp.Description("Optional free-text comment, up to 500 characters"),
 			),
+			annoCreate(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
@@ -86,6 +87,7 @@ func registerFeedbackTools(s *server.MCPServer, deps Deps) {
 				mcp.Required(),
 				mcp.Description("Complaint description, 5-1000 characters"),
 			),
+			annoCreate(),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
