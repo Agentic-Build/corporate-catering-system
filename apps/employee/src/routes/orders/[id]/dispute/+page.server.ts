@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from "./$types";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
 
-const DISPUTABLE = new Set(["picked_up", "no_show"]);
+const DISPUTABLE = new Set(["ready", "picked_up", "no_show"]);
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
   if (!locals.user) {

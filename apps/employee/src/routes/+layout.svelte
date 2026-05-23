@@ -9,7 +9,6 @@
   import Sidebar from "$lib/components/Sidebar.svelte";
   import CartDrawer from "$lib/components/CartDrawer.svelte";
   import FloatingCartBar from "$lib/components/FloatingCartBar.svelte";
-  import TotpModal from "$lib/components/TotpModal.svelte";
   import { cart } from "$lib/cart.svelte";
   import { PLANTS, buildDays } from "$lib/plants";
 
@@ -46,7 +45,6 @@
 
   // ── global overlays ──
   let cartOpen = $state(false);
-  let totpOpen = $state(false);
 
   // cart-bump animation on the header cart button when the count changes
   let bump = $state(false);
@@ -82,9 +80,9 @@
           <SearchInput value={search} onInput={onSearch} placeholder="搜尋餐廳或餐點…" />
         </div>
         <div class="ml-auto flex items-center gap-2 md:ml-0">
-          <Button variant="secondary" size="sm" onclick={() => (totpOpen = true)}>
+          <Button variant="secondary" size="sm" onclick={() => goto("/scan")}>
             <Icon name="qr" class="h-4 w-4 text-tb-red-600" />
-            <span class="hidden sm:inline">領餐碼</span>
+            <span class="hidden sm:inline">掃描領餐</span>
           </Button>
           <button
             type="button"
@@ -129,7 +127,7 @@
     </header>
 
     <div class="mx-auto flex max-w-[1400px] gap-6 px-4 py-6 md:px-8">
-      <Sidebar onOpenTotp={() => (totpOpen = true)} ordersBadge={data.activeOrders} />
+      <Sidebar ordersBadge={data.activeOrders} />
       <main class="min-w-0 flex-1 pb-32">{@render children()}</main>
     </div>
   </div>
@@ -141,7 +139,6 @@
     plant={selectedPlant}
     supplyDate={selectedDay}
   />
-  <TotpModal open={totpOpen} onClose={() => (totpOpen = false)} orders={data.readyOrders} />
 {:else}
   <main class="min-h-screen bg-white">{@render children()}</main>
 {/if}
