@@ -164,3 +164,249 @@ entries:
       attributes:
         tbite_role: vendor_operator
         tbite_vendor_id: a1111111-1111-1111-1111-111111111111
+
+  # Additional merchant operators for r002-r010 (vendors a2222222.. .. aaaaaaaa..).
+  # r001 is covered by tbite-dev-merchant (e2e-merchant) above.
+  - id: tbite-dev-merchant-r002
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: merchant-r002@tbite.test
+    attrs:
+      name: 巷口滷肉飯研究室
+      email: merchant-r002@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-vendor-operator
+      attributes:
+        tbite_role: vendor_operator
+        tbite_vendor_id: a2222222-2222-2222-2222-222222222222
+
+  - id: tbite-dev-merchant-r003
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: merchant-r003@tbite.test
+    attrs:
+      name: 永春豆漿早餐鋪
+      email: merchant-r003@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-vendor-operator
+      attributes:
+        tbite_role: vendor_operator
+        tbite_vendor_id: a3333333-3333-3333-3333-333333333333
+
+  - id: tbite-dev-merchant-r004
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: merchant-r004@tbite.test
+    attrs:
+      name: 晨光吐司研究所
+      email: merchant-r004@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-vendor-operator
+      attributes:
+        tbite_role: vendor_operator
+        tbite_vendor_id: a4444444-4444-4444-4444-444444444444
+
+  - id: tbite-dev-merchant-r005
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: merchant-r005@tbite.test
+    attrs:
+      name: 茶里王手作茶飲
+      email: merchant-r005@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-vendor-operator
+      attributes:
+        tbite_role: vendor_operator
+        tbite_vendor_id: a5555555-5555-5555-5555-555555555555
+
+  - id: tbite-dev-merchant-r006
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: merchant-r006@tbite.test
+    attrs:
+      name: 島嶼豆花甜品
+      email: merchant-r006@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-vendor-operator
+      attributes:
+        tbite_role: vendor_operator
+        tbite_vendor_id: a6666666-6666-6666-6666-666666666666
+
+  - id: tbite-dev-merchant-r007
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: merchant-r007@tbite.test
+    attrs:
+      name: 東京一番拉麵屋
+      email: merchant-r007@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-vendor-operator
+      attributes:
+        tbite_role: vendor_operator
+        tbite_vendor_id: a7777777-7777-7777-7777-777777777777
+
+  - id: tbite-dev-merchant-r008
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: merchant-r008@tbite.test
+    attrs:
+      name: 首爾拌飯與炸雞
+      email: merchant-r008@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-vendor-operator
+      attributes:
+        tbite_role: vendor_operator
+        tbite_vendor_id: a8888888-8888-8888-8888-888888888888
+
+  - id: tbite-dev-merchant-r009
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: merchant-r009@tbite.test
+    attrs:
+      name: 美式街角漢堡
+      email: merchant-r009@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-vendor-operator
+      attributes:
+        tbite_role: vendor_operator
+        tbite_vendor_id: a9999999-9999-9999-9999-999999999999
+
+  - id: tbite-dev-merchant-r010
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: merchant-r010@tbite.test
+    attrs:
+      name: 巷弄披薩義麵館
+      email: merchant-r010@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-vendor-operator
+      attributes:
+        tbite_role: vendor_operator
+        tbite_vendor_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+
+  # Additional employees across plants tn-a..tn-d (the canonical e2e-employee is
+  # tn-a/IT above). Mirrored in the DB seed (scripts/dev/seed-demo.sql).
+  - id: tbite-dev-employee-tnb
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: emp-tnb@tbite.test
+    attrs:
+      name: 王曉明 (B區)
+      email: emp-tnb@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-employee
+      attributes:
+        tbite_role: employee
+        tbite_employee_id: E2E002
+        tbite_plant: tn-b
+        tbite_department: Ops
+
+  - id: tbite-dev-employee-tnc
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: emp-tnc@tbite.test
+    attrs:
+      name: 陳怡君 (C區)
+      email: emp-tnc@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-employee
+      attributes:
+        tbite_role: employee
+        tbite_employee_id: E2E003
+        tbite_plant: tn-c
+        tbite_department: QA
+
+  - id: tbite-dev-employee-tnd
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: emp-tnd@tbite.test
+    attrs:
+      name: 林志豪 (D區)
+      email: emp-tnd@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-employee
+      attributes:
+        tbite_role: employee
+        tbite_employee_id: E2E004
+        tbite_plant: tn-d
+        tbite_department: HR
+
+  - id: tbite-dev-employee-tna2
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: emp-tna2@tbite.test
+    attrs:
+      name: 張美玲 (A區)
+      email: emp-tna2@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !KeyOf tbite-group-employee
+      attributes:
+        tbite_role: employee
+        tbite_employee_id: E2E005
+        tbite_plant: tn-a
+        tbite_department: Finance

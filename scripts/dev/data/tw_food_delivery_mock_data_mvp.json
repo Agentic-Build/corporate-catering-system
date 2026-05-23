@@ -1,0 +1,7296 @@
+{
+  "meta": {
+    "name": "Taiwan Food Delivery Mock Data",
+    "version": "1.0.0-mvp-assets",
+    "currency": "TWD",
+    "locale": "zh-TW",
+    "city": "Taipei",
+    "description": "Uber Eats-like 台灣外送 App mock data；所有店名、地址、餐點與價格皆為虛構，用於 UI/UX、prototype 與前端開發。",
+    "generatedAt": "2026-05-10",
+    "counts": {
+      "categories": 4,
+      "restaurants": 10,
+      "items": 150
+    },
+    "assetMode": "mvp-shared-item-images",
+    "assetCounts": {
+      "categories": 4,
+      "restaurantCovers": 10,
+      "restaurantLogos": 10,
+      "representativeItemImages": 10,
+      "totalImageFiles": 34
+    },
+    "notes": "MVP 圖片包：分類圖、店家封面、Logo 一對一；餐點圖片依店家共用代表餐點圖，所有 JSON image 路徑均指向 ZIP 內存在的檔案。"
+  },
+  "assetBasePath": "/assets/mock/eats",
+  "categories": [
+    {
+      "id": "cat-taiwanese",
+      "name": "台式／中式",
+      "shortName": "台式",
+      "description": "便當、滷肉飯、麵飯、小吃、滷味，對應台灣外送最常見的正餐情境。",
+      "icon": "rice-bowl",
+      "image": "/assets/mock/eats/categories/taiwanese.jpg",
+      "sortOrder": 1
+    },
+    {
+      "id": "cat-breakfast",
+      "name": "早餐／早午餐",
+      "shortName": "早餐",
+      "description": "豆漿、蛋餅、吐司、漢堡、沙拉與早午餐盤。",
+      "icon": "sunrise",
+      "image": "/assets/mock/eats/categories/breakfast.jpg",
+      "sortOrder": 2
+    },
+    {
+      "id": "cat-drinks-desserts",
+      "name": "飲料／甜點",
+      "shortName": "飲料甜點",
+      "description": "手搖飲、果茶、咖啡、豆花、鬆餅與下午茶甜點。",
+      "icon": "cup-straw",
+      "image": "/assets/mock/eats/categories/drinks-desserts.jpg",
+      "sortOrder": 3
+    },
+    {
+      "id": "cat-global-western",
+      "name": "日韓／西式",
+      "shortName": "異國西式",
+      "description": "拉麵、丼飯、韓式拌飯、炸雞、漢堡、披薩與義大利麵。",
+      "icon": "globe-2",
+      "image": "/assets/mock/eats/categories/global-western.jpg",
+      "sortOrder": 4
+    }
+  ],
+  "restaurants": [
+    {
+      "id": "r001",
+      "name": "阿城炙燒便當",
+      "categoryId": "cat-taiwanese",
+      "cuisineTags": [
+        "便當",
+        "台灣美食",
+        "雞腿",
+        "排骨"
+      ],
+      "rating": 4.8,
+      "ratingCount": 1280,
+      "priceLevel": "$",
+      "deliveryTimeMin": 18,
+      "deliveryTimeMax": 28,
+      "deliveryFeeTwd": 29,
+      "distanceKm": 1.4,
+      "isOpen": true,
+      "promo": "滿 NT$300 折 NT$30",
+      "address": "台北市大安區和平東路二段 88 號",
+      "coverImage": "/assets/mock/eats/stores/r001-cover.jpg",
+      "logoImage": "/assets/mock/eats/logos/r001.png",
+      "menuSections": [
+        "人氣精選",
+        "招牌便當",
+        "單點主菜",
+        "湯品小菜"
+      ],
+      "items": [
+        {
+          "id": "i001",
+          "restaurantId": "r001",
+          "section": "人氣精選",
+          "name": "炙燒雞腿便當",
+          "description": "去骨雞腿刷上醬油蒜香醬炙燒，附三樣配菜與白飯。",
+          "priceTwd": 165,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "炙燒雞腿便當 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 243,
+          "dietaryTags": [
+            "含肉",
+            "人氣"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i002",
+          "restaurantId": "r001",
+          "section": "人氣精選",
+          "name": "古早味排骨便當",
+          "description": "厚切里肌醃製後酥炸，搭配滷蛋與時蔬。",
+          "priceTwd": 145,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "古早味排骨便當 商品照",
+          "isPopular": true,
+          "likeRate": 94,
+          "ratingCount": 198,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i003",
+          "restaurantId": "r001",
+          "section": "招牌便當",
+          "name": "椒麻雞便當",
+          "description": "酥炸雞腿排淋椒麻醬，微辣開胃。",
+          "priceTwd": 170,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "椒麻雞便當 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 156,
+          "dietaryTags": [
+            "含肉",
+            "微辣"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i004",
+          "restaurantId": "r001",
+          "section": "招牌便當",
+          "name": "滷香控肉便當",
+          "description": "三層肉慢滷入味，肥瘦均衡。",
+          "priceTwd": 150,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "滷香控肉便當 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 87,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i005",
+          "restaurantId": "r001",
+          "section": "招牌便當",
+          "name": "蒜泥白肉便當",
+          "description": "溫體豬五花搭配蒜香醬油膏。",
+          "priceTwd": 155,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "蒜泥白肉便當 商品照",
+          "isPopular": false,
+          "likeRate": 90,
+          "ratingCount": 54,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i006",
+          "restaurantId": "r001",
+          "section": "招牌便當",
+          "name": "鹽烤鯖魚便當",
+          "description": "挪威鯖魚鹽烤，附檸檬角。",
+          "priceTwd": 175,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "鹽烤鯖魚便當 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 76,
+          "dietaryTags": [
+            "海鮮"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i007",
+          "restaurantId": "r001",
+          "section": "招牌便當",
+          "name": "三杯杏鮑菇便當",
+          "description": "九層塔與麻油香氣，素食友善。",
+          "priceTwd": 140,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "三杯杏鮑菇便當 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 62,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i008",
+          "restaurantId": "r001",
+          "section": "招牌便當",
+          "name": "雙拼雞排香腸便當",
+          "description": "酥炸雞排與台式香腸雙主菜。",
+          "priceTwd": 185,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "雙拼雞排香腸便當 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 129,
+          "dietaryTags": [
+            "含肉",
+            "份量大"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i009",
+          "restaurantId": "r001",
+          "section": "單點主菜",
+          "name": "炙燒雞腿單點",
+          "description": "去骨雞腿主菜，不附飯菜。",
+          "priceTwd": 105,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "炙燒雞腿單點 商品照",
+          "isPopular": false,
+          "likeRate": 96,
+          "ratingCount": 88,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i010",
+          "restaurantId": "r001",
+          "section": "單點主菜",
+          "name": "酥炸排骨單點",
+          "description": "厚切排骨單點，不附飯菜。",
+          "priceTwd": 90,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "酥炸排骨單點 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 51,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i011",
+          "restaurantId": "r001",
+          "section": "湯品小菜",
+          "name": "每日例湯",
+          "description": "依當日食材熬煮，可能含肉燥。",
+          "priceTwd": 35,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "每日例湯 商品照",
+          "isPopular": false,
+          "likeRate": 89,
+          "ratingCount": 31,
+          "dietaryTags": [],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i012",
+          "restaurantId": "r001",
+          "section": "湯品小菜",
+          "name": "滷蛋",
+          "description": "醬香滷蛋一顆。",
+          "priceTwd": 20,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "滷蛋 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 74,
+          "dietaryTags": [
+            "蛋奶素"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i013",
+          "restaurantId": "r001",
+          "section": "湯品小菜",
+          "name": "燙青菜",
+          "description": "季節青菜淋蒜蓉醬油。",
+          "priceTwd": 45,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "燙青菜 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 43,
+          "dietaryTags": [
+            "蔬菜"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i014",
+          "restaurantId": "r001",
+          "section": "湯品小菜",
+          "name": "黃金泡菜",
+          "description": "清爽微辣台式泡菜。",
+          "priceTwd": 50,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "黃金泡菜 商品照",
+          "isPopular": false,
+          "likeRate": 90,
+          "ratingCount": 38,
+          "dietaryTags": [
+            "微辣"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        },
+        {
+          "id": "i015",
+          "restaurantId": "r001",
+          "section": "人氣精選",
+          "name": "會議便當組合",
+          "description": "五份主廚精選便當，適合團訂。",
+          "priceTwd": 750,
+          "image": "/assets/mock/eats/items/i001.jpg",
+          "imageAlt": "會議便當組合 商品照",
+          "isPopular": false,
+          "likeRate": 95,
+          "ratingCount": 22,
+          "dietaryTags": [
+            "團體餐"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：炙燒雞腿便當"
+        }
+      ],
+      "featuredItemIds": [
+        "i001",
+        "i002",
+        "i003",
+        "i008"
+      ],
+      "mvpRepresentativeItemImage": "/assets/mock/eats/items/i001.jpg",
+      "mvpRepresentativeItemId": "i001"
+    },
+    {
+      "id": "r002",
+      "name": "巷口滷肉飯研究室",
+      "categoryId": "cat-taiwanese",
+      "cuisineTags": [
+        "台灣美食",
+        "滷肉飯",
+        "小吃",
+        "湯品"
+      ],
+      "rating": 4.7,
+      "ratingCount": 890,
+      "priceLevel": "$",
+      "deliveryTimeMin": 15,
+      "deliveryTimeMax": 25,
+      "deliveryFeeTwd": 19,
+      "distanceKm": 0.9,
+      "isOpen": true,
+      "promo": "加購小菜 8 折",
+      "address": "台北市中正區羅斯福路三段 210 號",
+      "coverImage": "/assets/mock/eats/stores/r002-cover.jpg",
+      "logoImage": "/assets/mock/eats/logos/r002.png",
+      "menuSections": [
+        "人氣精選",
+        "飯類",
+        "麵湯",
+        "小菜"
+      ],
+      "items": [
+        {
+          "id": "i016",
+          "restaurantId": "r002",
+          "section": "人氣精選",
+          "name": "半熟蛋滷肉飯",
+          "description": "肥瘦各半滷肉搭配半熟蛋與酸菜。",
+          "priceTwd": 75,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "半熟蛋滷肉飯 商品照",
+          "isPopular": true,
+          "likeRate": 98,
+          "ratingCount": 310,
+          "dietaryTags": [
+            "人氣",
+            "含蛋"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i017",
+          "restaurantId": "r002",
+          "section": "人氣精選",
+          "name": "招牌焢肉飯",
+          "description": "厚切焢肉、滷筍絲與青菜。",
+          "priceTwd": 115,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "招牌焢肉飯 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 192,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i018",
+          "restaurantId": "r002",
+          "section": "飯類",
+          "name": "雞肉飯",
+          "description": "手撕雞胸拌雞油蔥酥。",
+          "priceTwd": 70,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "雞肉飯 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 95,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i019",
+          "restaurantId": "r002",
+          "section": "飯類",
+          "name": "瓜仔肉飯",
+          "description": "醬瓜肉燥鹹甜下飯。",
+          "priceTwd": 80,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "瓜仔肉飯 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 67,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i020",
+          "restaurantId": "r002",
+          "section": "飯類",
+          "name": "雙醬滷肉雞肉飯",
+          "description": "滷肉與雞肉一次滿足。",
+          "priceTwd": 95,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "雙醬滷肉雞肉飯 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 143,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i021",
+          "restaurantId": "r002",
+          "section": "飯類",
+          "name": "素香菇燥飯",
+          "description": "香菇與豆干慢炒，無肉版本。",
+          "priceTwd": 80,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "素香菇燥飯 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 41,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i022",
+          "restaurantId": "r002",
+          "section": "麵湯",
+          "name": "切仔麵",
+          "description": "油蔥湯頭與韭菜豆芽。",
+          "priceTwd": 65,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "切仔麵 商品照",
+          "isPopular": false,
+          "likeRate": 88,
+          "ratingCount": 44,
+          "dietaryTags": [],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i023",
+          "restaurantId": "r002",
+          "section": "麵湯",
+          "name": "貢丸湯",
+          "description": "新竹風味貢丸兩顆。",
+          "priceTwd": 45,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "貢丸湯 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 88,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i024",
+          "restaurantId": "r002",
+          "section": "麵湯",
+          "name": "四神湯",
+          "description": "薏仁、蓮子與豬腸燉煮。",
+          "priceTwd": 70,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "四神湯 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 71,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i025",
+          "restaurantId": "r002",
+          "section": "麵湯",
+          "name": "蛤蜊冬瓜湯",
+          "description": "清甜冬瓜與新鮮蛤蜊。",
+          "priceTwd": 85,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "蛤蜊冬瓜湯 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 35,
+          "dietaryTags": [
+            "海鮮"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i026",
+          "restaurantId": "r002",
+          "section": "小菜",
+          "name": "滷豆腐",
+          "description": "老滷汁入味豆腐。",
+          "priceTwd": 35,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "滷豆腐 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 52,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i027",
+          "restaurantId": "r002",
+          "section": "小菜",
+          "name": "滷白菜",
+          "description": "蝦米白菜滷，帶古早味。",
+          "priceTwd": 50,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "滷白菜 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 62,
+          "dietaryTags": [],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i028",
+          "restaurantId": "r002",
+          "section": "小菜",
+          "name": "蒜香嘴邊肉",
+          "description": "嘴邊肉切片搭蒜蓉醬。",
+          "priceTwd": 85,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "蒜香嘴邊肉 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 48,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i029",
+          "restaurantId": "r002",
+          "section": "小菜",
+          "name": "紅油抄手",
+          "description": "花椒紅油微麻微辣。",
+          "priceTwd": 80,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "紅油抄手 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 104,
+          "dietaryTags": [
+            "微辣",
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        },
+        {
+          "id": "i030",
+          "restaurantId": "r002",
+          "section": "人氣精選",
+          "name": "一人飽足套餐",
+          "description": "半熟蛋滷肉飯、貢丸湯、滷豆腐。",
+          "priceTwd": 145,
+          "image": "/assets/mock/eats/items/i016.jpg",
+          "imageAlt": "一人飽足套餐 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 231,
+          "dietaryTags": [
+            "套餐"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半熟蛋滷肉飯"
+        }
+      ],
+      "featuredItemIds": [
+        "i016",
+        "i017",
+        "i020",
+        "i029",
+        "i030"
+      ],
+      "mvpRepresentativeItemImage": "/assets/mock/eats/items/i016.jpg",
+      "mvpRepresentativeItemId": "i016"
+    },
+    {
+      "id": "r003",
+      "name": "永春豆漿早餐鋪",
+      "categoryId": "cat-breakfast",
+      "cuisineTags": [
+        "早餐",
+        "豆漿",
+        "蛋餅",
+        "中式早餐"
+      ],
+      "rating": 4.6,
+      "ratingCount": 640,
+      "priceLevel": "$",
+      "deliveryTimeMin": 12,
+      "deliveryTimeMax": 22,
+      "deliveryFeeTwd": 19,
+      "distanceKm": 1.0,
+      "isOpen": true,
+      "promo": "滿 NT$180 送小杯紅茶",
+      "address": "台北市信義區松山路 365 號",
+      "coverImage": "/assets/mock/eats/stores/r003-cover.jpg",
+      "logoImage": "/assets/mock/eats/logos/r003.png",
+      "menuSections": [
+        "人氣精選",
+        "蛋餅燒餅",
+        "飯糰饅頭",
+        "飲品"
+      ],
+      "items": [
+        {
+          "id": "i031",
+          "restaurantId": "r003",
+          "section": "人氣精選",
+          "name": "起司蛋餅",
+          "description": "現煎蛋餅皮包起司與蔥蛋。",
+          "priceTwd": 55,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "起司蛋餅 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 202,
+          "dietaryTags": [
+            "蛋奶素"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i032",
+          "restaurantId": "r003",
+          "section": "人氣精選",
+          "name": "燒餅油條",
+          "description": "酥脆燒餅夾現炸油條。",
+          "priceTwd": 60,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "燒餅油條 商品照",
+          "isPopular": true,
+          "likeRate": 94,
+          "ratingCount": 155,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i033",
+          "restaurantId": "r003",
+          "section": "蛋餅燒餅",
+          "name": "培根蛋餅",
+          "description": "培根、蔥蛋與特調醬油膏。",
+          "priceTwd": 65,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "培根蛋餅 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 88,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i034",
+          "restaurantId": "r003",
+          "section": "蛋餅燒餅",
+          "name": "玉米蛋餅",
+          "description": "甜玉米粒與香煎蛋餅。",
+          "priceTwd": 55,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "玉米蛋餅 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 72,
+          "dietaryTags": [
+            "蛋奶素"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i035",
+          "restaurantId": "r003",
+          "section": "蛋餅燒餅",
+          "name": "鮪魚蛋餅",
+          "description": "鮪魚沙拉與蔥蛋。",
+          "priceTwd": 70,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "鮪魚蛋餅 商品照",
+          "isPopular": false,
+          "likeRate": 95,
+          "ratingCount": 96,
+          "dietaryTags": [
+            "海鮮"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i036",
+          "restaurantId": "r003",
+          "section": "蛋餅燒餅",
+          "name": "蘿蔔糕加蛋",
+          "description": "港式蘿蔔糕煎至恰恰。",
+          "priceTwd": 65,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "蘿蔔糕加蛋 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 176,
+          "dietaryTags": [
+            "含蛋"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i037",
+          "restaurantId": "r003",
+          "section": "飯糰饅頭",
+          "name": "傳統飯糰",
+          "description": "糯米包油條、肉鬆、菜脯與酸菜。",
+          "priceTwd": 65,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "傳統飯糰 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 138,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i038",
+          "restaurantId": "r003",
+          "section": "飯糰饅頭",
+          "name": "紫米素飯糰",
+          "description": "紫米、素鬆、油條與酸菜。",
+          "priceTwd": 70,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "紫米素飯糰 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 53,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i039",
+          "restaurantId": "r003",
+          "section": "飯糰饅頭",
+          "name": "黑糖饅頭夾蛋",
+          "description": "黑糖饅頭搭蔥蛋。",
+          "priceTwd": 55,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "黑糖饅頭夾蛋 商品照",
+          "isPopular": false,
+          "likeRate": 90,
+          "ratingCount": 47,
+          "dietaryTags": [
+            "蛋奶素"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i040",
+          "restaurantId": "r003",
+          "section": "飯糰饅頭",
+          "name": "鮮肉小籠包",
+          "description": "六顆手工小籠包。",
+          "priceTwd": 85,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "鮮肉小籠包 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 121,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i041",
+          "restaurantId": "r003",
+          "section": "飲品",
+          "name": "冰豆漿",
+          "description": "非基改黃豆現磨，可選甜度。",
+          "priceTwd": 30,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "冰豆漿 商品照",
+          "isPopular": true,
+          "likeRate": 98,
+          "ratingCount": 240,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i042",
+          "restaurantId": "r003",
+          "section": "飲品",
+          "name": "熱米漿",
+          "description": "花生米漿香濃滑順。",
+          "priceTwd": 35,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "熱米漿 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 79,
+          "dietaryTags": [
+            "花生"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i043",
+          "restaurantId": "r003",
+          "section": "飲品",
+          "name": "鹹豆漿",
+          "description": "蝦米、油條、榨菜與辣油。",
+          "priceTwd": 50,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "鹹豆漿 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 58,
+          "dietaryTags": [
+            "微辣"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i044",
+          "restaurantId": "r003",
+          "section": "飲品",
+          "name": "紅茶豆漿",
+          "description": "台式紅茶混合豆漿。",
+          "priceTwd": 35,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "紅茶豆漿 商品照",
+          "isPopular": false,
+          "likeRate": 95,
+          "ratingCount": 116,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        },
+        {
+          "id": "i045",
+          "restaurantId": "r003",
+          "section": "人氣精選",
+          "name": "早餐雙人組",
+          "description": "起司蛋餅、蘿蔔糕加蛋、豆漿兩杯。",
+          "priceTwd": 190,
+          "image": "/assets/mock/eats/items/i031.jpg",
+          "imageAlt": "早餐雙人組 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 89,
+          "dietaryTags": [
+            "套餐"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：起司蛋餅"
+        }
+      ],
+      "featuredItemIds": [
+        "i031",
+        "i032",
+        "i036",
+        "i037",
+        "i040",
+        "i041"
+      ],
+      "mvpRepresentativeItemImage": "/assets/mock/eats/items/i031.jpg",
+      "mvpRepresentativeItemId": "i031"
+    },
+    {
+      "id": "r004",
+      "name": "晨光吐司研究所",
+      "categoryId": "cat-breakfast",
+      "cuisineTags": [
+        "早午餐",
+        "吐司",
+        "漢堡",
+        "咖啡"
+      ],
+      "rating": 4.7,
+      "ratingCount": 730,
+      "priceLevel": "$$",
+      "deliveryTimeMin": 20,
+      "deliveryTimeMax": 32,
+      "deliveryFeeTwd": 39,
+      "distanceKm": 2.2,
+      "isOpen": true,
+      "promo": "指定套餐買 1 送 1",
+      "address": "台北市松山區民生東路五段 99 號",
+      "coverImage": "/assets/mock/eats/stores/r004-cover.jpg",
+      "logoImage": "/assets/mock/eats/logos/r004.png",
+      "menuSections": [
+        "人氣精選",
+        "厚吐司",
+        "早午餐盤",
+        "咖啡飲品"
+      ],
+      "items": [
+        {
+          "id": "i046",
+          "restaurantId": "r004",
+          "section": "人氣精選",
+          "name": "花生培根牛肉堡",
+          "description": "手打牛肉排、培根、花生醬與生菜。",
+          "priceTwd": 185,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "花生培根牛肉堡 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 164,
+          "dietaryTags": [
+            "含肉",
+            "花生"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i047",
+          "restaurantId": "r004",
+          "section": "人氣精選",
+          "name": "松露炒蛋厚吐司",
+          "description": "奶油炒蛋、菇菇與松露醬。",
+          "priceTwd": 160,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "松露炒蛋厚吐司 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 123,
+          "dietaryTags": [
+            "蛋奶素"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i048",
+          "restaurantId": "r004",
+          "section": "厚吐司",
+          "name": "炭烤雞腿厚吐司",
+          "description": "去骨雞腿、番茄、生菜與蜂蜜芥末。",
+          "priceTwd": 170,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "炭烤雞腿厚吐司 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 99,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i049",
+          "restaurantId": "r004",
+          "section": "厚吐司",
+          "name": "芋泥肉鬆厚吐司",
+          "description": "大甲芋泥、肉鬆與鹹甜奶油。",
+          "priceTwd": 145,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "芋泥肉鬆厚吐司 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 178,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i050",
+          "restaurantId": "r004",
+          "section": "厚吐司",
+          "name": "薯餅起司蛋吐司",
+          "description": "薯餅、起司與半熟蛋。",
+          "priceTwd": 125,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "薯餅起司蛋吐司 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 82,
+          "dietaryTags": [
+            "蛋奶素"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i051",
+          "restaurantId": "r004",
+          "section": "厚吐司",
+          "name": "鮪魚玉米吐司",
+          "description": "鮪魚沙拉、玉米與脆生菜。",
+          "priceTwd": 120,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "鮪魚玉米吐司 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 74,
+          "dietaryTags": [
+            "海鮮"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i052",
+          "restaurantId": "r004",
+          "section": "早午餐盤",
+          "name": "香煎雞胸沙拉盤",
+          "description": "嫩煎雞胸、溫沙拉、地瓜與水煮蛋。",
+          "priceTwd": 210,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "香煎雞胸沙拉盤 商品照",
+          "isPopular": false,
+          "likeRate": 95,
+          "ratingCount": 66,
+          "dietaryTags": [
+            "高蛋白"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i053",
+          "restaurantId": "r004",
+          "section": "早午餐盤",
+          "name": "酪梨鮭魚蛋盤",
+          "description": "煙燻鮭魚、酪梨、炒蛋與酸種麵包。",
+          "priceTwd": 260,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "酪梨鮭魚蛋盤 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 91,
+          "dietaryTags": [
+            "海鮮"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i054",
+          "restaurantId": "r004",
+          "section": "早午餐盤",
+          "name": "野菇蔬食盤",
+          "description": "炒野菇、烤番茄、薯塊與沙拉。",
+          "priceTwd": 190,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "野菇蔬食盤 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 44,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i055",
+          "restaurantId": "r004",
+          "section": "早午餐盤",
+          "name": "兒童小鬆餅盤",
+          "description": "迷你鬆餅、炒蛋、薯條與水果。",
+          "priceTwd": 150,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "兒童小鬆餅盤 商品照",
+          "isPopular": false,
+          "likeRate": 90,
+          "ratingCount": 38,
+          "dietaryTags": [
+            "兒童友善"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i056",
+          "restaurantId": "r004",
+          "section": "咖啡飲品",
+          "name": "冰美式",
+          "description": "中焙豆，清爽堅果尾韻。",
+          "priceTwd": 80,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "冰美式 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 84,
+          "dietaryTags": [
+            "咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i057",
+          "restaurantId": "r004",
+          "section": "咖啡飲品",
+          "name": "燕麥拿鐵",
+          "description": "燕麥奶與濃縮咖啡。",
+          "priceTwd": 120,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "燕麥拿鐵 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 75,
+          "dietaryTags": [
+            "植物奶"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i058",
+          "restaurantId": "r004",
+          "section": "咖啡飲品",
+          "name": "蜂蜜檸檬氣泡飲",
+          "description": "檸檬汁、蜂蜜與氣泡水。",
+          "priceTwd": 100,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "蜂蜜檸檬氣泡飲 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 42,
+          "dietaryTags": [],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i059",
+          "restaurantId": "r004",
+          "section": "咖啡飲品",
+          "name": "鮮奶茶",
+          "description": "錫蘭紅茶與鮮乳。",
+          "priceTwd": 90,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "鮮奶茶 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 69,
+          "dietaryTags": [
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        },
+        {
+          "id": "i060",
+          "restaurantId": "r004",
+          "section": "人氣精選",
+          "name": "假日早午餐雙人組",
+          "description": "兩份厚吐司、薯條、沙拉與飲品。",
+          "priceTwd": 520,
+          "image": "/assets/mock/eats/items/i046.jpg",
+          "imageAlt": "假日早午餐雙人組 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 52,
+          "dietaryTags": [
+            "套餐"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：花生培根牛肉堡"
+        }
+      ],
+      "featuredItemIds": [
+        "i046",
+        "i047",
+        "i049",
+        "i053",
+        "i060"
+      ],
+      "mvpRepresentativeItemImage": "/assets/mock/eats/items/i046.jpg",
+      "mvpRepresentativeItemId": "i046"
+    },
+    {
+      "id": "r005",
+      "name": "茶里王手作茶飲",
+      "categoryId": "cat-drinks-desserts",
+      "cuisineTags": [
+        "飲料",
+        "珍珠奶茶",
+        "果茶",
+        "手搖"
+      ],
+      "rating": 4.9,
+      "ratingCount": 1520,
+      "priceLevel": "$",
+      "deliveryTimeMin": 10,
+      "deliveryTimeMax": 18,
+      "deliveryFeeTwd": 0,
+      "distanceKm": 0.7,
+      "isOpen": true,
+      "promo": "新用戶免外送費",
+      "address": "台北市大安區忠孝東路四段 181 巷 12 號",
+      "coverImage": "/assets/mock/eats/stores/r005-cover.jpg",
+      "logoImage": "/assets/mock/eats/logos/r005.png",
+      "menuSections": [
+        "人氣精選",
+        "原茶",
+        "奶茶鮮奶",
+        "果茶特調"
+      ],
+      "items": [
+        {
+          "id": "i061",
+          "restaurantId": "r005",
+          "section": "人氣精選",
+          "name": "黑糖珍珠鮮奶",
+          "description": "黑糖熬煮珍珠搭配光泉鮮奶。",
+          "priceTwd": 75,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "黑糖珍珠鮮奶 商品照",
+          "isPopular": true,
+          "likeRate": 98,
+          "ratingCount": 420,
+          "dietaryTags": [
+            "含乳",
+            "珍珠"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i062",
+          "restaurantId": "r005",
+          "section": "人氣精選",
+          "name": "鐵觀音奶茶",
+          "description": "焙火鐵觀音與奶精，茶感厚實。",
+          "priceTwd": 60,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "鐵觀音奶茶 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 260,
+          "dietaryTags": [
+            "咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i063",
+          "restaurantId": "r005",
+          "section": "原茶",
+          "name": "四季春青茶",
+          "description": "清香回甘，可選冰量甜度。",
+          "priceTwd": 35,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "四季春青茶 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 180,
+          "dietaryTags": [
+            "咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i064",
+          "restaurantId": "r005",
+          "section": "原茶",
+          "name": "熟成紅茶",
+          "description": "濃郁紅茶香氣。",
+          "priceTwd": 35,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "熟成紅茶 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 152,
+          "dietaryTags": [
+            "咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i065",
+          "restaurantId": "r005",
+          "section": "原茶",
+          "name": "茉莉綠茶",
+          "description": "花香清爽，適合微糖。",
+          "priceTwd": 35,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "茉莉綠茶 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 117,
+          "dietaryTags": [
+            "咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i066",
+          "restaurantId": "r005",
+          "section": "原茶",
+          "name": "冬瓜青茶",
+          "description": "冬瓜甜香與青茶平衡。",
+          "priceTwd": 45,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "冬瓜青茶 商品照",
+          "isPopular": false,
+          "likeRate": 95,
+          "ratingCount": 132,
+          "dietaryTags": [
+            "咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i067",
+          "restaurantId": "r005",
+          "section": "奶茶鮮奶",
+          "name": "珍珠奶茶",
+          "description": "經典台式奶茶加珍珠。",
+          "priceTwd": 55,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "珍珠奶茶 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 390,
+          "dietaryTags": [
+            "珍珠"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i068",
+          "restaurantId": "r005",
+          "section": "奶茶鮮奶",
+          "name": "紅茶拿鐵",
+          "description": "紅茶與鮮奶比例 7:3。",
+          "priceTwd": 65,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "紅茶拿鐵 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 204,
+          "dietaryTags": [
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i069",
+          "restaurantId": "r005",
+          "section": "奶茶鮮奶",
+          "name": "芋頭鮮奶西米露",
+          "description": "芋泥、鮮奶與西米露。",
+          "priceTwd": 85,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "芋頭鮮奶西米露 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 143,
+          "dietaryTags": [
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i070",
+          "restaurantId": "r005",
+          "section": "奶茶鮮奶",
+          "name": "抹茶鮮奶",
+          "description": "靜岡抹茶粉與鮮奶。",
+          "priceTwd": 80,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "抹茶鮮奶 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 72,
+          "dietaryTags": [
+            "含乳",
+            "咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i071",
+          "restaurantId": "r005",
+          "section": "果茶特調",
+          "name": "百香雙響炮",
+          "description": "百香果、珍珠與椰果。",
+          "priceTwd": 65,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "百香雙響炮 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 188,
+          "dietaryTags": [
+            "珍珠",
+            "椰果"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i072",
+          "restaurantId": "r005",
+          "section": "果茶特調",
+          "name": "葡萄柚綠茶",
+          "description": "新鮮葡萄柚果粒與茉莉綠。",
+          "priceTwd": 70,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "葡萄柚綠茶 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 81,
+          "dietaryTags": [
+            "咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i073",
+          "restaurantId": "r005",
+          "section": "果茶特調",
+          "name": "檸檬愛玉",
+          "description": "檸檬汁與手洗愛玉。",
+          "priceTwd": 60,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "檸檬愛玉 商品照",
+          "isPopular": false,
+          "likeRate": 95,
+          "ratingCount": 111,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i074",
+          "restaurantId": "r005",
+          "section": "果茶特調",
+          "name": "芒果冰沙",
+          "description": "芒果果泥與碎冰，夏季限定。",
+          "priceTwd": 90,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "芒果冰沙 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 55,
+          "dietaryTags": [],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        },
+        {
+          "id": "i075",
+          "restaurantId": "r005",
+          "section": "人氣精選",
+          "name": "辦公室 6 杯組",
+          "description": "六杯指定茶飲，可混搭甜冰。",
+          "priceTwd": 320,
+          "image": "/assets/mock/eats/items/i061.jpg",
+          "imageAlt": "辦公室 6 杯組 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 70,
+          "dietaryTags": [
+            "團體餐"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：黑糖珍珠鮮奶"
+        }
+      ],
+      "featuredItemIds": [
+        "i061",
+        "i062",
+        "i067",
+        "i069",
+        "i071",
+        "i075"
+      ],
+      "mvpRepresentativeItemImage": "/assets/mock/eats/items/i061.jpg",
+      "mvpRepresentativeItemId": "i061"
+    },
+    {
+      "id": "r006",
+      "name": "島嶼豆花甜品",
+      "categoryId": "cat-drinks-desserts",
+      "cuisineTags": [
+        "甜點",
+        "豆花",
+        "冰品",
+        "下午茶"
+      ],
+      "rating": 4.8,
+      "ratingCount": 980,
+      "priceLevel": "$",
+      "deliveryTimeMin": 16,
+      "deliveryTimeMax": 26,
+      "deliveryFeeTwd": 29,
+      "distanceKm": 1.6,
+      "isOpen": true,
+      "promo": "甜品滿 NT$250 免服務費",
+      "address": "台北市中山區錦州街 58 號",
+      "coverImage": "/assets/mock/eats/stores/r006-cover.jpg",
+      "logoImage": "/assets/mock/eats/logos/r006.png",
+      "menuSections": [
+        "人氣精選",
+        "豆花仙草",
+        "冰品",
+        "飲品"
+      ],
+      "items": [
+        {
+          "id": "i076",
+          "restaurantId": "r006",
+          "section": "人氣精選",
+          "name": "綜合嫩豆花",
+          "description": "花生、粉圓、芋圓與嫩豆花。",
+          "priceTwd": 70,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "綜合嫩豆花 商品照",
+          "isPopular": true,
+          "likeRate": 98,
+          "ratingCount": 288,
+          "dietaryTags": [
+            "素食",
+            "花生"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i077",
+          "restaurantId": "r006",
+          "section": "人氣精選",
+          "name": "黑糖粉粿豆花",
+          "description": "黑糖粉粿與手工豆花。",
+          "priceTwd": 75,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "黑糖粉粿豆花 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 176,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i078",
+          "restaurantId": "r006",
+          "section": "豆花仙草",
+          "name": "花生豆花",
+          "description": "蜜煮花生搭配豆香豆花。",
+          "priceTwd": 65,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "花生豆花 商品照",
+          "isPopular": false,
+          "likeRate": 95,
+          "ratingCount": 142,
+          "dietaryTags": [
+            "花生",
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i079",
+          "restaurantId": "r006",
+          "section": "豆花仙草",
+          "name": "芋圓豆花",
+          "description": "雙色芋圓與地瓜圓。",
+          "priceTwd": 70,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "芋圓豆花 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 121,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i080",
+          "restaurantId": "r006",
+          "section": "豆花仙草",
+          "name": "仙草奶凍",
+          "description": "嫩仙草、鮮奶與紅豆。",
+          "priceTwd": 75,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "仙草奶凍 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 88,
+          "dietaryTags": [
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i081",
+          "restaurantId": "r006",
+          "section": "豆花仙草",
+          "name": "紅豆薏仁湯",
+          "description": "紅豆與薏仁慢煮，溫熱供應。",
+          "priceTwd": 65,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "紅豆薏仁湯 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 52,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i082",
+          "restaurantId": "r006",
+          "section": "冰品",
+          "name": "芒果雪花冰",
+          "description": "芒果、奶霜與雪花冰。",
+          "priceTwd": 180,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "芒果雪花冰 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 210,
+          "dietaryTags": [
+            "含乳",
+            "季節限定"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i083",
+          "restaurantId": "r006",
+          "section": "冰品",
+          "name": "花生麻糬雪花冰",
+          "description": "花生粉、麻糬與牛奶雪花。",
+          "priceTwd": 160,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "花生麻糬雪花冰 商品照",
+          "isPopular": false,
+          "likeRate": 95,
+          "ratingCount": 96,
+          "dietaryTags": [
+            "花生",
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i084",
+          "restaurantId": "r006",
+          "section": "冰品",
+          "name": "宇治金時刨冰",
+          "description": "抹茶蜜、紅豆與白玉。",
+          "priceTwd": 150,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "宇治金時刨冰 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 72,
+          "dietaryTags": [
+            "咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i085",
+          "restaurantId": "r006",
+          "section": "冰品",
+          "name": "檸檬愛玉冰",
+          "description": "酸甜檸檬與愛玉，清爽解膩。",
+          "priceTwd": 80,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "檸檬愛玉冰 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 77,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i086",
+          "restaurantId": "r006",
+          "section": "飲品",
+          "name": "冬瓜檸檬",
+          "description": "冬瓜茶與新鮮檸檬。",
+          "priceTwd": 50,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "冬瓜檸檬 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 66,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i087",
+          "restaurantId": "r006",
+          "section": "飲品",
+          "name": "仙草甘茶",
+          "description": "無咖啡因仙草茶。",
+          "priceTwd": 45,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "仙草甘茶 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 48,
+          "dietaryTags": [
+            "無咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i088",
+          "restaurantId": "r006",
+          "section": "飲品",
+          "name": "紅豆鮮奶",
+          "description": "蜜紅豆與鮮奶。",
+          "priceTwd": 70,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "紅豆鮮奶 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 54,
+          "dietaryTags": [
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i089",
+          "restaurantId": "r006",
+          "section": "飲品",
+          "name": "桂花烏龍冷泡",
+          "description": "桂花香與烏龍茶感。",
+          "priceTwd": 65,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "桂花烏龍冷泡 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 37,
+          "dietaryTags": [
+            "咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        },
+        {
+          "id": "i090",
+          "restaurantId": "r006",
+          "section": "人氣精選",
+          "name": "甜品三入分享組",
+          "description": "任選三碗豆花或仙草，適合分享。",
+          "priceTwd": 205,
+          "image": "/assets/mock/eats/items/i076.jpg",
+          "imageAlt": "甜品三入分享組 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 86,
+          "dietaryTags": [
+            "分享餐"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：綜合嫩豆花"
+        }
+      ],
+      "featuredItemIds": [
+        "i076",
+        "i077",
+        "i082",
+        "i090"
+      ],
+      "mvpRepresentativeItemImage": "/assets/mock/eats/items/i076.jpg",
+      "mvpRepresentativeItemId": "i076"
+    },
+    {
+      "id": "r007",
+      "name": "東京一番拉麵屋",
+      "categoryId": "cat-global-western",
+      "cuisineTags": [
+        "日本料理",
+        "拉麵",
+        "丼飯",
+        "炸物"
+      ],
+      "rating": 4.7,
+      "ratingCount": 1110,
+      "priceLevel": "$$",
+      "deliveryTimeMin": 22,
+      "deliveryTimeMax": 35,
+      "deliveryFeeTwd": 39,
+      "distanceKm": 2.5,
+      "isOpen": true,
+      "promo": "加購炸餃折 NT$20",
+      "address": "台北市中山區南京東路二段 45 號",
+      "coverImage": "/assets/mock/eats/stores/r007-cover.jpg",
+      "logoImage": "/assets/mock/eats/logos/r007.png",
+      "menuSections": [
+        "人氣精選",
+        "拉麵",
+        "丼飯",
+        "小菜炸物"
+      ],
+      "items": [
+        {
+          "id": "i091",
+          "restaurantId": "r007",
+          "section": "人氣精選",
+          "name": "豚骨叉燒拉麵",
+          "description": "濃厚豚骨湯、叉燒兩片、溏心蛋半顆。",
+          "priceTwd": 220,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "豚骨叉燒拉麵 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 260,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i092",
+          "restaurantId": "r007",
+          "section": "人氣精選",
+          "name": "唐揚雞咖哩飯",
+          "description": "日式咖哩搭配酥炸唐揚雞。",
+          "priceTwd": 210,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "唐揚雞咖哩飯 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 176,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i093",
+          "restaurantId": "r007",
+          "section": "拉麵",
+          "name": "味噌玉米拉麵",
+          "description": "北海道風味味噌湯底與玉米奶油。",
+          "priceTwd": 210,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "味噌玉米拉麵 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 121,
+          "dietaryTags": [
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i094",
+          "restaurantId": "r007",
+          "section": "拉麵",
+          "name": "辛味噌拉麵",
+          "description": "辣味噌湯頭與辣肉味噌。",
+          "priceTwd": 230,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "辛味噌拉麵 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 155,
+          "dietaryTags": [
+            "中辣",
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i095",
+          "restaurantId": "r007",
+          "section": "拉麵",
+          "name": "醬油雞湯拉麵",
+          "description": "清爽雞湯醬油湯底。",
+          "priceTwd": 200,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "醬油雞湯拉麵 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 86,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i096",
+          "restaurantId": "r007",
+          "section": "拉麵",
+          "name": "野菜鹽味拉麵",
+          "description": "大量蔬菜與鹽味湯底。",
+          "priceTwd": 195,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "野菜鹽味拉麵 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 52,
+          "dietaryTags": [
+            "蔬菜"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i097",
+          "restaurantId": "r007",
+          "section": "丼飯",
+          "name": "炙燒叉燒丼",
+          "description": "炙燒叉燒、溫泉蛋與蔥花。",
+          "priceTwd": 190,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "炙燒叉燒丼 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 144,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i098",
+          "restaurantId": "r007",
+          "section": "丼飯",
+          "name": "親子丼",
+          "description": "雞腿肉與滑蛋蓋飯。",
+          "priceTwd": 175,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "親子丼 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 108,
+          "dietaryTags": [
+            "含肉",
+            "含蛋"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i099",
+          "restaurantId": "r007",
+          "section": "丼飯",
+          "name": "牛五花丼",
+          "description": "醬燒牛五花、洋蔥與七味粉。",
+          "priceTwd": 205,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "牛五花丼 商品照",
+          "isPopular": false,
+          "likeRate": 95,
+          "ratingCount": 99,
+          "dietaryTags": [
+            "牛肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i100",
+          "restaurantId": "r007",
+          "section": "丼飯",
+          "name": "蒲燒鯛魚丼",
+          "description": "蒲燒醬烤鯛魚片。",
+          "priceTwd": 220,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "蒲燒鯛魚丼 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 48,
+          "dietaryTags": [
+            "海鮮"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i101",
+          "restaurantId": "r007",
+          "section": "小菜炸物",
+          "name": "日式炸餃",
+          "description": "六顆煎炸餃子。",
+          "priceTwd": 95,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "日式炸餃 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 135,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i102",
+          "restaurantId": "r007",
+          "section": "小菜炸物",
+          "name": "唐揚雞",
+          "description": "酥炸雞腿塊附檸檬。",
+          "priceTwd": 120,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "唐揚雞 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 189,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i103",
+          "restaurantId": "r007",
+          "section": "小菜炸物",
+          "name": "溏心蛋",
+          "description": "醬油半熟蛋一顆。",
+          "priceTwd": 45,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "溏心蛋 商品照",
+          "isPopular": false,
+          "likeRate": 96,
+          "ratingCount": 110,
+          "dietaryTags": [
+            "含蛋"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i104",
+          "restaurantId": "r007",
+          "section": "小菜炸物",
+          "name": "海帶芽沙拉",
+          "description": "酸甜和風海帶芽。",
+          "priceTwd": 55,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "海帶芽沙拉 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 59,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        },
+        {
+          "id": "i105",
+          "restaurantId": "r007",
+          "section": "人氣精選",
+          "name": "拉麵雙人套餐",
+          "description": "兩碗指定拉麵、炸餃與海帶芽。",
+          "priceTwd": 520,
+          "image": "/assets/mock/eats/items/i091.jpg",
+          "imageAlt": "拉麵雙人套餐 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 74,
+          "dietaryTags": [
+            "套餐"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：豚骨叉燒拉麵"
+        }
+      ],
+      "featuredItemIds": [
+        "i091",
+        "i092",
+        "i094",
+        "i097",
+        "i101",
+        "i102"
+      ],
+      "mvpRepresentativeItemImage": "/assets/mock/eats/items/i091.jpg",
+      "mvpRepresentativeItemId": "i091"
+    },
+    {
+      "id": "r008",
+      "name": "首爾拌飯與炸雞",
+      "categoryId": "cat-global-western",
+      "cuisineTags": [
+        "韓式料理",
+        "拌飯",
+        "炸雞",
+        "泡菜"
+      ],
+      "rating": 4.6,
+      "ratingCount": 760,
+      "priceLevel": "$$",
+      "deliveryTimeMin": 25,
+      "deliveryTimeMax": 38,
+      "deliveryFeeTwd": 49,
+      "distanceKm": 3.1,
+      "isOpen": true,
+      "promo": "韓式炸雞第二件 8 折",
+      "address": "台北市大安區延吉街 120 號",
+      "coverImage": "/assets/mock/eats/stores/r008-cover.jpg",
+      "logoImage": "/assets/mock/eats/logos/r008.png",
+      "menuSections": [
+        "人氣精選",
+        "拌飯鍋物",
+        "韓式炸雞",
+        "小菜飲品"
+      ],
+      "items": [
+        {
+          "id": "i106",
+          "restaurantId": "r008",
+          "section": "人氣精選",
+          "name": "牛肉石鍋拌飯",
+          "description": "牛肉、五色蔬菜、半熟蛋與韓式辣醬。",
+          "priceTwd": 220,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "牛肉石鍋拌飯 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 182,
+          "dietaryTags": [
+            "牛肉",
+            "微辣"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i107",
+          "restaurantId": "r008",
+          "section": "人氣精選",
+          "name": "半半炸雞",
+          "description": "原味與甜辣各半，附醃蘿蔔。",
+          "priceTwd": 360,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "半半炸雞 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 240,
+          "dietaryTags": [
+            "含肉",
+            "微辣"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i108",
+          "restaurantId": "r008",
+          "section": "拌飯鍋物",
+          "name": "豬肉泡菜鍋",
+          "description": "泡菜湯底、豬五花、豆腐與年糕。",
+          "priceTwd": 230,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "豬肉泡菜鍋 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 133,
+          "dietaryTags": [
+            "中辣",
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i109",
+          "restaurantId": "r008",
+          "section": "拌飯鍋物",
+          "name": "起司辣炒年糕",
+          "description": "韓式年糕、魚板與起司。",
+          "priceTwd": 180,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "起司辣炒年糕 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 104,
+          "dietaryTags": [
+            "中辣",
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i110",
+          "restaurantId": "r008",
+          "section": "拌飯鍋物",
+          "name": "雞肉拌飯",
+          "description": "嫩煎雞腿肉與拌飯蔬菜。",
+          "priceTwd": 205,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "雞肉拌飯 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 71,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i111",
+          "restaurantId": "r008",
+          "section": "拌飯鍋物",
+          "name": "菇菇蔬食拌飯",
+          "description": "綜合菇與蔬菜，無肉版本。",
+          "priceTwd": 190,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "菇菇蔬食拌飯 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 42,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i112",
+          "restaurantId": "r008",
+          "section": "韓式炸雞",
+          "name": "原味脆皮炸雞",
+          "description": "韓式粉漿酥炸雞塊。",
+          "priceTwd": 320,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "原味脆皮炸雞 商品照",
+          "isPopular": false,
+          "likeRate": 95,
+          "ratingCount": 121,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i113",
+          "restaurantId": "r008",
+          "section": "韓式炸雞",
+          "name": "蜂蜜蒜香炸雞",
+          "description": "蜂蜜蒜醬包裹炸雞。",
+          "priceTwd": 340,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "蜂蜜蒜香炸雞 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 157,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i114",
+          "restaurantId": "r008",
+          "section": "韓式炸雞",
+          "name": "辣醬炸雞",
+          "description": "韓式甜辣醬，辣度中等。",
+          "priceTwd": 340,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "辣醬炸雞 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 129,
+          "dietaryTags": [
+            "中辣",
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i115",
+          "restaurantId": "r008",
+          "section": "韓式炸雞",
+          "name": "無骨炸雞杯",
+          "description": "適合一人份的無骨炸雞。",
+          "priceTwd": 180,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "無骨炸雞杯 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 86,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i116",
+          "restaurantId": "r008",
+          "section": "小菜飲品",
+          "name": "韓式泡菜",
+          "description": "每日醃製白菜泡菜。",
+          "priceTwd": 55,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "韓式泡菜 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 77,
+          "dietaryTags": [
+            "微辣"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i117",
+          "restaurantId": "r008",
+          "section": "小菜飲品",
+          "name": "海苔飯捲",
+          "description": "海苔、白飯、蛋皮與醃蘿蔔。",
+          "priceTwd": 120,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "海苔飯捲 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 65,
+          "dietaryTags": [
+            "含蛋"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i118",
+          "restaurantId": "r008",
+          "section": "小菜飲品",
+          "name": "魚板湯",
+          "description": "韓式魚板清湯。",
+          "priceTwd": 85,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "魚板湯 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 44,
+          "dietaryTags": [
+            "海鮮"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i119",
+          "restaurantId": "r008",
+          "section": "小菜飲品",
+          "name": "柚子氣泡飲",
+          "description": "韓式柚子茶與氣泡水。",
+          "priceTwd": 90,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "柚子氣泡飲 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 33,
+          "dietaryTags": [],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        },
+        {
+          "id": "i120",
+          "restaurantId": "r008",
+          "section": "人氣精選",
+          "name": "追劇炸雞套餐",
+          "description": "半半炸雞、辣炒年糕、兩杯飲品。",
+          "priceTwd": 590,
+          "image": "/assets/mock/eats/items/i107.jpg",
+          "imageAlt": "追劇炸雞套餐 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 68,
+          "dietaryTags": [
+            "分享餐"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：半半炸雞"
+        }
+      ],
+      "featuredItemIds": [
+        "i106",
+        "i107",
+        "i108",
+        "i113",
+        "i114",
+        "i120"
+      ],
+      "mvpRepresentativeItemImage": "/assets/mock/eats/items/i107.jpg",
+      "mvpRepresentativeItemId": "i107"
+    },
+    {
+      "id": "r009",
+      "name": "美式街角漢堡",
+      "categoryId": "cat-global-western",
+      "cuisineTags": [
+        "美式料理",
+        "漢堡",
+        "炸雞",
+        "薯條"
+      ],
+      "rating": 4.5,
+      "ratingCount": 690,
+      "priceLevel": "$$",
+      "deliveryTimeMin": 20,
+      "deliveryTimeMax": 33,
+      "deliveryFeeTwd": 39,
+      "distanceKm": 2.4,
+      "isOpen": true,
+      "promo": "套餐升級薯條半價",
+      "address": "台北市信義區基隆路一段 135 號",
+      "coverImage": "/assets/mock/eats/stores/r009-cover.jpg",
+      "logoImage": "/assets/mock/eats/logos/r009.png",
+      "menuSections": [
+        "人氣精選",
+        "漢堡",
+        "炸物配餐",
+        "飲品"
+      ],
+      "items": [
+        {
+          "id": "i121",
+          "restaurantId": "r009",
+          "section": "人氣精選",
+          "name": "經典起司牛肉堡",
+          "description": "牛肉排、切達起司、酸黃瓜與特製醬。",
+          "priceTwd": 190,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "經典起司牛肉堡 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 210,
+          "dietaryTags": [
+            "牛肉",
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i122",
+          "restaurantId": "r009",
+          "section": "人氣精選",
+          "name": "辣味炸雞堡",
+          "description": "酥炸雞腿排、辣美乃滋與生菜。",
+          "priceTwd": 180,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "辣味炸雞堡 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 167,
+          "dietaryTags": [
+            "微辣",
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i123",
+          "restaurantId": "r009",
+          "section": "漢堡",
+          "name": "培根花生牛肉堡",
+          "description": "牛肉排、培根、花生醬與洋蔥圈。",
+          "priceTwd": 220,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "培根花生牛肉堡 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 155,
+          "dietaryTags": [
+            "牛肉",
+            "花生"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i124",
+          "restaurantId": "r009",
+          "section": "漢堡",
+          "name": "雙層牛肉堡",
+          "description": "雙牛肉排與雙起司，份量加倍。",
+          "priceTwd": 260,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "雙層牛肉堡 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 120,
+          "dietaryTags": [
+            "牛肉",
+            "份量大"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i125",
+          "restaurantId": "r009",
+          "section": "漢堡",
+          "name": "蘑菇瑞士起司堡",
+          "description": "炒蘑菇、瑞士起司與牛肉排。",
+          "priceTwd": 230,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "蘑菇瑞士起司堡 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 74,
+          "dietaryTags": [
+            "牛肉",
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i126",
+          "restaurantId": "r009",
+          "section": "漢堡",
+          "name": "酪梨雞胸堡",
+          "description": "嫩煎雞胸、酪梨泥與番茄。",
+          "priceTwd": 210,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "酪梨雞胸堡 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 58,
+          "dietaryTags": [
+            "高蛋白"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i127",
+          "restaurantId": "r009",
+          "section": "漢堡",
+          "name": "蔬食豆排堡",
+          "description": "黑豆蔬菜排與酪梨醬。",
+          "priceTwd": 190,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "蔬食豆排堡 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 43,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i128",
+          "restaurantId": "r009",
+          "section": "炸物配餐",
+          "name": "酥炸脆薯",
+          "description": "美式粗薯條附番茄醬。",
+          "priceTwd": 85,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "酥炸脆薯 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 180,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i129",
+          "restaurantId": "r009",
+          "section": "炸物配餐",
+          "name": "松露起司薯條",
+          "description": "薯條、帕瑪森與松露醬。",
+          "priceTwd": 140,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "松露起司薯條 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 128,
+          "dietaryTags": [
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i130",
+          "restaurantId": "r009",
+          "section": "炸物配餐",
+          "name": "水牛城雞翅",
+          "description": "酸辣水牛城醬雞翅六支。",
+          "priceTwd": 180,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "水牛城雞翅 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 91,
+          "dietaryTags": [
+            "中辣",
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i131",
+          "restaurantId": "r009",
+          "section": "炸物配餐",
+          "name": "洋蔥圈",
+          "description": "啤酒粉漿洋蔥圈。",
+          "priceTwd": 95,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "洋蔥圈 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 67,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i132",
+          "restaurantId": "r009",
+          "section": "炸物配餐",
+          "name": "凱薩沙拉",
+          "description": "蘿蔓、培根、麵包丁與凱薩醬。",
+          "priceTwd": 150,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "凱薩沙拉 商品照",
+          "isPopular": false,
+          "likeRate": 90,
+          "ratingCount": 39,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i133",
+          "restaurantId": "r009",
+          "section": "飲品",
+          "name": "可樂",
+          "description": "經典氣泡飲。",
+          "priceTwd": 45,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "可樂 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 88,
+          "dietaryTags": [],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i134",
+          "restaurantId": "r009",
+          "section": "飲品",
+          "name": "香草奶昔",
+          "description": "香草冰淇淋與鮮奶。",
+          "priceTwd": 120,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "香草奶昔 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 72,
+          "dietaryTags": [
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "甜度",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常糖",
+                "少糖",
+                "半糖",
+                "微糖",
+                "無糖"
+              ]
+            },
+            {
+              "name": "冰量",
+              "type": "single",
+              "required": true,
+              "values": [
+                "正常冰",
+                "少冰",
+                "微冰",
+                "去冰",
+                "熱"
+              ]
+            },
+            {
+              "name": "加料",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "珍珠 +10",
+                "椰果 +10",
+                "愛玉 +15",
+                "鮮奶 +20"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        },
+        {
+          "id": "i135",
+          "restaurantId": "r009",
+          "section": "人氣精選",
+          "name": "漢堡雙人套餐",
+          "description": "兩份漢堡、脆薯、雞翅與兩杯飲品。",
+          "priceTwd": 620,
+          "image": "/assets/mock/eats/items/i121.jpg",
+          "imageAlt": "漢堡雙人套餐 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 65,
+          "dietaryTags": [
+            "套餐"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：經典起司牛肉堡"
+        }
+      ],
+      "featuredItemIds": [
+        "i121",
+        "i122",
+        "i123",
+        "i124",
+        "i128",
+        "i129"
+      ],
+      "mvpRepresentativeItemImage": "/assets/mock/eats/items/i121.jpg",
+      "mvpRepresentativeItemId": "i121"
+    },
+    {
+      "id": "r010",
+      "name": "巷弄披薩義麵館",
+      "categoryId": "cat-global-western",
+      "cuisineTags": [
+        "義式料理",
+        "披薩",
+        "義大利麵",
+        "焗烤"
+      ],
+      "rating": 4.6,
+      "ratingCount": 820,
+      "priceLevel": "$$",
+      "deliveryTimeMin": 28,
+      "deliveryTimeMax": 42,
+      "deliveryFeeTwd": 49,
+      "distanceKm": 3.4,
+      "isOpen": true,
+      "promo": "披薩第二件 7 折",
+      "address": "台北市士林區中正路 310 號",
+      "coverImage": "/assets/mock/eats/stores/r010-cover.jpg",
+      "logoImage": "/assets/mock/eats/logos/r010.png",
+      "menuSections": [
+        "人氣精選",
+        "披薩",
+        "義大利麵",
+        "沙拉甜點"
+      ],
+      "items": [
+        {
+          "id": "i136",
+          "restaurantId": "r010",
+          "section": "人氣精選",
+          "name": "瑪格麗特披薩",
+          "description": "番茄醬、莫札瑞拉、羅勒葉。",
+          "priceTwd": 260,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "瑪格麗特披薩 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 164,
+          "dietaryTags": [
+            "蛋奶素"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i137",
+          "restaurantId": "r010",
+          "section": "人氣精選",
+          "name": "奶油培根蛋黃麵",
+          "description": "培根、蛋黃、帕瑪森與奶油醬。",
+          "priceTwd": 240,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "奶油培根蛋黃麵 商品照",
+          "isPopular": true,
+          "likeRate": 95,
+          "ratingCount": 142,
+          "dietaryTags": [
+            "含肉",
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i138",
+          "restaurantId": "r010",
+          "section": "披薩",
+          "name": "夏威夷披薩",
+          "description": "火腿、鳳梨與莫札瑞拉。",
+          "priceTwd": 280,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "夏威夷披薩 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 88,
+          "dietaryTags": [
+            "含肉",
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i139",
+          "restaurantId": "r010",
+          "section": "披薩",
+          "name": "辣味牛肉披薩",
+          "description": "牛絞肉、墨西哥辣椒與紅醬。",
+          "priceTwd": 320,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "辣味牛肉披薩 商品照",
+          "isPopular": true,
+          "likeRate": 94,
+          "ratingCount": 97,
+          "dietaryTags": [
+            "牛肉",
+            "中辣"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i140",
+          "restaurantId": "r010",
+          "section": "披薩",
+          "name": "野菇松露披薩",
+          "description": "綜合野菇、松露醬與起司。",
+          "priceTwd": 330,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "野菇松露披薩 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 64,
+          "dietaryTags": [
+            "蛋奶素"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i141",
+          "restaurantId": "r010",
+          "section": "披薩",
+          "name": "海鮮總匯披薩",
+          "description": "蝦仁、花枝、蛤蜊與紅醬。",
+          "priceTwd": 360,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "海鮮總匯披薩 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 76,
+          "dietaryTags": [
+            "海鮮"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i142",
+          "restaurantId": "r010",
+          "section": "披薩",
+          "name": "四起司披薩",
+          "description": "藍紋、莫札瑞拉、切達與帕瑪森。",
+          "priceTwd": 340,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "四起司披薩 商品照",
+          "isPopular": false,
+          "likeRate": 91,
+          "ratingCount": 52,
+          "dietaryTags": [
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i143",
+          "restaurantId": "r010",
+          "section": "義大利麵",
+          "name": "蒜辣清炒蛤蜊麵",
+          "description": "蛤蜊、蒜片、辣椒與白酒香氣。",
+          "priceTwd": 260,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "蒜辣清炒蛤蜊麵 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 111,
+          "dietaryTags": [
+            "海鮮",
+            "微辣"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i144",
+          "restaurantId": "r010",
+          "section": "義大利麵",
+          "name": "番茄肉醬麵",
+          "description": "牛豬混合肉醬與番茄。",
+          "priceTwd": 230,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "番茄肉醬麵 商品照",
+          "isPopular": false,
+          "likeRate": 93,
+          "ratingCount": 94,
+          "dietaryTags": [
+            "含肉"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i145",
+          "restaurantId": "r010",
+          "section": "義大利麵",
+          "name": "青醬雞肉筆管麵",
+          "description": "羅勒青醬與嫩煎雞腿。",
+          "priceTwd": 250,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "青醬雞肉筆管麵 商品照",
+          "isPopular": false,
+          "likeRate": 94,
+          "ratingCount": 83,
+          "dietaryTags": [
+            "含肉",
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i146",
+          "restaurantId": "r010",
+          "section": "義大利麵",
+          "name": "南瓜野菇燉飯",
+          "description": "南瓜泥、野菇與米型燉飯。",
+          "priceTwd": 240,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "南瓜野菇燉飯 商品照",
+          "isPopular": false,
+          "likeRate": 92,
+          "ratingCount": 57,
+          "dietaryTags": [
+            "蛋奶素"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i147",
+          "restaurantId": "r010",
+          "section": "義大利麵",
+          "name": "焗烤海鮮通心粉",
+          "description": "白醬、海鮮與焗烤起司。",
+          "priceTwd": 280,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "焗烤海鮮通心粉 商品照",
+          "isPopular": false,
+          "likeRate": 95,
+          "ratingCount": 79,
+          "dietaryTags": [
+            "海鮮",
+            "含乳"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i148",
+          "restaurantId": "r010",
+          "section": "沙拉甜點",
+          "name": "義式油醋沙拉",
+          "description": "生菜、番茄、橄欖與油醋醬。",
+          "priceTwd": 140,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "義式油醋沙拉 商品照",
+          "isPopular": false,
+          "likeRate": 90,
+          "ratingCount": 41,
+          "dietaryTags": [
+            "素食"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i149",
+          "restaurantId": "r010",
+          "section": "沙拉甜點",
+          "name": "提拉米蘇",
+          "description": "咖啡酒香手作提拉米蘇。",
+          "priceTwd": 130,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "提拉米蘇 商品照",
+          "isPopular": true,
+          "likeRate": 96,
+          "ratingCount": 102,
+          "dietaryTags": [
+            "含乳",
+            "咖啡因"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        },
+        {
+          "id": "i150",
+          "restaurantId": "r010",
+          "section": "人氣精選",
+          "name": "披薩派對四人組",
+          "description": "兩份披薩、兩份義麵、沙拉與甜點。",
+          "priceTwd": 1280,
+          "image": "/assets/mock/eats/items/i136.jpg",
+          "imageAlt": "披薩派對四人組 商品照",
+          "isPopular": true,
+          "likeRate": 97,
+          "ratingCount": 36,
+          "dietaryTags": [
+            "分享餐"
+          ],
+          "optionGroups": [
+            {
+              "name": "餐具",
+              "type": "single",
+              "required": false,
+              "values": [
+                "需要餐具",
+                "不需要餐具"
+              ]
+            },
+            {
+              "name": "加購",
+              "type": "multi",
+              "required": false,
+              "values": [
+                "加飯 +15",
+                "加蛋 +20",
+                "加青菜 +35"
+              ]
+            }
+          ],
+          "available": true,
+          "mvpImageNote": "MVP 共用代表圖：瑪格麗特披薩"
+        }
+      ],
+      "featuredItemIds": [
+        "i136",
+        "i137",
+        "i139",
+        "i143",
+        "i149",
+        "i150"
+      ],
+      "mvpRepresentativeItemImage": "/assets/mock/eats/items/i136.jpg",
+      "mvpRepresentativeItemId": "i136"
+    }
+  ],
+  "assetPrompts": [
+    {
+      "id": "cat-taiwanese",
+      "type": "category",
+      "path": "/assets/mock/eats/categories/taiwanese.jpg",
+      "promptZh": "台式／中式 分類圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "cat-breakfast",
+      "type": "category",
+      "path": "/assets/mock/eats/categories/breakfast.jpg",
+      "promptZh": "早餐／早午餐 分類圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "cat-drinks-desserts",
+      "type": "category",
+      "path": "/assets/mock/eats/categories/drinks-desserts.jpg",
+      "promptZh": "飲料／甜點 分類圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "cat-global-western",
+      "type": "category",
+      "path": "/assets/mock/eats/categories/global-western.jpg",
+      "promptZh": "日韓／西式 分類圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "r001-cover",
+      "type": "restaurant-cover",
+      "restaurantId": "r001",
+      "path": "/assets/mock/eats/stores/r001-cover.jpg",
+      "promptZh": "阿城炙燒便當 店家封面圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "r001-logo",
+      "type": "restaurant-logo",
+      "restaurantId": "r001",
+      "path": "/assets/mock/eats/logos/r001.png",
+      "promptZh": "阿城炙燒便當 店家 Logo，已包含在 MVP assets package。"
+    },
+    {
+      "id": "i001",
+      "type": "representative-item",
+      "restaurantId": "r001",
+      "path": "/assets/mock/eats/items/i001.jpg",
+      "promptZh": "阿城炙燒便當 代表餐點圖：炙燒雞腿便當。此圖於 MVP 版供該店其他餐點共用。"
+    },
+    {
+      "id": "r002-cover",
+      "type": "restaurant-cover",
+      "restaurantId": "r002",
+      "path": "/assets/mock/eats/stores/r002-cover.jpg",
+      "promptZh": "巷口滷肉飯研究室 店家封面圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "r002-logo",
+      "type": "restaurant-logo",
+      "restaurantId": "r002",
+      "path": "/assets/mock/eats/logos/r002.png",
+      "promptZh": "巷口滷肉飯研究室 店家 Logo，已包含在 MVP assets package。"
+    },
+    {
+      "id": "i016",
+      "type": "representative-item",
+      "restaurantId": "r002",
+      "path": "/assets/mock/eats/items/i016.jpg",
+      "promptZh": "巷口滷肉飯研究室 代表餐點圖：半熟蛋滷肉飯。此圖於 MVP 版供該店其他餐點共用。"
+    },
+    {
+      "id": "r003-cover",
+      "type": "restaurant-cover",
+      "restaurantId": "r003",
+      "path": "/assets/mock/eats/stores/r003-cover.jpg",
+      "promptZh": "永春豆漿早餐鋪 店家封面圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "r003-logo",
+      "type": "restaurant-logo",
+      "restaurantId": "r003",
+      "path": "/assets/mock/eats/logos/r003.png",
+      "promptZh": "永春豆漿早餐鋪 店家 Logo，已包含在 MVP assets package。"
+    },
+    {
+      "id": "i031",
+      "type": "representative-item",
+      "restaurantId": "r003",
+      "path": "/assets/mock/eats/items/i031.jpg",
+      "promptZh": "永春豆漿早餐鋪 代表餐點圖：起司蛋餅。此圖於 MVP 版供該店其他餐點共用。"
+    },
+    {
+      "id": "r004-cover",
+      "type": "restaurant-cover",
+      "restaurantId": "r004",
+      "path": "/assets/mock/eats/stores/r004-cover.jpg",
+      "promptZh": "晨光吐司研究所 店家封面圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "r004-logo",
+      "type": "restaurant-logo",
+      "restaurantId": "r004",
+      "path": "/assets/mock/eats/logos/r004.png",
+      "promptZh": "晨光吐司研究所 店家 Logo，已包含在 MVP assets package。"
+    },
+    {
+      "id": "i046",
+      "type": "representative-item",
+      "restaurantId": "r004",
+      "path": "/assets/mock/eats/items/i046.jpg",
+      "promptZh": "晨光吐司研究所 代表餐點圖：花生培根牛肉堡。此圖於 MVP 版供該店其他餐點共用。"
+    },
+    {
+      "id": "r005-cover",
+      "type": "restaurant-cover",
+      "restaurantId": "r005",
+      "path": "/assets/mock/eats/stores/r005-cover.jpg",
+      "promptZh": "茶里王手作茶飲 店家封面圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "r005-logo",
+      "type": "restaurant-logo",
+      "restaurantId": "r005",
+      "path": "/assets/mock/eats/logos/r005.png",
+      "promptZh": "茶里王手作茶飲 店家 Logo，已包含在 MVP assets package。"
+    },
+    {
+      "id": "i061",
+      "type": "representative-item",
+      "restaurantId": "r005",
+      "path": "/assets/mock/eats/items/i061.jpg",
+      "promptZh": "茶里王手作茶飲 代表餐點圖：黑糖珍珠鮮奶。此圖於 MVP 版供該店其他餐點共用。"
+    },
+    {
+      "id": "r006-cover",
+      "type": "restaurant-cover",
+      "restaurantId": "r006",
+      "path": "/assets/mock/eats/stores/r006-cover.jpg",
+      "promptZh": "島嶼豆花甜品 店家封面圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "r006-logo",
+      "type": "restaurant-logo",
+      "restaurantId": "r006",
+      "path": "/assets/mock/eats/logos/r006.png",
+      "promptZh": "島嶼豆花甜品 店家 Logo，已包含在 MVP assets package。"
+    },
+    {
+      "id": "i076",
+      "type": "representative-item",
+      "restaurantId": "r006",
+      "path": "/assets/mock/eats/items/i076.jpg",
+      "promptZh": "島嶼豆花甜品 代表餐點圖：綜合嫩豆花。此圖於 MVP 版供該店其他餐點共用。"
+    },
+    {
+      "id": "r007-cover",
+      "type": "restaurant-cover",
+      "restaurantId": "r007",
+      "path": "/assets/mock/eats/stores/r007-cover.jpg",
+      "promptZh": "東京一番拉麵屋 店家封面圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "r007-logo",
+      "type": "restaurant-logo",
+      "restaurantId": "r007",
+      "path": "/assets/mock/eats/logos/r007.png",
+      "promptZh": "東京一番拉麵屋 店家 Logo，已包含在 MVP assets package。"
+    },
+    {
+      "id": "i091",
+      "type": "representative-item",
+      "restaurantId": "r007",
+      "path": "/assets/mock/eats/items/i091.jpg",
+      "promptZh": "東京一番拉麵屋 代表餐點圖：豚骨叉燒拉麵。此圖於 MVP 版供該店其他餐點共用。"
+    },
+    {
+      "id": "r008-cover",
+      "type": "restaurant-cover",
+      "restaurantId": "r008",
+      "path": "/assets/mock/eats/stores/r008-cover.jpg",
+      "promptZh": "首爾拌飯與炸雞 店家封面圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "r008-logo",
+      "type": "restaurant-logo",
+      "restaurantId": "r008",
+      "path": "/assets/mock/eats/logos/r008.png",
+      "promptZh": "首爾拌飯與炸雞 店家 Logo，已包含在 MVP assets package。"
+    },
+    {
+      "id": "i107",
+      "type": "representative-item",
+      "restaurantId": "r008",
+      "path": "/assets/mock/eats/items/i107.jpg",
+      "promptZh": "首爾拌飯與炸雞 代表餐點圖：半半炸雞。此圖於 MVP 版供該店其他餐點共用。"
+    },
+    {
+      "id": "r009-cover",
+      "type": "restaurant-cover",
+      "restaurantId": "r009",
+      "path": "/assets/mock/eats/stores/r009-cover.jpg",
+      "promptZh": "美式街角漢堡 店家封面圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "r009-logo",
+      "type": "restaurant-logo",
+      "restaurantId": "r009",
+      "path": "/assets/mock/eats/logos/r009.png",
+      "promptZh": "美式街角漢堡 店家 Logo，已包含在 MVP assets package。"
+    },
+    {
+      "id": "i121",
+      "type": "representative-item",
+      "restaurantId": "r009",
+      "path": "/assets/mock/eats/items/i121.jpg",
+      "promptZh": "美式街角漢堡 代表餐點圖：經典起司牛肉堡。此圖於 MVP 版供該店其他餐點共用。"
+    },
+    {
+      "id": "r010-cover",
+      "type": "restaurant-cover",
+      "restaurantId": "r010",
+      "path": "/assets/mock/eats/stores/r010-cover.jpg",
+      "promptZh": "巷弄披薩義麵館 店家封面圖，已包含在 MVP assets package。"
+    },
+    {
+      "id": "r010-logo",
+      "type": "restaurant-logo",
+      "restaurantId": "r010",
+      "path": "/assets/mock/eats/logos/r010.png",
+      "promptZh": "巷弄披薩義麵館 店家 Logo，已包含在 MVP assets package。"
+    },
+    {
+      "id": "i136",
+      "type": "representative-item",
+      "restaurantId": "r010",
+      "path": "/assets/mock/eats/items/i136.jpg",
+      "promptZh": "巷弄披薩義麵館 代表餐點圖：瑪格麗特披薩。此圖於 MVP 版供該店其他餐點共用。"
+    }
+  ],
+  "mvpAssetManifest": {
+    "imageFileCount": 34,
+    "strategy": {
+      "categories": "4 張分類圖一對一。",
+      "restaurantCovers": "10 張店家封面圖一對一。",
+      "restaurantLogos": "10 張店家 Logo 一對一。",
+      "items": "10 張代表餐點圖；每家店 15 個品項共用該店代表餐點圖。"
+    },
+    "restaurantRepresentativeItems": [
+      {
+        "restaurantId": "r001",
+        "restaurantName": "阿城炙燒便當",
+        "itemId": "i001",
+        "itemName": "炙燒雞腿便當",
+        "path": "/assets/mock/eats/items/i001.jpg"
+      },
+      {
+        "restaurantId": "r002",
+        "restaurantName": "巷口滷肉飯研究室",
+        "itemId": "i016",
+        "itemName": "半熟蛋滷肉飯",
+        "path": "/assets/mock/eats/items/i016.jpg"
+      },
+      {
+        "restaurantId": "r003",
+        "restaurantName": "永春豆漿早餐鋪",
+        "itemId": "i031",
+        "itemName": "起司蛋餅",
+        "path": "/assets/mock/eats/items/i031.jpg"
+      },
+      {
+        "restaurantId": "r004",
+        "restaurantName": "晨光吐司研究所",
+        "itemId": "i046",
+        "itemName": "花生培根牛肉堡",
+        "path": "/assets/mock/eats/items/i046.jpg"
+      },
+      {
+        "restaurantId": "r005",
+        "restaurantName": "茶里王手作茶飲",
+        "itemId": "i061",
+        "itemName": "黑糖珍珠鮮奶",
+        "path": "/assets/mock/eats/items/i061.jpg"
+      },
+      {
+        "restaurantId": "r006",
+        "restaurantName": "島嶼豆花甜品",
+        "itemId": "i076",
+        "itemName": "綜合嫩豆花",
+        "path": "/assets/mock/eats/items/i076.jpg"
+      },
+      {
+        "restaurantId": "r007",
+        "restaurantName": "東京一番拉麵屋",
+        "itemId": "i091",
+        "itemName": "豚骨叉燒拉麵",
+        "path": "/assets/mock/eats/items/i091.jpg"
+      },
+      {
+        "restaurantId": "r008",
+        "restaurantName": "首爾拌飯與炸雞",
+        "itemId": "i107",
+        "itemName": "半半炸雞",
+        "path": "/assets/mock/eats/items/i107.jpg"
+      },
+      {
+        "restaurantId": "r009",
+        "restaurantName": "美式街角漢堡",
+        "itemId": "i121",
+        "itemName": "經典起司牛肉堡",
+        "path": "/assets/mock/eats/items/i121.jpg"
+      },
+      {
+        "restaurantId": "r010",
+        "restaurantName": "巷弄披薩義麵館",
+        "itemId": "i136",
+        "itemName": "瑪格麗特披薩",
+        "path": "/assets/mock/eats/items/i136.jpg"
+      }
+    ]
+  }
+}
