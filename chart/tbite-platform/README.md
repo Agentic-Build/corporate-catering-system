@@ -19,18 +19,37 @@ schedulers) with the full self-hosted dependency baseline:
 Every dependency is conditional on `<key>.enabled` so that operators can
 BYO (bring-your-own) external endpoints in production.
 
-## Profiles
+## Sizing profiles
 
-The same chart targets both local single-node clusters (kind, k3d, OrbStack)
-and full production HA via the `profile.size` switch and overlay files.
+The chart ships three values files, each targeting a different deployment
+shape. `values.yaml` is the default and aligns with ADR-0008
+(one-enterprise-per-stack); the other two are overlays applied on top.
+
+| File | Use case | Cluster | Memory | Capacity |
+| --- | --- | --- | --- | --- |
+| `values.yaml` (default) | **Single-enterprise production**, ADR-0008 sizing | ≥ 16 cores / 32 GiB single-node | ~18 GiB requests | ~5K–10K employees, ~50 orders/sec sustained, ~200/sec burst |
+| `values-dev.yaml` (overlay) | Laptop kind/k3d/OrbStack iteration | ≥ 8 GiB | ~6 GiB requests | smoke only |
+| `values-prod-ha.yaml` (overlay) | Multi-AZ HA for > 10K employees | ≥ 64 GiB cluster | ~32 GiB requests | enterprise scale |
 
 ```bash
-# Local single-node
-helm template tbite . -f values-dev.yaml
+# Single-enterprise prod (default)
+helm template tbite . -f values.yaml
 
-# Production HA
-helm template tbite . -f values-prod.yaml
+# Laptop / OrbStack single-node iteration
+helm template tbite . -f values.yaml -f values-dev.yaml
+
+# Multi-AZ HA scale-up
+helm template tbite . -f values.yaml -f values-prod-ha.yaml
 ```
+
+The default sizing carries one primary CNPG instance + one hot
+standby (not three), standalone Valkey with persistence (not
+Sentinel HA), a single-pod MinIO Deployment (not a 4×4 Tenant), a
+single-replica Authentik + Hydra reusing the main CNPG cluster (not
+their bundled Postgres), and a slim observability stack
+(VictoriaMetrics single + Grafana + OTel collector — no
+alertmanager, vmagent, kube-state-metrics, or node-exporter). All
+of those upgrades live in `values-prod-ha.yaml`.
 
 ## Install (after generating the lock file)
 

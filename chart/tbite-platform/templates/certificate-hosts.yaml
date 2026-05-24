@@ -9,8 +9,18 @@
 {{- if .Values.web.employee.enabled }}{{- $hosts = append $hosts (dict "name" "web-employee" "host" .Values.web.employee.ingress.host) -}}{{- end -}}
 {{- if .Values.web.merchant.enabled }}{{- $hosts = append $hosts (dict "name" "web-merchant" "host" .Values.web.merchant.ingress.host) -}}{{- end -}}
 {{- if .Values.web.admin.enabled }}{{- $hosts = append $hosts (dict "name" "web-admin" "host" .Values.web.admin.ingress.host) -}}{{- end -}}
-{{- if .Values.authentik.enabled }}{{- $hosts = append $hosts (dict "name" "authentik" "host" .Values.authentik.ingress.host) -}}{{- end -}}
-{{- if .Values.hydra.enabled }}{{- $hosts = append $hosts (dict "name" "hydra" "host" .Values.hydra.ingressHost) -}}{{- end -}}
+{{- if .Values.authentik.enabled -}}
+  {{- $authHost := printf "auth.%s" .Values.global.domain -}}
+  {{- if and (hasKey .Values.authentik "ingress") .Values.authentik.ingress -}}
+    {{- if hasKey .Values.authentik.ingress "host" -}}{{- $authHost = .Values.authentik.ingress.host -}}{{- end -}}
+  {{- end -}}
+  {{- $hosts = append $hosts (dict "name" "authentik" "host" $authHost) -}}
+{{- end -}}
+{{- if .Values.hydra.enabled -}}
+  {{- $hydraHost := printf "hydra.%s" .Values.global.domain -}}
+  {{- if hasKey .Values.hydra "ingressHost" -}}{{- $hydraHost = .Values.hydra.ingressHost -}}{{- end -}}
+  {{- $hosts = append $hosts (dict "name" "hydra" "host" $hydraHost) -}}
+{{- end -}}
 {{- if and .Values.observability.grafana.enabled .Values.observability.victoriaMetrics.enabled }}{{- $hosts = append $hosts (dict "name" "grafana" "host" .Values.observability.grafana.ingressHost) -}}{{- end -}}
 {{- range $h := $hosts }}
 {{- if $h.host }}

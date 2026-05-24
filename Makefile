@@ -7,7 +7,10 @@ HELM    ?= helm
 CHART_DIR ?= chart/tbite-platform
 CHART_RELEASE ?= tbite
 CHART_NAMESPACE ?= tbite
-CHART_VALUES ?= $(CHART_DIR)/values-dev.yaml
+# Default is the single-enterprise prod sizing (ADR-0008, fits
+# 16 cores / 32 GiB). Override to values-dev.yaml for laptop kind
+# clusters or stack values-prod-ha.yaml on top for multi-AZ HA.
+CHART_VALUES ?= $(CHART_DIR)/values.yaml
 
 .PHONY: help \
         dev dev-down dev-reset dev-logs \

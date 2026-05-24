@@ -1,8 +1,24 @@
-# tbite-platform — default values (production-leaning).
-# Use values-dev.yaml or values-prod.yaml as overlays.
+# tbite-platform — default values.
+#
+# This file is the **canonical single-enterprise production sizing**
+# per architecture ADR-0008 (#55): one enterprise per stack, not a
+# multi-tenant SaaS topology. The shape fits a 16-core / 32 GiB node
+# and supports roughly 5,000–10,000 employees, ~10–30 plants, and
+# ~50 sustained orders/sec / ~200 orders/sec burst.
+#
+# Overlays:
+#   values-dev.yaml      — laptop kind/k3d/OrbStack single-replica
+#   values-prod-ha.yaml  — opt-in multi-AZ HA (>10K employees, full
+#                          Valkey Sentinel, MinIO Tenant 4x4, CNPG
+#                          3-instance, complete VictoriaMetrics stack)
 
 profile:
   size: prod # one of: dev | prod
+  # haTopology gates the schema's HA-minima enforcement (3-instance
+  # CNPG, 3-replica Valkey HA, MinIO Tenant 4x4, etc.). Default is
+  # false: the chart ships single-enterprise prod sizing per
+  # ADR-0008. values-prod-ha.yaml sets this to true.
+  haTopology: false
 
 # crdsReady gates every template that emits a CustomResource whose CRD
 # is installed by a subchart in the same release. Two-pass install
@@ -20,18 +36,13 @@ global:
     employee: https://app.tbite.example.com
     merchant: https://merchant.tbite.example.com
     admin: https://admin.tbite.example.com
-  # Namespace overrides — if empty, .Release.Namespace is used.
   namespaceOverride: ""
   podAnnotations: {}
   podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  # OIDC issuer URL (Authentik or BYO). Required in prod.
   oidcIssuerURL: "https://auth.tbite.example.com/application/o/tbite/"
-  # Authentik connection (the Go config reads AUTHENTIK_BASE_URL and
-  # AUTHENTIK_API_TOKEN). When the authentik subchart is enabled,
-  # baseURL should be the in-cluster Service.
   authentik:
     baseURL: "http://tbite-authentik-server.tbite.svc.cluster.local:9000"
     vendorOperatorGroup: "tbite:role:vendor_operator"
@@ -39,17 +50,11 @@ global:
     apiTokenSecretRef:
       name: tbite-authentik
       key: apiToken
-  # OIDC client credentials per app — referenced as envFromSecrets
-  # by each role's Deployment. Operators populate the named secret
-  # via SOPS (ops/secrets/...).
   oidcClientsSecretRef:
     name: tbite-oidc-clients
-  # Redis-compatible URL for Valkey. Defaults to the in-release
-  # Service. The Go config's REDIS_URL var consumes this string.
   redisURL: "redis://tbite-valkey-primary.tbite.svc.cluster.local:6379/0"
-  # S3-compatible object storage endpoint (MinIO or BYO). Required in prod.
   s3:
-    endpoint: "https://minio.tbite.example.com"
+    endpoint: "http://minio.tbite.svc.cluster.local"
     region: "us-east-1"
     bucket: "tbite-prod"
     usePathStyle: "1"
@@ -57,18 +62,13 @@ global:
       name: tbite-s3
       accessKeyKey: accessKeyID
       secretKeyKey: secretAccessKey
-  # NATS endpoint used by all roles (cluster service when self-hosted).
   nats:
     url: "nats://tbite-nats.tbite.svc.cluster.local:4222"
     credentialsSecretRef:
       name: tbite-nats
       key: creds
-  # Postgres URLs are referenced via per-role secret refs (e.g. api.database.*).
 
 image:
-  # Single image holds every --role. Tag override is required because the
-  # chart's AppVersion is independent of the API image's git-sha-based tag;
-  # CI bumps the tag here (or in values-prod.yaml) on every main merge.
   repository: ghcr.io/agentic-build/tbite-api
   tag: "sha-766bf49"
   pullSecrets: []
@@ -91,33 +91,31 @@ containerSecurityContext:
   capabilities:
     drop: ["ALL"]
 
-# Default OTLP env vars injected into every workload when observability.otelCollector.enabled.
 otel:
   serviceNamespace: tbite
-  exporterProtocol: grpc # grpc | http/protobuf
-  # collector service name is computed via include "tbite.otelCollectorEndpoint"
+  exporterProtocol: grpc
 
 #-----------------------------------------------------------------------------
-# API role
+# Application roles
+#-----------------------------------------------------------------------------
+# Replica counts and HPA bounds are sized for ~5K–10K employees in a
+# single enterprise. Lunch-peak burst is absorbed by HPA scale-out
+# (api 2→10, realtime 2→6) plus the outbox-relay's KEDA scaler.
 #-----------------------------------------------------------------------------
 api:
   enabled: true
-  replicaCount: 3
-  image: {} # override repository/tag if needed
+  replicaCount: 2
+  image: {}
   args: ["--role=api"]
   port: 8080
   metricsPort: 2112
   resources:
-    requests:
-      cpu: 200m
-      memory: 256Mi
-    limits:
-      cpu: 1000m
-      memory: 1Gi
+    requests: { cpu: 200m, memory: 256Mi }
+    limits:   { cpu: 1000m, memory: 768Mi }
   hpa:
     enabled: true
-    minReplicas: 3
-    maxReplicas: 20
+    minReplicas: 2
+    maxReplicas: 10
     targetConcurrency: 50
     targetRPS: 100
     targetCPUUtilizationPercentage: 70
@@ -125,12 +123,8 @@ api:
     enabled: true
     minAvailable: 1
   database:
-    rwUrlSecretRef:
-      name: tbite-db
-      key: rwUrl
-    roUrlSecretRef:
-      name: tbite-db
-      key: roUrl
+    rwUrlSecretRef: { name: tbite-db, key: rwUrl }
+    roUrlSecretRef: { name: tbite-db, key: roUrl }
     maxConns: 16
     maxConnsRO: 16
   env: {}
@@ -139,9 +133,6 @@ api:
     enabled: true
     host: api.tbite.example.com
 
-#-----------------------------------------------------------------------------
-# Realtime SSE gateway
-#-----------------------------------------------------------------------------
 realtime:
   enabled: true
   replicaCount: 2
@@ -152,17 +143,13 @@ realtime:
   topicScope: "plant_date"
   terminationGracePeriodSeconds: 90
   resources:
-    requests:
-      cpu: 200m
-      memory: 256Mi
-    limits:
-      cpu: 1000m
-      memory: 1Gi
+    requests: { cpu: 200m, memory: 256Mi }
+    limits:   { cpu: 1000m, memory: 768Mi }
   hpa:
     enabled: true
     minReplicas: 2
-    maxReplicas: 10
-    targetActiveConnections: 500
+    maxReplicas: 6
+    targetActiveConnections: 3000
     targetCPUUtilizationPercentage: 70
   pdb:
     enabled: true
@@ -171,105 +158,95 @@ realtime:
     enabled: true
     host: rt.tbite.example.com
 
-#-----------------------------------------------------------------------------
-# Web SSR frontends
-#-----------------------------------------------------------------------------
 web:
   employee:
     enabled: true
     replicaCount: 2
     image:
-      repository: ghcr.io/jacoblincool/corporate-catering-system/web-employee
+      repository: ghcr.io/agentic-build/tbite-web-employee
       tag: ""
     port: 3000
     resources:
       requests: { cpu: 100m, memory: 128Mi }
-      limits: { cpu: 500m, memory: 512Mi }
-    hpa:
-      enabled: true
-      minReplicas: 2
-      maxReplicas: 8
-      targetCPUUtilizationPercentage: 70
-    pdb: { enabled: true, minAvailable: 1 }
-    baseURL: https://app.tbite.example.com
-    ingress: { enabled: true, host: app.tbite.example.com }
-  merchant:
-    enabled: true
-    replicaCount: 2
-    image:
-      repository: ghcr.io/jacoblincool/corporate-catering-system/web-merchant
-      tag: ""
-    port: 3000
-    resources:
-      requests: { cpu: 100m, memory: 128Mi }
-      limits: { cpu: 500m, memory: 512Mi }
+      limits:   { cpu: 500m, memory: 384Mi }
     hpa:
       enabled: true
       minReplicas: 2
       maxReplicas: 6
       targetCPUUtilizationPercentage: 70
     pdb: { enabled: true, minAvailable: 1 }
-    baseURL: https://merchant.tbite.example.com
-    ingress: { enabled: true, host: merchant.tbite.example.com }
-  admin:
+    baseURL: https://app.tbite.example.com
+    ingress: { enabled: true, host: app.tbite.example.com }
+  merchant:
     enabled: true
-    replicaCount: 2
+    replicaCount: 1
     image:
-      repository: ghcr.io/jacoblincool/corporate-catering-system/web-admin
+      repository: ghcr.io/agentic-build/tbite-web-merchant
       tag: ""
     port: 3000
     resources:
       requests: { cpu: 100m, memory: 128Mi }
-      limits: { cpu: 500m, memory: 512Mi }
+      limits:   { cpu: 500m, memory: 384Mi }
     hpa:
       enabled: true
-      minReplicas: 2
-      maxReplicas: 4
+      minReplicas: 1
+      maxReplicas: 3
       targetCPUUtilizationPercentage: 70
-    pdb: { enabled: true, minAvailable: 1 }
+    pdb: { enabled: false, minAvailable: 1 }
+    baseURL: https://merchant.tbite.example.com
+    ingress: { enabled: true, host: merchant.tbite.example.com }
+  admin:
+    enabled: true
+    replicaCount: 1
+    image:
+      repository: ghcr.io/agentic-build/tbite-web-admin
+      tag: ""
+    port: 3000
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits:   { cpu: 500m, memory: 384Mi }
+    hpa:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 2
+      targetCPUUtilizationPercentage: 70
+    pdb: { enabled: false, minAvailable: 1 }
     baseURL: https://admin.tbite.example.com
     ingress: { enabled: true, host: admin.tbite.example.com }
 
-#-----------------------------------------------------------------------------
-# Worker roles
-#-----------------------------------------------------------------------------
 workers:
   outboxRelay:
     enabled: true
-    replicaCount: 2
+    replicaCount: 1
     args: ["--role=outbox-relay"]
     metricsPort: 2112
     resources:
       requests: { cpu: 100m, memory: 128Mi }
-      limits: { cpu: 500m, memory: 512Mi }
+      limits:   { cpu: 500m, memory: 384Mi }
     keda:
       enabled: true
       minReplicas: 1
-      maxReplicas: 10
+      maxReplicas: 6
       pollingInterval: 15
       cooldownPeriod: 60
-      # Outbox is scaled on pending row count via Postgres trigger.
       pendingThreshold: 100
       database:
-        # references api.database.rwUrlSecretRef by default
-        connectionFromSecretRef:
-          name: tbite-db
-          key: rwUrl
+        connectionFromSecretRef: { name: tbite-db, key: rwUrl }
         query: |
           SELECT count(*) FROM platform.outbox
           WHERE published_at IS NULL;
   payrollSettler:
     enabled: true
-    replicaCount: 2
+    replicaCount: 1
     args: ["--role=payroll-settler"]
     metricsPort: 2112
     resources:
       requests: { cpu: 100m, memory: 128Mi }
-      limits: { cpu: 500m, memory: 512Mi }
+      limits:   { cpu: 500m, memory: 384Mi }
     keda:
       enabled: true
       minReplicas: 1
-      maxReplicas: 10
+      maxReplicas: 4
       pollingInterval: 15
       cooldownPeriod: 60
       stream: PAYROLL_V1
@@ -277,25 +254,22 @@ workers:
       lagThreshold: 500
   onTimeEvaluator:
     enabled: true
-    replicaCount: 2
+    replicaCount: 1
     args: ["--role=on-time-evaluator"]
     metricsPort: 2112
     resources:
       requests: { cpu: 100m, memory: 128Mi }
-      limits: { cpu: 500m, memory: 512Mi }
+      limits:   { cpu: 500m, memory: 384Mi }
     keda:
       enabled: true
       minReplicas: 1
-      maxReplicas: 10
+      maxReplicas: 4
       pollingInterval: 15
       cooldownPeriod: 60
       stream: ORDERS_V1
       consumer: on-time-evaluator
       lagThreshold: 500
 
-#-----------------------------------------------------------------------------
-# Scheduler singletons (lease-coordinated)
-#-----------------------------------------------------------------------------
 scheduler:
   cutoffSweeper:
     enabled: true
@@ -305,7 +279,7 @@ scheduler:
     leaseName: tbite-cutoff-sweeper
     resources:
       requests: { cpu: 50m, memory: 64Mi }
-      limits: { cpu: 200m, memory: 256Mi }
+      limits:   { cpu: 200m, memory: 192Mi }
   noShowSweeper:
     enabled: true
     replicaCount: 1
@@ -314,7 +288,7 @@ scheduler:
     leaseName: tbite-no-show-sweeper
     resources:
       requests: { cpu: 50m, memory: 64Mi }
-      limits: { cpu: 200m, memory: 256Mi }
+      limits:   { cpu: 200m, memory: 192Mi }
   documentExpiryScanner:
     enabled: true
     replicaCount: 1
@@ -323,7 +297,7 @@ scheduler:
     leaseName: tbite-doc-expiry-scanner
     resources:
       requests: { cpu: 50m, memory: 64Mi }
-      limits: { cpu: 200m, memory: 256Mi }
+      limits:   { cpu: 200m, memory: 192Mi }
   feedbackScanner:
     enabled: true
     replicaCount: 1
@@ -332,7 +306,7 @@ scheduler:
     leaseName: tbite-feedback-scanner
     resources:
       requests: { cpu: 50m, memory: 64Mi }
-      limits: { cpu: 200m, memory: 256Mi }
+      limits:   { cpu: 200m, memory: 192Mi }
 
 #-----------------------------------------------------------------------------
 # Helm hook Jobs (pre-install, pre-upgrade)
@@ -340,118 +314,139 @@ scheduler:
 hooks:
   dbMigrate:
     enabled: true
-    image:
-      repository: migrate/migrate
-      tag: v4.18.1
-    migrationsConfigMap: "" # if set, mounts a configmap of .sql files at /migrations
+    image: { repository: migrate/migrate, tag: v4.18.1 }
+    migrationsConfigMap: ""
     migrationsImage:
-      repository: ghcr.io/jacoblincool/corporate-catering-system/migrations
-      tag: "" # defaults to chart appVersion
+      repository: ghcr.io/agentic-build/tbite-migrations
+      tag: ""
     backoffLimit: 3
     activeDeadlineSeconds: 1800
     resources:
       requests: { cpu: 50m, memory: 64Mi }
-      limits: { cpu: 500m, memory: 256Mi }
+      limits:   { cpu: 500m, memory: 256Mi }
   provisionStreams:
     enabled: true
     backoffLimit: 3
     activeDeadlineSeconds: 600
     resources:
       requests: { cpu: 50m, memory: 64Mi }
-      limits: { cpu: 500m, memory: 256Mi }
+      limits:   { cpu: 500m, memory: 256Mi }
   bucketBootstrap:
     enabled: true
-    image:
-      repository: minio/mc
-      tag: RELEASE.2024-11-21T17-21-54Z
+    image: { repository: minio/mc, tag: RELEASE.2024-11-21T17-21-54Z }
     backoffLimit: 3
     activeDeadlineSeconds: 600
     resources:
       requests: { cpu: 50m, memory: 64Mi }
-      limits: { cpu: 500m, memory: 256Mi }
+      limits:   { cpu: 500m, memory: 256Mi }
     extraBuckets: []
-    policy: "private" # private | public | upload | download
+    policy: "private"
+  # createIdentityDatabases bootstraps the `authentik` and `hydra`
+  # databases inside the main CNPG Cluster so the two identity
+  # subcharts can reuse the same Postgres rather than bringing up
+  # their own. Skipped when authentik+hydra are both disabled or
+  # when postgres.enabled is false (BYO Postgres mode supplies the
+  # databases out-of-band).
+  createIdentityDatabases:
+    enabled: true
 
 #-----------------------------------------------------------------------------
-# Subchart-level value blocks
+# CloudNativePG — Postgres data plane
 #-----------------------------------------------------------------------------
-
-# CloudNativePG (operator subchart name 'cloudnative-pg' aliased to cloudnativePgOperator)
+# Single-enterprise sizing: 1 primary + 1 hot standby gives RPO ≤
+# 5 min / RTO ≤ 30 min per ADR-0007 without the cost of a 3-node
+# synchronous quorum that a single-enterprise workload does not
+# need. PgBouncer fronts the primary with one replica; HPA on the
+# api role caps backend connections at the chart's value-derived
+# pool budget (api.database.maxConns × api.hpa.maxReplicas) so the
+# primary's max_connections is not at risk.
+#-----------------------------------------------------------------------------
 postgres:
   enabled: true
   operator:
-    # When true, the chart pulls in the CloudNativePG operator as a
-    # subchart. Default is false: install the operator cluster-wide
-    # once (`helm install cnpg cnpg/cloudnative-pg -n cnpg-system`).
-    # See chart/tbite-platform/README.md for the platform-team
-    # bootstrap sequence.
-    bundled: false
+    bundled: false # platform team installs cnpg/cloudnative-pg once
   byo:
-    enabled: false # if true, skip the Cluster CR; just consume secret refs.
+    enabled: false
   cluster:
     name: tbite-pg
-    instances: 3
+    instances: 2
     imageName: ghcr.io/cloudnative-pg/postgresql:17.2
     storage:
-      size: 100Gi
+      size: 50Gi
       storageClass: ""
     pooler:
       enabled: true
-      instances: 2
+      instances: 1
       type: rw
     backup:
-      enabled: true
+      enabled: false # opt-in via values-prod-ha.yaml when external object
+                     # storage credentials are supplied
       retentionPolicy: "30d"
-      destinationPath: "s3://tbite-prod-pgbackup/"
+      destinationPath: "s3://tbite-pgbackup/"
       s3CredentialsSecretRef:
         name: tbite-pg-backup-s3
         accessKeyKey: ACCESS_KEY_ID
         secretKeyKey: ACCESS_SECRET_KEY
     monitoring:
-      enabled: true
+      enabled: false # podMonitor field deprecated; the chart's
+                     # VMServiceScrape covers metrics scraping
     resources:
-      requests: { cpu: 1, memory: 2Gi }
-      limits: { cpu: 4, memory: 8Gi }
+      requests: { cpu: 500m, memory: 2Gi }
+      limits:   { cpu: 2,    memory: 4Gi }
     postgresql:
       parameters:
-        max_connections: "400"
-        shared_buffers: "1GB"
-        effective_cache_size: "3GB"
+        max_connections: "200"
+        shared_buffers: "512MB"
+        effective_cache_size: "1500MB"
   pitr:
-    enabled: true
+    enabled: false # opt-in via values-prod-ha.yaml
     targetRpoSeconds: 300
     targetRtoSeconds: 1800
 
-cloudnativePgOperator:
-  # Subchart values
+# Used only when postgres.operator.bundled=true.
+cnpg-operator:
   config:
     create: true
     data:
       INHERITED_ANNOTATIONS: "argocd.argoproj.io/*"
       INHERITED_LABELS: "app.kubernetes.io/*"
 
+#-----------------------------------------------------------------------------
+# Valkey — sessions, OIDC state, read-model cache
+#-----------------------------------------------------------------------------
+# Single-enterprise sizing: standalone with persistence + RDB
+# snapshot. The cache surfaces (sessions, OIDC state, read-model
+# entries) are recoverable from authoritative sources, so a brief
+# Valkey restart does not lose business data. Sentinel HA is
+# available via values-prod-ha.yaml.
+#-----------------------------------------------------------------------------
 valkey:
   enabled: true
-  architecture: replication
-  replicaCount: 3
+  architecture: standalone
+  replicaCount: 1
   auth:
     enabled: true
     existingSecret: tbite-valkey
     existingSecretPasswordKey: password
   sentinel:
-    enabled: true
-    quorum: 2
-  master:
+    enabled: false
+  primary:
     persistence:
       enabled: true
-      size: 8Gi
-  replica:
-    persistence:
-      enabled: true
-      size: 8Gi
+      size: 4Gi
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
   metrics:
     enabled: true
 
+#-----------------------------------------------------------------------------
+# NATS JetStream — durable event plane
+#-----------------------------------------------------------------------------
+# Three replicas is the RAFT minimum for HA. JetStream file storage
+# 10 GiB easily holds 30-day retention of ORDERS_V1 + 90-day
+# PAYROLL_V1 for a single enterprise (~5K orders/day × 2 KB).
+#-----------------------------------------------------------------------------
 nats:
   enabled: true
   cluster:
@@ -466,7 +461,7 @@ nats:
       fileStore:
         enabled: true
         pvc:
-          size: 50Gi
+          size: 10Gi
           storageClassName: ""
     nats:
       port: 4222
@@ -474,13 +469,29 @@ nats:
     enabled: true
   promExporter:
     enabled: true
+  container:
+    merge:
+      resources:
+        requests: { cpu: 200m, memory: 512Mi }
+        limits:   { cpu: 1,    memory: 1Gi }
 
+#-----------------------------------------------------------------------------
+# MinIO — S3-compatible object storage
+#-----------------------------------------------------------------------------
+# Single-enterprise sizing: a single MinIO server with one volume.
+# The chart deliberately skips the MinIO Operator + Tenant
+# distributed mode (4 servers × 4 volumes = 16 PVCs) because that
+# topology is for multi-tenant SaaS scale, not for one enterprise's
+# menu images + compliance documents. values-prod-ha.yaml enables
+# the Tenant for installations that need erasure coding and
+# concurrent IO across nodes.
+#-----------------------------------------------------------------------------
 minio:
-  enabled: true
+  enabled: false
   operator:
-    enabled: true
+    enabled: false
   tenant:
-    enabled: true
+    enabled: false
     tenant:
       name: tbite
       configSecret:
@@ -488,10 +499,10 @@ minio:
         accessKey: minio
         secretKey: minio123
       pools:
-        - servers: 4
+        - servers: 1
           name: pool-0
-          volumesPerServer: 4
-          size: 1Ti
+          volumesPerServer: 1
+          size: 50Gi
           storageClassName: ""
       buckets:
         - name: tbite-prod
@@ -504,14 +515,36 @@ minio:
         - name: MINIO_PROMETHEUS_AUTH_TYPE
           value: "public"
 
-minioOperator:
-  operator:
-    replicaCount: 2
+# Single-pod MinIO Deployment used when minio.operator.enabled is
+# false. This is the default for the single-enterprise prod sizing:
+# one container, one persistent volume, exposed in-cluster as
+# `minio.<namespace>.svc.cluster.local`.
+minioStandalone:
+  enabled: true
+  image:
+    repository: minio/minio
+    tag: RELEASE.2024-11-07T00-52-20Z
+  storage:
+    size: 50Gi
+    storageClass: ""
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 1Gi }
+  credentialsSecretRef:
+    name: tbite-minio-root
+    accessKeyKey: accessKey
+    secretKeyKey: secretKey
 
-minioTenant:
-  # subchart noop holder — values nested under .minio.tenant are passed via library helpers.
+minio-operator:
+  operator:
+    replicaCount: 1
+
+minio-tenant:
   fullnameOverride: ""
 
+#-----------------------------------------------------------------------------
+# Ingress / Gateway API
+#-----------------------------------------------------------------------------
 ingress:
   className: traefik
   gateway:
@@ -532,12 +565,12 @@ ingress:
   certManager:
     enabled: true
     issuer:
-      kind: ClusterIssuer # ClusterIssuer | Issuer
+      kind: ClusterIssuer
       name: letsencrypt
       email: ops@tbite.example.com
       server: https://acme-v02.api.letsencrypt.org/directory
       stagingServer: https://acme-staging-v02.api.letsencrypt.org/directory
-      solver: http01 # http01 | dns01
+      solver: http01
 
 traefik:
   enabled: true
@@ -559,10 +592,6 @@ traefik:
       enabled: true
   gatewayClass:
     name: traefik
-  # Traefik chart 40.x moved TLS + HTTP→HTTPS redirect off the
-  # per-port shape; redirect is now expressed as a Middleware
-  # (templates/middleware-redirect-https.yaml) and TLS termination
-  # is configured via the Gateway/HTTPRoute listener spec.
   ports:
     web:
       port: 8000
@@ -573,13 +602,11 @@ traefik:
   metrics:
     prometheus:
       enabled: true
-      # The Victoria stack uses VMServiceScrape, not the prometheus-
-      # operator ServiceMonitor CRD; leave the Traefik
-      # subchart's ServiceMonitor disabled and rely on the
-      # VMServiceScrape rendered alongside (see
-      # templates/vmservicescrape-roles.yaml).
       serviceMonitor:
         enabled: false
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 256Mi }
 
 certManager:
   enabled: true
@@ -592,41 +619,66 @@ cert-manager:
   prometheus:
     enabled: true
     servicemonitor:
-      enabled: true
+      enabled: false
+  replicaCount: 1
+  webhook:
+    replicaCount: 1
+  cainjector:
+    replicaCount: 1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 200m, memory: 128Mi }
 
+#-----------------------------------------------------------------------------
+# Identity: Authentik (SSO) + Hydra (MCP DCR) — ADR-0006
+#-----------------------------------------------------------------------------
+# Authentik and Hydra reuse the main CNPG cluster (databases
+# `authentik` and `hydra`, created by the chart's identity DB-init
+# Job) plus the main Valkey for Authentik's cache. This saves
+# ~2 GiB versus bundling their own Postgres + Redis.
+#-----------------------------------------------------------------------------
 authentik:
   enabled: true
-  externalHost: "" # set when BYO Authentik
+  externalHost: ""
   authentik:
     secret_key: "PLEASE-REPLACE-VIA-SOPS-OR-SEALED-SECRET"
     error_reporting:
       enabled: false
     postgresql:
-      host: tbite-pg-rw
+      host: tbite-pg-rw.tbite.svc.cluster.local
       name: authentik
       user: authentik
       password: "PLEASE-REPLACE"
     redis:
-      host: tbite-platform-valkey-master
+      host: tbite-valkey-primary.tbite.svc.cluster.local
   server:
-    replicas: 2
-    ingress:
-      enabled: false # we expose via HTTPRoute
+    replicas: 1
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits:   { cpu: 1,    memory: 1Gi }
   worker:
-    replicas: 2
+    replicas: 1
+    resources:
+      requests: { cpu: 200m, memory: 384Mi }
+      limits:   { cpu: 1,    memory: 768Mi }
   postgresql:
     enabled: false
   redis:
     enabled: false
-  ingress:
-    host: auth.tbite.example.com
+  # The Authentik subchart's per-server ingress and the top-level
+  # ingress block were both deprecated in 2026.5.0. We expose the
+  # server via our own HTTPRoute (templates/httproute-authentik.yaml)
+  # at `global.baseURL.api`-derived host instead.
 
 hydra:
   enabled: true
-  externalUrl: "" # set when BYO Hydra
+  externalUrl: ""
   hydra:
     config:
-      dsn: "memory" # operators MUST set this via secret in real deploys
+      # Operators MUST set this via a SOPS-encrypted secret in real
+      # deploys (the chart's createIdentityDatabases Job ensures the
+      # `hydra` database exists in the main CNPG cluster).
+      dsn: "postgres://hydra@tbite-pg-rw.tbite.svc.cluster.local:5432/hydra?sslmode=disable"
       urls:
         self:
           issuer: https://hydra.tbite.example.com
@@ -641,27 +693,34 @@ hydra:
       enabled: false
     admin:
       enabled: false
-  replicaCount: 2
+  replicaCount: 1
   ingressHost: hydra.tbite.example.com
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 256Mi }
 
 #-----------------------------------------------------------------------------
-# Observability stack
+# Observability — slim default
+#-----------------------------------------------------------------------------
+# The single-enterprise prod default ships vmsingle + a small
+# Grafana + OTel Collector. vmagent, alertmanager, kube-state-metrics,
+# node-exporter, victoria-traces, and victoria-logs are off by
+# default; values-prod-ha.yaml enables the complete observability
+# stack for installations that need the full vendor-grade
+# experience.
 #-----------------------------------------------------------------------------
 observability:
-  # Grafana dashboards JSON files under chart/tbite-platform/dashboards/
-  # are loaded by templates/configmap-dashboards.yaml as a labelled
-  # ConfigMap the Grafana subchart's sidecar picks up.
   dashboards:
     enabled: true
   victoriaMetrics:
     enabled: true
-    retention: "12mo"
+    retention: "30d"
   victoriaLogs:
-    enabled: true
-    retention: "30d"
+    enabled: false
+    retention: "7d"
   victoriaTraces:
-    enabled: true
-    retention: "30d"
+    enabled: false
+    retention: "7d"
   grafana:
     enabled: true
     adminPasswordSecretRef:
@@ -673,57 +732,67 @@ observability:
     serviceName: opentelemetry-collector
     grpcPort: 4317
     httpPort: 4318
-    # Set to true if the OpenTelemetry *Operator* is already installed in
-    # the cluster and you prefer to drive the collector via the
-    # OpenTelemetryCollector CR rather than the bundled collector chart.
     useOperatorCR: false
 
-# Subchart values for victoria-metrics-k8s-stack
 victoria-metrics-k8s-stack:
   vmsingle:
     spec:
-      retentionPeriod: "12"
+      retentionPeriod: "30d"
       storage:
         accessModes: [ReadWriteOnce]
         resources:
           requests:
-            storage: 50Gi
+            storage: 30Gi
+      resources:
+        requests: { cpu: 200m, memory: 512Mi }
+        limits:   { cpu: 1,    memory: 1Gi }
   vmagent:
-    enabled: true
+    enabled: false
   alertmanager:
-    enabled: true
+    enabled: false
   vmalert:
     enabled: true
-    # vm-operator 0.79.x requires every VMAlert to declare either a
-    # notifier reference or the explicit blackhole opt-out. The
-    # subchart-rendered VMAlert wires Alertmanager from the same
-    # release when alertmanager.enabled is true; the blackhole flag
-    # is a safe default that the umbrella values-prod overrides
-    # with a real notifier list.
     spec:
       extraArgs:
         notifier.blackhole: "true"
+      resources:
+        requests: { cpu: 100m, memory: 128Mi }
+        limits:   { cpu: 500m, memory: 256Mi }
   grafana:
     enabled: true
     adminPassword: "PLEASE-REPLACE-VIA-SOPS"
+    replicas: 1
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits:   { cpu: 500m, memory: 384Mi }
+  kube-state-metrics:
+    enabled: false
+  prometheus-node-exporter:
+    enabled: false
 
 victoria-logs-single:
   server:
-    retentionPeriod: "30d"
+    retentionPeriod: "7d"
     persistentVolume:
       enabled: true
-      size: 50Gi
+      size: 10Gi
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
 
 victoria-traces-single:
   server:
-    retentionPeriod: "30d"
+    retentionPeriod: "7d"
     persistentVolume:
       enabled: true
-      size: 50Gi
+      size: 10Gi
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits:   { cpu: 500m, memory: 256Mi }
 
 opentelemetry-collector:
   mode: deployment
-  replicaCount: 2
+  replicaCount: 1
   image:
     repository: otel/opentelemetry-collector-contrib
   presets:
@@ -738,12 +807,15 @@ opentelemetry-collector:
       enabled: true
       containerPort: 4318
       servicePort: 4318
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits:   { cpu: 500m, memory: 384Mi }
 
 keda:
   enabled: true
 
 #-----------------------------------------------------------------------------
-# SOPS / secret management hints
+# SOPS / NetworkPolicy / Alerting
 #-----------------------------------------------------------------------------
 sops:
   enabled: true
@@ -751,22 +823,14 @@ sops:
     name: tbite-sops-age
     key: pub
 
-#-----------------------------------------------------------------------------
-# NetworkPolicy defaults
-#-----------------------------------------------------------------------------
 networkPolicy:
   enabled: true
-  # Default-deny applies to the namespace; allow rules per-role grant egress
-  # to the OTel collector and dependencies they need.
 
-#-----------------------------------------------------------------------------
-# Common alert thresholds
-#-----------------------------------------------------------------------------
 alerting:
   enabled: true
   thresholds:
     poolSaturationPct: 80
     replicaLagSeconds: 30
     outboxAgeSeconds: 60
-    sseConnPerPod: 800
+    sseConnPerPod: 2400
     fanoutLagSeconds: 5

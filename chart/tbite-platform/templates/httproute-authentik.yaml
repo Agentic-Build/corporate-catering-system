@@ -13,7 +13,9 @@ spec:
     - name: {{ .Values.ingress.gateway.name }}
       sectionName: https
   hostnames:
-    - {{ .Values.authentik.ingress.host | quote }}
+    {{- $host := printf "auth.%s" .Values.global.domain }}
+    {{- if and (hasKey .Values.authentik "ingress") .Values.authentik.ingress }}{{- if hasKey .Values.authentik.ingress "host" }}{{- $host = .Values.authentik.ingress.host }}{{- end }}{{- end }}
+    - {{ $host | quote }}
   rules:
     - matches:
         - path:

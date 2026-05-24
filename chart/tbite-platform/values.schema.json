@@ -11,7 +11,11 @@
         "size": {
           "type": "string",
           "enum": ["dev", "prod"],
-          "description": "Topology profile. 'dev' uses single-replica, smaller storage; 'prod' enforces HA minimums."
+          "description": "Topology profile. 'dev' uses single-replica, smaller storage; 'prod' is the canonical single-enterprise sizing (ADR-0008)."
+        },
+        "haTopology": {
+          "type": "boolean",
+          "description": "When true, the schema enforces multi-AZ HA minima (3-instance CNPG, 3-replica Valkey HA, MinIO Tenant 4x4, etc.). Set by values-prod-ha.yaml."
         }
       }
     },
@@ -152,7 +156,8 @@
   "allOf": [
     {
       "if": {
-        "properties": { "profile": { "properties": { "size": { "const": "prod" } } } }
+        "properties": { "profile": { "properties": { "haTopology": { "const": true } } } },
+        "required": ["profile"]
       },
       "then": {
         "properties": {

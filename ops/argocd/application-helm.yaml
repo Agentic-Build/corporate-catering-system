@@ -32,12 +32,11 @@ spec:
     path: chart/tbite-platform
     helm:
       releaseName: tbite
+      # The default values.yaml is the single-enterprise prod sizing
+      # per ADR-0008 (#55). Operators that need multi-AZ HA stack a
+      # second valueFile: ["values.yaml", "values-prod-ha.yaml"].
       valueFiles:
-        - values-prod.yaml
-      # Operators override these per environment via a Helm parameter
-      # override file (`ops/argocd/values-overrides/`) or a private
-      # ApplicationSet generator. Inline parameter overrides remain
-      # available for the few cross-cutting toggles below.
+        - values.yaml
       parameters:
         - name: profile.size
           value: prod

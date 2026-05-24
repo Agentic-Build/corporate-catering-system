@@ -1,0 +1,116 @@
+{{- if .Values.minioStandalone.enabled }}
+{{- /*
+Single-pod MinIO Deployment + Service + PVC. Used in the default
+single-enterprise sizing where the MinIO Operator + Tenant
+(distributed mode, 4 servers × 4 volumes = 16 PVCs) is heavier
+than the workload needs. Enable the Tenant via values-prod-ha.yaml
+when erasure coding and concurrent IO matter.
+*/ -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "tbite.fullname" . }}-minio
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.minioStandalone.storage.size | quote }}
+  {{- if .Values.minioStandalone.storage.storageClass }}
+  storageClassName: {{ .Values.minioStandalone.storage.storageClass | quote }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "tbite.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: minio
+  template:
+    metadata:
+      labels:
+        {{- include "tbite.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: minio
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: minio
+          image: "{{ .Values.minioStandalone.image.repository }}:{{ .Values.minioStandalone.image.tag }}"
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minioStandalone.credentialsSecretRef.name | quote }}
+                  key:  {{ .Values.minioStandalone.credentialsSecretRef.accessKeyKey | quote }}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minioStandalone.credentialsSecretRef.name | quote }}
+                  key:  {{ .Values.minioStandalone.credentialsSecretRef.secretKeyKey | quote }}
+            - name: MINIO_PROMETHEUS_AUTH_TYPE
+              value: "public"
+          ports:
+            - name: api
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: api
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: api
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.minioStandalone.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "tbite.fullname" . }}-minio
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "tbite.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+  ports:
+    - name: api
+      port: 80
+      targetPort: api
+    - name: console
+      port: 9001
+      targetPort: console
+{{- end }}
