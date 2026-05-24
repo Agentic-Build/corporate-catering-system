@@ -1,0 +1,256 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "tbite-platform values",
+  "type": "object",
+  "required": ["profile", "global", "image"],
+  "properties": {
+    "profile": {
+      "type": "object",
+      "required": ["size"],
+      "properties": {
+        "size": {
+          "type": "string",
+          "enum": ["dev", "prod"],
+          "description": "Topology profile. 'dev' uses single-replica, smaller storage; 'prod' is the canonical single-enterprise sizing (ADR-0008)."
+        },
+        "haTopology": {
+          "type": "boolean",
+          "description": "When true, the schema enforces multi-AZ HA minima (3-instance CNPG, 3-replica Valkey HA, MinIO Tenant 4x4, etc.). Set by values-prod-ha.yaml."
+        }
+      }
+    },
+    "global": {
+      "type": "object",
+      "required": ["domain", "baseURL", "oidcIssuerURL", "s3", "nats"],
+      "properties": {
+        "imageRegistry": { "type": "string" },
+        "imagePullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 3
+        },
+        "namespaceOverride": { "type": "string" },
+        "baseURL": {
+          "type": "object",
+          "required": ["api", "employee", "merchant", "admin"],
+          "properties": {
+            "api": { "type": "string", "pattern": "^https?://" },
+            "employee": { "type": "string", "pattern": "^https?://" },
+            "merchant": { "type": "string", "pattern": "^https?://" },
+            "admin": { "type": "string", "pattern": "^https?://" }
+          }
+        },
+        "oidcIssuerURL": {
+          "type": "string",
+          "pattern": "^https?://"
+        },
+        "s3": {
+          "type": "object",
+          "required": ["endpoint", "region", "bucket", "credentialsSecretRef"],
+          "properties": {
+            "endpoint": { "type": "string", "pattern": "^https?://" },
+            "region": { "type": "string", "minLength": 1 },
+            "bucket": { "type": "string", "minLength": 1 },
+            "credentialsSecretRef": {
+              "type": "object",
+              "required": ["name", "accessKeyKey", "secretKeyKey"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "accessKeyKey": { "type": "string", "minLength": 1 },
+                "secretKeyKey": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        },
+        "nats": {
+          "type": "object",
+          "required": ["url"],
+          "properties": {
+            "url": { "type": "string", "pattern": "^nats://" }
+          }
+        },
+        "podAnnotations": { "type": "object" },
+        "podLabels": { "type": "object" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" }
+      }
+    },
+    "image": {
+      "type": "object",
+      "required": ["repository"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pullSecrets": { "type": "array" }
+      }
+    },
+    "api": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "database": {
+          "type": "object",
+          "properties": {
+            "rwUrlSecretRef": {
+              "type": "object",
+              "required": ["name", "key"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "key": { "type": "string", "minLength": 1 }
+              }
+            },
+            "roUrlSecretRef": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "key": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } } },
+          "then": { "required": ["database"] }
+        }
+      ]
+    },
+    "realtime": { "type": "object" },
+    "web": { "type": "object" },
+    "workers": { "type": "object" },
+    "scheduler": { "type": "object" },
+    "hooks": { "type": "object" },
+    "postgres": { "type": "object" },
+    "valkey": { "type": "object" },
+    "nats": { "type": "object" },
+    "minio": { "type": "object" },
+    "ingress": { "type": "object" },
+    "traefik": { "type": "object" },
+    "certManager": { "type": "object" },
+    "authentik": { "type": "object" },
+    "hydra": { "type": "object" },
+    "observability": { "type": "object" },
+    "keda": { "type": "object" },
+    "sops": { "type": "object" },
+    "networkPolicy": { "type": "object" },
+    "alerting": { "type": "object" },
+    "otel": { "type": "object" },
+    "serviceAccount": { "type": "object" },
+    "securityContext": { "type": "object" },
+    "containerSecurityContext": { "type": "object" },
+    "cloudnativePgOperator": { "type": "object" },
+    "minioOperator": { "type": "object" },
+    "minioTenant": { "type": "object" },
+    "cert-manager": { "type": "object" },
+    "victoria-metrics-k8s-stack": { "type": "object" },
+    "victoria-logs-single": { "type": "object" },
+    "victoria-traces-single": { "type": "object" },
+    "opentelemetry-collector": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "profile": { "properties": { "haTopology": { "const": true } } } },
+        "required": ["profile"]
+      },
+      "then": {
+        "properties": {
+          "postgres": {
+            "type": "object",
+            "properties": {
+              "cluster": {
+                "type": "object",
+                "properties": {
+                  "instances": { "type": "integer", "minimum": 3 }
+                }
+              }
+            }
+          },
+          "nats": {
+            "type": "object",
+            "properties": {
+              "cluster": {
+                "type": "object",
+                "properties": {
+                  "replicas": { "type": "integer", "minimum": 3 }
+                }
+              }
+            }
+          },
+          "valkey": {
+            "type": "object",
+            "properties": {
+              "replicaCount": { "type": "integer", "minimum": 3 }
+            }
+          },
+          "minio": {
+            "type": "object",
+            "properties": {
+              "tenant": {
+                "type": "object",
+                "properties": {
+                  "tenant": {
+                    "type": "object",
+                    "properties": {
+                      "pools": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "servers": { "type": "integer", "minimum": 4 }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "api": {
+            "type": "object",
+            "properties": {
+              "replicaCount": { "type": "integer", "minimum": 2 }
+            }
+          },
+          "realtime": {
+            "type": "object",
+            "properties": {
+              "replicaCount": { "type": "integer", "minimum": 2 }
+            }
+          },
+          "web": {
+            "type": "object",
+            "properties": {
+              "employee": {
+                "type": "object",
+                "properties": {
+                  "replicaCount": { "type": "integer", "minimum": 2 }
+                }
+              },
+              "merchant": {
+                "type": "object",
+                "properties": {
+                  "replicaCount": { "type": "integer", "minimum": 2 }
+                }
+              },
+              "admin": {
+                "type": "object",
+                "properties": {
+                  "replicaCount": { "type": "integer", "minimum": 2 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+# SOPS configuration for the tbite-platform repo.
+#
+# How the `recipients:` work:
+#   When a file is encrypted with `sops -e -i <file>`, SOPS picks the first
+#   matching rule below and writes one encrypted data-key entry per age
+#   recipient. Every listed recipient can later decrypt the file with their
+#   own age private key (kept at `~/.config/sops/age/keys.txt` by default).
+#
+# How operators rotate / add a recipient:
+#   1. Have the new operator generate a key:
+#        age-keygen -o ~/.config/sops/age/keys.txt
+#      The first line of that file (the `# public key: age1...` comment)
+#      is what gets pasted here.
+#   2. Append their `age1...` public key to the relevant `age:` block below.
+#   3. Re-encrypt every affected file so the new recipient gets a copy of
+#      the data key:
+#        sops updatekeys ops/secrets/<env>/whatever.sops.yaml
+#      (or `make sops-encrypt FILE=...` after `sops -d`-ing in place; see
+#      docs/deployment/secrets.md).
+#   4. Removing a recipient is the same flow: delete the line, then run
+#      `sops updatekeys` against every file. The data key inside the file
+#      is then rewritten without that recipient's wrap. Treat removed keys
+#      as compromised: rotate any plaintext those files contained.
+#
+# IMPORTANT: the key below is a CLEARLY-MARKED PLACEHOLDER. Operators
+# MUST replace it before any real secret is encrypted with this config.
+# Encrypting against a placeholder you do not hold the private key for
+# will produce undecryptable files.
+
+creation_rules:
+  # Narrow rule first: anything explicitly placed under ops/secrets/
+  # (the canonical home for env-scoped Kubernetes Secret manifests).
+  - path_regex: ^ops/secrets/.*\.sops\.yaml$
+    encrypted_regex: "^(?!apiVersion$|kind$|metadata$|type$).*"
+    age: >-
+      age1placeholderplaceholderplaceholderplaceholderplaceholderplace00
+      # ^^^^^ REPLACE ME ^^^^^
+      # This is NOT a real age public key. Replace before first encrypt.
+      # See the rotation section above and docs/deployment/secrets.md.
+
+  # Broader catch-all: any *.sops.yaml under chart/ or ops/ that doesn't
+  # match the rule above (e.g. inline secrets vendored next to a chart
+  # values file, or one-off bootstrap manifests under ops/kubernetes/).
+  - path_regex: ^(chart|ops)/.*\.sops\.yaml$
+    encrypted_regex: "^(?!apiVersion$|kind$|metadata$|type$).*"
+    age: >-
+      age1placeholderplaceholderplaceholderplaceholderplaceholderplace00
+      # ^^^^^ REPLACE ME ^^^^^ same placeholder as above; replace in both
+      # blocks (or use a YAML anchor in your local fork) when you rotate.

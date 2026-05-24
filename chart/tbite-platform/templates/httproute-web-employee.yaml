@@ -1,0 +1,30 @@
+{{- if .Values.crdsReady -}}
+{{- $cfg := .Values.web.employee -}}
+{{- if and $cfg.enabled $cfg.ingress.enabled .Values.ingress.gateway.enabled }}
+{{- $role := "web-employee" -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" . "role" $role) | nindent 4 }}
+spec:
+  parentRefs:
+    - name: {{ .Values.ingress.gateway.name }}
+      sectionName: https
+  hostnames:
+    - {{ $cfg.ingress.host | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+          port: 80
+      timeouts:
+        request: 30s
+{{- end }}
+
+{{- end -}}

@@ -1,0 +1,33 @@
+{{- $ctx := . -}}
+{{/* List of (role, cfg) pairs that ship a PDB when role.pdb.enabled */}}
+{{- $items := list -}}
+{{- if and .Values.api.enabled .Values.api.pdb.enabled }}
+{{- $items = append $items (dict "role" "api" "minAvailable" .Values.api.pdb.minAvailable) -}}
+{{- end -}}
+{{- if and .Values.realtime.enabled .Values.realtime.pdb.enabled }}
+{{- $items = append $items (dict "role" "realtime" "minAvailable" .Values.realtime.pdb.minAvailable) -}}
+{{- end -}}
+{{- if and .Values.web.employee.enabled .Values.web.employee.pdb.enabled }}
+{{- $items = append $items (dict "role" "web-employee" "minAvailable" .Values.web.employee.pdb.minAvailable) -}}
+{{- end -}}
+{{- if and .Values.web.merchant.enabled .Values.web.merchant.pdb.enabled }}
+{{- $items = append $items (dict "role" "web-merchant" "minAvailable" .Values.web.merchant.pdb.minAvailable) -}}
+{{- end -}}
+{{- if and .Values.web.admin.enabled .Values.web.admin.pdb.enabled }}
+{{- $items = append $items (dict "role" "web-admin" "minAvailable" .Values.web.admin.pdb.minAvailable) -}}
+{{- end -}}
+{{- range $it := $items }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" $ctx "role" $it.role) }}
+  namespace: {{ include "tbite.namespace" $ctx }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" $ctx "role" $it.role) | nindent 4 }}
+spec:
+  minAvailable: {{ $it.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "tbite.roleSelectorLabels" (dict "ctx" $ctx "role" $it.role) | nindent 6 }}
+{{- end }}

@@ -54,8 +54,12 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
-          # PRs: build + load locally for verification (push: false).
-          # main / tags: push to GHCR.
+          # Multi-arch on push so Apple Silicon kind/k3d/OrbStack
+          # local clusters (architecture #47 first-class targets)
+          # can pull the image without operators rebuilding. PRs
+          # build linux/amd64 only because docker/build-push-action's
+          # `load: true` does not accept a platforms list.
+          platforms: ${{ github.event_name == 'push' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           push: ${{ github.event_name == 'push' }}
           load: ${{ github.event_name != 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -92,18 +96,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - name: Bump single-node overlay image tags
+      - name: Bump chart image.tag
         run: |
           set -euo pipefail
           SHA="sha-${GITHUB_SHA::7}"
-          f=ops/kubernetes/overlays/single-node/kustomization.yaml
-          sed -i -E "s|newTag: sha-[0-9a-f]+|newTag: ${SHA}|g" "$f"
+          f=chart/tbite-platform/values.yaml
+          sed -i -E "s|^(  tag: )\"sha-[0-9a-f]+\"|\\1\"${SHA}\"|" "$f"
           if git diff --quiet -- "$f"; then
-            echo "image tags already at ${SHA}; nothing to commit"
+            echo "image tag already at ${SHA}; nothing to commit"
             exit 0
           fi
           git config user.name "tbite-ci[bot]"
           git config user.email "tbite-ci@users.noreply.github.com"
           git add "$f"
-          git commit -m "chore(cd): single-node images -> ${SHA} [skip ci]"
+          git commit -m "chore(cd): chart image.tag -> ${SHA} [skip ci]"
           git push origin HEAD:main

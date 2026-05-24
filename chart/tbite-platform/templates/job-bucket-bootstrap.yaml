@@ -1,0 +1,74 @@
+{{- if .Values.hooks.bucketBootstrap.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "tbite.fullname" . }}-bucket-bootstrap
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bucket-bootstrap
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-15"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.hooks.bucketBootstrap.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.hooks.bucketBootstrap.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "tbite.labels" . | nindent 8 }}
+        app.kubernetes.io/component: bucket-bootstrap
+    spec:
+      restartPolicy: OnFailure
+      {{- include "tbite.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "tbite.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: mc
+          image: {{ printf "%s:%s" .Values.hooks.bucketBootstrap.image.repository .Values.hooks.bucketBootstrap.image.tag | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              mc alias set tbite "${TBITE_S3_ENDPOINT}" "${TBITE_S3_ACCESS_KEY_ID}" "${TBITE_S3_SECRET_ACCESS_KEY}"
+              # idempotent — ignore "bucket exists" errors
+              mc mb --ignore-existing "tbite/${TBITE_S3_BUCKET}"
+              mc anonymous set {{ .Values.hooks.bucketBootstrap.policy }} "tbite/${TBITE_S3_BUCKET}" || true
+              {{- range .Values.hooks.bucketBootstrap.extraBuckets }}
+              mc mb --ignore-existing "tbite/{{ . }}"
+              {{- end }}
+              echo "bucket bootstrap complete"
+          env:
+            - name: TBITE_S3_ENDPOINT
+              value: {{ .Values.global.s3.endpoint | quote }}
+            - name: TBITE_S3_BUCKET
+              value: {{ .Values.global.s3.bucket | quote }}
+            - name: TBITE_S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.s3.credentialsSecretRef.name | quote }}
+                  key: {{ .Values.global.s3.credentialsSecretRef.accessKeyKey | quote }}
+            - name: TBITE_S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.s3.credentialsSecretRef.name | quote }}
+                  key: {{ .Values.global.s3.credentialsSecretRef.secretKeyKey | quote }}
+          resources:
+            {{- toYaml .Values.hooks.bucketBootstrap.resources | nindent 12 }}
+          securityContext:
+            {{- include "tbite.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: home
+              mountPath: /root
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: home
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- include "tbite.podScheduling" . | nindent 6 }}
+{{- end }}

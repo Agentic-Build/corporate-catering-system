@@ -1,0 +1,33 @@
+{{- if and .Values.authentik.enabled .Values.authentikBlueprints.enabled }}
+{{- /*
+Loads the T-Bite Authentik blueprint(s) as a ConfigMap mounted into
+the Authentik server pod at /blueprints/. The Authentik server
+watches that path and reconciles entries on change.
+
+The blueprint file references TBITE_REDIRECT_URI_AUTHENTIK and
+TBITE_REDIRECT_URI_OAUTH placeholders so the OAuth2 provider's
+redirect_uris track the chart's global.baseURL.api configuration.
+We substitute via Helm `.Files.Get` + replace at render time so the
+operator does not have to keep the blueprint and the chart values
+in sync by hand.
+*/ -}}
+{{- $apiBase := trimSuffix "/" .Values.global.baseURL.api -}}
+{{- $authentikRedirect := printf "%s/auth/authentik/callback" $apiBase -}}
+{{- $oauthRedirect := printf "%s/oauth/callback" $apiBase -}}
+{{- $tpl := .Files.Get "blueprints/tbite.yaml" | replace "{{ TBITE_REDIRECT_URI_AUTHENTIK }}" $authentikRedirect | replace "{{ TBITE_REDIRECT_URI_OAUTH }}" $oauthRedirect -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tbite.fullname" . }}-authentik-blueprints
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: authentik-blueprints
+data:
+  tbite.yaml: |-
+    {{- $tpl | nindent 4 }}
+{{- if .Values.authentikBlueprints.devUsers.enabled }}
+  tbite-dev-users.yaml: |-
+    {{- .Files.Get "blueprints/tbite-dev-users.yaml" | nindent 4 }}
+{{- end }}
+{{- end }}

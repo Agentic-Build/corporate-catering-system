@@ -14,16 +14,12 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/pflag"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance/evaluator"
 	chttp "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/http"
 	cpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/postgres"
-	cscanner "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/scanner"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/config"
 	dlqhttp "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/http"
 	dlqpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/postgres"
@@ -42,19 +38,16 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
 	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
 	mpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/menu/readmodel"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
 	opgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	relay "github.com/takalawang/corporate-catering-system/services/api/internal/order/relay"
-	scheduler "github.com/takalawang/corporate-catering-system/services/api/internal/order/scheduler"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
 	payrollhttp "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/http"
 	payrollpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/postgres"
-	payrollsettler "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/settler"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/db"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/leader"
 	messaging "github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
@@ -71,7 +64,11 @@ import (
 
 func main() {
 	var roleStr string
-	pflag.StringVar(&roleStr, "role", "api", "binary role: api|worker|scheduler|mcp-stdio")
+	pflag.StringVar(&roleStr, "role", "api",
+		"binary role: api | mcp-stdio | "+
+			"outbox-relay | payroll-settler | on-time-evaluator | "+
+			"cutoff-sweeper | no-show-sweeper | document-expiry-scanner | feedback-scanner | "+
+			"realtime-gateway | provision-streams")
 	pflag.Parse()
 
 	role, err := config.ParseRole(roleStr)
@@ -115,10 +112,70 @@ func main() {
 	}
 	observability.MustInitMetrics()
 
+	// Dispatch table for the cloud-native split roles (architecture
+	// issues #56, #58, #62). These short-circuit before the api and
+	// mcp-stdio switch so the per-role bodies stay in roles.go.
+	switch role {
+	case config.RoleOutboxRelay:
+		if err := runOutboxRelay(ctx, logger, cfg); err != nil {
+			logger.Error("outbox-relay", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RolePayrollSettler:
+		if err := runPayrollSettler(ctx, logger, cfg); err != nil {
+			logger.Error("payroll-settler", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleOnTimeEvaluator:
+		if err := runOnTimeEvaluator(ctx, logger, cfg); err != nil {
+			logger.Error("on-time-evaluator", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleCutoffSweeper:
+		if err := runCutoffSweeper(ctx, logger, cfg); err != nil {
+			logger.Error("cutoff-sweeper", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleNoShowSweeper:
+		if err := runNoShowSweeper(ctx, logger, cfg); err != nil {
+			logger.Error("no-show-sweeper", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleDocExpiryScanner:
+		if err := runDocExpiryScanner(ctx, logger, cfg); err != nil {
+			logger.Error("document-expiry-scanner", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleFeedbackScanner:
+		if err := runFeedbackScanner(ctx, logger, cfg); err != nil {
+			logger.Error("feedback-scanner", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleRealtimeGateway:
+		if err := runRealtimeGateway(ctx, logger, cfg); err != nil {
+			logger.Error("realtime-gateway", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleProvisionStreams:
+		if err := runProvisionStreams(ctx, logger, cfg); err != nil {
+			logger.Error("provision-streams", "err", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	switch role {
 	case config.RoleAPI:
 		// 1. Postgres pool
-		pool, err := db.NewPool(ctx, cfg.DatabaseRW)
+		pool, err := db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{MaxConns: cfg.DBMaxConns, MinConns: cfg.DBMinConns})
 		if err != nil {
 			logger.Error("pg pool", "err", err)
 			os.Exit(1)
@@ -338,10 +395,10 @@ func main() {
 		if err := s3API.EnsureBucket(ctx); err != nil {
 			logger.Warn("ensure bucket failed; uploads will fail until storage is reachable", "err", err)
 		}
-		// Merchant menu-item image uploads land in the same object storage and
-		// are served back through GET {PublicBaseURL}/uploads/{key}.
+		// Menu-item images travel via presigned PUT/GET to object
+		// storage (architecture issue #60). The API authorises and
+		// signs URLs; bytes never traverse the API path.
 		menuAPI.Storage = s3API
-		menuAPI.PublicBaseURL = cfg.OIDCCallbackBaseURL
 		complianceService := &compliance.Service{
 			Pool:      pool,
 			Docs:      cpgrepo.NewDocumentRepo(pool),
@@ -435,7 +492,36 @@ func main() {
 				return out, rows.Err()
 			},
 		}
-		homeAPI := &mhttp.HomeAPI{Home: homeSvc, MenuSvc: menuService}
+		// Wire the read-model cache for the employee home aggregate
+		// (architecture issue #59). The Valkey client is the same
+		// one used by the session store; the namespace prefix scopes
+		// the keys so SCAN-based invalidation stays bounded. Leaving
+		// the cache field unset keeps the legacy uncached path.
+		homeCache := &readmodel.RedisCache{C: rdb, Prefix: "tbite:rm:"}
+		homeMetrics := readmodel.NewMetrics()
+		homeAPI := &mhttp.HomeAPI{
+			Home:        homeSvc,
+			MenuSvc:     menuService,
+			Cache:       homeCache,
+			CacheTTL:    30 * time.Second,
+			CacheMetric: homeMetrics,
+		}
+		// The outbox-driven invalidator subscribes to ORDERS_V1 and
+		// clears entries scoped to the affected plant/date. Failure
+		// to start is non-fatal — the TTL is the safety net.
+		if cfg.NATSURL != "" {
+			go func() {
+				natsClient, err := messaging.New(ctx, cfg.NATSURL)
+				if err != nil {
+					logger.Warn("readmodel invalidator: nats unavailable", "err", err)
+					return
+				}
+				defer natsClient.Close()
+				if err := readmodel.RunOrderInvalidator(ctx, natsClient.JS, homeCache, logger.With("component", "readmodel-invalidator")); err != nil {
+					logger.Warn("readmodel invalidator stopped", "err", err)
+				}
+			}()
+		}
 
 		// 7j. Feedback (F1): employee meal ratings + complaint workflow.
 		// Reverser wires admin "resolve with compensation" to ReverseOrder so a
@@ -505,8 +591,6 @@ func main() {
 		}
 
 		srv := httpserver.New(cfg.HTTPAddr, logger, api, func(r chi.Router) {
-			// Public image streaming for merchant-uploaded menu images.
-			r.Get("/uploads/*", menuAPI.ServeUpload)
 			// Hydra OAuth bridge — only mounted when the sidecar is wired.
 			// These endpoints are anonymous: they're the URLs Hydra
 			// redirects the user's browser to during the login/consent
@@ -538,6 +622,7 @@ func main() {
 		}, mcpSrv, mcpOpts,
 			vendorAPI.Register,
 			menuAPI.Register,
+			menuAPI.RegisterPresigned,
 			quotaAPI.Register,
 			orderAPI.Register,
 			payrollAPI.Register,
@@ -553,209 +638,6 @@ func main() {
 			logger.Error("api shutdown", "err", err)
 			os.Exit(1)
 		}
-	case config.RoleWorker:
-		pool, err := db.NewPool(ctx, cfg.DatabaseRW)
-		if err != nil {
-			logger.Error("pg pool", "err", err)
-			os.Exit(1)
-		}
-		defer pool.Close()
-
-		if cfg.NATSURL == "" {
-			logger.Error("NATS_URL is required for worker role")
-			os.Exit(2)
-		}
-		natsClient, err := messaging.New(ctx, cfg.NATSURL)
-		if err != nil {
-			logger.Error("nats connect", "err", err)
-			os.Exit(1)
-		}
-		defer natsClient.Close()
-		if err := natsClient.ProvisionStreams(ctx); err != nil {
-			logger.Error("provision streams", "err", err)
-			os.Exit(1)
-		}
-
-		outbox := opgrepo.NewOutboxRepo(pool)
-		r := &relay.Relay{
-			Outbox: outbox,
-			NATS:   natsClient,
-			Logger: logger.With("component", "outbox-relay"),
-			Batch:  100,
-			Sleep:  500 * time.Millisecond,
-		}
-
-		// S3 client for the payroll settler. We construct + EnsureBucket at
-		// boot so the worker fails fast if object storage is misconfigured,
-		// rather than blowing up on the first batch_locked event.
-		s3Client, err := storage.NewS3(ctx, storage.S3Config{
-			Endpoint:        cfg.S3Endpoint,
-			Region:          cfg.S3Region,
-			AccessKeyID:     cfg.S3AccessKeyID,
-			SecretAccessKey: cfg.S3SecretAccessKey,
-			Bucket:          cfg.S3Bucket,
-			UsePathStyle:    cfg.S3UsePathStyle,
-		})
-		if err != nil {
-			logger.Error("s3", "err", err)
-			os.Exit(1)
-		}
-		if err := s3Client.EnsureBucket(ctx); err != nil {
-			logger.Error("ensure bucket", "err", err)
-			os.Exit(1)
-		}
-
-		settler := &payrollsettler.Settler{
-			JS:         natsClient.JS,
-			Pool:       pool,
-			Batches:    payrollpgrepo.NewBatchRepo(pool),
-			Entries:    payrollpgrepo.NewEntryRepo(pool),
-			Users:      payrollsettler.NewPgUserLookup(pool),
-			Exceptions: payrollpgrepo.NewExceptionRepo(pool),
-			Storage:    s3Client,
-			Logger:     logger.With("component", "payroll-settler"),
-			Audit:      opgrepo.NewAuditRepo(pool),
-			Outbox:     outbox,
-		}
-
-		onTimeEval := &evaluator.OnTimeRateEvaluator{
-			JS:      natsClient.JS,
-			Anomaly: cpgrepo.NewAnomalyRepo(pool),
-			Logger:  logger.With("component", "on-time-evaluator"),
-		}
-
-		logger.Info("worker starting (outbox-relay + payroll-settler + on-time-evaluator)")
-		eg, egctx := errgroup.WithContext(ctx)
-		eg.Go(func() error { return r.Run(egctx) })
-		eg.Go(func() error { return settler.Run(egctx) })
-		eg.Go(func() error { return onTimeEval.Run(egctx) })
-		if err := eg.Wait(); err != nil && !errors.Is(err, context.Canceled) {
-			logger.Error("worker shutdown", "err", err)
-			os.Exit(1)
-		}
-		logger.Info("worker shutdown")
-	case config.RoleScheduler:
-		// P3 ships a single-replica scheduler — no leader election. If we ever
-		// scale to >1 replica, wrap sched.Run() with a K8s coordination.k8s.io
-		// Lease so only the holder runs RunOnce. Documented as future work.
-		pool, err := db.NewPool(ctx, cfg.DatabaseRW)
-		if err != nil {
-			logger.Error("pg pool", "err", err)
-			os.Exit(1)
-		}
-		defer pool.Close()
-
-		orderRepo := opgrepo.NewOrderRepo(pool)
-		// Service used by NoShowSweep. MarkNoShow calls into all the per-tx repos,
-		// so we wire a full Service rather than re-implementing the loop.
-		sweepSvc := &order.Service{
-			Pool:     pool,
-			Orders:   orderRepo,
-			OrdersTx: orderRepo,
-			StateTx:  opgrepo.NewStateEventRepo(pool),
-			AuditTx:  opgrepo.NewAuditRepo(pool),
-			OutboxTx: opgrepo.NewOutboxRepo(pool),
-			Clock:    clock.SystemClock{},
-		}
-		cutoff := &scheduler.Cutoff{
-			Pool:     pool,
-			Orders:   orderRepo,
-			OrdersTx: orderRepo,
-			StateTx:  opgrepo.NewStateEventRepo(pool),
-			AuditTx:  opgrepo.NewAuditRepo(pool),
-			OutboxTx: opgrepo.NewOutboxRepo(pool),
-			Clock:    clock.SystemClock{},
-			Logger:   logger.With("component", "cutoff"),
-		}
-		noShow := &scheduler.NoShowSweep{
-			Svc:      sweepSvc,
-			Interval: 5 * time.Minute,
-			MaxAge:   2 * time.Hour,
-			Logger:   logger.With("component", "no-show"),
-		}
-		cutoffInterval := 60 * time.Second
-		if v := os.Getenv("CUTOFF_INTERVAL"); v != "" {
-			if d, err := time.ParseDuration(v); err == nil {
-				cutoffInterval = d
-			}
-		}
-		if v := os.Getenv("NO_SHOW_INTERVAL"); v != "" {
-			if d, err := time.ParseDuration(v); err == nil {
-				noShow.Interval = d
-			}
-		}
-		if v := os.Getenv("NO_SHOW_MAX_AGE"); v != "" {
-			if d, err := time.ParseDuration(v); err == nil {
-				noShow.MaxAge = d
-			}
-		}
-
-		docScanner := &cscanner.DocumentExpiryScanner{
-			Pool:       pool,
-			Docs:       cpgrepo.NewDocumentRepo(pool),
-			Anomaly:    cpgrepo.NewAnomalyRepo(pool),
-			Interval:   1 * time.Hour,
-			DaysWindow: 14,
-			Logger:     logger.With("component", "doc-expiry"),
-			Clock:      clock.SystemClock{},
-		}
-		if v := os.Getenv("DOC_EXPIRY_INTERVAL"); v != "" {
-			if d, err := time.ParseDuration(v); err == nil {
-				docScanner.Interval = d
-			}
-		}
-
-		// FeedbackScanner (F1): per-vendor rolling-window aggregation of meal
-		// ratings + complaints, opening satisfaction_drop / complaint_spike
-		// anomalies. Mirrors docScanner — single-replica under the same lease.
-		feedbackScanner := &feedback.FeedbackScanner{
-			Ratings:    fpg.NewRatingRepo(pool),
-			Complaints: fpg.NewComplaintRepo(pool),
-			Anomaly:    cpgrepo.NewAnomalyRepo(pool),
-			Clock:      clock.SystemClock{},
-			Logger:     logger.With("component", "feedback-scanner"),
-			Interval:   1 * time.Hour,
-			Window:     14 * 24 * time.Hour,
-		}
-		if v := os.Getenv("FEEDBACK_SCAN_INTERVAL"); v != "" {
-			if d, err := time.ParseDuration(v); err == nil {
-				feedbackScanner.Interval = d
-			}
-		}
-		if v := os.Getenv("FEEDBACK_SCAN_WINDOW"); v != "" {
-			if d, err := time.ParseDuration(v); err == nil {
-				feedbackScanner.Window = d
-			}
-		}
-
-		logger.Info("scheduler starting", "cutoff_interval", cutoffInterval, "noshow_interval", noShow.Interval, "noshow_max_age", noShow.MaxAge, "doc_expiry_interval", docScanner.Interval)
-
-		leaseName := getenv("SCHEDULER_LEASE_NAME", "tbite-scheduler")
-		leaseNS := getenv("SCHEDULER_LEASE_NAMESPACE", "tbite")
-		identity := getenv("POD_NAME", "local-"+uuid.NewString())
-
-		onLeading := func(leadCtx context.Context) error {
-			eg, egctx := errgroup.WithContext(leadCtx)
-			eg.Go(func() error { return cutoff.Run(egctx, cutoffInterval) })
-			eg.Go(func() error { return noShow.Run(egctx) })
-			eg.Go(func() error { return docScanner.Run(egctx) })
-			eg.Go(func() error { return feedbackScanner.Run(egctx) })
-			if err := eg.Wait(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				return err
-			}
-			return nil
-		}
-
-		if err := leader.RunWithLease(ctx, leader.Config{
-			Namespace: leaseNS,
-			LeaseName: leaseName,
-			Identity:  identity,
-			Logger:    logger.With("component", "leader"),
-		}, onLeading); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			logger.Error("scheduler shutdown", "err", err)
-			os.Exit(1)
-		}
-		logger.Info("scheduler shutdown")
 	case config.RoleMCPStdio:
 		// mcp-stdio role: same MCPServer + tool wiring as the api role's /mcp
 		// mount, but transported over stdin/stdout for local MCP clients
@@ -768,7 +650,7 @@ func main() {
 			os.Exit(2)
 		}
 
-		pool, err := db.NewPool(ctx, cfg.DatabaseRW)
+		pool, err := db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{MaxConns: cfg.DBMaxConns, MinConns: cfg.DBMinConns})
 		if err != nil {
 			logger.Error("pg pool", "err", err)
 			os.Exit(1)

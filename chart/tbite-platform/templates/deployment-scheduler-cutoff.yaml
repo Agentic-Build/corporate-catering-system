@@ -1,0 +1,77 @@
+{{- $cfg := .Values.scheduler.cutoffSweeper -}}
+{{- if $cfg.enabled }}
+{{- $role := "scheduler-cutoff" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" . "role" $role) | nindent 4 }}
+spec:
+  # Singleton coordinated via K8s Lease — replicas is always 1.
+  replicas: 1
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "tbite.roleSelectorLabels" (dict "ctx" . "role" $role) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tbite.roleSelectorLabels" (dict "ctx" . "role" $role) | nindent 8 }}
+        {{- include "tbite.podLabels" . | nindent 8 }}
+      annotations:
+        checksum/configmap: {{ include (print $.Template.BasePath "/configmap-app-env.yaml") . | sha256sum }}
+        {{- include "tbite.podAnnotations" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "tbite.roleServiceAccountName" (dict "ctx" . "role" $role) }}
+      {{- include "tbite.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "tbite.podSecurityContext" . | nindent 8 }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: scheduler
+          image: {{ include "tbite.platformImage" . | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args: {{ toYaml $cfg.args | nindent 12 }}
+          ports:
+            - name: metrics
+              containerPort: {{ $cfg.metricsPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "tbite.fullname" . }}-app-env
+          env:
+            {{- include "tbite.appSecretEnv" . | nindent 12 }}
+            - name: TBITE_ROLE
+              value: cutoff-sweeper
+            - name: TBITE_METRICS_PORT
+              value: {{ $cfg.metricsPort | quote }}
+            - name: TBITE_LEASE_NAME
+              value: {{ $cfg.leaseName | quote }}
+            - name: TBITE_LEASE_NAMESPACE
+              value: {{ include "tbite.namespace" . | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- include "tbite.dbEnv" . | nindent 12 }}
+            {{- include "tbite.otelEnv" . | nindent 12 }}
+          readinessProbe:
+            {{- include "tbite.tcpProbe" (dict "port" "metrics") | nindent 12 }}
+          livenessProbe:
+            {{- include "tbite.tcpProbe" (dict "port" "metrics") | nindent 12 }}
+          resources:
+            {{- toYaml $cfg.resources | nindent 12 }}
+          securityContext:
+            {{- include "tbite.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- include "tbite.podScheduling" . | nindent 6 }}
+{{- end }}

@@ -1,0 +1,25 @@
+{{- if .Values.crdsReady -}}
+{{- if and .Values.postgres.enabled (not .Values.postgres.byo.enabled) .Values.postgres.cluster.pooler.enabled }}
+{{- $c := .Values.postgres.cluster -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: {{ printf "%s-pooler-%s" $c.name $c.pooler.type }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres-pooler
+spec:
+  cluster:
+    name: {{ $c.name }}
+  instances: {{ $c.pooler.instances }}
+  type: {{ $c.pooler.type | quote }}
+  pgbouncer:
+    poolMode: transaction
+    parameters:
+      max_client_conn: "1000"
+      default_pool_size: "25"
+      reserve_pool_size: "5"
+{{- end }}
+
+{{- end -}}

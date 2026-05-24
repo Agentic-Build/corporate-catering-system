@@ -1,0 +1,247 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_VICTORIA_METRICS",
+      "label": "VictoriaMetrics",
+      "description": "VictoriaMetrics (Prometheus-compatible) datasource backing tbite observability.",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "" }
+  ],
+  "annotations": { "list": [] },
+  "description": "Outbox + JetStream event-plane health for architecture baseline #47 (issues #54, #56, #57). Outbox age, relay throughput, JetStream consumer pending/delivery rates per worker role, DLQ counts.",
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "panels": [
+    {
+      "type": "row",
+      "title": "Outbox lag",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Oldest unpublished outbox row",
+      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 },
+      "id": 1,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green" },
+              { "color": "yellow", "value": 30 },
+              { "color": "red", "value": 120 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "expr": "max(tbite_outbox_oldest_unpublished_seconds)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox age over time",
+      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 1 },
+      "id": 2,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "expr": "tbite_outbox_oldest_unpublished_seconds",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Outbox relay throughput",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox relay publish rate",
+      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "expr": "sum by (aggregate_type) (rate(tbite_outbox_published_total[1m]))",
+          "legendFormat": "{{aggregate_type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Consumer pending per worker role",
+      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green" },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max"] }
+      },
+      "targets": [
+        {
+          "expr": "jetstream_consumer_num_pending{consumer_name=~\"outbox-relay.*|payroll-settler.*|on-time-evaluator.*\"}",
+          "legendFormat": "{{stream_name}}/{{consumer_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Consumer delivery rate per role",
+      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "id": 5,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean"] }
+      },
+      "targets": [
+        {
+          "expr": "sum by (consumer_name) (rate(jetstream_consumer_delivered_consumer_seq[1m]))",
+          "legendFormat": "{{consumer_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "DLQ",
+      "gridPos": { "h": 1, "w": 24, "x": 12, "y": 16 },
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "DLQ messages (15m increase)",
+      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 17 },
+      "id": 6,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green" },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(tbite_dlq_messages_total[15m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "DLQ growth per source stream",
+      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "id": 7,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (source_stream) (increase(tbite_dlq_messages_total[15m]))",
+          "legendFormat": "{{source_stream}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["tbite", "architecture-baseline-47"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "Outbox + Events — JetStream + DLQ",
+  "uid": "outbox-and-events",
+  "version": 1
+}

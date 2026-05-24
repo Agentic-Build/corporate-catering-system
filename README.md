@@ -2,21 +2,34 @@
 
 > 員工 / 商家 / 福委會三端 + Go modular monolith API
 
-A monorepo: 3 SvelteKit frontends + a Go modular monolith + dual K8s overlays (single-node / GCP) + an MCP server for AI agents.
+A monorepo: 3 SvelteKit frontends + a Go modular monolith + a self-hostable cloud-native Helm umbrella chart + an MCP server for AI agents.
 
 ## Architecture
 
+The canonical architecture is recorded in [`docs/architecture/`](docs/architecture/). The
+baseline ([#47](docs/architecture/00-baseline.md)) and the fifteen sub-decisions (ADRs
+0001–0008 and architecture specs 0001–0007) describe the locked deployment
+shape: Kubernetes-only runtime, Helm umbrella chart, CloudNativePG + PgBouncer
++ Valkey HA + NATS JetStream + MinIO Operator data plane, Victoria
+observability stack, SOPS+age secrets, plant-aware scaling, role-split
+workers, outbox-only publishing, dedicated SSE realtime gateway, read-model
+caching, direct object-storage path, Authentik+Hydra identity boundary, and
+workload-aware autoscaling.
+
 ```
-3 SvelteKit apps         <-->  Go API (chi + huma)  <-->  Postgres / Redis / NATS / S3
-employee/merchant/admin        same binary, 4 roles:
-                               api / worker / scheduler / mcp-stdio
+3 SvelteKit apps        <-->  Go binary (one image, many roles)  <-->  Postgres / Valkey / NATS / S3
+employee/merchant/admin       api / realtime-gateway / outbox-relay /
+                              payroll-settler / on-time-evaluator /
+                              cutoff-sweeper / no-show-sweeper /
+                              document-expiry-scanner / feedback-scanner /
+                              mcp-stdio / provision-streams
 ```
 
 - **Frontend**: SvelteKit 2 + Svelte 5 + Tailwind 3 (adapter-node, SSR)
-- **Backend**: Go 1.23 modular monolith
-- **Data**: Postgres (state of record), Redis (sessions / cache), NATS JetStream (events), S3-compatible object storage (HR CSV / vendor docs)
-- **Observability**: OpenTelemetry traces via OTLP HTTP
-- **Deployment**: dual kustomize overlay — `single-node` for any self-managed cluster, `gcp` for GKE + Cloud SQL + Memorystore + GCS
+- **Backend**: Go 1.23 modular monolith dispatched into per-role Deployments by `--role=<name>`
+- **Data**: Postgres (state of record, RW + RO routing), Valkey HA (sessions / cache / read models), NATS JetStream (durable events + outbox-only publication), S3-compatible object storage (presigned upload/download)
+- **Observability**: OpenTelemetry → VictoriaMetrics + VictoriaLogs + VictoriaTraces + Grafana
+- **Deployment**: Helm umbrella chart [`chart/tbite-platform`](chart/tbite-platform/) is the sole canonical deployment path. The previous kustomize overlays (`single-node`, `gcp`) have been removed.
 
 ## Local development
 
@@ -64,24 +77,35 @@ make dev-logs svc=postgres
 
 ## Production deployment
 
-Two overlays, same `make` interface:
+### Helm umbrella chart (canonical)
+
+The Helm umbrella chart at [`chart/tbite-platform`](chart/tbite-platform/) is the
+canonical packaging per [ADR-0002](docs/architecture/adr-0002-helm-umbrella-chart.md).
+It ships the application, the self-hosted data plane (CloudNativePG, PgBouncer,
+Valkey HA, NATS JetStream, MinIO Operator), the Traefik gateway with cert-manager,
+the Victoria observability stack, the OpenTelemetry Collector, KEDA, and the
+optional Authentik + Hydra identity providers. The same chart renders for
+dev (`values-dev.yaml`) and prod (`values-prod.yaml`); BYO endpoints are
+supplied through values without changing application code.
 
 ```bash
-make prod-up env=single-node    # any reachable k8s cluster
-make prod-up env=gcp            # GKE + Cloud SQL + Memorystore + GCS
+make chart-deps              # one-shot, populates chart/tbite-platform/charts/
+make chart-lint              # lints against values-dev + values-prod
+make chart-render            # dry-renders to stdout (VALUES=… to override)
+make chart-install           # installs into current kubectl context (interactive)
+make chart-upgrade           # upgrades the release
 ```
 
-Both targets print the active `kubectl` context and require interactive confirmation before applying.
+Secrets are managed with SOPS + age — see [`docs/deployment/secrets.md`](docs/deployment/secrets.md)
+and [`docs/deployment/airgapped.md`](docs/deployment/airgapped.md).
 
-- [`docs/deployment/single-node.md`](docs/deployment/single-node.md) — self-managed k8s
-- [`docs/deployment/gcp.md`](docs/deployment/gcp.md) — GCP runbook (Workload Identity, External Secrets, Cloud Armor, managed certs)
+### ArgoCD
 
-To check what kustomize will produce without applying:
-
-```bash
-make render-overlay env=single-node
-make render-overlay env=gcp
-```
+`ops/argocd/application-helm.yaml` declares the ArgoCD `Application` pointing
+at `chart/tbite-platform`. Sync options enable `ServerSideApply` plus a
+five-retry exponential backoff so the chart-of-charts CRD bootstrap converges
+in a single Application. `kubectl apply -k ops/argocd/` bootstraps the
+AppProject + Application on a cluster that already runs ArgoCD.
 
 ## Operations
 
@@ -102,12 +126,15 @@ make render-overlay env=gcp
 ```
 apps/{employee,merchant,admin}/      SvelteKit frontends
 packages/{ui,tokens,api-client,web-auth}/   shared
-services/api/                        Go API + worker + scheduler + mcp-stdio
+services/api/                        Go modular monolith (12 roles via --role=<name>)
 migrations/                          golang-migrate SQL
 ops/local/                           docker-compose dev stack
-ops/kubernetes/{base,overlays}/      K8s manifests
+chart/tbite-platform/                Helm umbrella chart (canonical deployment)
+ops/argocd/                          ArgoCD AppProject + Application
 ops/{load,chaos,security}/           runbooks + scripts
+ops/secrets/                         SOPS-encrypted operator secrets
 contract/openapi/                    generated OpenAPI artifacts
+docs/architecture/                   ADRs + architecture specifications
 docs/                                deployment runbooks, MCP, branding, plans
 ```
 
@@ -120,8 +147,9 @@ docs/                                deployment runbooks, MCP, branding, plans
 | `make migrate-up` / `migrate-down` / `migrate-new name=xxx` | Schema |
 | `make contract-sync` | Regenerate OpenAPI + TS client from Go |
 | `make test-go` / `make test-web` / `make test-e2e` | Tests |
-| `make render-overlay env=…` | Dry-render a kustomize overlay |
-| `make prod-up env=…` / `prod-status env=…` / `prod-down env=…` | Apply / inspect / remove overlay |
+| `make chart-deps` / `chart-lint` / `chart-render` / `chart-install` / `chart-upgrade` / `chart-uninstall` | Helm umbrella chart lifecycle |
+| `make sops-encrypt` / `sops-decrypt` / `sops-edit` | SOPS workflow |
+| `make image-build-local` | Build the platform image for the local Docker daemon |
 | `make build` / `make clean` | Bundle + binary / wipe artifacts |
 
 Full list: `make help`.

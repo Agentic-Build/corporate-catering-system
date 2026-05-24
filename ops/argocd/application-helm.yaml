@@ -1,0 +1,89 @@
+# ArgoCD Application for the umbrella Helm chart (architecture #47).
+#
+# The legacy single-node Application points at the kustomize overlay
+# (`ops/kubernetes/overlays/single-node`); this Application points at
+# the canonical chart at `chart/tbite-platform`. Both can coexist on a
+# cluster during the kustomize→Helm migration; on a per-cluster basis
+# pick exactly one.
+#
+# CRD bootstrap. Several subcharts (CloudNativePG, cert-manager,
+# Traefik, MinIO Operator, KEDA, OpenTelemetry Operator,
+# VictoriaMetrics Operator) install CustomResourceDefinitions in the
+# same Helm release that submits resources of those kinds. ArgoCD
+# handles this via the `ServerSideApply` sync option plus phased
+# rollout — `argoproj.io/sync-wave` on each subchart toggle, or two
+# Applications under an app-of-apps. The single-Application form
+# below relies on ServerSideApply + retry for the first sync to settle
+# CRDs and re-apply the dependent resources on the second pass.
+#
+# Image tag bump. `image.tag` is set via the values overlay and bumped
+# by the existing cd-publish-images workflow that already write-backs
+# the kustomize overlay's `images:` block.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tbite-helm
+  namespace: argocd
+spec:
+  project: tbite
+  source:
+    repoURL: https://github.com/Agentic-Build/corporate-catering-system.git
+    targetRevision: main
+    path: chart/tbite-platform
+    helm:
+      releaseName: tbite
+      # Three valueFiles stack in order:
+      #   1. values.yaml — single-enterprise prod default (ADR-0008).
+      #   2. values-cloudflared.yaml — replace Traefik+LE with
+      #      Cloudflare Tunnel public ingress (this overlay turns
+      #      off traefik/cert-manager/Gateway API; see
+      #      docs/deployment/k3s-cloudflare-tsmc.md).
+      #   3. ../../ops/argocd/values-overrides/tbite-nycu.yaml —
+      #      deployment-specific overrides (public hostnames,
+      #      hook toggles, CNPG sizing).
+      # Operators that need multi-AZ HA prepend values-prod-ha.yaml
+      # before the cloudflared overlay.
+      valueFiles:
+        - values.yaml
+        - values-cloudflared.yaml
+        - ../../ops/argocd/values-overrides/tbite-nycu.yaml
+      parameters:
+        - name: profile.size
+          value: prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tbite
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # ServerSideApply lets ArgoCD progressively converge a release
+      # whose first pass declares CRDs and a second pass declares the
+      # CRs of those kinds. Without it the first sync fails the way
+      # `helm install` does on a fresh cluster.
+      - ServerSideApply=true
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+      # Skip schema validation on CRs whose CRDs are being installed
+      # in the same wave; the API server validates them on the
+      # subsequent retry once the CRD is established.
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+  # The api / web / realtime / worker Deployments are scaled by HPAs
+  # and KEDA ScaledObjects respectively; ignore replica drift so the
+  # controllers do not perpetually report OutOfSync.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/replicas

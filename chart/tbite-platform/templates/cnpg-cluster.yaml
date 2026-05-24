@@ -1,0 +1,56 @@
+{{- if .Values.crdsReady -}}
+{{- if and .Values.postgres.enabled (not .Values.postgres.byo.enabled) }}
+{{- $c := .Values.postgres.cluster -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $c.name }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  instances: {{ $c.instances }}
+  imageName: {{ $c.imageName | quote }}
+  primaryUpdateStrategy: unsupervised
+  storage:
+    size: {{ $c.storage.size }}
+    {{- with $c.storage.storageClass }}
+    storageClass: {{ . | quote }}
+    {{- end }}
+  postgresql:
+    parameters:
+      {{- range $k, $v := $c.postgresql.parameters }}
+      {{ $k }}: {{ $v | quote }}
+      {{- end }}
+  resources:
+    {{- toYaml $c.resources | nindent 4 }}
+  monitoring:
+    enablePodMonitor: {{ $c.monitoring.enabled }}
+  {{- if $c.backup.enabled }}
+  backup:
+    barmanObjectStore:
+      destinationPath: {{ $c.backup.destinationPath | quote }}
+      s3Credentials:
+        accessKeyId:
+          name: {{ $c.backup.s3CredentialsSecretRef.name | quote }}
+          key: {{ $c.backup.s3CredentialsSecretRef.accessKeyKey | quote }}
+        secretAccessKey:
+          name: {{ $c.backup.s3CredentialsSecretRef.name | quote }}
+          key: {{ $c.backup.s3CredentialsSecretRef.secretKeyKey | quote }}
+      wal:
+        compression: gzip
+        maxParallel: 8
+      data:
+        compression: gzip
+        immediateCheckpoint: false
+        jobs: 4
+    retentionPolicy: {{ $c.backup.retentionPolicy | quote }}
+  {{- end }}
+  bootstrap:
+    initdb:
+      database: tbite
+      owner: tbite
+{{- end }}
+
+{{- end -}}

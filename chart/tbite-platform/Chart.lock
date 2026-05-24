@@ -1,0 +1,45 @@
+dependencies:
+- name: cloudnative-pg
+  repository: https://cloudnative-pg.github.io/charts
+  version: 0.28.2
+- name: valkey
+  repository: https://charts.bitnami.com/bitnami
+  version: 6.0.2
+- name: nats
+  repository: https://nats-io.github.io/k8s/helm/charts/
+  version: 2.14.0
+- name: operator
+  repository: https://operator.min.io
+  version: 7.1.1
+- name: tenant
+  repository: https://operator.min.io
+  version: 7.1.1
+- name: cert-manager
+  repository: https://charts.jetstack.io
+  version: v1.20.2
+- name: traefik
+  repository: https://traefik.github.io/charts
+  version: 40.2.0
+- name: authentik
+  repository: https://charts.goauthentik.io
+  version: 2026.5.0
+- name: hydra
+  repository: https://k8s.ory.sh/helm/charts
+  version: 0.61.2
+- name: victoria-metrics-k8s-stack
+  repository: https://victoriametrics.github.io/helm-charts/
+  version: 0.79.1
+- name: victoria-logs-single
+  repository: https://victoriametrics.github.io/helm-charts/
+  version: 0.12.4
+- name: victoria-traces-single
+  repository: https://victoriametrics.github.io/helm-charts/
+  version: 0.0.9
+- name: opentelemetry-collector
+  repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+  version: 0.156.2
+- name: keda
+  repository: https://kedacore.github.io/charts
+  version: 2.19.0
+digest: sha256:8ec9b4a41412d5e575b9b579a88a7890a370d7a6973eefe56b08011d77db6cbf
+generated: "2026-05-25T01:28:20.716569+08:00"

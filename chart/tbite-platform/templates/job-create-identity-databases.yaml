@@ -1,0 +1,74 @@
+{{- if and .Values.hooks.createIdentityDatabases.enabled (or .Values.authentik.enabled .Values.hydra.enabled) (not .Values.postgres.byo.enabled) }}
+{{- /*
+Bootstraps `authentik` and `hydra` databases (and their roles)
+inside the main CNPG Cluster so the two identity subcharts can
+share the same Postgres rather than bringing up their own. Runs as
+a Helm post-install / post-upgrade hook (after CNPG has elected a
+primary). Idempotent.
+
+Reuses the CNPG-generated superuser secret named `<cluster>-superuser`.
+*/ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "tbite.fullname" . }}-identity-db-init
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: identity-db-init
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "tbite.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: psql
+          image: ghcr.io/cloudnative-pg/postgresql:17.2
+          env:
+            - name: PGHOST
+              value: {{ printf "%s-rw.%s.svc.cluster.local" .Values.postgres.cluster.name (include "tbite.namespace" .) | quote }}
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-superuser" .Values.postgres.cluster.name | quote }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-superuser" .Values.postgres.cluster.name | quote }}
+                  key: password
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              {{- if .Values.authentik.enabled }}
+              psql -v ON_ERROR_STOP=1 -d postgres -c "DO \$\$ BEGIN
+                IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authentik') THEN
+                  CREATE ROLE authentik LOGIN PASSWORD '{{ .Values.authentik.authentik.postgresql.password }}';
+                END IF;
+              END \$\$;"
+              psql -v ON_ERROR_STOP=1 -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='authentik'" | grep -q 1 || \
+                psql -v ON_ERROR_STOP=1 -d postgres -c "CREATE DATABASE authentik OWNER authentik;"
+              {{- end }}
+              {{- if .Values.hydra.enabled }}
+              psql -v ON_ERROR_STOP=1 -d postgres -c "DO \$\$ BEGIN
+                IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'hydra') THEN
+                  CREATE ROLE hydra LOGIN;
+                END IF;
+              END \$\$;"
+              psql -v ON_ERROR_STOP=1 -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='hydra'" | grep -q 1 || \
+                psql -v ON_ERROR_STOP=1 -d postgres -c "CREATE DATABASE hydra OWNER hydra;"
+              {{- end }}
+              echo "identity databases provisioned"
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 200m, memory: 192Mi }
+{{- end }}

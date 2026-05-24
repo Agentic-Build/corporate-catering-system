@@ -1,0 +1,34 @@
+{{- if .Values.crdsReady -}}
+{{- if .Values.ingress.gateway.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.ingress.gateway.name }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.traefik.gatewayClass.name | default "traefik" }}
+  listeners:
+{{- range .Values.ingress.gateway.listeners }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      protocol: {{ .protocol }}
+      {{- with .hostname }}
+      hostname: {{ . | quote }}
+      {{- end }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+      {{- with .tls }}
+      tls:
+        mode: {{ .mode }}
+        {{- with .certificateRefs }}
+        certificateRefs:
+{{ toYaml . | indent 10 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- end }}
+
+{{- end -}}

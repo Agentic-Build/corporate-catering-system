@@ -1,0 +1,38 @@
+{{- if .Values.crdsReady -}}
+{{- if .Values.observability.victoriaMetrics.enabled }}
+{{- $ctx := . -}}
+{{- $roles := list -}}
+{{- if .Values.api.enabled }}{{- $roles = append $roles "api" -}}{{- end -}}
+{{- if .Values.realtime.enabled }}{{- $roles = append $roles "realtime" -}}{{- end -}}
+{{- if .Values.workers.outboxRelay.enabled }}{{- $roles = append $roles "worker-outbox-relay" -}}{{- end -}}
+{{- if .Values.workers.payrollSettler.enabled }}{{- $roles = append $roles "worker-payroll-settler" -}}{{- end -}}
+{{- if .Values.workers.onTimeEvaluator.enabled }}{{- $roles = append $roles "worker-on-time-evaluator" -}}{{- end -}}
+{{- if .Values.scheduler.cutoffSweeper.enabled }}{{- $roles = append $roles "scheduler-cutoff" -}}{{- end -}}
+{{- if .Values.scheduler.noShowSweeper.enabled }}{{- $roles = append $roles "scheduler-no-show" -}}{{- end -}}
+{{- if .Values.scheduler.documentExpiryScanner.enabled }}{{- $roles = append $roles "scheduler-doc-expiry" -}}{{- end -}}
+{{- if .Values.scheduler.feedbackScanner.enabled }}{{- $roles = append $roles "scheduler-feedback" -}}{{- end -}}
+{{- range $role := $roles }}
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" $ctx "role" $role) }}
+  namespace: {{ include "tbite.namespace" $ctx }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" $ctx "role" $role) | nindent 4 }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ include "tbite.namespace" $ctx }}
+  selector:
+    matchLabels:
+      {{- include "tbite.roleSelectorLabels" (dict "ctx" $ctx "role" $role) | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      scheme: http
+{{- end }}
+{{- end }}
+
+{{- end -}}

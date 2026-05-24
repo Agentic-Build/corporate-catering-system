@@ -1,7 +1,8 @@
-// Package scanner contains periodic compliance jobs that run in the
-// --role=scheduler binary. DocumentExpiryScanner sweeps approved vendor
-// documents and emits anomalies (and flips status=expired for those past
-// their expiry date).
+// Package scanner contains periodic compliance jobs. DocumentExpiryScanner
+// runs in the --role=document-expiry-scanner singleton (one of the split
+// scheduler roles introduced by architecture #56). It sweeps approved
+// vendor documents and emits anomalies, and flips status=expired for
+// those past their expiry date.
 package scanner
 
 import (

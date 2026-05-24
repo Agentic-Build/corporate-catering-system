@@ -1,0 +1,88 @@
+{{- if .Values.realtime.enabled }}
+{{- $role := "realtime" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" . "role" $role) | nindent 4 }}
+spec:
+  {{- if not .Values.realtime.hpa.enabled }}
+  replicas: {{ .Values.realtime.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "tbite.roleSelectorLabels" (dict "ctx" . "role" $role) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tbite.roleSelectorLabels" (dict "ctx" . "role" $role) | nindent 8 }}
+        {{- include "tbite.podLabels" . | nindent 8 }}
+      annotations:
+        checksum/configmap: {{ include (print $.Template.BasePath "/configmap-app-env.yaml") . | sha256sum }}
+        {{- include "tbite.podAnnotations" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "tbite.roleServiceAccountName" (dict "ctx" . "role" $role) }}
+      {{- include "tbite.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "tbite.podSecurityContext" . | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.realtime.terminationGracePeriodSeconds }}
+      containers:
+        - name: realtime
+          image: {{ include "tbite.platformImage" . | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args: {{ toYaml .Values.realtime.args | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.realtime.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.realtime.metricsPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "tbite.fullname" . }}-app-env
+          env:
+            {{- include "tbite.appSecretEnv" . | nindent 12 }}
+            - name: TBITE_ROLE
+              value: realtime-gateway
+            - name: HTTP_ADDR
+              value: {{ printf ":%v" .Values.realtime.port | quote }}
+            - name: TBITE_HTTP_PORT
+              value: {{ .Values.realtime.port | quote }}
+            - name: TBITE_METRICS_PORT
+              value: {{ .Values.realtime.metricsPort | quote }}
+            - name: TBITE_REALTIME_TOPIC_SCOPE
+              value: {{ .Values.realtime.topicScope | quote }}
+            - name: TBITE_REALTIME_SSE_IDLE_TIMEOUT
+              value: {{ .Values.realtime.sseIdleTimeout | quote }}
+            {{- include "tbite.dbEnv" . | nindent 12 }}
+            {{- include "tbite.otelEnv" . | nindent 12 }}
+          readinessProbe:
+            {{- include "tbite.httpReadinessProbe" (dict "port" "http") | nindent 12 }}
+          livenessProbe:
+            {{- include "tbite.httpLivenessProbe" (dict "port" "http") | nindent 12 }}
+          # Realtime needs a generous preStop to drain SSE connections.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 30"]
+          resources:
+            {{- toYaml .Values.realtime.resources | nindent 12 }}
+          securityContext:
+            {{- include "tbite.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- include "tbite.podScheduling" . | nindent 6 }}
+{{- end }}

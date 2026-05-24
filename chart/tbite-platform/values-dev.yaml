@@ -1,0 +1,194 @@
+# tbite-platform — dev overlay (kind/k3d/OrbStack single-node friendly).
+profile:
+  size: dev
+
+global:
+  domain: tbite.local
+  baseURL:
+    api: http://api.tbite.local
+    employee: http://app.tbite.local
+    merchant: http://merchant.tbite.local
+    admin: http://admin.tbite.local
+  oidcIssuerURL: http://auth.tbite.local/application/o/tbite/
+  s3:
+    endpoint: http://minio.tbite.local
+    region: us-east-1
+    bucket: tbite-dev
+    credentialsSecretRef:
+      name: tbite-s3
+      accessKeyKey: accessKeyID
+      secretKeyKey: secretAccessKey
+  nats:
+    url: nats://tbite-nats.tbite.svc.cluster.local:4222
+  redisURL: redis://:devpassword@tbite-valkey-primary.tbite.svc.cluster.local:6379/0
+
+api:
+  replicaCount: 1
+  hpa:
+    enabled: false
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+realtime:
+  replicaCount: 1
+  hpa:
+    enabled: false
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+web:
+  employee:
+    replicaCount: 1
+    hpa: { enabled: false }
+    pdb: { enabled: false }
+  merchant:
+    replicaCount: 1
+    hpa: { enabled: false }
+    pdb: { enabled: false }
+  admin:
+    replicaCount: 1
+    hpa: { enabled: false }
+    pdb: { enabled: false }
+
+workers:
+  outboxRelay:
+    replicaCount: 1
+    keda: { enabled: false }
+  payrollSettler:
+    replicaCount: 1
+    keda: { enabled: false }
+  onTimeEvaluator:
+    replicaCount: 1
+    keda: { enabled: false }
+
+scheduler:
+  cutoffSweeper: { replicaCount: 1 }
+  noShowSweeper: { replicaCount: 1 }
+  documentExpiryScanner: { replicaCount: 1 }
+  feedbackScanner: { replicaCount: 1 }
+
+postgres:
+  enabled: true
+  cluster:
+    instances: 1
+    storage:
+      size: 5Gi
+    pooler:
+      enabled: false
+    backup:
+      enabled: false
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: 1, memory: 1Gi }
+  pitr:
+    enabled: false
+
+valkey:
+  enabled: true
+  architecture: standalone
+  replicaCount: 1
+  sentinel:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 1Gi
+
+nats:
+  enabled: true
+  cluster:
+    enabled: false
+    replicas: 1
+  config:
+    cluster:
+      enabled: false
+      replicas: 1
+    jetstream:
+      enabled: true
+      fileStore:
+        enabled: true
+        pvc:
+          size: 5Gi
+
+minio:
+  enabled: true
+  operator:
+    enabled: true
+  tenant:
+    enabled: true
+    tenant:
+      pools:
+        - servers: 1
+          name: pool-0
+          volumesPerServer: 1
+          size: 5Gi
+          storageClassName: ""
+
+ingress:
+  certManager:
+    enabled: true
+    issuer:
+      name: letsencrypt-staging
+      server: https://acme-staging-v02.api.letsencrypt.org/directory
+
+traefik:
+  enabled: true
+  deployment:
+    replicas: 1
+
+cert-manager:
+  installCRDs: true
+
+authentik:
+  enabled: false # disabled in dev; use a stub OIDC or BYO
+hydra:
+  enabled: false
+
+observability:
+  victoriaMetrics:
+    enabled: true
+    retention: "7d"
+  victoriaLogs:
+    enabled: true
+    retention: "7d"
+  victoriaTraces:
+    enabled: false
+  grafana:
+    enabled: true
+  otelCollector:
+    enabled: true
+
+victoria-metrics-k8s-stack:
+  vmsingle:
+    spec:
+      retentionPeriod: "7d"
+      storage:
+        resources:
+          requests:
+            storage: 5Gi
+  alertmanager:
+    enabled: false
+
+victoria-logs-single:
+  server:
+    retentionPeriod: "7d"
+    persistentVolume:
+      enabled: true
+      size: 5Gi
+
+opentelemetry-collector:
+  mode: deployment
+  replicaCount: 1
+
+keda:
+  enabled: true
+
+hooks:
+  dbMigrate: { enabled: true }
+  provisionStreams: { enabled: true }
+  bucketBootstrap: { enabled: true }
+
+networkPolicy:
+  enabled: false

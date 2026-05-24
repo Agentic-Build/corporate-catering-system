@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -106,4 +107,53 @@ func (c *S3Client) GetObject(ctx context.Context, key string) (io.ReadCloser, er
 		return nil, fmt.Errorf("get %s: %w", key, err)
 	}
 	return out.Body, nil
+}
+
+// PresignedPut returns a time-bounded URL the client uses to upload
+// bytes directly to object storage with HTTP PUT. The API never sees
+// the file body, which is the architectural goal of ADR-0010 / issue
+// #60: keep bulk transfer off API CPU and memory.
+//
+// Method enforcement is the responsibility of the client and of the
+// bucket policy; size and content-type are signed in so the client
+// cannot upload a 1GB binary against a 2MB-image authorization.
+func (c *S3Client) PresignedPut(ctx context.Context, key, contentType string, sizeLimit int64, ttl time.Duration) (string, error) {
+	presigner := s3.NewPresignClient(c.s3)
+	if ttl <= 0 {
+		ttl = 10 * time.Minute
+	}
+	req, err := presigner.PresignPutObject(ctx,
+		&s3.PutObjectInput{
+			Bucket:        aws.String(c.Bucket),
+			Key:           aws.String(key),
+			ContentType:   aws.String(contentType),
+			ContentLength: aws.Int64(sizeLimit),
+		},
+		s3.WithPresignExpires(ttl),
+	)
+	if err != nil {
+		return "", fmt.Errorf("presign put %s: %w", key, err)
+	}
+	return req.URL, nil
+}
+
+// PresignedGet returns a time-bounded URL the client uses to download
+// bytes directly from object storage. Used by the menu/compliance
+// surfaces in lieu of API proxying.
+func (c *S3Client) PresignedGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	presigner := s3.NewPresignClient(c.s3)
+	if ttl <= 0 {
+		ttl = 10 * time.Minute
+	}
+	req, err := presigner.PresignGetObject(ctx,
+		&s3.GetObjectInput{
+			Bucket: aws.String(c.Bucket),
+			Key:    aws.String(key),
+		},
+		s3.WithPresignExpires(ttl),
+	)
+	if err != nil {
+		return "", fmt.Errorf("presign get %s: %w", key, err)
+	}
+	return req.URL, nil
 }

@@ -1,0 +1,32 @@
+tbite-platform {{ .Chart.Version }} has been installed/upgraded
+in namespace: {{ include "tbite.namespace" . }}
+
+Profile: {{ .Values.profile.size }}
+
+Roles enabled:
+{{- if .Values.api.enabled }}  - api ({{ .Values.api.replicaCount }} replicas){{ end }}
+{{- if .Values.realtime.enabled }}  - realtime ({{ .Values.realtime.replicaCount }} replicas){{ end }}
+{{- if .Values.web.employee.enabled }}  - web-employee{{ end }}
+{{- if .Values.web.merchant.enabled }}  - web-merchant{{ end }}
+{{- if .Values.web.admin.enabled }}  - web-admin{{ end }}
+{{- if .Values.workers.outboxRelay.enabled }}  - worker-outbox-relay{{ end }}
+{{- if .Values.workers.payrollSettler.enabled }}  - worker-payroll-settler{{ end }}
+{{- if .Values.workers.onTimeEvaluator.enabled }}  - worker-on-time-evaluator{{ end }}
+{{- if .Values.scheduler.cutoffSweeper.enabled }}  - scheduler-cutoff{{ end }}
+{{- if .Values.scheduler.noShowSweeper.enabled }}  - scheduler-no-show{{ end }}
+{{- if .Values.scheduler.documentExpiryScanner.enabled }}  - scheduler-doc-expiry{{ end }}
+{{- if .Values.scheduler.feedbackScanner.enabled }}  - scheduler-feedback{{ end }}
+
+Routes:
+  API:        {{ .Values.global.baseURL.api }}
+  Employee:   {{ .Values.global.baseURL.employee }}
+  Merchant:   {{ .Values.global.baseURL.merchant }}
+  Admin:      {{ .Values.global.baseURL.admin }}
+
+Pre-install hooks executed:
+  - db-migrate          (golang-migrate)
+  - provision-streams   (--role=provision-streams)
+  - bucket-bootstrap    (mc)
+
+See README.md in the chart for required secret references and BYO override
+patterns.

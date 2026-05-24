@@ -1,0 +1,22 @@
+{{- if and .Values.observability.victoriaMetrics.enabled .Values.observability.dashboards.enabled }}
+{{- /*
+Loads every JSON file under chart/tbite-platform/dashboards/ into a ConfigMap
+that the Grafana subchart's sidecar picks up via the
+`grafana_dashboard=1` label selector. Replaces the legacy
+`ops/kubernetes/monitoring/dashboards/` provisioning path.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tbite.fullname" . }}-dashboards
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  {{- $files := .Files.Glob "dashboards/*.json" }}
+  {{- range $path, $bytes := $files }}
+  {{ base $path | quote }}: |-
+    {{- $.Files.Get $path | nindent 4 }}
+  {{- end }}
+{{- end }}

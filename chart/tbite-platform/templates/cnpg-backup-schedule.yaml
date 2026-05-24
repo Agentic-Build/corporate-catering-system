@@ -1,0 +1,20 @@
+{{- if .Values.crdsReady -}}
+{{- if and .Values.postgres.enabled (not .Values.postgres.byo.enabled) .Values.postgres.cluster.backup.enabled }}
+{{- $c := .Values.postgres.cluster -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ printf "%s-daily" $c.name }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres-backup
+spec:
+  immediate: true
+  schedule: "0 0 3 * * *" # 03:00 daily (seconds-precision cron used by CNPG)
+  backupOwnerReference: self
+  cluster:
+    name: {{ $c.name }}
+{{- end }}
+
+{{- end -}}

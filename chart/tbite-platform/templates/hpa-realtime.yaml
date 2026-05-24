@@ -1,0 +1,45 @@
+{{- if and .Values.realtime.enabled .Values.realtime.hpa.enabled }}
+{{- $role := "realtime" -}}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" . "role" $role) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+  minReplicas: {{ .Values.realtime.hpa.minReplicas }}
+  maxReplicas: {{ .Values.realtime.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.realtime.hpa.targetCPUUtilizationPercentage }}
+    - type: Pods
+      pods:
+        metric:
+          name: tbite_realtime_active_sse_connections
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.realtime.hpa.targetActiveConnections | quote }}
+  behavior:
+    scaleDown:
+      # SSE connections are long-lived — be very conservative scaling down.
+      stabilizationWindowSeconds: 1800
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+{{- end }}

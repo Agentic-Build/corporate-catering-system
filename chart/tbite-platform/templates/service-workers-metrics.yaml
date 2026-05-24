@@ -1,0 +1,45 @@
+{{/* Headless metrics-only Services for worker and scheduler roles so VMServiceScrape can find them. */}}
+{{- $ctx := . -}}
+{{- $items := list -}}
+{{- if .Values.workers.outboxRelay.enabled }}
+{{- $items = append $items (dict "role" "worker-outbox-relay" "port" .Values.workers.outboxRelay.metricsPort) -}}
+{{- end -}}
+{{- if .Values.workers.payrollSettler.enabled }}
+{{- $items = append $items (dict "role" "worker-payroll-settler" "port" .Values.workers.payrollSettler.metricsPort) -}}
+{{- end -}}
+{{- if .Values.workers.onTimeEvaluator.enabled }}
+{{- $items = append $items (dict "role" "worker-on-time-evaluator" "port" .Values.workers.onTimeEvaluator.metricsPort) -}}
+{{- end -}}
+{{- if .Values.scheduler.cutoffSweeper.enabled }}
+{{- $items = append $items (dict "role" "scheduler-cutoff" "port" .Values.scheduler.cutoffSweeper.metricsPort) -}}
+{{- end -}}
+{{- if .Values.scheduler.noShowSweeper.enabled }}
+{{- $items = append $items (dict "role" "scheduler-no-show" "port" .Values.scheduler.noShowSweeper.metricsPort) -}}
+{{- end -}}
+{{- if .Values.scheduler.documentExpiryScanner.enabled }}
+{{- $items = append $items (dict "role" "scheduler-doc-expiry" "port" .Values.scheduler.documentExpiryScanner.metricsPort) -}}
+{{- end -}}
+{{- if .Values.scheduler.feedbackScanner.enabled }}
+{{- $items = append $items (dict "role" "scheduler-feedback" "port" .Values.scheduler.feedbackScanner.metricsPort) -}}
+{{- end -}}
+{{- range $it := $items }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" $ctx "role" $it.role) }}-metrics
+  namespace: {{ include "tbite.namespace" $ctx }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" $ctx "role" $it.role) | nindent 4 }}
+    tbite.io/scrape: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "tbite.roleSelectorLabels" (dict "ctx" $ctx "role" $it.role) | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ $it.port }}
+      targetPort: metrics
+      protocol: TCP
+{{- end }}
