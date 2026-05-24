@@ -11,6 +11,13 @@ data:
   NATS_URL: "nats://nats:4222"
   S3_ENDPOINT: "http://minio:9000"
   S3_BUCKET: "tbite"
+  # MinIO needs static creds + path-style addressing. Values match the
+  # MINIO_ROOT_USER/PASSWORD in secrets-bootstrap (dev values). Without these
+  # the worker's startup bucket-ensure fails with "static credentials are empty".
+  S3_ACCESS_KEY_ID: "tbite"
+  S3_SECRET_ACCESS_KEY: "tbite-dev-secret"
+  S3_REGION: "us-east-1"
+  S3_USE_PATH_STYLE: "1"
   OIDC_CALLBACK_BASE_URL: "http://api.tbite.test"
   AUTH_PROVIDER_SLUGS: "authentik"
   AUTH_PROVIDER_AUTHENTIK_DISPLAY_NAME: "Authentik"
