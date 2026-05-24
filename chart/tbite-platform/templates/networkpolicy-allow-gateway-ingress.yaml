@@ -29,6 +29,14 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/component: cloudflared
+        # web-* SSR servers fan out to the api on every request that
+        # touches data; the dataplane Service therefore has to accept
+        # in-cluster traffic from the three web Deployments too.
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: ["web-employee", "web-merchant", "web-admin"]
       ports:
         - protocol: TCP
           port: {{ .Values.api.port }}
