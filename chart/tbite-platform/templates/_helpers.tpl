@@ -156,8 +156,27 @@ app.kubernetes.io/component: {{ .role }}
 {{- end }}
 {{- end -}}
 
-{{/* DB env for app/worker roles (RW + optional RO) */}}
+{{/*
+DB connection-pool tuning env for app/worker roles. The DATABASE_RW_URL
+and DATABASE_RO_URL secret-backed env vars are provided by
+`tbite.appSecretEnv`; this helper carries only the non-secret tuning
+knobs that live in values.yaml and would otherwise need to be repeated
+across every Deployment. provision-streams Job still includes this for
+its --role=provision-streams binary which honours the same env shape.
+*/}}
 {{- define "tbite.dbEnv" -}}
+- name: DATABASE_MAX_CONNS
+  value: {{ .Values.api.database.maxConns | quote }}
+- name: DATABASE_MAX_CONNS_RO
+  value: {{ .Values.api.database.maxConnsRO | quote }}
+{{- end -}}
+
+{{/*
+DB env for the provision-streams Job which does not include
+`tbite.appSecretEnv`. Mirrors the pre-split combined helper: URL +
+tuning in one block.
+*/}}
+{{- define "tbite.dbEnvForJob" -}}
 - name: DATABASE_RW_URL
   valueFrom:
     secretKeyRef:

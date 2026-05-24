@@ -40,7 +40,7 @@ spec:
           env:
             - name: TBITE_ROLE
               value: provision-streams
-            {{- include "tbite.dbEnv" . | nindent 12 }}
+            {{- include "tbite.dbEnvForJob" . | nindent 12 }}
             {{- include "tbite.otelEnv" . | nindent 12 }}
           resources:
             {{- toYaml .Values.hooks.provisionStreams.resources | nindent 12 }}
