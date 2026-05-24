@@ -55,6 +55,13 @@ make dev-reset     # stop deps and wipe volumes
 make dev-logs svc=postgres
 ```
 
+> **Upgrading Postgres across major versions** (e.g. the 16 → 18 bump): Postgres
+> will not start on a data directory written by an older major and exits with
+> "database files are incompatible with server". Major upgrades have no
+> in-place path for the dev stack — run `make dev-reset` to wipe the volumes,
+> then `make dev` to re-init on the new version (migrations + seed re-run
+> automatically; the Authentik blueprint re-applies its dev users).
+
 ## Production deployment
 
 Two overlays, same `make` interface:

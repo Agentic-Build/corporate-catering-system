@@ -10,8 +10,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
   }
   const client = createApiClient(API_BASE_URL, locals.apiToken);
+  // The favorites endpoint requires `day` (it computes per-day availability).
+  const day = new Date().toISOString().slice(0, 10);
   const r = await client.GET("/api/employee/favorites", {
-    params: { query: { limit: PAGE_LIMIT } },
+    params: { query: { day, limit: PAGE_LIMIT } },
   });
   return {
     user: locals.user,
@@ -27,8 +29,9 @@ export const actions: Actions = {
     const fd = await request.formData();
     const cursor = String(fd.get("cursor") ?? "");
     const client = createApiClient(API_BASE_URL, locals.apiToken);
+    const day = new Date().toISOString().slice(0, 10);
     const r = await client.GET("/api/employee/favorites", {
-      params: { query: { cursor, limit: PAGE_LIMIT } },
+      params: { query: { day, cursor, limit: PAGE_LIMIT } },
     });
     if (r.error) return fail(400, { error: JSON.stringify(r.error) });
     return {

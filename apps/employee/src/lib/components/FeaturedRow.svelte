@@ -21,7 +21,7 @@
   }
 </script>
 
-<section class="mb-8">
+<section class="mb-8" aria-label={title}>
   <div class="mb-3 flex items-end justify-between gap-3">
     <div>
       <h2 class="text-xl font-extrabold tracking-tight text-tb-slate-900">{title}</h2>
