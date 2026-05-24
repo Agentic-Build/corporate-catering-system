@@ -89,8 +89,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Postgres contention (deadlocks, rollbacks, oldest open tx)",
-      "description": "Deadlock rate ⇒ contention on hot rows (e.g. meal_supply during lunch crunch). Rollbacks ⇒ application-side retries or aborts. Oldest open tx ⇒ a long-running query or a stuck connection. Together these surface DB-layer regressions during dev iteration — no need for pg_stat_statements.",
+      "title": "Oldest open Postgres transaction (s)",
+      "description": "Catches the classic dev mistake: code path that opens a transaction but doesn't commit/rollback on every return — the connection lingers, this number climbs. Deadlock rate and rollback rate live on Infra Health (the canonical PG operational view); this panel keeps only the dev-iteration signal so the two dashboards don't double-up.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoria-metrics"
@@ -103,61 +103,34 @@
       },
       "fieldConfig": {
         "defaults": {
+          "unit": "s",
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
             "showPoints": "never"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {"id": "byName", "options": "deadlocks/s"},
-            "properties": [
-              {"id": "unit", "value": "ops"},
-              {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}
-            ]
           },
-          {
-            "matcher": {"id": "byName", "options": "rollbacks/s"},
-            "properties": [
-              {"id": "unit", "value": "ops"},
-              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
-            ]
-          },
-          {
-            "matcher": {"id": "byName", "options": "oldest open tx (s)"},
-            "properties": [
-              {"id": "unit", "value": "s"},
-              {"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green"},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 30}
             ]
           }
-        ]
+        }
       },
       "options": {
         "legend": {
           "displayMode": "table",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
+          "calcs": ["mean", "max"]
         }
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_deadlocks_total{datname=\"tbite\"}[5m])",
-          "legendFormat": "deadlocks/s",
-          "refId": "A"
-        },
-        {
           "expr": "pg_stat_activity_max_tx_duration{datname=\"tbite\"}",
-          "legendFormat": "oldest open tx (s)",
-          "refId": "B"
-        },
-        {
-          "expr": "rate(pg_stat_database_xact_rollback_total{datname=\"tbite\"}[5m])",
-          "legendFormat": "rollbacks/s",
-          "refId": "C"
+          "legendFormat": "oldest open tx",
+          "refId": "A"
         }
       ]
     },
