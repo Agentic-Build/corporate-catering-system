@@ -356,7 +356,8 @@
     },
     {
       "type": "timeseries",
-      "title": "NATS JetStream consumer pending (top 10)",
+      "title": "Async-plane backlog (publisher + consumers)",
+      "description": "Three complementary backlog signals on one chart so the L1 dashboard distinguishes WHERE the async plane is unhealthy: outbox_pending (DB rows the publisher has not yet flushed to NATS — climbs when outbox-relay is dead or slow), jetstream consumer_pending (messages in NATS that consumers have not yet acked — climbs when a downstream worker stalls), and dlq_pending (events that failed all retries). If only the publisher curve climbs the broker pump is the suspect; if only consumers climb, drill into the async-plane detail dashboard.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoria-metrics"
@@ -369,28 +370,46 @@
       },
       "fieldConfig": {
         "defaults": {
+          "unit": "short",
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
             "showPoints": "never"
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "outbox_pending (publisher)"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "dlq_pending"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "dark-red"}}]
+          }
+        ]
       },
       "options": {
         "legend": {
           "displayMode": "table",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
+          "calcs": ["mean", "max"]
         }
       },
       "targets": [
         {
-          "expr": "topk(10, jetstream_consumer_num_pending{consumer_name=~\"on-time-evaluator|payroll-settler|outbox-relay.*\"})",
-          "legendFormat": "{{stream_name}}/{{consumer_name}}",
+          "expr": "sum(tbite_outbox_pending) or vector(0)",
+          "legendFormat": "outbox_pending (publisher)",
           "refId": "A"
+        },
+        {
+          "expr": "sum(tbite_dlq_pending) or vector(0)",
+          "legendFormat": "dlq_pending",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (consumer_name) (jetstream_consumer_num_pending{consumer_name=~\"on-time-evaluator|payroll-settler|outbox-relay.*\"})",
+          "legendFormat": "consumer:{{consumer_name}}",
+          "refId": "C"
         }
       ]
     },

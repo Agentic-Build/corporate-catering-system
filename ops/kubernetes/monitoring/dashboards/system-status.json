@@ -621,6 +621,7 @@
         "x": 12,
         "y": 14
       },
+      "description": "Async-plane health: outbox queue (publisher), DLQ (terminal failures), and oldest unpublished event age. Thresholds are calibrated for both count-scale (events queued) AND time-scale (seconds since oldest publish): yellow ≥ 20, red ≥ 300 flags either >20 events queued OR >20s of un-flushed events — both indicate the broker pump is falling behind, just measured differently. Drill into Async Plane for per-stream / per-consumer breakdown.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -633,11 +634,11 @@
               },
               {
                 "color": "yellow",
-                "value": 50
+                "value": 20
               },
               {
                 "color": "red",
-                "value": 500
+                "value": 300
               }
             ]
           }
