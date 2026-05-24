@@ -34,11 +34,54 @@ helm template tbite . -f values-prod.yaml
 
 ## Install (after generating the lock file)
 
+The chart bundles fourteen subcharts that own CustomResourceDefinitions
+(VictoriaMetrics-operator's `VMServiceScrape` / `VMRule` / `VMSingle` /
+`VMAlert`, CloudNativePG's `Cluster` / `Pooler`, cert-manager's
+`Issuer` / `Certificate`, MinIO's `Tenant`, Traefik's `Middleware` /
+`GatewayClass`, KEDA's `ScaledObject`, etc.). Helm renders the
+umbrella as a single release and submits CRDs and the resources that
+use them in one `apply` pass — the Kubernetes API server cannot
+establish a CRD and accept resources of that kind within the same
+batch, so a fresh-cluster `helm install` of the full umbrella fails
+with `ensure CRDs are installed first` errors. This is the standard
+chart-of-charts CRD-bootstrap pitfall, not a chart bug.
+
+### Two-pass install (recommended for fresh clusters)
+
+```bash
+# Phase 1 — bootstrap CRD-providing operators only. Disable the
+# observability and CRD-consuming layers.
+helm dependency update chart/tbite-platform
+
+helm install tbite-bootstrap chart/tbite-platform \
+  -f chart/tbite-platform/values-dev.yaml \
+  --namespace tbite --create-namespace \
+  --set observability.victoriaMetrics.enabled=false \
+  --set observability.victoriaLogs.enabled=false \
+  --set observability.victoriaTraces.enabled=false
+
+# Phase 2 — once CRDs are established, upgrade to the full chart.
+helm upgrade tbite-bootstrap chart/tbite-platform \
+  -f chart/tbite-platform/values-dev.yaml \
+  --namespace tbite
+```
+
+### Single-pass install (clusters with pre-installed CRDs)
+
+When the operator CRDs are already present on the cluster (e.g. via a
+platform-team install or ArgoCD sync-wave ordering at a higher
+layer), the single-command install works:
+
 ```bash
 helm dependency update chart/tbite-platform
 helm template tbite chart/tbite-platform -f chart/tbite-platform/values-prod.yaml
 helm install tbite chart/tbite-platform -f chart/tbite-platform/values-prod.yaml --namespace tbite --create-namespace
 ```
+
+ArgoCD users typically express phase 1 / phase 2 as two
+`argoproj.io/sync-wave` annotations on the umbrella subchart toggles
+or as two separate `Application` objects in an `app-of-apps`
+layout; that ordering is intentionally out of scope of this chart.
 
 ## Helm hooks
 

@@ -523,22 +523,27 @@ traefik:
       enabled: true
   gatewayClass:
     name: traefik
+  # Traefik chart 40.x moved TLS + HTTP→HTTPS redirect off the
+  # per-port shape; redirect is now expressed as a Middleware
+  # (templates/middleware-redirect-https.yaml) and TLS termination
+  # is configured via the Gateway/HTTPRoute listener spec.
   ports:
     web:
       port: 8000
       exposedPort: 80
-      redirectTo:
-        port: websecure
     websecure:
       port: 8443
       exposedPort: 443
-      tls:
-        enabled: true
   metrics:
     prometheus:
       enabled: true
+      # The Victoria stack uses VMServiceScrape, not the prometheus-
+      # operator ServiceMonitor CRD; leave the Traefik
+      # subchart's ServiceMonitor disabled and rely on the
+      # VMServiceScrape rendered alongside (see
+      # templates/vmservicescrape-roles.yaml).
       serviceMonitor:
-        enabled: true
+        enabled: false
 
 certManager:
   enabled: true
@@ -648,6 +653,15 @@ victoria-metrics-k8s-stack:
     enabled: true
   vmalert:
     enabled: true
+    # vm-operator 0.79.x requires every VMAlert to declare either a
+    # notifier reference or the explicit blackhole opt-out. The
+    # subchart-rendered VMAlert wires Alertmanager from the same
+    # release when alertmanager.enabled is true; the blackhole flag
+    # is a safe default that the umbrella values-prod overrides
+    # with a real notifier list.
+    spec:
+      extraArgs:
+        notifier.blackhole: "true"
   grafana:
     enabled: true
     adminPassword: "PLEASE-REPLACE-VIA-SOPS"
