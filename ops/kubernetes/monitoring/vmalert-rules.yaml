@@ -133,7 +133,7 @@ groups:
     rules:
       - alert: AuthFailureSurge
         # OIDC + Hydra DCR failures cluster as 401s on /auth/* and /oauth2/*.
-        expr: sum(rate(http_server_request_duration_seconds_count{http_route=~"/auth/.*|/oauth/.*|/oauth2/.*|/\.well-known/.*|/userinfo",http_response_status_code=~"4(01|03)"}[5m])) > 5
+        expr: sum(rate(http_server_request_duration_seconds_count{http_route=~"/auth/.*|/oauth/.*|/oauth2/.*|/\\.well-known/.*|/userinfo",http_response_status_code=~"4(01|03)"}[5m])) > 5
         for: 5m
         labels: { severity: warning }
         annotations:
