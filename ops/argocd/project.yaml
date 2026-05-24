@@ -13,10 +13,13 @@ spec:
   sourceRepos:
     - https://github.com/Agentic-Build/corporate-catering-system.git
 
-  # Deploy only into the in-cluster `tbite` namespace.
+  # In-cluster only. Any namespace: the single-node overlay deploys the app
+  # into `tbite` AND composes the monitoring stack (../../monitoring) into the
+  # `monitoring` namespace, so the project must permit both. This is a trusted
+  # single-node box, so we allow any in-cluster namespace rather than enumerate.
   destinations:
     - server: https://kubernetes.default.svc
-      namespace: tbite
+      namespace: '*'
 
   # Namespaced resources the apps need (apps, deployments, services,
   # ingress, configmaps, secrets, HPAs, PDBs, networkpolicies, SAs, ...).
@@ -24,11 +27,9 @@ spec:
     - group: '*'
       kind: '*'
 
-  # Cluster-scoped resources the single-node overlay renders:
-  #   - Namespace (also created by CreateNamespace=true)
-  #   - IngressClass (shipped by the overlay's nginx-ingress)
+  # Cluster-scoped resources: the overlay renders Namespace + IngressClass, and
+  # the monitoring stack adds ClusterRole/ClusterRoleBinding (+ possibly CRDs).
+  # Single-node staging — allow all cluster-scoped kinds rather than enumerate.
   clusterResourceWhitelist:
-    - group: ''
-      kind: Namespace
-    - group: networking.k8s.io
-      kind: IngressClass
+    - group: '*'
+      kind: '*'
