@@ -21,6 +21,7 @@ resources:
   - hydra.yaml
   - nginx-ingress.yaml
   - cloudflared.yaml
+  - db-migrate.yaml
 
 # Authentik blueprint mounted into the server + worker pods at
 # /blueprints/tbite.yaml (mirrors the compose bind-mount). The blueprint is
