@@ -25,7 +25,6 @@ resources:
   - minio.yaml
   - authentik.yaml
   - hydra.yaml
-  - nginx-ingress.yaml
   - cloudflared.yaml
   - db-migrate.yaml
 
@@ -54,6 +53,19 @@ patches:
     target:
       kind: ConfigMap
       name: grafana-runtime-config
+  # This box exposes the app through Cloudflare Tunnel (cloudflared.yaml), not a
+  # Kubernetes Ingress. Drop the base nginx Ingress: with no ingress-nginx
+  # controller installed it would stay addressless forever, which ArgoCD reports
+  # as Health: Progressing (never Healthy).
+  - target:
+      kind: Ingress
+      name: tbite
+    patch: |
+      $patch: delete
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: tbite
 
 # App images: pinned to immutable GHCR sha-<gitsha> tags. The cd-publish-images
 # workflow bumps `newTag` here on every push to main (git write-back), so a

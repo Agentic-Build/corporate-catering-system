@@ -1,6 +1,6 @@
 # Single-node deployment
 
-Deploys the full T-Bite stack (Postgres, Redis, NATS, MinIO, API, three web apps, ingress-nginx) into one Kubernetes cluster. Suitable for a single-box k3s/k0s install, a throwaway GKE/EKS, or a kind/k3d cluster used as a staging surface.
+Deploys the full T-Bite stack (Postgres, Redis, NATS, MinIO, API, three web apps, monitoring) into one Kubernetes cluster, exposed through a Cloudflare Tunnel (cloudflared). Suitable for a single-box k3s/k0s install, a throwaway GKE/EKS, or a kind/k3d cluster used as a staging surface.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ kubectl -n tbite get pods -w
 The overlay applies:
 
 - Postgres / Redis / NATS / MinIO as single-replica deployments with `emptyDir` volumes (no PVC). Data is lost on pod restart — for anything beyond a smoke test, swap in a real StorageClass.
-- ingress-nginx-class Ingress on `app.tbite.test` / `merchant.tbite.test` / `admin.tbite.test` / `api.tbite.test`. Add those hostnames to your DNS or `/etc/hosts` pointing at the cluster's load balancer IP.
+- A `cloudflared` Deployment (Cloudflare Tunnel) that publishes the web apps and API to public hostnames. The tunnel is remotely managed; provide its connector token out-of-band as the `cloudflared-token` Secret (see the header of `ops/kubernetes/overlays/single-node/cloudflared.yaml`). No Kubernetes Ingress / load balancer is required.
 - `secrets-bootstrap.yaml` provides plaintext dev credentials. **Replace these before exposing the cluster to anything that matters** — see `ops/kubernetes/overlays/single-node/secrets-bootstrap.yaml`.
 
 ## Verify
