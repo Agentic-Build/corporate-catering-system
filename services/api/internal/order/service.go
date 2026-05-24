@@ -530,8 +530,16 @@ func (s *Service) Pickup(ctx context.Context, orderID, employeeID string) (err e
 		return s.AuditTx.WriteTx(ctx, tx, &employeeID, &evRole, "order.picked_up", "order", orderID, payload, "")
 	}))
 	if err != nil {
-		if errors.Is(err, ErrConcurrentModification) {
+		switch {
+		case errors.Is(err, ErrConcurrentModification):
 			outcome = "concurrent_modification"
+		case errors.Is(err, ErrInvalidTransition):
+			// Lost the in-tx race: another caller flipped the row out of READY
+			// between our pre-check and MarkPickedUpTx. Same root cause as the
+			// pre-check wrong_state branch, so report identically — keeps the
+			// dashboard from showing a phantom "tx_error" spike on the
+			// pickup-floor when really it's contention.
+			outcome = "wrong_state"
 		}
 		return err
 	}

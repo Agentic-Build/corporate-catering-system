@@ -312,7 +312,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Pickup verifications by method",
+      "title": "Pickup outcomes (5m rate)",
+      "description": "Self-service pickup ended in success, forbidden (wrong employee scanned), wrong_state (already picked up or not yet ready), or concurrent_modification (deadlock retry path). A forbidden spike suggests confused stickers; a wrong_state spike usually means double-tap retries.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoria-metrics"
@@ -341,8 +342,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (method) (rate(catering_order_pickup_verified_count_total{deployment_environment=~\"$env\",plant_id=~\"$plant\"}[5m]))",
-          "legendFormat": "{{method}}",
+          "expr": "sum by (outcome) (rate(catering_order_pickup_verified_count_total{deployment_environment=~\"$env\",plant_id=~\"$plant\"}[5m]))",
+          "legendFormat": "{{outcome}}",
           "refId": "A"
         }
       ]

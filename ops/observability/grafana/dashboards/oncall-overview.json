@@ -309,7 +309,8 @@
     },
     {
       "type": "stat",
-      "title": "Order placement rate (1m) by outcome",
+      "title": "Place-order success ratio (5m)",
+      "description": "Single-number health KPI: success / total over the last 5 minutes. Green ≥ 0.95, yellow ≥ 0.80, red below. Complements the by-outcome stacked timeseries in the catering-domain section — that one shows the breakdown, this one shows whether the headline is healthy.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoria-metrics"
@@ -322,23 +323,33 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "ops"
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0.80},
+              {"color": "green", "value": 0.95}
+            ]
+          }
         }
       },
       "options": {
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
         },
-        "orientation": "horizontal",
-        "textMode": "value_and_name",
-        "colorMode": "value"
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center"
       },
       "targets": [
         {
-          "expr": "sum by (outcome) (rate(catering_order_placed_count_total{deployment_environment=~\"$env\"}[1m]))",
-          "legendFormat": "{{outcome}}",
+          "expr": "sum(rate(catering_order_placed_count_total{deployment_environment=~\"$env\",outcome=\"success\"}[5m])) / clamp_min(sum(rate(catering_order_placed_count_total{deployment_environment=~\"$env\"}[5m])), 1e-9)",
           "refId": "A"
         }
       ]

@@ -59,7 +59,7 @@ func main() {
 		duration    = flag.Duration("duration", 5*time.Minute, "Total run duration")
 		concurrency = flag.Int("concurrency", 8, "Concurrent worker count")
 		rps         = flag.Float64("rps", 5, "Target requests-per-second per worker (overall ≈ rps × concurrency)")
-		scenario     = flag.String("scenario", "mixed", "mixed|place-only|cancel-storm|browse|adjust-supply|lunch-crunch|modify-storm")
+		scenario     = flag.String("scenario", "mixed", "mixed|place-only|cancel-storm|browse|adjust-supply|lunch-crunch|modify-storm|pickup-flood")
 		targetPlant  = flag.String("target-plant", "tn-d", "Plant focus for lunch-crunch / focused scenarios")
 		targetVendor = flag.String("target-vendor", "a1111111-1111-1111-1111-111111111111", "Vendor focus for lunch-crunch")
 		hotItem      = flag.String("hot-item", "b1000003-0000-0000-0000-000000000001", "Single menu item that focused scenarios prefer (drives quota exhaustion)")
@@ -117,11 +117,18 @@ func main() {
 		summary.Error("load ready orders", "err", err)
 		os.Exit(1)
 	}
+	ownerTokens, err := mintReadyOwnerSessions(ctx, pool, sess, ready)
+	if err != nil {
+		summary.Error("mint ready owner sessions", "err", err)
+		os.Exit(1)
+	}
 	summary.Info("seed ready",
 		"employees", len(users.employees),
 		"merchants", len(users.merchants),
 		"admins", 1,
 		"vendors", len(menus),
+		"ready_orders", len(ready),
+		"ready_owner_tokens", len(ownerTokens),
 	)
 
 	// 3. Build the scenario picker for the chosen mode.
@@ -142,6 +149,7 @@ func main() {
 		stats:        st,
 		log:          logger,
 		readyOrders:  ready,
+		ownerTokens:  ownerTokens,
 		targetPlant:  *targetPlant,
 		targetVendor: *targetVendor,
 		hotItem:      *hotItem,
@@ -328,7 +336,7 @@ type menuItem struct {
 // orders mid-run we won't see them, but the bound keeps the slice cheap.
 func loadReadyOrders(ctx context.Context, pool *pgxpool.Pool) ([]readyOrder, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, vendor_id FROM "order"
+		SELECT id, vendor_id, user_id FROM "order"
 		WHERE status='ready'
 		ORDER BY ready_at DESC NULLS LAST
 		LIMIT 1000
@@ -340,10 +348,46 @@ func loadReadyOrders(ctx context.Context, pool *pgxpool.Pool) ([]readyOrder, err
 	var out []readyOrder
 	for rows.Next() {
 		var r readyOrder
-		if err := rows.Scan(&r.id, &r.vendorID); err != nil {
+		if err := rows.Scan(&r.id, &r.vendorID, &r.userID); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// mintReadyOwnerSessions mints a stress session for each unique user that owns
+// a READY order so the pickup-flow scenario can authenticate AS the rightful
+// owner and exercise the success path. Sessions for non-owners (foreign
+// pickups → 403) still come from the stress employee pool.
+func mintReadyOwnerSessions(ctx context.Context, pool *pgxpool.Pool, sess identity.SessionStore, ready []readyOrder) (map[string]string, error) {
+	uniq := map[string]struct{}{}
+	for _, r := range ready {
+		uniq[r.userID] = struct{}{}
+	}
+	ids := make([]string, 0, len(uniq))
+	for id := range uniq {
+		ids = append(ids, id)
+	}
+	out := map[string]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := pool.Query(ctx, `SELECT id, role FROM "user" WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, role string
+		if err := rows.Scan(&id, &role); err != nil {
+			return nil, err
+		}
+		s, err := sess.Create(ctx, id, identity.Role(role))
+		if err != nil {
+			return nil, err
+		}
+		out[id] = s.Token
 	}
 	return out, rows.Err()
 }
@@ -403,6 +447,9 @@ type runState struct {
 	// from Postgres at start-up by the pickup-flood scenario so workers can
 	// hit /verify-pickup without first navigating cutoff/mark-ready.
 	readyOrders []readyOrder
+	// ownerTokens maps a READY order's owner user_id → minted bearer token.
+	// pickup_self_owner authenticates as the rightful owner from this map.
+	ownerTokens map[string]string
 	// Focus knobs for lunch-crunch / modify-storm — narrowing pickers down
 	// to a single plant×vendor×item turns a diffuse load test into a real
 	// hotspot scenario.
@@ -414,6 +461,7 @@ type runState struct {
 type readyOrder struct {
 	id       string
 	vendorID string
+	userID   string
 }
 
 type stats struct {
@@ -471,13 +519,16 @@ func buildPicker(mode string) func() string {
 	switch mode {
 	case "mixed":
 		mix = []weight{
-			{"place_order", 50},
-			{"browse_menu", 15},
-			{"browse_orders", 10},
-			{"cancel_order", 10},
-			{"modify_order", 8},
+			{"place_order", 45},
+			{"browse_menu", 14},
+			{"browse_orders", 9},
+			{"cancel_order", 9},
+			{"modify_order", 7},
+			{"mark_ready", 6},
 			{"adjust_supply", 4},
 			{"list_supply", 3},
+			{"pickup_self_owner", 2},
+			{"pickup_foreign", 1},
 		}
 	case "place-only":
 		mix = []weight{{"place_order", 1}}
@@ -518,14 +569,15 @@ func buildPicker(mode string) func() string {
 			{"cancel_order", 35},
 		}
 	case "pickup-flood":
-		// Lunch-time pickup peak with a glitchy QR scanner. 75% invalid codes
-		// (scanner read errors, typos, expired). Exercises pickup-floor and
-		// the TOTP verification fast-path. Requires READY orders to exist —
-		// see scripts/dev/promote-to-ready.sh.
+		// Lunch-time self-service pickup peak. Mostly rightful owners scanning
+		// their own QR (success path), with a tail of forbidden attempts from
+		// employees scanning someone else's sticker (forbidden outcome) — the
+		// real-world failure mode the new model exposes. Requires READY orders
+		// in DB; see scripts/dev/promote-to-ready.sh.
 		mix = []weight{
-			{"pickup_verify_bad", 60},
-			{"pickup_verify_good", 15},
-			{"browse_orders", 25},
+			{"pickup_self_owner", 65},
+			{"pickup_foreign", 15},
+			{"browse_orders", 20},
 		}
 	default:
 		return nil
@@ -555,10 +607,10 @@ func runScenario(ctx context.Context, st *runState, name string, workerID int) {
 		scenarioPlaceOrderFocused(ctx, st)
 	case "merchant_chase_supply":
 		scenarioMerchantChaseSupply(ctx, st)
-	case "pickup_verify_bad":
-		scenarioPickupVerify(ctx, st, false)
-	case "pickup_verify_good":
-		scenarioPickupVerify(ctx, st, true)
+	case "pickup_self_owner":
+		scenarioPickup(ctx, st, true)
+	case "pickup_foreign":
+		scenarioPickup(ctx, st, false)
 	case "browse_menu":
 		scenarioBrowseMenu(ctx, st)
 	case "browse_orders":
@@ -571,6 +623,8 @@ func runScenario(ctx context.Context, st *runState, name string, workerID int) {
 		scenarioAdjustSupply(ctx, st)
 	case "list_supply":
 		scenarioListSupply(ctx, st)
+	case "mark_ready":
+		scenarioMarkReady(ctx, st)
 	}
 }
 
@@ -734,45 +788,55 @@ func scenarioMerchantChaseSupply(ctx context.Context, st *runState) {
 	st.stats.recordOutcome(fmt.Sprintf("merchant_chase:http_%d", status))
 }
 
-// scenarioPickupVerify hits /api/merchant/orders/{id}/verify-pickup as a
-// vendor_operator. We don't have a real READY-state pickup-code generator
-// available from the stress side, so we use a 6-digit pseudo-random code
-// (matching TOTP shape) which is overwhelmingly going to be wrong — that's
-// the entire point. The valid=true branch is reserved for a future iteration
-// that wires in the TOTP secret from the order row; for now both modes
-// exercise the same code path and yield 409 ErrInvalidPickupCode.
-func scenarioPickupVerify(ctx context.Context, st *runState, valid bool) {
-	if len(st.users.merchants) == 0 {
-		return
-	}
-	// Pick a random READY-state order from any vendor.
+// scenarioPickup exercises POST /api/employee/orders/{id}/pickup — the new
+// employee self-service flow that replaced the vendor TOTP verify path in #26.
+//
+//	asOwner=true  : authenticate as the order's rightful owner (success path,
+//	                or wrong_state if someone else already picked it up).
+//	asOwner=false : authenticate as a random stress employee → 403 forbidden.
+//
+// Both modes drive the same metric (catering_order_pickup_verified_count_total)
+// with different `outcome` labels so dashboards can distinguish a real scanner
+// problem (forbidden spike) from a contention issue (concurrent_modification).
+func scenarioPickup(ctx context.Context, st *runState, asOwner bool) {
 	if len(st.readyOrders) == 0 {
-		st.stats.recordOutcome("pickup_verify:no_ready_order")
+		st.stats.recordOutcome("pickup:no_ready_order")
 		return
 	}
 	st.mu.Lock()
 	target := st.readyOrders[rand.IntN(len(st.readyOrders))]
 	st.mu.Unlock()
-	merchant := st.users.merchants[target.vendorID]
-	if merchant == nil {
-		return
+
+	var token, modeTag string
+	if asOwner {
+		t, ok := st.ownerTokens[target.userID]
+		if !ok {
+			st.stats.recordOutcome("pickup:no_owner_token")
+			return
+		}
+		token = t
+		modeTag = "self"
+	} else {
+		if len(st.users.employees) == 0 {
+			return
+		}
+		emp := st.users.employees[rand.IntN(len(st.users.employees))]
+		token = emp.token
+		modeTag = "foreign"
 	}
-	code := fmt.Sprintf("%06d", rand.IntN(1000000))
-	if valid {
-		// Placeholder for future TOTP-aware path. Today this still emits a
-		// random code, but tagging the outcome separately lets dashboards
-		// show "intended-valid attempts" vs "intended-invalid attempts" if
-		// we ever wire the real secret.
-	}
-	body := map[string]any{"code": code}
-	_, status := postJSON(ctx, st, merchant.token, "/api/merchant/orders/"+target.id+"/verify-pickup", body)
+
+	_, status := postJSON(ctx, st, token, "/api/employee/orders/"+target.id+"/pickup", map[string]any{})
 	switch {
 	case status >= 200 && status < 300:
-		st.stats.recordOutcome("pickup_verify:success")
+		st.stats.recordOutcome("pickup_" + modeTag + ":success")
+	case status == 403:
+		st.stats.recordOutcome("pickup_" + modeTag + ":forbidden")
 	case status == 409:
-		st.stats.recordOutcome("pickup_verify:invalid_code_or_state")
+		st.stats.recordOutcome("pickup_" + modeTag + ":conflict_or_state")
+	case status == 404:
+		st.stats.recordOutcome("pickup_" + modeTag + ":not_found")
 	default:
-		st.stats.recordOutcome(fmt.Sprintf("pickup_verify:http_%d", status))
+		st.stats.recordOutcome(fmt.Sprintf("pickup_%s:http_%d", modeTag, status))
 	}
 }
 
@@ -892,6 +956,54 @@ func scenarioListSupply(ctx context.Context, st *runState) {
 	date := pickFutureDate()
 	_, status := getURL(ctx, st, merchant.token, "/api/merchant/supply?date="+date)
 	st.stats.recordOutcome(fmt.Sprintf("list_supply:http_%d", status))
+}
+
+// scenarioMarkReady picks a random merchant, queries their PLACED orders for
+// the next supply day, and marks up to 5 of them READY. This drives the
+// catering_order_ready_count_total metric and the "Orders marked READY (24h)"
+// pickup-floor stat — without it the pickup lifecycle has a missing link.
+func scenarioMarkReady(ctx context.Context, st *runState) {
+	if len(st.users.merchants) == 0 {
+		return
+	}
+	vendorIDs := make([]string, 0, len(st.users.merchants))
+	for k := range st.users.merchants {
+		vendorIDs = append(vendorIDs, k)
+	}
+	vid := vendorIDs[rand.IntN(len(vendorIDs))]
+	merchant := st.users.merchants[vid]
+	date := pickFutureDate()
+	body, status := getURL(ctx, st, merchant.token, "/api/merchant/orders?date="+date+"&status=placed")
+	if status >= 400 {
+		st.stats.recordOutcome(fmt.Sprintf("mark_ready:list_http_%d", status))
+		return
+	}
+	var list struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(body, &list); err != nil || len(list.Items) == 0 {
+		st.stats.recordOutcome("mark_ready:no_placed")
+		return
+	}
+	n := 1 + rand.IntN(5)
+	if n > len(list.Items) {
+		n = len(list.Items)
+	}
+	ids := make([]string, 0, n)
+	for _, o := range list.Items[:n] {
+		ids = append(ids, o.ID)
+	}
+	_, status = postJSON(ctx, st, merchant.token, "/api/merchant/orders/mark-ready", map[string]any{"order_ids": ids})
+	switch {
+	case status >= 200 && status < 300:
+		st.stats.recordOutcome("mark_ready:success")
+	case status == 409 || status == 422:
+		st.stats.recordOutcome("mark_ready:invalid_state")
+	default:
+		st.stats.recordOutcome(fmt.Sprintf("mark_ready:http_%d", status))
+	}
 }
 
 // ─────────────────────────── HTTP helpers ───────────────────────────

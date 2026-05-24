@@ -351,7 +351,7 @@
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "Concentrates by (vendor, outcome) so a single scanner-broken-at-one-vendor incident jumps out. Cross-check with HTTP latency \u2014 if /verify-pickup p95 is also high, the vendor's backend might be slow not just their scanner.",
+      "description": "Concentrates by (vendor, outcome) so a single vendor's failing pickup flow jumps out. Outcomes: forbidden (employee scanned someone else's QR), wrong_state (already picked up or not yet ready), concurrent_modification (deadlock retry path). Cross-check with /api/employee/orders/{id}/pickup HTTP latency below.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -448,7 +448,7 @@
     },
     {
       "type": "timeseries",
-      "title": "HTTP verify-pickup latency (p50/p95/p99)",
+      "title": "HTTP /employee/orders/{id}/pickup latency (p50/p95/p99)",
       "datasource": {
         "type": "prometheus",
         "uid": "victoria-metrics"
@@ -481,17 +481,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_request_duration_seconds_bucket{http_route=\"/api/merchant/orders/{id}/verify-pickup\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_request_duration_seconds_bucket{http_route=\"/api/employee/orders/{id}/pickup\"}[5m])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{http_route=\"/api/merchant/orders/{id}/verify-pickup\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{http_route=\"/api/employee/orders/{id}/pickup\"}[5m])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{http_route=\"/api/merchant/orders/{id}/verify-pickup\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{http_route=\"/api/employee/orders/{id}/pickup\"}[5m])))",
           "legendFormat": "p99",
           "refId": "C"
         }

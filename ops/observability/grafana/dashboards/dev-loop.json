@@ -8,11 +8,12 @@
   "id": null,
   "panels": [
     {
-      "type": "logs",
-      "title": "Recent ERROR-level application logs",
+      "type": "timeseries",
+      "title": "HTTP 5xx + 4xx by route (top 10, 5m)",
+      "description": "Surfaces routes that are currently erroring — the canonical 'what just broke' panel for a dev loop. 5xx (server-side bug or downstream failure) and 4xx (validation, auth, business-rule reject) are graphed together so a flip from 4xx-dominant to 5xx-dominant during a refactor jumps out.",
       "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "victoria-logs"
+        "type": "prometheus",
+        "uid": "victoria-metrics"
       },
       "gridPos": {
         "h": 12,
@@ -20,15 +21,27 @@
         "x": 0,
         "y": 0
       },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
       "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "showLabels": true,
-        "sortOrder": "Descending"
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": ["mean", "max"]
+        }
       },
       "targets": [
         {
-          "expr": "_stream_id:* level:ERROR",
+          "expr": "topk(10, sum by (http_route, http_response_status_code) (rate(http_server_request_duration_seconds_count{http_response_status_code=~\"4..|5..\"}[5m])))",
+          "legendFormat": "{{http_response_status_code}} {{http_route}}",
           "refId": "A"
         }
       ]
@@ -76,7 +89,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Slow Postgres queries (top 10 by mean exec time)",
+      "title": "Postgres contention (deadlocks, rollbacks, oldest open tx)",
+      "description": "Deadlock rate ⇒ contention on hot rows (e.g. meal_supply during lunch crunch). Rollbacks ⇒ application-side retries or aborts. Oldest open tx ⇒ a long-running query or a stuck connection. Together these surface DB-layer regressions during dev iteration — no need for pg_stat_statements.",
       "datasource": {
         "type": "prometheus",
         "uid": "victoria-metrics"
@@ -89,7 +103,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -109,9 +122,19 @@
       },
       "targets": [
         {
-          "expr": "topk(10, pg_stat_statements_mean_exec_seconds)",
-          "legendFormat": "{{queryid}}",
+          "expr": "rate(pg_stat_database_deadlocks_total{datname=\"tbite\"}[5m])",
+          "legendFormat": "deadlocks/s",
           "refId": "A"
+        },
+        {
+          "expr": "pg_stat_activity_max_tx_duration{datname=\"tbite\"}",
+          "legendFormat": "oldest open tx (s)",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(pg_stat_database_xact_rollback_total{datname=\"tbite\"}[5m])",
+          "legendFormat": "rollbacks/s",
+          "refId": "C"
         }
       ]
     },

@@ -418,13 +418,13 @@
       ]
     },
     {
-      "type": "table",
-      "title": "\u26a0\ufe0f Items configured at capacity=0 (typo / misconfig)",
+      "type": "stat",
+      "title": "\u26a0\ufe0f Items configured at capacity=0",
       "datasource": {
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "Direct config-drift detector \u2014 surfaces items where capacity=0 was set (intentionally or by mistake). Catches the silent ops failure mode where one item is fully blocked even at low traffic \u2014 would otherwise hide behind the aggregate 'quota_exhausted' counter. Empty table = healthy.",
+      "description": "Config-drift detector \u2014 counts menu items where capacity=0 was set (intentionally or by mistake). Catches the silent ops failure mode where one item is fully blocked even at low traffic \u2014 would otherwise hide behind the aggregate 'quota_exhausted' counter. Click to open Supply Health for the per-item list.",
       "gridPos": {
         "h": 6,
         "w": 12,
@@ -433,120 +433,45 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "align": "left"
-          },
-          "noValue": "no items at capacity=0 \u2713"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "vendor_id"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 90
-              }
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
             ]
           },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "item_name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "item"
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {"text": "\u2713 OK", "color": "green"}
               }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "supply_date"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "date"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "cap"
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-background"
-                }
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "red"
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "displayName": "date",
-            "desc": false
-          }
-        ]
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
       },
       "targets": [
         {
-          "expr": "tbite_item_supply_capacity == 0",
+          "expr": "count(tbite_item_supply_capacity == 0) or on() vector(0)",
           "instant": true,
-          "format": "table",
           "refId": "A"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "job": true,
-              "instance": true,
-              "server": true,
-              "menu_item_id": true
-            },
-            "indexByName": {
-              "supply_date": 0,
-              "vendor_id": 1,
-              "item_name": 2,
-              "Value": 3
-            }
-          }
         }
       ],
       "links": [
         {
-          "title": "Supply Health",
+          "title": "Supply Health (item-level detail)",
           "url": "/d/supply-health",
           "targetBlank": false
         }
