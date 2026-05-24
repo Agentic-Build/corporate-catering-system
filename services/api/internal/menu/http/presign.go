@@ -9,16 +9,54 @@ package mhttp
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 )
+
+// maxImageBytes caps a single uploaded image at 2 MB. Enforced via the
+// presigned URL's ContentLength so the storage backend rejects writes
+// larger than the signed bound.
+const maxImageBytes int64 = 2 << 20
+
+// imageExtByContentType maps the accepted image content-types to the
+// extension used in the generated object key.
+var imageExtByContentType = map[string]string{
+	"image/jpeg": "jpg",
+	"image/png":  "png",
+	"image/webp": "webp",
+}
+
+// validateImageUpload checks the content-type is an accepted image
+// format and the size is within maxImageBytes, returning the
+// extension for the object key.
+func validateImageUpload(contentType string, size int64) (string, error) {
+	ext, ok := imageExtByContentType[contentType]
+	if !ok {
+		return "", huma.Error400BadRequest("unsupported content type: " + contentType +
+			" (allowed: image/jpeg, image/png, image/webp)")
+	}
+	if size <= 0 {
+		return "", huma.Error400BadRequest("empty file")
+	}
+	if size > maxImageBytes {
+		return "", huma.Error400BadRequest("file too large (max 2 MB)")
+	}
+	return ext, nil
+}
+
+// imageObjectKey builds a vendor-scoped object key for a menu image.
+func imageObjectKey(vendorID, ext string) string {
+	return fmt.Sprintf("menu-images/%s/%s.%s", vendorID, uuid.NewString(), ext)
+}
 
 // presignedUploadInput carries the client's declared content-type and
 // byte size. The handler validates both against the same policy used
@@ -40,10 +78,6 @@ type presignedUploadOutput struct {
 		// client can echo it back to the application when persisting
 		// the image reference on the menu item.
 		Key string `json:"key"`
-		// PublicURL is the canonical browser-loadable URL for the
-		// stored object (served via ServeUpload or, in BYO mode,
-		// directly from the object storage host).
-		PublicURL string `json:"public_url"`
 		// ExpiresIn is the URL lifetime in seconds.
 		ExpiresIn int `json:"expires_in"`
 	}
@@ -103,7 +137,6 @@ func (a *API) presignedMenuImageUpload(ctx context.Context, in *presignedUploadI
 	var resp presignedUploadOutput
 	resp.Body.URL = url
 	resp.Body.Key = key
-	resp.Body.PublicURL = a.imageURL(key)
 	resp.Body.ExpiresIn = int(presignTTL / time.Second)
 	return &resp, nil
 }
@@ -140,7 +173,6 @@ func (a *API) presignedMenuImageDownload(ctx context.Context, in *struct {
 	var resp presignedUploadOutput
 	resp.Body.URL = url
 	resp.Body.Key = in.Key
-	resp.Body.PublicURL = a.imageURL(in.Key)
 	resp.Body.ExpiresIn = int(presignTTL / time.Second)
 	return &resp, nil
 }

@@ -615,6 +615,11 @@ hydra:
 # Observability stack
 #-----------------------------------------------------------------------------
 observability:
+  # Grafana dashboards JSON files under chart/tbite-platform/dashboards/
+  # are loaded by templates/configmap-dashboards.yaml as a labelled
+  # ConfigMap the Grafana subchart's sidecar picks up.
+  dashboards:
+    enabled: true
   victoriaMetrics:
     enabled: true
     retention: "12mo"

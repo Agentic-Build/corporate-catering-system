@@ -23,14 +23,13 @@ employee/merchant/admin       api / realtime-gateway / outbox-relay /
                               cutoff-sweeper / no-show-sweeper /
                               document-expiry-scanner / feedback-scanner /
                               mcp-stdio / provision-streams
-                              (legacy: worker / scheduler)
 ```
 
 - **Frontend**: SvelteKit 2 + Svelte 5 + Tailwind 3 (adapter-node, SSR)
 - **Backend**: Go 1.23 modular monolith dispatched into per-role Deployments by `--role=<name>`
 - **Data**: Postgres (state of record, RW + RO routing), Valkey HA (sessions / cache / read models), NATS JetStream (durable events + outbox-only publication), S3-compatible object storage (presigned upload/download)
 - **Observability**: OpenTelemetry → VictoriaMetrics + VictoriaLogs + VictoriaTraces + Grafana
-- **Deployment**: Helm umbrella chart [`chart/tbite-platform`](chart/tbite-platform/) as the canonical path; kustomize overlays under [`ops/kubernetes/overlays/`](ops/kubernetes/overlays/) remain available for the legacy single-node / GCP shapes during the chart roll-out
+- **Deployment**: Helm umbrella chart [`chart/tbite-platform`](chart/tbite-platform/) is the sole canonical deployment path. The previous kustomize overlays (`single-node`, `gcp`) have been removed.
 
 ## Local development
 
@@ -100,26 +99,13 @@ make chart-upgrade           # upgrades the release
 Secrets are managed with SOPS + age — see [`docs/deployment/secrets.md`](docs/deployment/secrets.md)
 and [`docs/deployment/airgapped.md`](docs/deployment/airgapped.md).
 
-### Legacy kustomize overlays
+### ArgoCD
 
-The two earlier overlays remain available during the chart roll-out:
-
-```bash
-make prod-up env=single-node    # any reachable k8s cluster
-make prod-up env=gcp            # GKE + Cloud SQL + Memorystore + GCS
-```
-
-Both targets print the active `kubectl` context and require interactive confirmation before applying.
-
-- [`docs/deployment/single-node.md`](docs/deployment/single-node.md) — self-managed k8s
-- [`docs/deployment/gcp.md`](docs/deployment/gcp.md) — GCP runbook (Workload Identity, External Secrets, Cloud Armor, managed certs)
-
-To check what kustomize will produce without applying:
-
-```bash
-make render-overlay env=single-node
-make render-overlay env=gcp
-```
+`ops/argocd/application-helm.yaml` declares the ArgoCD `Application` pointing
+at `chart/tbite-platform`. Sync options enable `ServerSideApply` plus a
+five-retry exponential backoff so the chart-of-charts CRD bootstrap converges
+in a single Application. `kubectl apply -k ops/argocd/` bootstraps the
+AppProject + Application on a cluster that already runs ArgoCD.
 
 ## Operations
 
@@ -140,12 +126,15 @@ make render-overlay env=gcp
 ```
 apps/{employee,merchant,admin}/      SvelteKit frontends
 packages/{ui,tokens,api-client,web-auth}/   shared
-services/api/                        Go API + worker + scheduler + mcp-stdio
+services/api/                        Go modular monolith (12 roles via --role=<name>)
 migrations/                          golang-migrate SQL
 ops/local/                           docker-compose dev stack
-ops/kubernetes/{base,overlays}/      K8s manifests
+chart/tbite-platform/                Helm umbrella chart (canonical deployment)
+ops/argocd/                          ArgoCD AppProject + Application
 ops/{load,chaos,security}/           runbooks + scripts
+ops/secrets/                         SOPS-encrypted operator secrets
 contract/openapi/                    generated OpenAPI artifacts
+docs/architecture/                   ADRs + architecture specifications
 docs/                                deployment runbooks, MCP, branding, plans
 ```
 
@@ -158,8 +147,9 @@ docs/                                deployment runbooks, MCP, branding, plans
 | `make migrate-up` / `migrate-down` / `migrate-new name=xxx` | Schema |
 | `make contract-sync` | Regenerate OpenAPI + TS client from Go |
 | `make test-go` / `make test-web` / `make test-e2e` | Tests |
-| `make render-overlay env=…` | Dry-render a kustomize overlay |
-| `make prod-up env=…` / `prod-status env=…` / `prod-down env=…` | Apply / inspect / remove overlay |
+| `make chart-deps` / `chart-lint` / `chart-render` / `chart-install` / `chart-upgrade` / `chart-uninstall` | Helm umbrella chart lifecycle |
+| `make sops-encrypt` / `sops-decrypt` / `sops-edit` | SOPS workflow |
+| `make image-build-local` | Build the platform image for the local Docker daemon |
 | `make build` / `make clean` | Bundle + binary / wipe artifacts |
 
 Full list: `make help`.

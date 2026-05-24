@@ -18,15 +18,12 @@ import (
 // Merchant routes require a vendor_operator bound to a vendor (user.VendorID);
 // the employee read route requires an employee with a plant assignment.
 //
-// Storage backs the merchant image-upload endpoint; the orchestrator
-// (cmd/tbite/main.go) is responsible for wiring it. PublicBaseURL is the
-// API's own externally reachable base URL — uploaded images are served back
-// through GET {PublicBaseURL}/uploads/{key} (see ServeUpload), so the URL
-// returned to clients is one a browser <img> can actually load.
+// Storage backs the presigned URL endpoints in presign.go. The chart
+// wires it; menu-item images travel direct-to-storage per
+// architecture issue #60 (no API-proxied bulk transfer).
 type API struct {
-	Svc           *menu.Service
-	Storage       *storage.S3Client
-	PublicBaseURL string
+	Svc     *menu.Service
+	Storage *storage.S3Client
 }
 
 // ----- DTOs -----
@@ -256,15 +253,10 @@ func (a *API) Register(api huma.API) {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.listEmployeeMenu)
 
-	huma.Register(api, huma.Operation{
-		OperationID:   "uploadMerchantImage",
-		Method:        http.MethodPost,
-		Path:          "/api/merchant/uploads",
-		Summary:       "Upload a menu-item image and get its stored URL",
-		Tags:          []string{"merchant", "menu"},
-		Security:      []map[string][]string{{"bearer": {}}},
-		DefaultStatus: http.StatusCreated,
-	}, a.uploadImage)
+	// Legacy multipart-to-API upload was removed; clients use
+	// POST /api/merchant/uploads/presigned and PUT directly to object
+	// storage (architecture issue #60). RegisterPresigned in
+	// presign.go mounts the replacement endpoints.
 }
 
 // ----- Auth helpers -----

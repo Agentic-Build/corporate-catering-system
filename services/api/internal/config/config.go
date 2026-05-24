@@ -10,17 +10,15 @@ import (
 type Role string
 
 const (
-	RoleAPI       Role = "api"
-	RoleWorker    Role = "worker"    // legacy combined worker; retained for backward compat
-	RoleScheduler Role = "scheduler" // legacy combined scheduler; retained for backward compat
-	RoleMCPStdio  Role = "mcp-stdio"
+	// Application HTTP role.
+	RoleAPI Role = "api"
+
+	// MCP stdio transport for local AI clients.
+	RoleMCPStdio Role = "mcp-stdio"
 
 	// Cloud-native split worker roles (architecture #56). Each runs as
 	// an independent Deployment with its own scaling rule and DLQ
-	// behavior. The legacy RoleWorker keeps wrapping outbox-relay +
-	// payroll-settler + on-time-evaluator under one process for
-	// single-node operation; production deployments scale these roles
-	// independently via the Helm chart.
+	// behavior. There is no legacy combined worker/scheduler role.
 	RoleOutboxRelay      Role = "outbox-relay"
 	RolePayrollSettler   Role = "payroll-settler"
 	RoleOnTimeEvaluator  Role = "on-time-evaluator"
@@ -235,8 +233,7 @@ func splitScopes(raw string) []string {
 
 func ParseRole(s string) (Role, error) {
 	switch Role(s) {
-	case RoleAPI,
-		RoleWorker, RoleScheduler, RoleMCPStdio,
+	case RoleAPI, RoleMCPStdio,
 		RoleOutboxRelay, RolePayrollSettler, RoleOnTimeEvaluator,
 		RoleCutoffSweeper, RoleNoShowSweeper,
 		RoleDocExpiryScanner, RoleFeedbackScanner,
