@@ -3905,27 +3905,6 @@
         ],
         "type": "object"
       },
-      "UploadImageOutputBody": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/UploadImageOutputBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "url"
-        ],
-        "type": "object"
-      },
       "VendorDTO": {
         "additionalProperties": false,
         "properties": {
@@ -8208,68 +8187,6 @@
         "tags": [
           "merchant",
           "quota"
-        ]
-      }
-    },
-    "/api/merchant/uploads": {
-      "post": {
-        "operationId": "uploadMerchantImage",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "encoding": {
-                "file": {
-                  "contentType": "image/jpeg,image/png,image/webp"
-                }
-              },
-              "schema": {
-                "properties": {
-                  "file": {
-                    "contentEncoding": "binary",
-                    "contentMediaType": "application/octet-stream",
-                    "format": "binary",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "file"
-                ],
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadImageOutputBody"
-                }
-              }
-            },
-            "description": "Created"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                }
-              }
-            },
-            "description": "Error"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Upload a menu-item image and get its stored URL",
-        "tags": [
-          "merchant",
-          "menu"
         ]
       }
     },

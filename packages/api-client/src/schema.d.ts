@@ -1206,23 +1206,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/merchant/uploads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Upload a menu-item image and get its stored URL */
-        post: operations["uploadMerchantImage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/auth/{provider}/callback": {
         parameters: {
             query?: never;
@@ -2599,15 +2582,6 @@ export interface components {
              */
             readonly $schema?: string;
             document: components["schemas"]["DocumentDTO"];
-        };
-        UploadImageOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UploadImageOutputBody.json
-             */
-            readonly $schema?: string;
-            url: string;
         };
         VendorDTO: {
             approved_at?: string;
@@ -5278,42 +5252,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SupplyOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    uploadMerchantImage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "multipart/form-data": {
-                    /** Format: binary */
-                    file: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadImageOutputBody"];
                 };
             };
             /** @description Error */
