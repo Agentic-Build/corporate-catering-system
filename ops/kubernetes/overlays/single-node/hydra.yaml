@@ -152,7 +152,10 @@ spec:
       containers:
         - name: hydra-migrate
           image: oryd/hydra:v2.2.0
-          command: ["migrate", "sql", "--read-from-env", "--yes"]
+          # k8s `command` overrides the image ENTRYPOINT (`hydra`); compose
+          # `command` is args appended to it. Use `args` so this runs
+          # `hydra migrate sql ...`, not a non-existent `migrate` binary.
+          args: ["migrate", "sql", "--read-from-env", "--yes"]
           env:
             - name: DSN
               value: postgres://hydra:hydra@hydra-postgresql:5432/hydra?sslmode=disable
@@ -216,7 +219,7 @@ spec:
       containers:
         - name: hydra
           image: oryd/hydra:v2.2.0
-          command: ["serve", "all", "--dev"]
+          args: ["serve", "all", "--dev"]
           ports:
             - name: public
               containerPort: 4444

@@ -170,7 +170,10 @@ spec:
       containers:
         - name: authentik
           image: ghcr.io/goauthentik/server:2026.2.0
-          command: ["server"]
+          # `args` not `command`: the goauthentik image ENTRYPOINT dispatches the
+          # `server`/`worker` subcommand. Overriding `command` would exec a
+          # non-existent `server` binary.
+          args: ["server"]
           ports:
             - name: http
               containerPort: 9000
@@ -270,7 +273,7 @@ spec:
       containers:
         - name: authentik
           image: ghcr.io/goauthentik/server:2026.2.0
-          command: ["worker"]
+          args: ["worker"]
           env:
             - name: AUTHENTIK_SECRET_KEY
               value: tbite-local-authentik-secret-key-change-outside-dev
