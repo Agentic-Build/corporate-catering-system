@@ -161,6 +161,11 @@ spec:
         - name: mc
           image: quay.io/minio/mc:RELEASE.2025-01-17T23-25-50Z
           env:
+            # runAsUser 1000 has HOME=/ (not writable); without this mc fails
+            # with "mkdir /.mc: permission denied" and the alias-set loop never
+            # exits ("waiting for minio..." forever).
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
