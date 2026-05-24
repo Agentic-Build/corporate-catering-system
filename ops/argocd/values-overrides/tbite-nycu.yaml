@@ -52,19 +52,15 @@ authentikBlueprints:
   devUsers:
     enabled: true
 
-# The chart-rendered hooks expect a ghcr.io/agentic-build/tbite-migrations
-# image that the CI workflow does not yet build. Disable the hook
-# Jobs until CI publishes that image; operator runs migrations +
-# stream provisioning + bucket bootstrap out-of-band (see playbook
-# docs/deployment/k3s-cloudflare-tsmc.md steps 7-8).
+# Only `dbMigrate` is disabled: its initContainer pulls
+# ghcr.io/agentic-build/tbite-migrations which the CI workflow does
+# not yet build. Migrations run out-of-band via migrate/migrate +
+# `github://` source driver during bootstrap. The three other hooks
+# use already-published images (minio/mc, cnpg/postgresql:17.2, the
+# platform image itself), so we keep them enabled and let ArgoCD
+# manage them as Helm-style PreSync / PostSync hooks.
 hooks:
   dbMigrate:
-    enabled: false
-  provisionStreams:
-    enabled: false
-  createIdentityDatabases:
-    enabled: false
-  bucketBootstrap:
     enabled: false
 
 # CNPG cluster sized down to fit a single 16-core / 32 GiB box that
