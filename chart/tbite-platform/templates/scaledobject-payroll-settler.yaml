@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- $cfg := .Values.workers.payrollSettler -}}
 {{- if and $cfg.enabled $cfg.keda.enabled .Values.keda.enabled }}
 {{- $role := "worker-payroll-settler" -}}
@@ -26,3 +27,5 @@ spec:
         consumer: {{ $cfg.keda.consumer | quote }}
         lagThreshold: {{ $cfg.keda.lagThreshold | quote }}
 {{- end }}
+
+{{- end -}}

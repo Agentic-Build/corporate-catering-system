@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- if and .Values.postgres.enabled (not .Values.postgres.byo.enabled) }}
 {{- $c := .Values.postgres.cluster -}}
 apiVersion: postgresql.cnpg.io/v1
@@ -51,3 +52,5 @@ spec:
       database: tbite
       owner: tbite
 {{- end }}
+
+{{- end -}}

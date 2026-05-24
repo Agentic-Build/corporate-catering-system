@@ -4,6 +4,13 @@
 profile:
   size: prod # one of: dev | prod
 
+# crdsReady gates every template that emits a CustomResource whose CRD
+# is installed by a subchart in the same release. Two-pass install
+# leaves this false on phase 1 so subcharts can bring their CRDs up,
+# then true on phase 2. ArgoCD users keep this true and rely on
+# `syncOptions: [ServerSideApply=true]` + retry for convergence.
+crdsReady: true
+
 global:
   imageRegistry: ""
   imagePullPolicy: IfNotPresent

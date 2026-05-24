@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- if .Values.observability.victoriaMetrics.enabled }}
 {{- $ctx := . -}}
 {{- $roles := list -}}
@@ -33,3 +34,5 @@ spec:
       scheme: http
 {{- end }}
 {{- end }}
+
+{{- end -}}

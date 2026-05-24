@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- if and .Values.observability.victoriaMetrics.enabled .Values.alerting.enabled }}
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMRule
@@ -66,3 +67,5 @@ spec:
           annotations:
             summary: "JetStream consumer pending > 1000"
 {{- end }}
+
+{{- end -}}

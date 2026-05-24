@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- if and .Values.ingress.certManager.enabled (eq .Values.ingress.certManager.issuer.kind "Issuer") }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
@@ -22,3 +23,5 @@ spec:
                 kind: Gateway
       {{- end }}
 {{- end }}
+
+{{- end -}}

@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- $cfg := .Values.web.employee -}}
 {{- if and $cfg.enabled $cfg.ingress.enabled .Values.ingress.gateway.enabled }}
 {{- $role := "web-employee" -}}
@@ -25,3 +26,5 @@ spec:
       timeouts:
         request: 30s
 {{- end }}
+
+{{- end -}}

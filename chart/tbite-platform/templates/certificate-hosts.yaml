@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- if .Values.ingress.certManager.enabled }}
 {{- $ctx := . -}}
 {{- $issuerRef := dict "kind" .Values.ingress.certManager.issuer.kind "name" .Values.ingress.certManager.issuer.name -}}
@@ -32,3 +33,5 @@ spec:
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{- end -}}

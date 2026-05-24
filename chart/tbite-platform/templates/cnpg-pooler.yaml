@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- if and .Values.postgres.enabled (not .Values.postgres.byo.enabled) .Values.postgres.cluster.pooler.enabled }}
 {{- $c := .Values.postgres.cluster -}}
 apiVersion: postgresql.cnpg.io/v1
@@ -20,3 +21,5 @@ spec:
       default_pool_size: "25"
       reserve_pool_size: "5"
 {{- end }}
+
+{{- end -}}

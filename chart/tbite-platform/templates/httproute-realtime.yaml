@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- if and .Values.realtime.enabled .Values.realtime.ingress.enabled .Values.ingress.gateway.enabled }}
 {{- $role := "realtime" -}}
 apiVersion: gateway.networking.k8s.io/v1
@@ -28,3 +29,5 @@ spec:
         request: 0s          # streaming — no overall request timeout
         backendRequest: 3600s
 {{- end }}
+
+{{- end -}}

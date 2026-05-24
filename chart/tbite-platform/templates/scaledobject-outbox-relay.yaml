@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- $cfg := .Values.workers.outboxRelay -}}
 {{- if and $cfg.enabled $cfg.keda.enabled .Values.keda.enabled }}
 {{- $role := "worker-outbox-relay" -}}
@@ -38,3 +39,5 @@ spec:
       authenticationRef:
         name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}-auth
 {{- end }}
+
+{{- end -}}

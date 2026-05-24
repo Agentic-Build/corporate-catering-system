@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- /*
 The opentelemetry-collector chart dependency runs the collector as a
 Deployment directly. When the operator-based mode is preferred, set
@@ -60,3 +61,5 @@ spec:
           processors: [memory_limiter, k8sattributes, batch]
           exporters: [otlphttp/logs]
 {{- end }}
+
+{{- end -}}

@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- if and .Values.observability.grafana.enabled .Values.observability.victoriaMetrics.enabled .Values.ingress.gateway.enabled }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -25,3 +26,5 @@ spec:
       timeouts:
         request: 60s
 {{- end }}
+
+{{- end -}}

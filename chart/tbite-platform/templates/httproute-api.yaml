@@ -1,3 +1,4 @@
+{{- if .Values.crdsReady -}}
 {{- if and .Values.api.enabled .Values.api.ingress.enabled .Values.ingress.gateway.enabled }}
 {{- $role := "api" -}}
 apiVersion: gateway.networking.k8s.io/v1
@@ -25,3 +26,5 @@ spec:
         request: 60s
         backendRequest: 60s
 {{- end }}
+
+{{- end -}}
