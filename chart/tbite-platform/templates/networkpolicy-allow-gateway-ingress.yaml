@@ -15,10 +15,20 @@ spec:
   policyTypes: ["Ingress"]
   ingress:
     - from:
+        # Traefik (default Gateway API ingress) and cloudflared (the
+        # values-cloudflared.yaml overlay's tunnel sidecar) are the two
+        # supported gateway implementations. Either lives in some other
+        # namespace (kube-system for k3s's traefik, or this same ns for
+        # the chart-rendered cloudflared) so a single rule with a
+        # union of pod-label selectors covers both deployment modes.
         - namespaceSelector: {}
           podSelector:
             matchLabels:
               app.kubernetes.io/name: traefik
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: cloudflared
       ports:
         - protocol: TCP
           port: {{ .Values.api.port }}
