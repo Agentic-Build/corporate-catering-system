@@ -97,6 +97,13 @@ batch, so a fresh-cluster `helm install` of the full umbrella fails
 with `ensure CRDs are installed first` errors. This is the standard
 chart-of-charts CRD-bootstrap pitfall, not a chart bug.
 
+### First-time end-to-end walkthrough
+
+For a step-by-step playbook that takes a fresh Linux box from "no
+cluster" to "twenty-eight pods Ready, eight public hostnames" using
+k3s + Cloudflare Tunnel + the TSMC pickup-location seed, see
+[`docs/deployment/k3s-cloudflare-tsmc.md`](../../docs/deployment/k3s-cloudflare-tsmc.md).
+
 ### Two-pass install (recommended for fresh clusters)
 
 ```bash
