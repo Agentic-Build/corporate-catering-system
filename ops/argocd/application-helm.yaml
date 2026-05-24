@@ -32,11 +32,21 @@ spec:
     path: chart/tbite-platform
     helm:
       releaseName: tbite
-      # The default values.yaml is the single-enterprise prod sizing
-      # per ADR-0008 (#55). Operators that need multi-AZ HA stack a
-      # second valueFile: ["values.yaml", "values-prod-ha.yaml"].
+      # Three valueFiles stack in order:
+      #   1. values.yaml — single-enterprise prod default (ADR-0008).
+      #   2. values-cloudflared.yaml — replace Traefik+LE with
+      #      Cloudflare Tunnel public ingress (this overlay turns
+      #      off traefik/cert-manager/Gateway API; see
+      #      docs/deployment/k3s-cloudflare-tsmc.md).
+      #   3. ../../ops/argocd/values-overrides/tbite-nycu.yaml —
+      #      deployment-specific overrides (public hostnames,
+      #      hook toggles, CNPG sizing).
+      # Operators that need multi-AZ HA prepend values-prod-ha.yaml
+      # before the cloudflared overlay.
       valueFiles:
         - values.yaml
+        - values-cloudflared.yaml
+        - ../../ops/argocd/values-overrides/tbite-nycu.yaml
       parameters:
         - name: profile.size
           value: prod

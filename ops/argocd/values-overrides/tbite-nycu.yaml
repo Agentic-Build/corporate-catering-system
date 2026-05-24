@@ -1,0 +1,86 @@
+# tbite-platform Helm values override applied by ArgoCD on top of
+# chart/tbite-platform/values.yaml + values-cloudflared.yaml. This
+# file is referenced from ops/argocd/application-helm.yaml as a
+# third valueFiles entry; ArgoCD reads it from the same repo + ref
+# as the chart itself.
+#
+# Contains only fields that vary by deployment target:
+#   - public hostnames (nycu.ai zone)
+#   - Hydra issuer + OIDC redirect URLs
+#   - Grafana ingress host
+#   - image override (the chart's pinned image.tag may lag behind
+#     main; cd-publish-images writes the freshest sha here, not
+#     in values.yaml)
+#
+# Anything sensitive (Cloudflare tunnel token, Authentik PG password,
+# Hydra DSN password, Valkey password, Grafana admin password, the
+# Authentik bootstrap password) is supplied via SOPS-encrypted
+# Secrets out-of-band — see ops/secrets/example.sops.yaml.
+
+global:
+  domain: nycu.ai
+  baseURL:
+    api: https://tbite-api.nycu.ai
+    employee: https://tbite-app.nycu.ai
+    merchant: https://tbite-merchant.nycu.ai
+    admin: https://tbite-admin.nycu.ai
+  oidcIssuerURL: https://tbite-auth.nycu.ai/application/o/tbite/
+  authentik:
+    baseURL: http://tbite-authentik-server.tbite.svc.cluster.local:80
+  s3:
+    endpoint: http://minio.tbite.svc.cluster.local
+  nats:
+    url: nats://tbite-nats.tbite.svc.cluster.local:4222
+
+hydra:
+  hydra:
+    config:
+      urls:
+        self:
+          issuer: https://tbite-hydra.nycu.ai
+        login: https://tbite-app.nycu.ai/login
+        consent: https://tbite-app.nycu.ai/consent
+        logout: https://tbite-app.nycu.ai/logout
+
+observability:
+  grafana:
+    ingressHost: tbite-grafana.nycu.ai
+
+# Dev users on for the early demo; flip to false once real users land
+# from HR SCIM (architecture #61 follow-up).
+authentikBlueprints:
+  devUsers:
+    enabled: true
+
+# The chart-rendered hooks expect a ghcr.io/agentic-build/tbite-migrations
+# image that the CI workflow does not yet build. Disable the hook
+# Jobs until CI publishes that image; operator runs migrations +
+# stream provisioning + bucket bootstrap out-of-band (see playbook
+# docs/deployment/k3s-cloudflare-tsmc.md steps 7-8).
+hooks:
+  dbMigrate:
+    enabled: false
+  provisionStreams:
+    enabled: false
+  createIdentityDatabases:
+    enabled: false
+  bucketBootstrap:
+    enabled: false
+
+# CNPG cluster sized down to fit a single 16-core / 32 GiB box that
+# is also running everything else (k3s itself, observability stack,
+# Authentik+Hydra each with their own boot footprint). Production-
+# grade installs override via values-prod-ha.yaml on top.
+postgres:
+  cluster:
+    monitoring:
+      enabled: false
+    resources:
+      requests: { cpu: 500m, memory: 2Gi }
+      limits:   { cpu: 2,    memory: 2Gi }
+
+# The chart's per-Service ClusterIP defaults to port 80 (mapped to
+# the role's container port via HTTP_ADDR env). Cloudflare tunnel
+# public-hostname routes — configured in the Cloudflare Zero Trust
+# dashboard — therefore dial the in-cluster Service at :80 (not the
+# container's bind port).
