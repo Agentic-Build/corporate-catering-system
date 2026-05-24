@@ -55,13 +55,20 @@ patches:
       kind: ConfigMap
       name: grafana-runtime-config
 
-# Pin app images to the local :dev tag built by `make dev-up` (Task 14).
+# App images: pinned to immutable GHCR sha-<gitsha> tags. The cd-publish-images
+# workflow bumps `newTag` here on every push to main (git write-back), so a
+# merge → build → ArgoCD sync redeploys the new build automatically.
+# (`tbite/api` also backs the scheduler + worker Deployments.)
 images:
   - name: tbite/api
-    newTag: dev
+    newName: ghcr.io/agentic-build/tbite-api
+    newTag: sha-69187f5
   - name: tbite/web-employee
-    newTag: dev
+    newName: ghcr.io/agentic-build/tbite-web-employee
+    newTag: sha-69187f5
   - name: tbite/web-merchant
-    newTag: dev
+    newName: ghcr.io/agentic-build/tbite-web-merchant
+    newTag: sha-69187f5
   - name: tbite/web-admin
-    newTag: dev
+    newName: ghcr.io/agentic-build/tbite-web-admin
+    newTag: sha-69187f5

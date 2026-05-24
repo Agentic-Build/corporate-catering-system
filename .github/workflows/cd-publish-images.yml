@@ -76,3 +76,34 @@ jobs:
           format: table
           severity: HIGH,CRITICAL
           exit-code: '0'   # Don't fail on findings yet; just report
+
+  # Close the CD loop: after the images are pushed on a main build, bump the
+  # single-node overlay's image tags to this build's immutable sha so ArgoCD
+  # (which syncs the overlay from main) redeploys the new build automatically.
+  # The commit carries [skip ci] so it does not re-trigger this workflow.
+  # Only GITHUB_SHA (a trusted hex commit id) is used in run: — no untrusted input.
+  bump-image-tags:
+    needs: publish
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Bump single-node overlay image tags
+        run: |
+          set -euo pipefail
+          SHA="sha-${GITHUB_SHA::7}"
+          f=ops/kubernetes/overlays/single-node/kustomization.yaml
+          sed -i -E "s|newTag: sha-[0-9a-f]+|newTag: ${SHA}|g" "$f"
+          if git diff --quiet -- "$f"; then
+            echo "image tags already at ${SHA}; nothing to commit"
+            exit 0
+          fi
+          git config user.name "tbite-ci[bot]"
+          git config user.email "tbite-ci@users.noreply.github.com"
+          git add "$f"
+          git commit -m "chore(cd): single-node images -> ${SHA} [skip ci]"
+          git push origin HEAD:main
