@@ -2,20 +2,38 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # Single-node overlay (k3d / kind / Docker Desktop K8s).
-# Adds self-hosted single-pod Postgres / Redis / NATS / MinIO + a dev Secret
-# + patches the base ConfigMap with in-cluster connection strings.
-# HA / clustered variants land in P8.
+# Adds self-hosted single-pod Postgres / Redis / NATS / MinIO / Authentik /
+# Hydra + a dev Secret + an allow-all NetworkPolicy (relaxes the base
+# default-deny on this trusted single-node box) + patches the base ConfigMap
+# with in-cluster connection strings. HA / clustered variants land in P8.
 
 namespace: tbite
 
 resources:
   - ../../base
   - secrets-bootstrap.yaml
+  - allow-all.yaml
   - postgres.yaml
   - redis.yaml
   - nats.yaml
   - minio.yaml
+  - authentik.yaml
+  - hydra.yaml
   - nginx-ingress.yaml
+
+# Authentik blueprint mounted into the server + worker pods at
+# /blueprints/tbite.yaml (mirrors the compose bind-mount). The blueprint is
+# vendored as authentik-blueprint.tbite.yaml (a copy of the canonical
+# ops/local/authentik/blueprints/tbite.yaml) because kustomize's default
+# load-restrictor — which ArgoCD also enforces — forbids reading files outside
+# the kustomization root. Keep the two copies in sync.
+configMapGenerator:
+  - name: authentik-blueprints
+    files:
+      - tbite.yaml=authentik-blueprint.tbite.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
 
 # Merge dev URLs into the base ConfigMap.
 patches:

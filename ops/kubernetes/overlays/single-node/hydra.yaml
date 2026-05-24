@@ -1,0 +1,285 @@
+# Ory Hydra (OAuth 2.1 server with RFC 7591 Dynamic Client Registration) for
+# the single-node overlay.
+#
+# Translated from ops/local/docker-compose.dev.yml services
+# hydra-postgresql / hydra-migrate / hydra. The API only wires the Hydra
+# bridge when HYDRA_PUBLIC_URL is set (see configmap-patch.yaml), but once it
+# is, the API does a Hydra discovery at boot, so the overlay must ship Hydra.
+#
+# Dev secrets are inlined (matching the compose values) — DO NOT use outside
+# local single-node staging.
+#
+# Issuer / login / consent URLs point at the API host (http://api.tbite.test/)
+# because the API reverse-proxies Hydra's OAuth surface. In-cluster, app pods
+# reach Hydra directly via the `hydra` Service (configmap-patch.yaml). Making
+# the full browser OIDC flow consistent through the ingress is follow-up work;
+# this overlay only needs the API's boot-time Hydra discovery to succeed.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hydra-postgresql-data
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: hydra-postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hydra-postgresql
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: hydra-postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: hydra-postgresql
+    app.kubernetes.io/component: database
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hydra-postgresql
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: hydra-postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hydra-postgresql
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hydra-postgresql
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: tbite
+        app.kubernetes.io/managed-by: kustomize
+    spec:
+      # See overlays/single-node/postgres.yaml for why runAsNonRoot is omitted.
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:18-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: hydra
+            - name: POSTGRES_USER
+              value: hydra
+            - name: POSTGRES_PASSWORD
+              value: hydra
+            - name: PGDATA
+              value: /var/lib/postgresql/18/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "hydra", "-d", "hydra"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "hydra", "-d", "hydra"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: hydra-postgresql-data
+---
+# Schema migration. ArgoCD PreSync hook so it completes before the hydra
+# Deployment rolls (Hydra refuses to serve against an un-migrated DB).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hydra-migrate
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: hydra-migrate
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hydra-migrate
+        app.kubernetes.io/component: auth
+        app.kubernetes.io/part-of: tbite
+        app.kubernetes.io/managed-by: kustomize
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: hydra-migrate
+          image: oryd/hydra:v2.2.0
+          command: ["migrate", "sql", "--read-from-env", "--yes"]
+          env:
+            - name: DSN
+              value: postgres://hydra:hydra@hydra-postgresql:5432/hydra?sslmode=disable
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hydra
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: hydra
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: hydra
+    app.kubernetes.io/component: auth
+  ports:
+    - name: public
+      port: 4444
+      targetPort: 4444
+      protocol: TCP
+    - name: admin
+      port: 4445
+      targetPort: 4445
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hydra
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: hydra
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hydra
+      app.kubernetes.io/component: auth
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hydra
+        app.kubernetes.io/component: auth
+        app.kubernetes.io/part-of: tbite
+        app.kubernetes.io/managed-by: kustomize
+    spec:
+      containers:
+        - name: hydra
+          image: oryd/hydra:v2.2.0
+          command: ["serve", "all", "--dev"]
+          ports:
+            - name: public
+              containerPort: 4444
+              protocol: TCP
+            - name: admin
+              containerPort: 4445
+              protocol: TCP
+          # Env mirrors docker-compose.dev.yml hydra service (lines 170-204).
+          env:
+            - name: DSN
+              value: postgres://hydra:hydra@hydra-postgresql:5432/hydra?sslmode=disable
+            - name: URLS_SELF_ISSUER
+              value: http://api.tbite.test/
+            - name: URLS_SELF_PUBLIC
+              value: http://api.tbite.test/
+            - name: URLS_LOGIN
+              value: http://api.tbite.test/oauth/login
+            - name: URLS_CONSENT
+              value: http://api.tbite.test/oauth/consent
+            - name: URLS_LOGOUT
+              value: http://api.tbite.test/oauth/logout
+            - name: STRATEGIES_ACCESS_TOKEN
+              value: jwt
+            - name: STRATEGIES_SCOPE
+              value: exact
+            - name: OIDC_DYNAMIC_CLIENT_REGISTRATION_ENABLED
+              value: "true"
+            - name: OIDC_DYNAMIC_CLIENT_REGISTRATION_DEFAULT_SCOPE
+              value: "openid offline_access"
+            - name: TTL_ACCESS_TOKEN
+              value: 1h
+            - name: TTL_REFRESH_TOKEN
+              value: 720h
+            - name: TTL_ID_TOKEN
+              value: 1h
+            - name: TTL_AUTH_CODE
+              value: 10m
+            - name: SECRETS_SYSTEM
+              value: tbite-dev-hydra-secret-change-outside-dev-environments
+            - name: SERVE_PUBLIC_CORS_ENABLED
+              value: "true"
+            - name: SERVE_PUBLIC_CORS_ALLOWED_ORIGINS
+              value: "*"
+            - name: LOG_LEVEL
+              value: debug
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: admin
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health/alive
+              port: admin
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 12
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi

@@ -1,0 +1,314 @@
+# Authentik (OIDC identity provider) for the single-node overlay.
+#
+# Translated from ops/local/docker-compose.dev.yml services
+# authentik-postgresql / authentik-server / authentik-worker. The API does an
+# unconditional OIDC discovery against Authentik at boot, so the single-node
+# overlay must ship it or every app pod crashes with
+# `lookup authentik.tbite.test: no such host`.
+#
+# Dev credentials are inlined here (matching the compose values) — DO NOT use
+# outside local single-node staging.
+#
+# Postgres template mirrors overlays/single-node/postgres.yaml: PVC + Service +
+# Deployment, PGDATA=/var/lib/postgresql/18/pgdata, PVC mounted at
+# /var/lib/postgresql, securityContext.fsGroup: 999, pg_isready probe.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: authentik-postgresql-data
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: authentik-postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-postgresql
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: authentik-postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: authentik-postgresql
+    app.kubernetes.io/component: database
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-postgresql
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: authentik-postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: authentik-postgresql
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: authentik-postgresql
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: tbite
+        app.kubernetes.io/managed-by: kustomize
+    spec:
+      # See overlays/single-node/postgres.yaml: do NOT set runAsNonRoot so the
+      # entrypoint can chown PGDATA before dropping privileges; fsGroup makes
+      # the mounted PVC group-writable.
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:18-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: authentik
+            - name: POSTGRES_USER
+              value: authentik
+            - name: POSTGRES_PASSWORD
+              value: authentik
+            - name: PGDATA
+              value: /var/lib/postgresql/18/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "authentik", "-d", "authentik"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "authentik", "-d", "authentik"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: authentik-postgresql-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: authentik
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: authentik
+    app.kubernetes.io/component: auth
+  ports:
+    - name: http
+      port: 9000
+      targetPort: 9000
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-server
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: authentik
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: authentik
+      app.kubernetes.io/component: auth
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: authentik
+        app.kubernetes.io/component: auth
+        app.kubernetes.io/part-of: tbite
+        app.kubernetes.io/managed-by: kustomize
+    spec:
+      containers:
+        - name: authentik
+          image: ghcr.io/goauthentik/server:2026.2.0
+          command: ["server"]
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+          # Reuse the single-node redis Service. Postgres + bootstrap creds
+          # match docker-compose.dev.yml (dev values, inline by design).
+          env:
+            - name: AUTHENTIK_SECRET_KEY
+              value: tbite-local-authentik-secret-key-change-outside-dev
+            - name: AUTHENTIK_REDIS__HOST
+              value: redis
+            - name: AUTHENTIK_POSTGRESQL__HOST
+              value: authentik-postgresql
+            - name: AUTHENTIK_POSTGRESQL__USER
+              value: authentik
+            - name: AUTHENTIK_POSTGRESQL__NAME
+              value: authentik
+            - name: AUTHENTIK_POSTGRESQL__PASSWORD
+              value: authentik
+            - name: AUTHENTIK_BOOTSTRAP_EMAIL
+              value: akadmin@tbite.test
+            - name: AUTHENTIK_BOOTSTRAP_PASSWORD
+              value: tbite-dev-admin
+            - name: AUTHENTIK_BOOTSTRAP_TOKEN
+              value: tbite-dev-authentik-api-token
+            - name: AUTHENTIK_LOG_LEVEL
+              value: info
+          volumeMounts:
+            - name: blueprints
+              mountPath: /blueprints/tbite.yaml
+              subPath: tbite.yaml
+              readOnly: true
+            - name: media
+              mountPath: /media
+          # First boot runs a long DB migration before the HTTP server is
+          # ready, so probes start late with a high failure budget to avoid
+          # being killed mid-migration.
+          startupProbe:
+            httpGet:
+              path: /-/health/live/
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /-/health/ready/
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /-/health/live/
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+      volumes:
+        - name: blueprints
+          configMap:
+            name: authentik-blueprints
+        - name: media
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-worker
+  namespace: tbite
+  labels:
+    app.kubernetes.io/name: authentik-worker
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: authentik-worker
+      app.kubernetes.io/component: auth
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: authentik-worker
+        app.kubernetes.io/component: auth
+        app.kubernetes.io/part-of: tbite
+        app.kubernetes.io/managed-by: kustomize
+    spec:
+      containers:
+        - name: authentik
+          image: ghcr.io/goauthentik/server:2026.2.0
+          command: ["worker"]
+          env:
+            - name: AUTHENTIK_SECRET_KEY
+              value: tbite-local-authentik-secret-key-change-outside-dev
+            - name: AUTHENTIK_REDIS__HOST
+              value: redis
+            - name: AUTHENTIK_POSTGRESQL__HOST
+              value: authentik-postgresql
+            - name: AUTHENTIK_POSTGRESQL__USER
+              value: authentik
+            - name: AUTHENTIK_POSTGRESQL__NAME
+              value: authentik
+            - name: AUTHENTIK_POSTGRESQL__PASSWORD
+              value: authentik
+            - name: AUTHENTIK_BOOTSTRAP_EMAIL
+              value: akadmin@tbite.test
+            - name: AUTHENTIK_BOOTSTRAP_PASSWORD
+              value: tbite-dev-admin
+            - name: AUTHENTIK_BOOTSTRAP_TOKEN
+              value: tbite-dev-authentik-api-token
+            - name: AUTHENTIK_LOG_LEVEL
+              value: info
+          volumeMounts:
+            - name: blueprints
+              mountPath: /blueprints/tbite.yaml
+              subPath: tbite.yaml
+              readOnly: true
+            - name: media
+              mountPath: /media
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+      volumes:
+        - name: blueprints
+          configMap:
+            name: authentik-blueprints
+        - name: media
+          emptyDir: {}

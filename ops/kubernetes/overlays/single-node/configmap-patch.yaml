@@ -14,10 +14,17 @@ data:
   OIDC_CALLBACK_BASE_URL: "http://api.tbite.test"
   AUTH_PROVIDER_SLUGS: "authentik"
   AUTH_PROVIDER_AUTHENTIK_DISPLAY_NAME: "Authentik"
-  AUTH_PROVIDER_AUTHENTIK_ISSUER_URL: "http://authentik.tbite.test/application/o/tbite/"
+  # In-cluster Service URLs so the API's boot-time OIDC/Hydra discovery
+  # succeeds and the pods reach Running/Healthy. The browser-facing OIDC flow
+  # (issuer/redirect consistency through the ingress) is follow-up work; this
+  # overlay's goal is pod liveness + API healthz, not the full login round-trip.
+  AUTH_PROVIDER_AUTHENTIK_ISSUER_URL: "http://authentik:9000/application/o/tbite/"
   AUTH_PROVIDER_AUTHENTIK_SCOPES: "openid email profile tbite"
-  AUTHENTIK_BASE_URL: "http://authentik.tbite.test"
+  AUTHENTIK_BASE_URL: "http://authentik:9000"
+  AUTHENTIK_API_TOKEN: "tbite-dev-authentik-api-token"
   AUTHENTIK_VENDOR_OPERATOR_GROUP: "tbite:role:vendor_operator"
+  HYDRA_PUBLIC_URL: "http://hydra:4444"
+  HYDRA_ADMIN_URL: "http://hydra:4445"
   APP_BASE_URL_EMPLOYEE: "http://app.tbite.test"
   APP_BASE_URL_MERCHANT: "http://merchant.tbite.test"
   APP_BASE_URL_ADMIN:    "http://admin.tbite.test"
