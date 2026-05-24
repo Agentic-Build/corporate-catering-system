@@ -1,0 +1,83 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $ctx := . -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tbite.fullname" . }}-egress-otel-and-deps
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: tbite-platform
+  policyTypes: ["Egress"]
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # OpenTelemetry collector
+    {{- if .Values.observability.otelCollector.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opentelemetry-collector
+      ports:
+        - protocol: TCP
+          port: {{ .Values.observability.otelCollector.grpcPort }}
+        - protocol: TCP
+          port: {{ .Values.observability.otelCollector.httpPort }}
+    {{- end }}
+    # NATS
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nats
+      ports:
+        - protocol: TCP
+          port: 4222
+    # Postgres (CNPG)
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ .Values.postgres.cluster.name | quote }}
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6432
+    # Valkey
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: valkey
+      ports:
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 26379
+    # MinIO tenant
+    - to:
+        - podSelector:
+            matchLabels:
+              v1.min.io/tenant: tbite
+      ports:
+        - protocol: TCP
+          port: 9000
+    # External HTTPS egress (S3 BYO, OIDC discovery, etc.) — broad allow
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+{{- end }}

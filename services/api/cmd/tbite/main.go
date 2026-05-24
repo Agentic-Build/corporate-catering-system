@@ -42,6 +42,7 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
 	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
 	mpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/menu/readmodel"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
 	opgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
@@ -71,7 +72,11 @@ import (
 
 func main() {
 	var roleStr string
-	pflag.StringVar(&roleStr, "role", "api", "binary role: api|worker|scheduler|mcp-stdio")
+	pflag.StringVar(&roleStr, "role", "api",
+		"binary role: api | worker | scheduler | mcp-stdio | "+
+			"outbox-relay | payroll-settler | on-time-evaluator | "+
+			"cutoff-sweeper | no-show-sweeper | document-expiry-scanner | feedback-scanner | "+
+			"realtime-gateway | provision-streams")
 	pflag.Parse()
 
 	role, err := config.ParseRole(roleStr)
@@ -115,10 +120,71 @@ func main() {
 	}
 	observability.MustInitMetrics()
 
+	// Dispatch table for the cloud-native split roles (architecture
+	// issues #56, #58, #62). These short-circuit before the larger
+	// legacy switch so the per-role bodies stay in roles.go and main.go
+	// retains the historical api/worker/scheduler/mcp-stdio layout.
+	switch role {
+	case config.RoleOutboxRelay:
+		if err := runOutboxRelay(ctx, logger, cfg); err != nil {
+			logger.Error("outbox-relay", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RolePayrollSettler:
+		if err := runPayrollSettler(ctx, logger, cfg); err != nil {
+			logger.Error("payroll-settler", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleOnTimeEvaluator:
+		if err := runOnTimeEvaluator(ctx, logger, cfg); err != nil {
+			logger.Error("on-time-evaluator", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleCutoffSweeper:
+		if err := runCutoffSweeper(ctx, logger, cfg); err != nil {
+			logger.Error("cutoff-sweeper", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleNoShowSweeper:
+		if err := runNoShowSweeper(ctx, logger, cfg); err != nil {
+			logger.Error("no-show-sweeper", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleDocExpiryScanner:
+		if err := runDocExpiryScanner(ctx, logger, cfg); err != nil {
+			logger.Error("document-expiry-scanner", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleFeedbackScanner:
+		if err := runFeedbackScanner(ctx, logger, cfg); err != nil {
+			logger.Error("feedback-scanner", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleRealtimeGateway:
+		if err := runRealtimeGateway(ctx, logger, cfg); err != nil {
+			logger.Error("realtime-gateway", "err", err)
+			os.Exit(1)
+		}
+		return
+	case config.RoleProvisionStreams:
+		if err := runProvisionStreams(ctx, logger, cfg); err != nil {
+			logger.Error("provision-streams", "err", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	switch role {
 	case config.RoleAPI:
 		// 1. Postgres pool
-		pool, err := db.NewPool(ctx, cfg.DatabaseRW)
+		pool, err := db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{MaxConns: cfg.DBMaxConns, MinConns: cfg.DBMinConns})
 		if err != nil {
 			logger.Error("pg pool", "err", err)
 			os.Exit(1)
@@ -435,7 +501,36 @@ func main() {
 				return out, rows.Err()
 			},
 		}
-		homeAPI := &mhttp.HomeAPI{Home: homeSvc, MenuSvc: menuService}
+		// Wire the read-model cache for the employee home aggregate
+		// (architecture issue #59). The Valkey client is the same
+		// one used by the session store; the namespace prefix scopes
+		// the keys so SCAN-based invalidation stays bounded. Leaving
+		// the cache field unset keeps the legacy uncached path.
+		homeCache := &readmodel.RedisCache{C: rdb, Prefix: "tbite:rm:"}
+		homeMetrics := readmodel.NewMetrics()
+		homeAPI := &mhttp.HomeAPI{
+			Home:        homeSvc,
+			MenuSvc:     menuService,
+			Cache:       homeCache,
+			CacheTTL:    30 * time.Second,
+			CacheMetric: homeMetrics,
+		}
+		// The outbox-driven invalidator subscribes to ORDERS_V1 and
+		// clears entries scoped to the affected plant/date. Failure
+		// to start is non-fatal — the TTL is the safety net.
+		if cfg.NATSURL != "" {
+			go func() {
+				natsClient, err := messaging.New(ctx, cfg.NATSURL)
+				if err != nil {
+					logger.Warn("readmodel invalidator: nats unavailable", "err", err)
+					return
+				}
+				defer natsClient.Close()
+				if err := readmodel.RunOrderInvalidator(ctx, natsClient.JS, homeCache, logger.With("component", "readmodel-invalidator")); err != nil {
+					logger.Warn("readmodel invalidator stopped", "err", err)
+				}
+			}()
+		}
 
 		// 7j. Feedback (F1): employee meal ratings + complaint workflow.
 		// Reverser wires admin "resolve with compensation" to ReverseOrder so a
@@ -538,6 +633,7 @@ func main() {
 		}, mcpSrv, mcpOpts,
 			vendorAPI.Register,
 			menuAPI.Register,
+			menuAPI.RegisterPresigned,
 			quotaAPI.Register,
 			orderAPI.Register,
 			payrollAPI.Register,
@@ -554,7 +650,7 @@ func main() {
 			os.Exit(1)
 		}
 	case config.RoleWorker:
-		pool, err := db.NewPool(ctx, cfg.DatabaseRW)
+		pool, err := db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{MaxConns: cfg.DBMaxConns, MinConns: cfg.DBMinConns})
 		if err != nil {
 			logger.Error("pg pool", "err", err)
 			os.Exit(1)
@@ -638,7 +734,7 @@ func main() {
 		// P3 ships a single-replica scheduler — no leader election. If we ever
 		// scale to >1 replica, wrap sched.Run() with a K8s coordination.k8s.io
 		// Lease so only the holder runs RunOnce. Documented as future work.
-		pool, err := db.NewPool(ctx, cfg.DatabaseRW)
+		pool, err := db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{MaxConns: cfg.DBMaxConns, MinConns: cfg.DBMinConns})
 		if err != nil {
 			logger.Error("pg pool", "err", err)
 			os.Exit(1)
@@ -768,7 +864,7 @@ func main() {
 			os.Exit(2)
 		}
 
-		pool, err := db.NewPool(ctx, cfg.DatabaseRW)
+		pool, err := db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{MaxConns: cfg.DBMaxConns, MinConns: cfg.DBMinConns})
 		if err != nil {
 			logger.Error("pg pool", "err", err)
 			os.Exit(1)

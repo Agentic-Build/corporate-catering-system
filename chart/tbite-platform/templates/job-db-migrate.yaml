@@ -1,0 +1,70 @@
+{{- if .Values.hooks.dbMigrate.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "tbite.fullname" . }}-db-migrate
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db-migrate
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-20"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.hooks.dbMigrate.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.hooks.dbMigrate.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "tbite.labels" . | nindent 8 }}
+        app.kubernetes.io/component: db-migrate
+    spec:
+      restartPolicy: OnFailure
+      {{- include "tbite.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "tbite.podSecurityContext" . | nindent 8 }}
+      initContainers:
+        - name: fetch-migrations
+          image: {{ printf "%s:%s" .Values.hooks.dbMigrate.migrationsImage.repository (default .Chart.AppVersion .Values.hooks.dbMigrate.migrationsImage.tag) | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["/bin/sh", "-c"]
+          # The migrations image is expected to ship .sql files at /migrations.
+          # We copy them into the shared emptyDir so migrate/migrate can read them.
+          args:
+            - cp -r /migrations/. /shared/ && echo "copied migrations"
+          volumeMounts:
+            - name: migrations
+              mountPath: /shared
+          securityContext:
+            {{- include "tbite.containerSecurityContext" . | nindent 12 }}
+      containers:
+        - name: migrate
+          image: {{ printf "%s:%s" .Values.hooks.dbMigrate.image.repository .Values.hooks.dbMigrate.image.tag | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["migrate"]
+          args:
+            - -path
+            - /migrations
+            - -database
+            - "$(DATABASE_RW_URL)"
+            - up
+          env:
+            - name: DATABASE_RW_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.api.database.rwUrlSecretRef.name | quote }}
+                  key: {{ .Values.api.database.rwUrlSecretRef.key | quote }}
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+          resources:
+            {{- toYaml .Values.hooks.dbMigrate.resources | nindent 12 }}
+          securityContext:
+            {{- include "tbite.containerSecurityContext" . | nindent 12 }}
+      volumes:
+        - name: migrations
+          emptyDir: {}
+      {{- include "tbite.podScheduling" . | nindent 6 }}
+{{- end }}

@@ -1,0 +1,717 @@
+# tbite-platform — default values (production-leaning).
+# Use values-dev.yaml or values-prod.yaml as overlays.
+
+profile:
+  size: prod # one of: dev | prod
+
+global:
+  imageRegistry: ""
+  imagePullPolicy: IfNotPresent
+  domain: tbite.example.com
+  baseURL:
+    api: https://api.tbite.example.com
+    employee: https://app.tbite.example.com
+    merchant: https://merchant.tbite.example.com
+    admin: https://admin.tbite.example.com
+  # Namespace overrides — if empty, .Release.Namespace is used.
+  namespaceOverride: ""
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # OIDC issuer URL (Authentik or BYO). Required in prod.
+  oidcIssuerURL: "https://auth.tbite.example.com/application/o/tbite/"
+  # S3-compatible object storage endpoint (MinIO or BYO). Required in prod.
+  s3:
+    endpoint: "https://minio.tbite.example.com"
+    region: "us-east-1"
+    bucket: "tbite-prod"
+    credentialsSecretRef:
+      name: tbite-s3
+      accessKeyKey: accessKeyID
+      secretKeyKey: secretAccessKey
+  # NATS endpoint used by all roles (cluster service when self-hosted).
+  nats:
+    url: "nats://nats:4222"
+    credentialsSecretRef:
+      name: tbite-nats
+      key: creds
+  # Postgres URLs are referenced via per-role secret refs (e.g. api.database.*).
+
+image:
+  repository: ghcr.io/jacoblincool/corporate-catering-system/tbite
+  tag: "" # defaults to .Chart.AppVersion when empty
+  pullSecrets: []
+
+serviceAccount:
+  create: true
+  annotations: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Default OTLP env vars injected into every workload when observability.otelCollector.enabled.
+otel:
+  serviceNamespace: tbite
+  exporterProtocol: grpc # grpc | http/protobuf
+  # collector service name is computed via include "tbite.otelCollectorEndpoint"
+
+#-----------------------------------------------------------------------------
+# API role
+#-----------------------------------------------------------------------------
+api:
+  enabled: true
+  replicaCount: 3
+  image: {} # override repository/tag if needed
+  args: ["--role=api"]
+  port: 8080
+  metricsPort: 2112
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetConcurrency: 50
+    targetRPS: 100
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
+  database:
+    rwUrlSecretRef:
+      name: tbite-db
+      key: rwUrl
+    roUrlSecretRef:
+      name: tbite-db
+      key: roUrl
+    maxConns: 16
+    maxConnsRO: 16
+  env: {}
+  envFromSecrets: []
+  ingress:
+    enabled: true
+    host: api.tbite.example.com
+
+#-----------------------------------------------------------------------------
+# Realtime SSE gateway
+#-----------------------------------------------------------------------------
+realtime:
+  enabled: true
+  replicaCount: 2
+  args: ["--role=realtime-gateway"]
+  port: 8081
+  metricsPort: 2112
+  sseIdleTimeout: 1h
+  topicScope: "plant_date"
+  terminationGracePeriodSeconds: 90
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetActiveConnections: 500
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
+  ingress:
+    enabled: true
+    host: rt.tbite.example.com
+
+#-----------------------------------------------------------------------------
+# Web SSR frontends
+#-----------------------------------------------------------------------------
+web:
+  employee:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: ghcr.io/jacoblincool/corporate-catering-system/web-employee
+      tag: ""
+    port: 3000
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+    pdb: { enabled: true, minAvailable: 1 }
+    baseURL: https://app.tbite.example.com
+    ingress: { enabled: true, host: app.tbite.example.com }
+  merchant:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: ghcr.io/jacoblincool/corporate-catering-system/web-merchant
+      tag: ""
+    port: 3000
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+    pdb: { enabled: true, minAvailable: 1 }
+    baseURL: https://merchant.tbite.example.com
+    ingress: { enabled: true, host: merchant.tbite.example.com }
+  admin:
+    enabled: true
+    replicaCount: 2
+    image:
+      repository: ghcr.io/jacoblincool/corporate-catering-system/web-admin
+      tag: ""
+    port: 3000
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
+    pdb: { enabled: true, minAvailable: 1 }
+    baseURL: https://admin.tbite.example.com
+    ingress: { enabled: true, host: admin.tbite.example.com }
+
+#-----------------------------------------------------------------------------
+# Worker roles
+#-----------------------------------------------------------------------------
+workers:
+  outboxRelay:
+    enabled: true
+    replicaCount: 2
+    args: ["--role=outbox-relay"]
+    metricsPort: 2112
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    keda:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 10
+      pollingInterval: 15
+      cooldownPeriod: 60
+      # Outbox is scaled on pending row count via Postgres trigger.
+      pendingThreshold: 100
+      database:
+        # references api.database.rwUrlSecretRef by default
+        connectionFromSecretRef:
+          name: tbite-db
+          key: rwUrl
+        query: |
+          SELECT count(*) FROM platform.outbox
+          WHERE published_at IS NULL;
+  payrollSettler:
+    enabled: true
+    replicaCount: 2
+    args: ["--role=payroll-settler"]
+    metricsPort: 2112
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    keda:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 10
+      pollingInterval: 15
+      cooldownPeriod: 60
+      stream: PAYROLL_V1
+      consumer: payroll-settler
+      lagThreshold: 500
+  onTimeEvaluator:
+    enabled: true
+    replicaCount: 2
+    args: ["--role=on-time-evaluator"]
+    metricsPort: 2112
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    keda:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 10
+      pollingInterval: 15
+      cooldownPeriod: 60
+      stream: ORDERS_V1
+      consumer: on-time-evaluator
+      lagThreshold: 500
+
+#-----------------------------------------------------------------------------
+# Scheduler singletons (lease-coordinated)
+#-----------------------------------------------------------------------------
+scheduler:
+  cutoffSweeper:
+    enabled: true
+    replicaCount: 1
+    args: ["--role=cutoff-sweeper"]
+    metricsPort: 2112
+    leaseName: tbite-cutoff-sweeper
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 200m, memory: 256Mi }
+  noShowSweeper:
+    enabled: true
+    replicaCount: 1
+    args: ["--role=no-show-sweeper"]
+    metricsPort: 2112
+    leaseName: tbite-no-show-sweeper
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 200m, memory: 256Mi }
+  documentExpiryScanner:
+    enabled: true
+    replicaCount: 1
+    args: ["--role=document-expiry-scanner"]
+    metricsPort: 2112
+    leaseName: tbite-doc-expiry-scanner
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 200m, memory: 256Mi }
+  feedbackScanner:
+    enabled: true
+    replicaCount: 1
+    args: ["--role=feedback-scanner"]
+    metricsPort: 2112
+    leaseName: tbite-feedback-scanner
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 200m, memory: 256Mi }
+
+#-----------------------------------------------------------------------------
+# Helm hook Jobs (pre-install, pre-upgrade)
+#-----------------------------------------------------------------------------
+hooks:
+  dbMigrate:
+    enabled: true
+    image:
+      repository: migrate/migrate
+      tag: v4.18.1
+    migrationsConfigMap: "" # if set, mounts a configmap of .sql files at /migrations
+    migrationsImage:
+      repository: ghcr.io/jacoblincool/corporate-catering-system/migrations
+      tag: "" # defaults to chart appVersion
+    backoffLimit: 3
+    activeDeadlineSeconds: 1800
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+  provisionStreams:
+    enabled: true
+    backoffLimit: 3
+    activeDeadlineSeconds: 600
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+  bucketBootstrap:
+    enabled: true
+    image:
+      repository: minio/mc
+      tag: RELEASE.2024-11-21T17-21-54Z
+    backoffLimit: 3
+    activeDeadlineSeconds: 600
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+    extraBuckets: []
+    policy: "private" # private | public | upload | download
+
+#-----------------------------------------------------------------------------
+# Subchart-level value blocks
+#-----------------------------------------------------------------------------
+
+# CloudNativePG (operator subchart name 'cloudnative-pg' aliased to cloudnativePgOperator)
+postgres:
+  enabled: true
+  byo:
+    enabled: false # if true, skip the Cluster CR; just consume secret refs.
+  cluster:
+    name: tbite-pg
+    instances: 3
+    imageName: ghcr.io/cloudnative-pg/postgresql:17.2
+    storage:
+      size: 100Gi
+      storageClass: ""
+    pooler:
+      enabled: true
+      instances: 2
+      type: rw
+    backup:
+      enabled: true
+      retentionPolicy: "30d"
+      destinationPath: "s3://tbite-prod-pgbackup/"
+      s3CredentialsSecretRef:
+        name: tbite-pg-backup-s3
+        accessKeyKey: ACCESS_KEY_ID
+        secretKeyKey: ACCESS_SECRET_KEY
+    monitoring:
+      enabled: true
+    resources:
+      requests: { cpu: 1, memory: 2Gi }
+      limits: { cpu: 4, memory: 8Gi }
+    postgresql:
+      parameters:
+        max_connections: "400"
+        shared_buffers: "1GB"
+        effective_cache_size: "3GB"
+  pitr:
+    enabled: true
+    targetRpoSeconds: 300
+    targetRtoSeconds: 1800
+
+cloudnativePgOperator:
+  # Subchart values
+  config:
+    create: true
+    data:
+      INHERITED_ANNOTATIONS: "argocd.argoproj.io/*"
+      INHERITED_LABELS: "app.kubernetes.io/*"
+
+valkey:
+  enabled: true
+  architecture: replication
+  replicaCount: 3
+  auth:
+    enabled: true
+    existingSecret: tbite-valkey
+    existingSecretPasswordKey: password
+  sentinel:
+    enabled: true
+    quorum: 2
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+  replica:
+    persistence:
+      enabled: true
+      size: 8Gi
+  metrics:
+    enabled: true
+
+nats:
+  enabled: true
+  cluster:
+    enabled: true
+    replicas: 3
+  config:
+    cluster:
+      enabled: true
+      replicas: 3
+    jetstream:
+      enabled: true
+      fileStore:
+        enabled: true
+        pvc:
+          size: 50Gi
+          storageClassName: ""
+    nats:
+      port: 4222
+  natsBox:
+    enabled: true
+  promExporter:
+    enabled: true
+
+minio:
+  enabled: true
+  operator:
+    enabled: true
+  tenant:
+    enabled: true
+    tenant:
+      name: tbite
+      configSecret:
+        name: tbite-minio-env
+        accessKey: minio
+        secretKey: minio123
+      pools:
+        - servers: 4
+          name: pool-0
+          volumesPerServer: 4
+          size: 1Ti
+          storageClassName: ""
+      buckets:
+        - name: tbite-prod
+          objectLock: false
+      certificate:
+        requestAutoCert: false
+      metrics:
+        enabled: true
+      env:
+        - name: MINIO_PROMETHEUS_AUTH_TYPE
+          value: "public"
+
+minioOperator:
+  operator:
+    replicaCount: 2
+
+minioTenant:
+  # subchart noop holder — values nested under .minio.tenant are passed via library helpers.
+  fullnameOverride: ""
+
+ingress:
+  className: traefik
+  gateway:
+    enabled: true
+    name: tbite-gateway
+    listeners:
+      - name: https
+        port: 443
+        protocol: HTTPS
+        hostname: "*.tbite.example.com"
+        tls:
+          mode: Terminate
+          certificateRefs:
+            - name: tbite-wildcard-tls
+      - name: http
+        port: 80
+        protocol: HTTP
+  certManager:
+    enabled: true
+    issuer:
+      kind: ClusterIssuer # ClusterIssuer | Issuer
+      name: letsencrypt
+      email: ops@tbite.example.com
+      server: https://acme-v02.api.letsencrypt.org/directory
+      stagingServer: https://acme-staging-v02.api.letsencrypt.org/directory
+      solver: http01 # http01 | dns01
+
+traefik:
+  enabled: true
+  deployment:
+    replicas: 2
+  ingressRoute:
+    dashboard:
+      enabled: false
+  providers:
+    kubernetesGateway:
+      enabled: true
+      experimentalChannel: true
+    kubernetesCRD:
+      enabled: true
+    kubernetesIngress:
+      enabled: false
+  experimental:
+    kubernetesGateway:
+      enabled: true
+  gatewayClass:
+    name: traefik
+  ports:
+    web:
+      port: 8000
+      exposedPort: 80
+      redirectTo:
+        port: websecure
+    websecure:
+      port: 8443
+      exposedPort: 443
+      tls:
+        enabled: true
+  metrics:
+    prometheus:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+
+certManager:
+  enabled: true
+
+cert-manager:
+  installCRDs: true
+  global:
+    leaderElection:
+      namespace: cert-manager
+  prometheus:
+    enabled: true
+    servicemonitor:
+      enabled: true
+
+authentik:
+  enabled: true
+  externalHost: "" # set when BYO Authentik
+  authentik:
+    secret_key: "PLEASE-REPLACE-VIA-SOPS-OR-SEALED-SECRET"
+    error_reporting:
+      enabled: false
+    postgresql:
+      host: tbite-pg-rw
+      name: authentik
+      user: authentik
+      password: "PLEASE-REPLACE"
+    redis:
+      host: tbite-platform-valkey-master
+  server:
+    replicas: 2
+    ingress:
+      enabled: false # we expose via HTTPRoute
+  worker:
+    replicas: 2
+  postgresql:
+    enabled: false
+  redis:
+    enabled: false
+  ingress:
+    host: auth.tbite.example.com
+
+hydra:
+  enabled: true
+  externalUrl: "" # set when BYO Hydra
+  hydra:
+    config:
+      dsn: "memory" # operators MUST set this via secret in real deploys
+      urls:
+        self:
+          issuer: https://hydra.tbite.example.com
+        consent: https://app.tbite.example.com/consent
+        login: https://app.tbite.example.com/login
+        logout: https://app.tbite.example.com/logout
+      secrets:
+        system:
+          - "PLEASE-REPLACE-VIA-SOPS-OR-SEALED-SECRET"
+  ingress:
+    public:
+      enabled: false
+    admin:
+      enabled: false
+  replicaCount: 2
+  ingressHost: hydra.tbite.example.com
+
+#-----------------------------------------------------------------------------
+# Observability stack
+#-----------------------------------------------------------------------------
+observability:
+  victoriaMetrics:
+    enabled: true
+    retention: "12mo"
+  victoriaLogs:
+    enabled: true
+    retention: "30d"
+  victoriaTraces:
+    enabled: true
+    retention: "30d"
+  grafana:
+    enabled: true
+    adminPasswordSecretRef:
+      name: tbite-grafana-admin
+      key: password
+    ingressHost: grafana.tbite.example.com
+  otelCollector:
+    enabled: true
+    serviceName: opentelemetry-collector
+    grpcPort: 4317
+    httpPort: 4318
+    # Set to true if the OpenTelemetry *Operator* is already installed in
+    # the cluster and you prefer to drive the collector via the
+    # OpenTelemetryCollector CR rather than the bundled collector chart.
+    useOperatorCR: false
+
+# Subchart values for victoria-metrics-k8s-stack
+victoria-metrics-k8s-stack:
+  vmsingle:
+    spec:
+      retentionPeriod: "12"
+      storage:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 50Gi
+  vmagent:
+    enabled: true
+  alertmanager:
+    enabled: true
+  vmalert:
+    enabled: true
+  grafana:
+    enabled: true
+    adminPassword: "PLEASE-REPLACE-VIA-SOPS"
+
+victoria-logs-single:
+  server:
+    retentionPeriod: "30d"
+    persistentVolume:
+      enabled: true
+      size: 50Gi
+
+victoria-traces-single:
+  server:
+    retentionPeriod: "30d"
+    persistentVolume:
+      enabled: true
+      size: 50Gi
+
+opentelemetry-collector:
+  mode: deployment
+  replicaCount: 2
+  image:
+    repository: otel/opentelemetry-collector-contrib
+  presets:
+    kubernetesAttributes:
+      enabled: true
+  ports:
+    otlp:
+      enabled: true
+      containerPort: 4317
+      servicePort: 4317
+    otlp-http:
+      enabled: true
+      containerPort: 4318
+      servicePort: 4318
+
+keda:
+  enabled: true
+
+#-----------------------------------------------------------------------------
+# SOPS / secret management hints
+#-----------------------------------------------------------------------------
+sops:
+  enabled: true
+  ageRecipientSecretRef:
+    name: tbite-sops-age
+    key: pub
+
+#-----------------------------------------------------------------------------
+# NetworkPolicy defaults
+#-----------------------------------------------------------------------------
+networkPolicy:
+  enabled: true
+  # Default-deny applies to the namespace; allow rules per-role grant egress
+  # to the OTel collector and dependencies they need.
+
+#-----------------------------------------------------------------------------
+# Common alert thresholds
+#-----------------------------------------------------------------------------
+alerting:
+  enabled: true
+  thresholds:
+    poolSaturationPct: 80
+    replicaLagSeconds: 30
+    outboxAgeSeconds: 60
+    sseConnPerPod: 800
+    fanoutLagSeconds: 5

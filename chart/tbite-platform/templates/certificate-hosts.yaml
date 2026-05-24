@@ -1,0 +1,34 @@
+{{- if .Values.ingress.certManager.enabled }}
+{{- $ctx := . -}}
+{{- $issuerRef := dict "kind" .Values.ingress.certManager.issuer.kind "name" .Values.ingress.certManager.issuer.name -}}
+{{/* Build list of host secrets to mint */}}
+{{- $hosts := list -}}
+{{- if .Values.api.enabled }}{{- $hosts = append $hosts (dict "name" "api" "host" .Values.api.ingress.host) -}}{{- end -}}
+{{- if .Values.realtime.enabled }}{{- $hosts = append $hosts (dict "name" "realtime" "host" .Values.realtime.ingress.host) -}}{{- end -}}
+{{- if .Values.web.employee.enabled }}{{- $hosts = append $hosts (dict "name" "web-employee" "host" .Values.web.employee.ingress.host) -}}{{- end -}}
+{{- if .Values.web.merchant.enabled }}{{- $hosts = append $hosts (dict "name" "web-merchant" "host" .Values.web.merchant.ingress.host) -}}{{- end -}}
+{{- if .Values.web.admin.enabled }}{{- $hosts = append $hosts (dict "name" "web-admin" "host" .Values.web.admin.ingress.host) -}}{{- end -}}
+{{- if .Values.authentik.enabled }}{{- $hosts = append $hosts (dict "name" "authentik" "host" .Values.authentik.ingress.host) -}}{{- end -}}
+{{- if .Values.hydra.enabled }}{{- $hosts = append $hosts (dict "name" "hydra" "host" .Values.hydra.ingressHost) -}}{{- end -}}
+{{- if and .Values.observability.grafana.enabled .Values.observability.victoriaMetrics.enabled }}{{- $hosts = append $hosts (dict "name" "grafana" "host" .Values.observability.grafana.ingressHost) -}}{{- end -}}
+{{- range $h := $hosts }}
+{{- if $h.host }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ printf "%s-%s-tls" (include "tbite.fullname" $ctx) $h.name }}
+  namespace: {{ include "tbite.namespace" $ctx }}
+  labels:
+    {{- include "tbite.labels" $ctx | nindent 4 }}
+    app.kubernetes.io/component: {{ $h.name }}
+spec:
+  secretName: {{ printf "%s-%s-tls" (include "tbite.fullname" $ctx) $h.name }}
+  dnsNames:
+    - {{ $h.host | quote }}
+  issuerRef:
+    kind: {{ $issuerRef.kind }}
+    name: {{ $issuerRef.name }}
+{{- end }}
+{{- end }}
+{{- end }}

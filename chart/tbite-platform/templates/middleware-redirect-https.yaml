@@ -1,0 +1,27 @@
+{{- if .Values.ingress.gateway.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "tbite.fullname" . }}-redirect-https
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "tbite.fullname" . }}-sse-passthrough
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+spec:
+  # Keep the connection open for long-lived SSE; disable any response buffering
+  # the proxy might apply.
+  buffering:
+    maxRequestBodyBytes: 0
+    maxResponseBodyBytes: 0
+{{- end }}

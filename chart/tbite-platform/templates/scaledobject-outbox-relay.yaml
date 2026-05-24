@@ -1,0 +1,40 @@
+{{- $cfg := .Values.workers.outboxRelay -}}
+{{- if and $cfg.enabled $cfg.keda.enabled .Values.keda.enabled }}
+{{- $role := "worker-outbox-relay" -}}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}-auth
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" . "role" $role) | nindent 4 }}
+spec:
+  secretTargetRef:
+    - parameter: connection
+      name: {{ $cfg.keda.database.connectionFromSecretRef.name | quote }}
+      key: {{ $cfg.keda.database.connectionFromSecretRef.key | quote }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" . "role" $role) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+  pollingInterval: {{ $cfg.keda.pollingInterval }}
+  cooldownPeriod: {{ $cfg.keda.cooldownPeriod }}
+  minReplicaCount: {{ $cfg.keda.minReplicas }}
+  maxReplicaCount: {{ $cfg.keda.maxReplicas }}
+  triggers:
+    - type: postgresql
+      metadata:
+        query: {{ $cfg.keda.database.query | quote }}
+        targetQueryValue: {{ $cfg.keda.pendingThreshold | quote }}
+      authenticationRef:
+        name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}-auth
+{{- end }}

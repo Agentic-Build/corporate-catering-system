@@ -1,0 +1,27 @@
+{{- if and .Values.authentik.enabled .Values.ingress.gateway.enabled (not .Values.authentik.externalHost) }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "tbite.fullname" . }}-authentik
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: authentik
+spec:
+  parentRefs:
+    - name: {{ .Values.ingress.gateway.name }}
+      sectionName: https
+  hostnames:
+    - {{ .Values.authentik.ingress.host | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        # The authentik subchart exposes a Service named "<release>-authentik-server".
+        - name: {{ printf "%s-authentik-server" .Release.Name | quote }}
+          port: 80
+      timeouts:
+        request: 60s
+{{- end }}

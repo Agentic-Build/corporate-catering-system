@@ -11,9 +11,35 @@ type Role string
 
 const (
 	RoleAPI       Role = "api"
-	RoleWorker    Role = "worker"
-	RoleScheduler Role = "scheduler"
+	RoleWorker    Role = "worker"    // legacy combined worker; retained for backward compat
+	RoleScheduler Role = "scheduler" // legacy combined scheduler; retained for backward compat
 	RoleMCPStdio  Role = "mcp-stdio"
+
+	// Cloud-native split worker roles (architecture #56). Each runs as
+	// an independent Deployment with its own scaling rule and DLQ
+	// behavior. The legacy RoleWorker keeps wrapping outbox-relay +
+	// payroll-settler + on-time-evaluator under one process for
+	// single-node operation; production deployments scale these roles
+	// independently via the Helm chart.
+	RoleOutboxRelay      Role = "outbox-relay"
+	RolePayrollSettler   Role = "payroll-settler"
+	RoleOnTimeEvaluator  Role = "on-time-evaluator"
+	RoleCutoffSweeper    Role = "cutoff-sweeper"
+	RoleNoShowSweeper    Role = "no-show-sweeper"
+	RoleDocExpiryScanner Role = "document-expiry-scanner"
+	RoleFeedbackScanner  Role = "feedback-scanner"
+
+	// Realtime SSE gateway (architecture #58). Serves only the
+	// long-lived SSE endpoints, consuming from JetStream, so that
+	// ordinary API request pods do not carry primary long-connection
+	// load.
+	RoleRealtimeGateway Role = "realtime-gateway"
+
+	// One-shot provisioning role (architecture #62). Runs as a
+	// Kubernetes Job (pre-install / pre-upgrade Helm hook) to declare
+	// JetStream streams and consumers, then exits. Removes the
+	// data-plane mutation from ordinary worker startup.
+	RoleProvisionStreams Role = "provision-streams"
 )
 
 type Config struct {
@@ -21,9 +47,21 @@ type Config struct {
 	HTTPAddr string
 	LogLevel string
 
-	DatabaseRW string
-	RedisURL   string
-	NATSURL    string
+	// DatabaseRW is the read/write connection string aimed at the
+	// Postgres primary. DatabaseRO is the read-only fan-out string
+	// aimed at a replica (or a PgBouncer pool fronting replicas);
+	// it falls back to DatabaseRW when empty, which preserves the
+	// behaviour of small deployments that do not yet run replicas.
+	// See architecture ADR-0007 (#54).
+	DatabaseRW   string
+	DatabaseRO   string
+	DBMaxConns   int32
+	DBMinConns   int32
+	DBMaxConnsRO int32
+	DBMinConnsRO int32
+
+	RedisURL string
+	NATSURL  string
 
 	AuthProviders []AuthProviderConfig
 
@@ -77,9 +115,14 @@ func FromEnv() (Config, error) {
 		HTTPAddr: getenv("HTTP_ADDR", ":8080"),
 		LogLevel: getenv("LOG_LEVEL", "info"),
 
-		DatabaseRW: os.Getenv("DATABASE_RW_URL"),
-		RedisURL:   os.Getenv("REDIS_URL"),
-		NATSURL:    os.Getenv("NATS_URL"),
+		DatabaseRW:   os.Getenv("DATABASE_RW_URL"),
+		DatabaseRO:   os.Getenv("DATABASE_RO_URL"),
+		DBMaxConns:   envInt32("DB_MAX_CONNS", 16),
+		DBMinConns:   envInt32("DB_MIN_CONNS", 2),
+		DBMaxConnsRO: envInt32("DB_MAX_CONNS_RO", 16),
+		DBMinConnsRO: envInt32("DB_MIN_CONNS_RO", 2),
+		RedisURL:     os.Getenv("REDIS_URL"),
+		NATSURL:      os.Getenv("NATS_URL"),
 
 		AuthProviders: providers,
 
@@ -120,6 +163,22 @@ func getenv(k, def string) string {
 		return def
 	}
 	return v
+}
+
+// envInt32 parses an integer env var, returning def on unset or parse error.
+// The chart wires database pool budgets through these vars so HPA / KEDA
+// scaling can be reasoned about against a known total backend connection
+// budget (ADR-0007 / issue #54).
+func envInt32(k string, def int32) int32 {
+	v := os.Getenv(k)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return def
+	}
+	return int32(n)
 }
 
 func authProvidersFromEnv() ([]AuthProviderConfig, error) {
@@ -176,11 +235,28 @@ func splitScopes(raw string) []string {
 
 func ParseRole(s string) (Role, error) {
 	switch Role(s) {
-	case RoleAPI, RoleWorker, RoleScheduler, RoleMCPStdio:
+	case RoleAPI,
+		RoleWorker, RoleScheduler, RoleMCPStdio,
+		RoleOutboxRelay, RolePayrollSettler, RoleOnTimeEvaluator,
+		RoleCutoffSweeper, RoleNoShowSweeper,
+		RoleDocExpiryScanner, RoleFeedbackScanner,
+		RoleRealtimeGateway, RoleProvisionStreams:
 		return Role(s), nil
 	default:
-		return "", fmt.Errorf("invalid role %q (want api|worker|scheduler|mcp-stdio)", s)
+		return "", fmt.Errorf("invalid role %q", s)
 	}
+}
+
+// EffectiveDatabaseRO returns DatabaseRO when set, otherwise the
+// DatabaseRW string. Application code that reads on hot, eventual-
+// consistency paths (menu, home, recommendation) should ask for the
+// RO pool by name; small deployments without a replica still receive a
+// working connection string.
+func (c Config) EffectiveDatabaseRO() string {
+	if c.DatabaseRO == "" {
+		return c.DatabaseRW
+	}
+	return c.DatabaseRO
 }
 
 func MustParsePort(s string) int {

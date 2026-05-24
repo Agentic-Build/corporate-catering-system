@@ -1,17 +1,26 @@
 SHELL := /usr/bin/env bash
 DEV_COMPOSE := docker compose -f ops/local/docker-compose.dev.yml
 KUBECTL ?= kubectl
+HELM    ?= helm
 # Monitoring base reads SoT files from ops/observability/ via configMapGenerator;
 # kustomize blocks that by default for security. We opt in here because the
 # referenced files live in-repo and are reviewed alongside the manifests.
 KUSTOMIZE_FLAGS ?= --load-restrictor=LoadRestrictionsNone
+
+# Canonical Helm umbrella chart (architecture baseline #47).
+CHART_DIR ?= chart/tbite-platform
+CHART_RELEASE ?= tbite
+CHART_NAMESPACE ?= tbite
+CHART_VALUES ?= $(CHART_DIR)/values-dev.yaml
 
 .PHONY: help \
         dev dev-down dev-reset dev-logs \
         migrate-up migrate-down migrate-new seed \
         contract-sync test-go test-web test-e2e \
         render-overlay build clean \
-        prod-up prod-down prod-status
+        prod-up prod-down prod-status \
+        sops-encrypt sops-decrypt sops-edit \
+        chart-deps chart-lint chart-render chart-install chart-upgrade chart-uninstall
 
 help:
 	@awk -F':.*##' '/^[a-zA-Z0-9_-]+:.*##/ {printf "  \033[36m%-20s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -95,3 +104,41 @@ prod-down: ## Remove overlay from current kubectl context (env=single-node|gcp)
 	@echo "==> context: $$($(KUBECTL) config current-context)"
 	@read -r -p "Delete? [y/N] " yn; [ "$$yn" = "y" ] || [ "$$yn" = "Y" ] || (echo "aborted." && exit 1)
 	@$(KUBECTL) kustomize $(KUSTOMIZE_FLAGS) ops/kubernetes/overlays/$(env) | $(KUBECTL) delete --ignore-not-found -f -
+
+chart-deps: ## Resolve and download Helm subchart dependencies (offline-friendly after first run)
+	@$(HELM) dependency update $(CHART_DIR)
+
+chart-lint: ## Lint the umbrella chart against values-dev.yaml + values-prod.yaml
+	@$(HELM) lint $(CHART_DIR) -f $(CHART_DIR)/values-dev.yaml
+	@$(HELM) lint $(CHART_DIR) -f $(CHART_DIR)/values-prod.yaml
+
+chart-render: ## Render the chart to stdout. Usage: make chart-render VALUES=chart/tbite-platform/values-prod.yaml
+	@$(HELM) template $(CHART_RELEASE) $(CHART_DIR) -f $(CHART_VALUES) --namespace $(CHART_NAMESPACE)
+
+chart-install: ## Install the umbrella chart into the current kubectl context
+	@echo "==> context: $$($(KUBECTL) config current-context)"
+	@echo "==> chart:   $(CHART_DIR)"
+	@echo "==> values:  $(CHART_VALUES)"
+	@read -r -p "Install? [y/N] " yn; [ "$$yn" = "y" ] || [ "$$yn" = "Y" ] || (echo "aborted." && exit 1)
+	@$(HELM) install $(CHART_RELEASE) $(CHART_DIR) -f $(CHART_VALUES) --namespace $(CHART_NAMESPACE) --create-namespace
+
+chart-upgrade: ## Upgrade the umbrella chart release
+	@echo "==> context: $$($(KUBECTL) config current-context)"
+	@$(HELM) upgrade $(CHART_RELEASE) $(CHART_DIR) -f $(CHART_VALUES) --namespace $(CHART_NAMESPACE) --install
+
+chart-uninstall: ## Uninstall the umbrella chart release
+	@echo "==> context: $$($(KUBECTL) config current-context)"
+	@read -r -p "Uninstall release $(CHART_RELEASE) from namespace $(CHART_NAMESPACE)? [y/N] " yn; [ "$$yn" = "y" ] || [ "$$yn" = "Y" ] || (echo "aborted." && exit 1)
+	@$(HELM) uninstall $(CHART_RELEASE) --namespace $(CHART_NAMESPACE)
+
+sops-encrypt:  ## Encrypt a YAML file in place. Usage: make sops-encrypt FILE=ops/secrets/example.sops.yaml
+	@test -n "$(FILE)" || (echo "FILE=... required"; exit 1)
+	sops -e -i $(FILE)
+
+sops-decrypt:  ## Decrypt a SOPS-encrypted file to stdout. Usage: make sops-decrypt FILE=ops/secrets/prod.sops.yaml
+	@test -n "$(FILE)" || (echo "FILE=... required"; exit 1)
+	sops -d $(FILE)
+
+sops-edit:     ## Edit a SOPS-encrypted file with $$EDITOR. Usage: make sops-edit FILE=ops/secrets/prod.sops.yaml
+	@test -n "$(FILE)" || (echo "FILE=... required"; exit 1)
+	sops $(FILE)

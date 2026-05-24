@@ -61,6 +61,13 @@ configMapGenerator:
       - dashboards/auth.json
       - dashboards/business-kpi.json
       - dashboards/dev-loop.json
+      # architecture-baseline-47: SLI dashboards for issues #52, #54, #56, #57, #58, #62
+      - dashboards/pg-routing.json
+      - dashboards/outbox-and-events.json
+      - dashboards/sse-gateway.json
+      - dashboards/read-models.json
+      - dashboards/object-storage.json
+      - dashboards/role-readiness.json
 
 generatorOptions:
   disableNameSuffixHash: true

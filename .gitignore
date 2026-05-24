@@ -68,3 +68,7 @@ playwright-report/
 
 # Worktrees
 .worktrees/
+
+# Helm subchart tarballs (operators resolve via `make chart-deps`).
+# Chart.lock IS committed so versions stay reproducible.
+chart/*/charts/*.tgz

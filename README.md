@@ -2,21 +2,35 @@
 
 > 員工 / 商家 / 福委會三端 + Go modular monolith API
 
-A monorepo: 3 SvelteKit frontends + a Go modular monolith + dual K8s overlays (single-node / GCP) + an MCP server for AI agents.
+A monorepo: 3 SvelteKit frontends + a Go modular monolith + a self-hostable cloud-native Helm umbrella chart + an MCP server for AI agents.
 
 ## Architecture
 
+The canonical architecture is recorded in [`docs/architecture/`](docs/architecture/). The
+baseline ([#47](docs/architecture/00-baseline.md)) and the fifteen sub-decisions (ADRs
+0001–0008 and architecture specs 0001–0007) describe the locked deployment
+shape: Kubernetes-only runtime, Helm umbrella chart, CloudNativePG + PgBouncer
++ Valkey HA + NATS JetStream + MinIO Operator data plane, Victoria
+observability stack, SOPS+age secrets, plant-aware scaling, role-split
+workers, outbox-only publishing, dedicated SSE realtime gateway, read-model
+caching, direct object-storage path, Authentik+Hydra identity boundary, and
+workload-aware autoscaling.
+
 ```
-3 SvelteKit apps         <-->  Go API (chi + huma)  <-->  Postgres / Redis / NATS / S3
-employee/merchant/admin        same binary, 4 roles:
-                               api / worker / scheduler / mcp-stdio
+3 SvelteKit apps        <-->  Go binary (one image, many roles)  <-->  Postgres / Valkey / NATS / S3
+employee/merchant/admin       api / realtime-gateway / outbox-relay /
+                              payroll-settler / on-time-evaluator /
+                              cutoff-sweeper / no-show-sweeper /
+                              document-expiry-scanner / feedback-scanner /
+                              mcp-stdio / provision-streams
+                              (legacy: worker / scheduler)
 ```
 
 - **Frontend**: SvelteKit 2 + Svelte 5 + Tailwind 3 (adapter-node, SSR)
-- **Backend**: Go 1.23 modular monolith
-- **Data**: Postgres (state of record), Redis (sessions / cache), NATS JetStream (events), S3-compatible object storage (HR CSV / vendor docs)
-- **Observability**: OpenTelemetry traces via OTLP HTTP
-- **Deployment**: dual kustomize overlay — `single-node` for any self-managed cluster, `gcp` for GKE + Cloud SQL + Memorystore + GCS
+- **Backend**: Go 1.23 modular monolith dispatched into per-role Deployments by `--role=<name>`
+- **Data**: Postgres (state of record, RW + RO routing), Valkey HA (sessions / cache / read models), NATS JetStream (durable events + outbox-only publication), S3-compatible object storage (presigned upload/download)
+- **Observability**: OpenTelemetry → VictoriaMetrics + VictoriaLogs + VictoriaTraces + Grafana
+- **Deployment**: Helm umbrella chart [`chart/tbite-platform`](chart/tbite-platform/) as the canonical path; kustomize overlays under [`ops/kubernetes/overlays/`](ops/kubernetes/overlays/) remain available for the legacy single-node / GCP shapes during the chart roll-out
 
 ## Local development
 
@@ -64,7 +78,31 @@ make dev-logs svc=postgres
 
 ## Production deployment
 
-Two overlays, same `make` interface:
+### Helm umbrella chart (canonical)
+
+The Helm umbrella chart at [`chart/tbite-platform`](chart/tbite-platform/) is the
+canonical packaging per [ADR-0002](docs/architecture/adr-0002-helm-umbrella-chart.md).
+It ships the application, the self-hosted data plane (CloudNativePG, PgBouncer,
+Valkey HA, NATS JetStream, MinIO Operator), the Traefik gateway with cert-manager,
+the Victoria observability stack, the OpenTelemetry Collector, KEDA, and the
+optional Authentik + Hydra identity providers. The same chart renders for
+dev (`values-dev.yaml`) and prod (`values-prod.yaml`); BYO endpoints are
+supplied through values without changing application code.
+
+```bash
+make chart-deps              # one-shot, populates chart/tbite-platform/charts/
+make chart-lint              # lints against values-dev + values-prod
+make chart-render            # dry-renders to stdout (VALUES=… to override)
+make chart-install           # installs into current kubectl context (interactive)
+make chart-upgrade           # upgrades the release
+```
+
+Secrets are managed with SOPS + age — see [`docs/deployment/secrets.md`](docs/deployment/secrets.md)
+and [`docs/deployment/airgapped.md`](docs/deployment/airgapped.md).
+
+### Legacy kustomize overlays
+
+The two earlier overlays remain available during the chart roll-out:
 
 ```bash
 make prod-up env=single-node    # any reachable k8s cluster

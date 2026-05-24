@@ -1,0 +1,136 @@
+apiVersion: v2
+name: tbite-platform
+description: |
+  Umbrella Helm chart for the tbite corporate catering platform.
+  Self-hostable cloud-native baseline (CNPG, NATS JetStream, MinIO, Valkey,
+  cert-manager, Traefik Gateway API, Authentik, Hydra, Victoria-Metrics stack,
+  OpenTelemetry, KEDA) plus the application workloads (api, realtime gateway,
+  three SSR frontends, queue-driven workers and singleton schedulers).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.29.0-0"
+
+home: https://github.com/JacobLinCool/corporate-catering-system
+sources:
+  - https://github.com/JacobLinCool/corporate-catering-system
+
+maintainers:
+  - name: tbite-platform
+    url: https://github.com/JacobLinCool/corporate-catering-system
+
+keywords:
+  - corporate-catering
+  - tbite
+  - self-hosted
+  - cloud-native
+
+annotations:
+  category: Application
+  artifacthub.io/changes: |
+    - kind: added
+      description: initial umbrella chart
+
+# All dependencies are conditionally enabled via "<key>.enabled" so operators
+# can BYO (bring-your-own) external endpoints in production.
+dependencies:
+  - name: cloudnative-pg
+    version: 0.28.2
+    repository: https://cloudnative-pg.github.io/charts
+    condition: postgres.enabled
+    alias: cloudnativePgOperator
+    tags:
+      - postgres
+
+  - name: valkey
+    version: 6.0.2
+    repository: https://charts.bitnami.com/bitnami
+    condition: valkey.enabled
+    tags:
+      - cache
+
+  - name: nats
+    version: 2.14.0
+    repository: https://nats-io.github.io/k8s/helm/charts/
+    condition: nats.enabled
+    tags:
+      - messaging
+
+  - name: operator
+    alias: minioOperator
+    version: 7.1.1
+    repository: https://operator.min.io
+    condition: minio.operator.enabled
+    tags:
+      - object-storage
+
+  - name: tenant
+    alias: minioTenant
+    version: 7.1.1
+    repository: https://operator.min.io
+    condition: minio.tenant.enabled
+    tags:
+      - object-storage
+
+  - name: cert-manager
+    version: v1.20.2
+    repository: https://charts.jetstack.io
+    condition: certManager.enabled
+    tags:
+      - tls
+
+  - name: traefik
+    version: 40.2.0
+    repository: https://traefik.github.io/charts
+    condition: traefik.enabled
+    tags:
+      - ingress
+
+  - name: authentik
+    version: 2026.5.0
+    repository: https://charts.goauthentik.io
+    condition: authentik.enabled
+    tags:
+      - identity
+
+  - name: hydra
+    version: 0.61.2
+    repository: https://k8s.ory.sh/helm/charts
+    condition: hydra.enabled
+    tags:
+      - identity
+
+  - name: victoria-metrics-k8s-stack
+    version: 0.79.1
+    repository: https://victoriametrics.github.io/helm-charts/
+    condition: observability.victoriaMetrics.enabled
+    tags:
+      - observability
+
+  - name: victoria-logs-single
+    version: 0.12.4
+    repository: https://victoriametrics.github.io/helm-charts/
+    condition: observability.victoriaLogs.enabled
+    tags:
+      - observability
+
+  - name: victoria-traces-single
+    version: 0.0.9
+    repository: https://victoriametrics.github.io/helm-charts/
+    condition: observability.victoriaTraces.enabled
+    tags:
+      - observability
+
+  - name: opentelemetry-collector
+    version: 0.156.2
+    repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+    condition: observability.otelCollector.enabled
+    tags:
+      - observability
+
+  - name: keda
+    version: 2.19.0
+    repository: https://kedacore.github.io/charts
+    condition: keda.enabled
+    tags:
+      - autoscaling

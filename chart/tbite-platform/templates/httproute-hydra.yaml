@@ -1,0 +1,26 @@
+{{- if and .Values.hydra.enabled .Values.ingress.gateway.enabled (not .Values.hydra.externalUrl) }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "tbite.fullname" . }}-hydra
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hydra
+spec:
+  parentRefs:
+    - name: {{ .Values.ingress.gateway.name }}
+      sectionName: https
+  hostnames:
+    - {{ .Values.hydra.ingressHost | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ printf "%s-hydra-public" .Release.Name | quote }}
+          port: 4444
+      timeouts:
+        request: 30s
+{{- end }}

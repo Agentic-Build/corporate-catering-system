@@ -1,0 +1,28 @@
+{{- $cfg := .Values.workers.onTimeEvaluator -}}
+{{- if and $cfg.enabled $cfg.keda.enabled .Values.keda.enabled }}
+{{- $role := "worker-on-time-evaluator" -}}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" . "role" $role) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+  pollingInterval: {{ $cfg.keda.pollingInterval }}
+  cooldownPeriod: {{ $cfg.keda.cooldownPeriod }}
+  minReplicaCount: {{ $cfg.keda.minReplicas }}
+  maxReplicaCount: {{ $cfg.keda.maxReplicas }}
+  triggers:
+    - type: nats-jetstream
+      metadata:
+        natsServerMonitoringEndpoint: {{ printf "http://%s-nats:8222" (include "tbite.fullname" .) | quote }}
+        account: "$G"
+        stream: {{ $cfg.keda.stream | quote }}
+        consumer: {{ $cfg.keda.consumer | quote }}
+        lagThreshold: {{ $cfg.keda.lagThreshold | quote }}
+{{- end }}

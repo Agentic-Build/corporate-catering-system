@@ -138,3 +138,207 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: Authentication failures > 5/s for 5m
+
+  # ---------------------------------------------------------------------------
+  # Architecture baseline #47 — SLI coverage for issues #52, #54, #56, #57,
+  # #58, #62. Threshold rationale lives inline next to each rule. These rules
+  # APPEND to the existing groups above; the alphabetical-prefix ordering is
+  # intentional so the new groups sort below the original SRE policy.
+  # ---------------------------------------------------------------------------
+
+  - name: pg-routing
+    interval: 30s
+    rules:
+      # Issue #52: api/realtime/worker each own a pgxpool sized to fit within
+      # the shared Postgres max_connections budget. 80% sustained = capacity
+      # planning signal, 95% = imminent saturation that will stall requests.
+      # otelpgx emits pg_pool_in_use / pg_pool_max with a `role` resource
+      # attribute set by the application (api|realtime|worker). If the metric
+      # name changes upstream, fall back to pgxpool_acquired_conns /
+      # pgxpool_max_conns.
+      - alert: PostgresPoolSaturationWarning
+        expr: (pg_pool_in_use / pg_pool_max) > 0.8
+        for: 5m
+        labels: { severity: warning, slo: pg-pool-saturation }
+        annotations:
+          summary: pgxpool {{ $labels.role }} > 80% utilized for 5m
+          runbook: Verify replica routing; consider scaling role or pool size.
+
+      - alert: PostgresPoolSaturationCritical
+        expr: (pg_pool_in_use / pg_pool_max) > 0.95
+        for: 2m
+        labels: { severity: critical, slo: pg-pool-saturation }
+        annotations:
+          summary: pgxpool {{ $labels.role }} > 95% utilized for 2m — requests will queue
+          runbook: Scale role replicas or raise pool size. Check for runaway queries.
+
+      # Issue #52: RO routing for read-only API + read-models depends on the
+      # streaming replica being fresh. 30s lag means stale reads for the
+      # "just placed an order" UX; 2 minutes means the replica is materially
+      # broken and the RO router should fall back to primary.
+      - alert: PostgresReplicaLagWarning
+        expr: pg_replication_lag_seconds > 30
+        for: 5m
+        labels: { severity: warning, slo: pg-replica-lag }
+        annotations:
+          summary: Postgres replica lag > 30s for 5m
+          runbook: RO reads may be stale. Verify wal_sender on primary + apply rate on replica.
+
+      - alert: PostgresReplicaLagCritical
+        expr: pg_replication_lag_seconds > 120
+        for: 2m
+        labels: { severity: critical, slo: pg-replica-lag }
+        annotations:
+          summary: Postgres replica lag > 120s for 2m — RO routing should fall back to primary
+          runbook: Page DB on-call. Read-models may be serving stale data.
+
+      # Issue #52 + #54: rising deadlocks indicate either schema-hotspot
+      # contention (line_items, payroll_ledger) or transaction-ordering bugs
+      # introduced by the new outbox writer paths.
+      - alert: PostgresDeadlocksRising
+        expr: rate(pg_stat_database_deadlocks[5m]) > 0.1
+        for: 5m
+        labels: { severity: warning, slo: pg-deadlocks }
+        annotations:
+          summary: Postgres deadlock rate > 0.1/s for 5m
+          runbook: Inspect pg_stat_database + pg_locks; correlate with recent migrations.
+
+  - name: outbox-and-events
+    interval: 30s
+    rules:
+      # Issue #54: outbox-relay budget. 30s = relay is falling behind (acks
+      # to NATS take ~ms in healthy state), 120s = critical because event
+      # consumers downstream (payroll, on-time, read-model) are starving.
+      # This complements the existing OutboxRelayStalled alert which uses
+      # the older tbite_outbox_oldest_seconds gauge — once apps migrate to
+      # the new _seconds suffix from the rfc/relay-rewrite both metrics will
+      # exist; alerts on either suffice.
+      - alert: OutboxAgeWarning
+        expr: tbite_outbox_oldest_unpublished_seconds > 30
+        for: 2m
+        labels: { severity: warning, slo: outbox-age }
+        annotations:
+          summary: Outbox oldest unpublished row > 30s for 2m
+          runbook: Check outbox-relay pod logs + NATS publish latency.
+
+      - alert: OutboxAgeCritical
+        expr: tbite_outbox_oldest_unpublished_seconds > 120
+        for: 1m
+        labels: { severity: critical, slo: outbox-age }
+        annotations:
+          summary: Outbox oldest unpublished row > 120s for 1m — downstream consumers starving
+          runbook: Page worker on-call. Inspect outbox-relay readiness + NATS connectivity.
+
+      # Issue #56 + #57: per-consumer lag, separated so each on-call rotation
+      # gets a targeted page rather than a generic JetStream alert. The
+      # async-plane group above already fires JetstreamConsumerLagHigh on the
+      # union; these rules give per-role granularity for the new workers.
+      - alert: OutboxRelayConsumerLag
+        expr: jetstream_consumer_num_pending{consumer_name=~"outbox-relay.*"} > 1000
+        for: 5m
+        labels: { severity: warning, slo: jetstream-lag, role: outbox_relay }
+        annotations:
+          summary: outbox-relay consumer pending > 1000 for 5m on {{ $labels.stream_name }}
+
+      - alert: PayrollSettlerConsumerLag
+        expr: jetstream_consumer_num_pending{consumer_name=~"payroll-settler.*"} > 1000
+        for: 5m
+        labels: { severity: warning, slo: jetstream-lag, role: payroll_settler }
+        annotations:
+          summary: payroll-settler consumer pending > 1000 for 5m on {{ $labels.stream_name }}
+
+      - alert: OnTimeEvaluatorConsumerLag
+        expr: jetstream_consumer_num_pending{consumer_name=~"on-time-evaluator.*"} > 1000
+        for: 5m
+        labels: { severity: warning, slo: jetstream-lag, role: on_time_evaluator }
+        annotations:
+          summary: on-time-evaluator consumer pending > 1000 for 5m on {{ $labels.stream_name }}
+
+      # Issue #54: any DLQ growth at all in a 15m window is a signal. We
+      # intentionally avoid a "> N" threshold because the operational
+      # expectation is zero — a single poison message is worth a page.
+      - alert: DlqGrowth
+        expr: increase(tbite_dlq_messages_total[15m]) > 0
+        for: 0m
+        labels: { severity: warning, slo: dlq-growth }
+        annotations:
+          summary: DLQ grew in the last 15m (stream={{ $labels.source_stream }})
+          runbook: Triage poison message in DLQ; reprocess or quarantine.
+
+  - name: sse-gateway
+    interval: 30s
+    rules:
+      # Issue #56: SSE realtime gateway has a per-pod connection budget.
+      # 5000 concurrent SSE streams per pod is the validated soak ceiling
+      # (see ops/observability/load/staged-capacity-policy.json). Above
+      # that we expect goroutine pressure and head-of-line blocking.
+      - alert: SseConnectionSaturation
+        expr: tbite_sse_active_connections > 5000
+        for: 5m
+        labels: { severity: warning, slo: sse-connection-saturation }
+        annotations:
+          summary: SSE pod {{ $labels.pod }} holding > 5000 connections for 5m
+          runbook: Scale realtime replicas or inspect for stuck connections.
+
+      # Issue #56: fanout lag = time between event arriving at gateway and
+      # being flushed to subscriber. 5s is the agreed UX SLO for "live"
+      # updates (board, pickup countdown). Sustained breach implies CPU
+      # starvation or downstream subscriber backpressure.
+      - alert: SseFanoutLag
+        expr: tbite_sse_fanout_lag_seconds > 5
+        for: 5m
+        labels: { severity: warning, slo: sse-fanout-lag }
+        annotations:
+          summary: SSE fanout lag > 5s for 5m on {{ $labels.topic }}
+          runbook: Check realtime CPU + JetStream consumer ack rate.
+
+  - name: object-storage
+    interval: 30s
+    rules:
+      # Issue #58: presigned URL signing failures break uploads/downloads.
+      # 0.05/s = roughly 1 failure per 20s sustained — meaningfully above
+      # the noise floor of transient KMS / IAM hiccups.
+      - alert: PresignedUrlSigningErrors
+        expr: rate(tbite_object_signing_errors_total[5m]) > 0.05
+        for: 5m
+        labels: { severity: warning, slo: object-signing }
+        annotations:
+          summary: Presigned URL signing error rate > 0.05/s for 5m
+          runbook: Inspect S3/GCS credentials, KMS key health, and IAM bindings.
+
+  - name: role-readiness
+    interval: 30s
+    rules:
+      # Issue #62: per-role /readyz now drives traffic gating. Flapping
+      # (>5 ready transitions in 10m) means the role is oscillating and
+      # rolling pods around — almost always a config or dependency issue.
+      - alert: RoleReadinessFlapping
+        expr: increase(kube_pod_ready_changed_total{namespace="tbite"}[10m]) > 5
+        for: 0m
+        labels: { severity: warning, slo: role-readiness }
+        annotations:
+          summary: Pod {{ $labels.pod }} ready-state changed > 5 times in 10m
+          runbook: Inspect readiness probe target, dependency health (DB/NATS/Redis).
+
+      # Issue #62: db-migrate is an init Job per deploy. Any failure halts
+      # rollout; needs immediate page so the release driver can either
+      # rerun or roll back the schema change.
+      - alert: DbMigrationJobFailed
+        expr: kube_job_failed{job_name=~"tbite-db-migrate.*"} > 0
+        for: 0m
+        labels: { severity: critical, slo: deploy-pipeline }
+        annotations:
+          summary: tbite-db-migrate Job {{ $labels.job_name }} failed
+          runbook: ops/chaos/drill-runbook.md#db-migration-failure
+
+      # Issue #54: stream-provision is the pre-rollout Job that creates/
+      # updates JetStream streams + consumers. Failure means the new
+      # subjects will not be wired; downstream consumers will report
+      # JetstreamConsumerLagHigh shortly after.
+      - alert: StreamProvisionJobFailed
+        expr: kube_job_failed{job_name=~"tbite-provision-streams.*"} > 0
+        for: 0m
+        labels: { severity: critical, slo: deploy-pipeline }
+        annotations:
+          summary: tbite-provision-streams Job {{ $labels.job_name }} failed
+          runbook: Inspect JetStream connectivity; rerun the Job after fix.

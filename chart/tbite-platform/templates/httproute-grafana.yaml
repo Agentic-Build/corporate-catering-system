@@ -1,0 +1,27 @@
+{{- if and .Values.observability.grafana.enabled .Values.observability.victoriaMetrics.enabled .Values.ingress.gateway.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "tbite.fullname" . }}-grafana
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  parentRefs:
+    - name: {{ .Values.ingress.gateway.name }}
+      sectionName: https
+  hostnames:
+    - {{ .Values.observability.grafana.ingressHost | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        # victoria-metrics-k8s-stack ships grafana under "<release>-grafana"
+        - name: {{ printf "%s-grafana" .Release.Name | quote }}
+          port: 80
+      timeouts:
+        request: 60s
+{{- end }}

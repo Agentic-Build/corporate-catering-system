@@ -1,0 +1,179 @@
+# tbite-platform — prod overlay (full HA).
+profile:
+  size: prod
+
+global:
+  podAnnotations:
+    sidecar.istio.io/inject: "false"
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values: [tbite]
+
+api:
+  replicaCount: 3
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 30
+    targetConcurrency: 50
+    targetRPS: 100
+
+realtime:
+  replicaCount: 3
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 15
+    targetActiveConnections: 500
+  terminationGracePeriodSeconds: 120
+
+web:
+  employee:
+    replicaCount: 3
+    hpa: { enabled: true, minReplicas: 3, maxReplicas: 12 }
+  merchant:
+    replicaCount: 2
+    hpa: { enabled: true, minReplicas: 2, maxReplicas: 6 }
+  admin:
+    replicaCount: 2
+    hpa: { enabled: true, minReplicas: 2, maxReplicas: 4 }
+
+workers:
+  outboxRelay:
+    replicaCount: 2
+    keda: { enabled: true, minReplicas: 2, maxReplicas: 20 }
+  payrollSettler:
+    replicaCount: 2
+    keda: { enabled: true, minReplicas: 1, maxReplicas: 10 }
+  onTimeEvaluator:
+    replicaCount: 2
+    keda: { enabled: true, minReplicas: 1, maxReplicas: 10 }
+
+postgres:
+  enabled: true
+  cluster:
+    instances: 3
+    storage:
+      size: 200Gi
+    pooler:
+      enabled: true
+      instances: 3
+    backup:
+      enabled: true
+      retentionPolicy: "30d"
+  pitr:
+    enabled: true
+    targetRpoSeconds: 300
+    targetRtoSeconds: 1800
+
+valkey:
+  enabled: true
+  architecture: replication
+  replicaCount: 3
+  sentinel:
+    enabled: true
+    quorum: 2
+
+nats:
+  enabled: true
+  cluster:
+    enabled: true
+    replicas: 3
+  config:
+    cluster:
+      enabled: true
+      replicas: 3
+    jetstream:
+      enabled: true
+      fileStore:
+        enabled: true
+        pvc:
+          size: 100Gi
+
+minio:
+  enabled: true
+  operator:
+    enabled: true
+  tenant:
+    enabled: true
+    tenant:
+      pools:
+        - servers: 4
+          name: pool-0
+          volumesPerServer: 4
+          size: 1Ti
+
+ingress:
+  certManager:
+    enabled: true
+    issuer:
+      name: letsencrypt
+      server: https://acme-v02.api.letsencrypt.org/directory
+
+traefik:
+  enabled: true
+  deployment:
+    replicas: 3
+
+observability:
+  victoriaMetrics:
+    enabled: true
+    retention: "12mo"
+  victoriaLogs:
+    enabled: true
+    retention: "30d"
+  victoriaTraces:
+    enabled: true
+    retention: "30d"
+  grafana:
+    enabled: true
+  otelCollector:
+    enabled: true
+
+victoria-metrics-k8s-stack:
+  vmsingle:
+    spec:
+      retentionPeriod: "12mo"
+      storage:
+        resources:
+          requests:
+            storage: 500Gi
+  alertmanager:
+    enabled: true
+
+victoria-logs-single:
+  server:
+    retentionPeriod: "30d"
+    persistentVolume:
+      enabled: true
+      size: 200Gi
+
+victoria-traces-single:
+  server:
+    retentionPeriod: "30d"
+    persistentVolume:
+      enabled: true
+      size: 200Gi
+
+opentelemetry-collector:
+  mode: deployment
+  replicaCount: 3
+
+keda:
+  enabled: true
+
+authentik:
+  enabled: true
+hydra:
+  enabled: true
+
+networkPolicy:
+  enabled: true

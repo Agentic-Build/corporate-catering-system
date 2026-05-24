@@ -10,6 +10,7 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/menu/readmodel"
 )
 
 // HomeAPI exposes the employee landing-page aggregate endpoint plus the two
@@ -30,6 +31,33 @@ type HomeAPI struct {
 	// Reused as-is so the home page returns the same shape that
 	// GET /api/employee/menu does for "today".
 	MenuSvc *menu.Service
+
+	// Read-model cache (architecture issue #59). When wired, the
+	// employee home Compute() result is memoised by (user, plant,
+	// day) under a short TTL and the outbox-driven invalidator
+	// drops affected keys on order events. Leaving these zero
+	// preserves the historical uncached path — the BYO-no-Valkey
+	// mode of the chart relies on this.
+	Cache       readmodel.Cache
+	CacheTTL    time.Duration
+	CacheMetric readmodel.Metrics
+}
+
+// computeHome consults the read-model cache when wired. The wrapper
+// exists in this package (not menu/readmodel) so the only call site
+// is the home aggregate endpoint; the chip endpoints recompute
+// because their pagination key would push cache cardinality high.
+func (a *HomeAPI) computeHome(ctx context.Context, userID, plant, day string) (menu.HomeState, error) {
+	if a.Cache == nil {
+		return a.Home.Compute(ctx, userID, plant, day)
+	}
+	w := &readmodel.CachedHome{
+		Inner:   a.Home,
+		Cache:   a.Cache,
+		Metrics: a.CacheMetric,
+		TTL:     a.CacheTTL,
+	}
+	return w.Compute(ctx, userID, plant, day)
 }
 
 // ---------- DTOs ----------
@@ -149,7 +177,7 @@ func (a *HomeAPI) getHome(ctx context.Context, in *homeInput) (*homeOutput, erro
 		return nil, err
 	}
 
-	state, err := a.Home.Compute(ctx, user.ID, plant, in.Day)
+	state, err := a.computeHome(ctx, user.ID, plant, in.Day)
 	if err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
 	}
@@ -224,7 +252,7 @@ func (a *HomeAPI) listReorders(ctx context.Context, in *reordersInput) (*reorder
 	}
 	// We need a target day to compute available_today; reuse Compute() with no
 	// day override so the cursor-based paging stays consistent with /home.
-	state, err := a.Home.Compute(ctx, user.ID, plant, "")
+	state, err := a.computeHome(ctx, user.ID, plant, "")
 	if err != nil {
 		return nil, huma.Error500InternalServerError("compute target day", err)
 	}
@@ -256,7 +284,7 @@ func (a *HomeAPI) listRecommendations(ctx context.Context, in *recommendationsIn
 	}
 	dayStr := in.Day
 	if dayStr == "" {
-		state, derr := a.Home.Compute(ctx, user.ID, plant, "")
+		state, derr := a.computeHome(ctx, user.ID, plant, "")
 		if derr != nil {
 			return nil, huma.Error500InternalServerError("compute target day", derr)
 		}

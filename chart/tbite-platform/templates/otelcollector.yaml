@@ -1,0 +1,62 @@
+{{- /*
+The opentelemetry-collector chart dependency runs the collector as a
+Deployment directly. When the operator-based mode is preferred, set
+observability.otelCollector.useOperatorCR: true (operators install the
+OpenTelemetry Operator separately) and this template renders the CR instead
+of relying on the chart-side Deployment.
+
+Currently this template is gated to render only when the dependency chart
+is NOT enabled, so a single render path is active at a time.
+*/}}
+{{- if and .Values.observability.otelCollector.enabled (default false .Values.observability.otelCollector.useOperatorCR) }}
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: {{ include "tbite.fullname" . }}-otel
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  mode: deployment
+  replicas: 2
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:{{ .Values.observability.otelCollector.grpcPort }}
+          http:
+            endpoint: 0.0.0.0:{{ .Values.observability.otelCollector.httpPort }}
+    processors:
+      batch: {}
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 75
+        spike_limit_percentage: 25
+      k8sattributes:
+        passthrough: false
+    exporters:
+      otlp/traces:
+        endpoint: vmtraces.{{ include "tbite.namespace" . }}.svc:4317
+        tls:
+          insecure: true
+      prometheusremotewrite:
+        endpoint: http://vmsingle.{{ include "tbite.namespace" . }}.svc:8429/api/v1/write
+      otlphttp/logs:
+        endpoint: http://vlogs.{{ include "tbite.namespace" . }}.svc:9428/insert/opentelemetry/v1/logs
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [otlp/traces]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [prometheusremotewrite]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [otlphttp/logs]
+{{- end }}

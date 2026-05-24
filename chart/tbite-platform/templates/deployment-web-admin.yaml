@@ -1,0 +1,82 @@
+{{- $cfg := .Values.web.admin -}}
+{{- if $cfg.enabled }}
+{{- $role := "web-admin" -}}
+{{- $imgRepo := $cfg.image.repository -}}
+{{- $imgTag := default .Chart.AppVersion $cfg.image.tag -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" . "role" $role) | nindent 4 }}
+spec:
+  {{- if not $cfg.hpa.enabled }}
+  replicas: {{ $cfg.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "tbite.roleSelectorLabels" (dict "ctx" . "role" $role) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tbite.roleSelectorLabels" (dict "ctx" . "role" $role) | nindent 8 }}
+        {{- include "tbite.podLabels" . | nindent 8 }}
+      annotations:
+        checksum/configmap: {{ include (print $.Template.BasePath "/configmap-app-env.yaml") . | sha256sum }}
+        {{- include "tbite.podAnnotations" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "tbite.roleServiceAccountName" (dict "ctx" . "role" $role) }}
+      {{- include "tbite.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "tbite.podSecurityContext" . | nindent 8 }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: web
+          image: {{ printf "%s:%s" $imgRepo $imgTag | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $cfg.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "tbite.fullname" . }}-app-env
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: {{ $cfg.port | quote }}
+            - name: PUBLIC_BASE_URL
+              value: {{ $cfg.baseURL | quote }}
+            - name: PUBLIC_API_BASE_URL
+              value: {{ .Values.global.baseURL.api | quote }}
+            - name: PUBLIC_OIDC_ISSUER_URL
+              value: {{ .Values.global.oidcIssuerURL | quote }}
+            {{- include "tbite.otelEnv" . | nindent 12 }}
+          readinessProbe:
+            {{- include "tbite.httpReadinessProbe" (dict "port" "http") | nindent 12 }}
+          livenessProbe:
+            {{- include "tbite.httpLivenessProbe" (dict "port" "http") | nindent 12 }}
+          resources:
+            {{- toYaml $cfg.resources | nindent 12 }}
+          securityContext:
+            {{- include "tbite.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /.next/cache
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+      {{- include "tbite.podScheduling" . | nindent 6 }}
+{{- end }}

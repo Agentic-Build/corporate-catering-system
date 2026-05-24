@@ -1,0 +1,24 @@
+{{- if and .Values.ingress.certManager.enabled (eq .Values.ingress.certManager.issuer.kind "Issuer") }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .Values.ingress.certManager.issuer.name }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+spec:
+  acme:
+    email: {{ .Values.ingress.certManager.issuer.email | quote }}
+    server: {{ .Values.ingress.certManager.issuer.server | quote }}
+    privateKeySecretRef:
+      name: {{ printf "%s-acme-key" .Values.ingress.certManager.issuer.name }}
+    solvers:
+      {{- if eq .Values.ingress.certManager.issuer.solver "http01" }}
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: {{ .Values.ingress.gateway.name }}
+                namespace: {{ include "tbite.namespace" . }}
+                kind: Gateway
+      {{- end }}
+{{- end }}

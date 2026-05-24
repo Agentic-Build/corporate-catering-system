@@ -1,0 +1,30 @@
+{{- if .Values.realtime.enabled }}
+{{- $role := "realtime" -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" . "role" $role) }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" . "role" $role) | nindent 4 }}
+  annotations:
+    # Tell the gateway/proxy to skip buffering for SSE.
+    traefik.ingress.kubernetes.io/service.passhostheader: "true"
+spec:
+  type: ClusterIP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+  selector:
+    {{- include "tbite.roleSelectorLabels" (dict "ctx" . "role" $role) | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.realtime.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+{{- end }}

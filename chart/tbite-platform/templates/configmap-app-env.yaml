@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tbite.fullname" . }}-app-env
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+data:
+  TBITE_PROFILE: {{ .Values.profile.size | quote }}
+  TBITE_DOMAIN: {{ .Values.global.domain | quote }}
+  TBITE_BASE_URL_API: {{ .Values.global.baseURL.api | quote }}
+  TBITE_BASE_URL_EMPLOYEE: {{ .Values.global.baseURL.employee | quote }}
+  TBITE_BASE_URL_MERCHANT: {{ .Values.global.baseURL.merchant | quote }}
+  TBITE_BASE_URL_ADMIN: {{ .Values.global.baseURL.admin | quote }}
+  TBITE_OIDC_ISSUER_URL: {{ .Values.global.oidcIssuerURL | quote }}
+  TBITE_NATS_URL: {{ .Values.global.nats.url | quote }}
+  TBITE_S3_ENDPOINT: {{ .Values.global.s3.endpoint | quote }}
+  TBITE_S3_REGION: {{ .Values.global.s3.region | quote }}
+  TBITE_S3_BUCKET: {{ .Values.global.s3.bucket | quote }}
+  TBITE_REALTIME_TOPIC_SCOPE: {{ .Values.realtime.topicScope | quote }}
+  TBITE_REALTIME_SSE_IDLE_TIMEOUT: {{ .Values.realtime.sseIdleTimeout | quote }}
+{{- if .Values.observability.otelCollector.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ printf "http://%s" (include "tbite.otelCollectorEndpoint" .) | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: {{ .Values.otel.exporterProtocol | quote }}
+  OTEL_SERVICE_NAMESPACE: {{ .Values.otel.serviceNamespace | quote }}
+{{- end }}

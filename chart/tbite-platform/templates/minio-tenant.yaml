@@ -1,0 +1,47 @@
+{{- /*
+This template emits the Tenant CR directly when minio.operator.enabled and the
+minioTenant subchart is not in use (minio.tenant.enabled false). When the
+minioTenant subchart IS enabled, it owns the Tenant resource and this template
+is skipped to avoid duplicates.
+*/}}
+{{- if and .Values.minio.enabled .Values.minio.operator.enabled (not .Values.minio.tenant.enabled) }}
+{{- $t := .Values.minio.tenant.tenant -}}
+apiVersion: minio.min.io/v2
+kind: Tenant
+metadata:
+  name: {{ $t.name }}
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio-tenant
+spec:
+  configuration:
+    name: {{ $t.configSecret.name }}
+  pools:
+    {{- range $i, $pool := $t.pools }}
+    - servers: {{ $pool.servers }}
+      name: {{ $pool.name | quote }}
+      volumesPerServer: {{ $pool.volumesPerServer }}
+      volumeClaimTemplate:
+        metadata:
+          name: data
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          {{- with $pool.storageClassName }}
+          storageClassName: {{ . | quote }}
+          {{- end }}
+          resources:
+            requests:
+              storage: {{ $pool.size }}
+    {{- end }}
+  buckets:
+    {{- range $t.buckets }}
+    - name: {{ .name | quote }}
+      objectLock: {{ .objectLock | default false }}
+    {{- end }}
+  requestAutoCert: {{ $t.certificate.requestAutoCert }}
+  env:
+    {{- with $t.env }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

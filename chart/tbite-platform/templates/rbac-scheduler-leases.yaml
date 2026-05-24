@@ -1,0 +1,41 @@
+{{/*
+Schedulers run as singletons coordinated via coordination.k8s.io Leases.
+Each scheduler ServiceAccount needs RBAC to create/update its own Lease.
+*/}}
+{{- $ctx := . -}}
+{{- $schedulers := dict "scheduler-cutoff" .Values.scheduler.cutoffSweeper "scheduler-no-show" .Values.scheduler.noShowSweeper "scheduler-doc-expiry" .Values.scheduler.documentExpiryScanner "scheduler-feedback" .Values.scheduler.feedbackScanner -}}
+{{- range $role, $cfg := $schedulers }}
+{{- if $cfg.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" $ctx "role" $role) }}-lease
+  namespace: {{ include "tbite.namespace" $ctx }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" $ctx "role" $role) | nindent 4 }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "tbite.roleFullname" (dict "ctx" $ctx "role" $role) }}-lease
+  namespace: {{ include "tbite.namespace" $ctx }}
+  labels:
+    {{- include "tbite.roleLabels" (dict "ctx" $ctx "role" $role) | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "tbite.roleFullname" (dict "ctx" $ctx "role" $role) }}
+    namespace: {{ include "tbite.namespace" $ctx }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "tbite.roleFullname" (dict "ctx" $ctx "role" $role) }}-lease
+{{- end }}
+{{- end }}

@@ -1,0 +1,52 @@
+{{- if .Values.hooks.provisionStreams.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "tbite.fullname" . }}-provision-streams
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: provision-streams
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.hooks.provisionStreams.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.hooks.provisionStreams.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "tbite.labels" . | nindent 8 }}
+        app.kubernetes.io/component: provision-streams
+    spec:
+      restartPolicy: OnFailure
+      {{- include "tbite.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "tbite.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: provision
+          image: {{ include "tbite.platformImage" . | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args: ["--role=provision-streams"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "tbite.fullname" . }}-app-env
+          env:
+            - name: TBITE_ROLE
+              value: provision-streams
+            {{- include "tbite.dbEnv" . | nindent 12 }}
+            {{- include "tbite.otelEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.hooks.provisionStreams.resources | nindent 12 }}
+          securityContext:
+            {{- include "tbite.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- include "tbite.podScheduling" . | nindent 6 }}
+{{- end }}
