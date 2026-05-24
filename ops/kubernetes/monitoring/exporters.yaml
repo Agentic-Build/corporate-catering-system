@@ -183,7 +183,7 @@ spec:
               containerPort: 7777
           readinessProbe:
             httpGet:
-              path: /
+              path: /metrics
               port: metrics
             periodSeconds: 10
           resources:
