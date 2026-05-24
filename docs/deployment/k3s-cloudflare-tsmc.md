@@ -161,42 +161,57 @@ kubectl -n cnpg-system get pods
 
 ---
 
-## Step 4 — Create the Cloudflare Tunnel
+## Step 4 — Create the Cloudflare Tunnel in the dashboard
 
-Log in (opens a browser, authorises the local cloudflared binary):
+The chart uses Cloudflare's **remote-managed tunnel** model — the
+tunnel and its routing rules are created in the Zero Trust dashboard,
+and Cloudflare hands back a single token. No local `cloudflared`
+binary is needed for this step.
 
-```bash
-cloudflared tunnel login
-```
+### 4a. Create the tunnel and copy the token
 
-Create the tunnel and stash its UUID + token:
+1. Open [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/)
+   → **Networks** → **Tunnels** → **Create a tunnel**.
+2. Pick the **Cloudflared** connector type, name the tunnel
+   `tbite-demo` (or anything), **Save**.
+3. The dashboard shows install instructions for various platforms;
+   ignore them — we run cloudflared in-cluster. **Copy the long
+   base64 token string** (the part after `--token` in the example
+   command). You will paste it into a Secret in Step 5.
 
-```bash
-cloudflared tunnel create tbite-demo
-# Created tunnel tbite-demo with id 12345678-1234-1234-1234-123456789012
+### 4b. Add the eight public hostnames
 
-TUNNEL_ID=$(cloudflared tunnel list --output json | jq -r '.[] | select(.name=="tbite-demo") | .id')
-TUNNEL_TOKEN=$(cloudflared tunnel token "$TUNNEL_ID")
-echo "tunnel id:    $TUNNEL_ID"
-echo "tunnel token: (paste into the secret below)"
-```
+Still in the dashboard, under the tunnel's **Public Hostnames** tab,
+**Add a public hostname** for each entry below. Cloudflare creates the
+matching DNS CNAME automatically the moment you save each one.
 
-In the Cloudflare dashboard → DNS → your zone, add eight CNAMEs all
-pointing at `<TUNNEL_ID>.cfargotunnel.com` (Cloudflare proxy on,
-orange cloud):
+| Subdomain | Domain | Service type | URL |
+| --- | --- | --- | --- |
+| `api` | `tbite.example.com` | HTTP | `tbite-tbite-platform-api.tbite.svc.cluster.local:8080` |
+| `app` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-employee.tbite.svc.cluster.local:3000` |
+| `merchant` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-merchant.tbite.svc.cluster.local:3000` |
+| `admin` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-admin.tbite.svc.cluster.local:3000` |
+| `rt` | `tbite.example.com` | HTTP | `tbite-tbite-platform-realtime.tbite.svc.cluster.local:8081` |
+| `auth` | `tbite.example.com` | HTTP | `tbite-authentik-server.tbite.svc.cluster.local:80` |
+| `hydra` | `tbite.example.com` | HTTP | `tbite-hydra-public.tbite.svc.cluster.local:4444` |
+| `grafana` | `tbite.example.com` | HTTP | `tbite-grafana.tbite.svc.cluster.local:80` |
+| `argocd` | `tbite.example.com` | HTTP | `argocd-server.argocd.svc.cluster.local:80` |
 
-```
-api.tbite.example.com       CNAME  <TUNNEL_ID>.cfargotunnel.com
-app.tbite.example.com       CNAME  <TUNNEL_ID>.cfargotunnel.com
-merchant.tbite.example.com  CNAME  <TUNNEL_ID>.cfargotunnel.com
-admin.tbite.example.com     CNAME  <TUNNEL_ID>.cfargotunnel.com
-auth.tbite.example.com      CNAME  <TUNNEL_ID>.cfargotunnel.com
-hydra.tbite.example.com     CNAME  <TUNNEL_ID>.cfargotunnel.com
-grafana.tbite.example.com   CNAME  <TUNNEL_ID>.cfargotunnel.com
-argocd.tbite.example.com    CNAME  <TUNNEL_ID>.cfargotunnel.com
-```
+Replace `tbite.example.com` with your actual zone. The `:port` values
+match the chart's default Service ports (`api.port: 8080`,
+`realtime.port: 8081`, `web.*.port: 3000`); change if you override
+them. For the realtime SSE hostname, expand **Additional application
+settings → TLS** and set **HTTP2 connection** off and **Disable
+Chunked Encoding** off — the application emits a 20s heartbeat so
+Cloudflare's 100s idle timeout does not drop SSE streams.
 
-Replace `tbite.example.com` with your actual zone throughout.
+### 4c. (Optional) Add Cloudflare Access policies
+
+For `grafana`, `admin`, and `argocd` you typically also add a Zero
+Trust Access application in the dashboard (Access → Applications)
+requiring Google / Okta / WebAuthn SSO before the request even
+reaches the cluster. This is independent of Authentik (which gates
+the employee / merchant flows).
 
 ---
 
@@ -222,7 +237,9 @@ kubectl create namespace tbite
 # can decrypt. For raw helm + kubectl the operator decrypts locally and
 # `kubectl create secret` plain values, which is what we do below.
 
-# 1. Cloudflare tunnel token
+# 1. Cloudflare tunnel token — the long base64 string you copied
+#    from the dashboard in Step 4a.
+TUNNEL_TOKEN="<paste-token-from-cloudflare-dashboard>"
 kubectl -n tbite create secret generic tbite-cloudflared \
   --from-literal=token="$TUNNEL_TOKEN"
 
@@ -298,7 +315,6 @@ helm install tbite chart/tbite-platform/ \
   -f chart/tbite-platform/values-cloudflared.yaml \
   --namespace tbite \
   --set crdsReady=false \
-  --set cloudflared.tunnel.id="$TUNNEL_ID" \
   --set "global.domain=tbite.example.com" \
   --set "global.baseURL.api=https://api.tbite.example.com" \
   --set "global.baseURL.employee=https://app.tbite.example.com" \
@@ -314,8 +330,6 @@ helm install tbite chart/tbite-platform/ \
   --set "hydra.hydra.config.dsn=postgres://hydra:${HYDRA_PG_PW}@tbite-pg-rw.tbite.svc.cluster.local:5432/hydra?sslmode=disable" \
   --set "hydra.hydra.config.urls.self.issuer=https://hydra.tbite.example.com" \
   --set "observability.grafana.ingressHost=grafana.tbite.example.com" \
-  --set "cloudflared.ingress.argocd.enabled=true" \
-  --set "cloudflared.ingress.argocd.host=argocd.tbite.example.com" \
   --set authentikBlueprints.devUsers.enabled=true \
   --set hooks.dbMigrate.enabled=false \
   --set hooks.provisionStreams.enabled=false \
@@ -631,7 +645,9 @@ UPDATE vendor_plant_mapping SET active = false WHERE plant = 'tn-22-1f';
 ```bash
 kubectl -n tbite get pods,svc,pvc
 helm -n tbite status tbite
-cloudflared tunnel info tbite-demo    # tunnel + connector health
+kubectl -n tbite logs deploy/tbite-tbite-platform-cloudflared
+# Zero Trust dashboard → Networks → Tunnels → tbite-demo → Connectors
+# shows live cloudflared replicas + edge connections.
 ```
 
 ### Logs
@@ -670,7 +686,8 @@ helm -n tbite uninstall tbite
 helm -n tbite uninstall tbite
 helm -n cnpg-system uninstall cnpg
 kubectl delete namespace tbite cnpg-system
-cloudflared tunnel delete tbite-demo
+# Cloudflare Zero Trust dashboard → Networks → Tunnels → tbite-demo
+# → "..." → Delete tunnel
 sudo /usr/local/bin/k3s-uninstall.sh
 ```
 
@@ -703,15 +720,23 @@ reconciliation. Wait for `kubectl -n tbite logs deploy/tbite-authentik-worker`
 to print `Task finished … apply_blueprint`, then try again.
 
 **Cloudflare returns 502** — the tunnel is up but the in-cluster
-Service for that hostname returns no endpoints. Check
-`kubectl -n tbite get endpoints <service-name>`; usually a pod is in
-CrashLoop.
+Service for the hostname's public-hostname mapping returns no
+endpoints. Cross-check (a) the Service URL you entered in Step 4b
+matches `kubectl -n tbite get svc` exactly, and (b) the Service has
+endpoints (`kubectl -n tbite get endpoints <name>` — usually a pod
+is in CrashLoop).
 
 **SSE drops at 100s** — Cloudflare's edge enforces a 100s idle
 timeout. The application's SSE handler emits a 20s heartbeat so the
-connection should not idle out. If it does, check that the cloudflared
-ingress entry for the realtime host has `originRequest.connectTimeout`
-set (it does, in `templates/configmap-cloudflared.yaml`).
+connection should not idle out. If it still does, double-check the
+realtime public-hostname's "TLS → Disable Chunked Encoding" setting
+(off) in the dashboard.
+
+**Public hostname returns Cloudflare error 1033 ("tunnel error")** —
+the cloudflared pods cannot reach Cloudflare's edge. Check the
+cloudflared pod log (`kubectl -n tbite logs deploy/...-cloudflared`)
+and verify the cluster has outbound network access on TCP 7844 / UDP
+7844 (QUIC).
 
 ---
 

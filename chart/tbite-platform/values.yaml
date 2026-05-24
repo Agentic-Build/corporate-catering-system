@@ -546,16 +546,26 @@ minio-tenant:
 # Cloudflare Tunnel (cloudflared) — outbound-only ingress alternative
 #-----------------------------------------------------------------------------
 # Replaces the Traefik + cert-manager + Gateway API ingress path with
-# a cloudflared Deployment that dials out to Cloudflare's edge. TLS
-# terminates at Cloudflare; in-cluster traffic stays plain HTTP. The
-# tunnel is named (operators create it via `cloudflared tunnel
-# create`) and authenticated by a tunnel token stored in a SOPS-
-# encrypted Secret.
+# a cloudflared Deployment that dials out to Cloudflare's edge.
 #
-# When cloudflared.enabled=true, operators typically also set
-# traefik.enabled=false, ingress.gateway.enabled=false,
-# certManager.enabled=false, ingress.certManager.enabled=false —
-# the umbrella's TLS chain becomes Cloudflare's, not Let's Encrypt's.
+# Remote-managed tunnel model: the tunnel and its public-hostname
+# routes are created in the Cloudflare Zero Trust dashboard
+# (Networks → Tunnels). Cloudflare hands back a single token that
+# encodes the tunnel id + account id + rotating tunnel secret;
+# operators paste the token into the SOPS-encrypted Secret named
+# below, and cloudflared dials home with nothing else. Public-
+# hostname → in-cluster-Service mapping is configured in the
+# dashboard under "Public Hostnames"; Cloudflare auto-creates the
+# matching DNS CNAMEs.
+#
+# See docs/deployment/k3s-cloudflare-tsmc.md for the canonical
+# dashboard routing table (api / app / merchant / admin / auth /
+# hydra / grafana / argocd → in-cluster Service URLs).
+#
+# When cloudflared.enabled=true the canonical companion is the
+# values-cloudflared.yaml overlay, which also flips traefik /
+# cert-manager / ingress.gateway off so the cluster does not run
+# two ingress paths in parallel.
 cloudflared:
   enabled: false
   replicaCount: 2
@@ -567,32 +577,13 @@ cloudflared:
     requests: { cpu: 50m, memory: 64Mi }
     limits:   { cpu: 500m, memory: 256Mi }
   tunnel:
-    # The tunnel id is the UUID printed by
-    # `cloudflared tunnel create <name>`. Required.
-    id: ""
-    # Token-mode auth (recommended). Operators paste the
-    # `cloudflared tunnel token <name>` output into the named
-    # SOPS-encrypted Secret under the named key.
+    # The Cloudflare-issued tunnel token (Zero Trust dashboard →
+    # Networks → Tunnels → <tunnel> → Connectors → "Install and run
+    # a connector" → copy the long base64 token string). Encrypt
+    # via SOPS into the named Secret under the named key.
     tokenSecretRef:
       name: tbite-cloudflared
       key: token
-    # File-mode auth (alternative). When credentialsFile is set,
-    # the chart mounts credentialsSecretRef as a Secret volume at
-    # /etc/cloudflared/creds/<UUID>.json.
-    credentialsFile: ""
-    credentialsSecretRef:
-      name: tbite-cloudflared-creds
-  ingress:
-    # Cross-namespace route to ArgoCD (typically installed by the
-    # platform team in its own namespace).
-    argocd:
-      enabled: false
-      host: argocd.tbite.example.com
-      serviceURL: http://argocd-server.argocd.svc.cluster.local:80
-    # Additional ad-hoc routes operators want to expose through the
-    # same tunnel (e.g. a tools dashboard, internal docs portal).
-    # Each entry: { hostname: <fqdn>, service: <url> }.
-    extra: []
 
 #-----------------------------------------------------------------------------
 # Ingress / Gateway API

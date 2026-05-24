@@ -1,21 +1,36 @@
 {{- if .Values.cloudflared.enabled }}
 {{- /*
-cloudflared Deployment. Outbound-only — dials out to
-Cloudflare's edge over QUIC/HTTPS and proxies inbound
-requests routed via the named tunnel into the in-cluster
-Services declared in the configmap-cloudflared.yaml ingress
-map. Multiple replicas attach to the same tunnel for
-high-availability (Cloudflare load-balances across
-connections).
+cloudflared Deployment — outbound-only connector that dials out to
+Cloudflare's edge over QUIC/HTTPS and proxies inbound requests routed
+via the named tunnel into in-cluster Services. Multiple replicas
+attach to the same tunnel for high-availability (Cloudflare
+load-balances across active connections).
 
-Auth modes:
-  * `tunnel.tokenSecretRef` — the simplest mode; the token
-    encodes the tunnel id + credentials. Operators paste the
-    `cloudflared tunnel token <name>` output into a SOPS-
-    encrypted Secret.
-  * `tunnel.credentialsFile` — for the older
-    cert.pem + <UUID>.json file pair. Operators mount the
-    JSON via a Secret + the cred path in the config map.
+This template uses the **remote-managed tunnel** model (Cloudflare's
+modern recommended path):
+
+  * Operator creates the tunnel in the Cloudflare Zero Trust
+    dashboard (Networks → Tunnels → Create a tunnel → Cloudflared
+    connector) and copies the generated token into a SOPS-encrypted
+    Secret. The token encodes the tunnel id, account id, and the
+    rotating tunnel secret — cloudflared needs nothing else to dial
+    home.
+  * Operator defines the public-hostname → in-cluster-Service map in
+    the same dashboard (Tunnels → <tunnel> → Public Hostnames). DNS
+    CNAMEs are created automatically by Cloudflare; ingress rules
+    live in Cloudflare, not in a chart-rendered ConfigMap.
+  * cloudflared in the cluster runs `tunnel run --token $TUNNEL_TOKEN`
+    — no local config.yaml, no credentials file, no `cloudflared
+    tunnel route dns` CLI calls.
+
+The legacy locally-managed-tunnel pattern (chart-rendered config.yaml +
+cred file) was removed: the dashboard path is simpler, equivalent in
+capability, and keeps Cloudflare as the single source of truth for
+public routes.
+
+See docs/deployment/k3s-cloudflare-tsmc.md for the full operator
+walkthrough and the public-hostname routing table the operator pastes
+into the dashboard.
 */ -}}
 apiVersion: apps/v1
 kind: Deployment
@@ -36,8 +51,6 @@ spec:
       labels:
         {{- include "tbite.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: cloudflared
-      annotations:
-        checksum/configmap: {{ include (print $.Template.BasePath "/configmap-cloudflared.yaml") . | sha256sum }}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -49,25 +62,16 @@ spec:
           imagePullPolicy: {{ .Values.cloudflared.image.pullPolicy }}
           args:
             - tunnel
-            - --config
-            - /etc/cloudflared/config.yaml
             - --no-autoupdate
             - --metrics
             - 0.0.0.0:2000
-            {{- if .Values.cloudflared.tunnel.tokenSecretRef.name }}
             - run
-            {{- else }}
-            - run
-            - {{ .Values.cloudflared.tunnel.id | quote }}
-            {{- end }}
-          {{- if .Values.cloudflared.tunnel.tokenSecretRef.name }}
           env:
             - name: TUNNEL_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.cloudflared.tunnel.tokenSecretRef.name | quote }}
                   key:  {{ .Values.cloudflared.tunnel.tokenSecretRef.key | quote }}
-          {{- end }}
           ports:
             - name: metrics
               containerPort: 2000
@@ -84,24 +88,6 @@ spec:
               port: metrics
             initialDelaySeconds: 5
             periodSeconds: 10
-          volumeMounts:
-            - name: config
-              mountPath: /etc/cloudflared
-              readOnly: true
-            {{- if .Values.cloudflared.tunnel.credentialsFile }}
-            - name: credentials
-              mountPath: /etc/cloudflared/creds
-              readOnly: true
-            {{- end }}
           resources:
             {{- toYaml .Values.cloudflared.resources | nindent 12 }}
-      volumes:
-        - name: config
-          configMap:
-            name: {{ include "tbite.fullname" . }}-cloudflared
-        {{- if .Values.cloudflared.tunnel.credentialsFile }}
-        - name: credentials
-          secret:
-            secretName: {{ .Values.cloudflared.tunnel.credentialsSecretRef.name | quote }}
-        {{- end }}
 {{- end }}

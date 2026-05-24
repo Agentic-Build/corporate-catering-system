@@ -6,11 +6,18 @@
 #
 #   helm install tbite chart/tbite-platform \
 #     -f chart/tbite-platform/values.yaml \
-#     -f chart/tbite-platform/values-cloudflared.yaml \
-#     --set cloudflared.tunnel.id=<UUID-from-cloudflared-tunnel-create>
+#     -f chart/tbite-platform/values-cloudflared.yaml
 #
-# Stackable with values-prod-ha.yaml when both multi-AZ HA *and*
-# Cloudflare exposure are required:
+# The tunnel itself is created in the Cloudflare Zero Trust dashboard
+# (Networks → Tunnels → Create a tunnel → Cloudflared connector). The
+# generated token is the only credential the chart needs; encrypt it
+# into a SOPS Secret named `tbite-cloudflared` (key `token`). Public-
+# hostname → in-cluster-Service mapping is also configured in the
+# dashboard under Public Hostnames; Cloudflare auto-creates the DNS
+# CNAMEs the moment each hostname is added.
+#
+# Stackable with values-prod-ha.yaml when multi-AZ HA + Cloudflare
+# exposure are both required:
 #
 #   helm install tbite chart/tbite-platform \
 #     -f chart/tbite-platform/values.yaml \
@@ -19,8 +26,8 @@
 #
 # Architectural caveat: Cloudflare Tunnel is an opt-in deviation from
 # ADR-0006's air-gapped-baseline product requirement. Operators choose
-# this overlay when their deployment shape accepts an external
-# vendor on the data path (public-internet, multi-tenant SaaS, or
+# this overlay when their deployment shape accepts an external vendor
+# on the public data path (public-internet, multi-tenant SaaS, or
 # non-regulated workloads). For on-prem / air-gapped enterprise
 # installs, leave this overlay off and use the default Gateway API +
 # cert-manager path.
@@ -30,19 +37,10 @@
 #-----------------------------------------------------------------------------
 cloudflared:
   enabled: true
-  # tunnel.id MUST be supplied via --set or a private overlay; this
-  # overlay deliberately does not pin a tunnel id.
   tunnel:
     tokenSecretRef:
       name: tbite-cloudflared
       key: token
-  # ArgoCD route is opt-in but defaults to the common-case host
-  # (operators override via --set or a private overlay).
-  ingress:
-    argocd:
-      enabled: true
-      host: argocd.tbite.example.com
-      serviceURL: http://argocd-server.argocd.svc.cluster.local:80
 
 #-----------------------------------------------------------------------------
 # Disable the Traefik + cert-manager + Gateway API path. Cloudflare
