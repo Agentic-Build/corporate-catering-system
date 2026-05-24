@@ -119,8 +119,8 @@
           "refId": "F"
         },
         {
-          "expr": "up{job=~\".*nats-exporter\"}",
-          "legendFormat": "NATS",
+          "expr": "clamp_max(count(jetstream_stream_total_messages), 1) or on() vector(0)",
+          "legendFormat": "NATS broker",
           "refId": "G"
         }
       ]
