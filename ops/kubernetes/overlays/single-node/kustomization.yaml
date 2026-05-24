@@ -62,13 +62,13 @@ patches:
 images:
   - name: tbite/api
     newName: ghcr.io/agentic-build/tbite-api
-    newTag: sha-2259e89
+    newTag: sha-e19ae01
   - name: tbite/web-employee
     newName: ghcr.io/agentic-build/tbite-web-employee
-    newTag: sha-2259e89
+    newTag: sha-e19ae01
   - name: tbite/web-merchant
     newName: ghcr.io/agentic-build/tbite-web-merchant
-    newTag: sha-2259e89
+    newTag: sha-e19ae01
   - name: tbite/web-admin
     newName: ghcr.io/agentic-build/tbite-web-admin
-    newTag: sha-2259e89
+    newTag: sha-e19ae01
