@@ -19,7 +19,8 @@ global:
       accessKeyKey: accessKeyID
       secretKeyKey: secretAccessKey
   nats:
-    url: nats://nats:4222
+    url: nats://tbite-nats.tbite.svc.cluster.local:4222
+  redisURL: redis://:devpassword@tbite-valkey-primary.tbite.svc.cluster.local:6379/0
 
 api:
   replicaCount: 1

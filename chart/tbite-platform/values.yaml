@@ -29,18 +29,37 @@ global:
   affinity: {}
   # OIDC issuer URL (Authentik or BYO). Required in prod.
   oidcIssuerURL: "https://auth.tbite.example.com/application/o/tbite/"
+  # Authentik connection (the Go config reads AUTHENTIK_BASE_URL and
+  # AUTHENTIK_API_TOKEN). When the authentik subchart is enabled,
+  # baseURL should be the in-cluster Service.
+  authentik:
+    baseURL: "http://tbite-authentik-server.tbite.svc.cluster.local:9000"
+    vendorOperatorGroup: "tbite:role:vendor_operator"
+    providerSlugs: "authentik"
+    apiTokenSecretRef:
+      name: tbite-authentik
+      key: apiToken
+  # OIDC client credentials per app — referenced as envFromSecrets
+  # by each role's Deployment. Operators populate the named secret
+  # via SOPS (ops/secrets/...).
+  oidcClientsSecretRef:
+    name: tbite-oidc-clients
+  # Redis-compatible URL for Valkey. Defaults to the in-release
+  # Service. The Go config's REDIS_URL var consumes this string.
+  redisURL: "redis://tbite-valkey-primary.tbite.svc.cluster.local:6379/0"
   # S3-compatible object storage endpoint (MinIO or BYO). Required in prod.
   s3:
     endpoint: "https://minio.tbite.example.com"
     region: "us-east-1"
     bucket: "tbite-prod"
+    usePathStyle: "1"
     credentialsSecretRef:
       name: tbite-s3
       accessKeyKey: accessKeyID
       secretKeyKey: secretAccessKey
   # NATS endpoint used by all roles (cluster service when self-hosted).
   nats:
-    url: "nats://nats:4222"
+    url: "nats://tbite-nats.tbite.svc.cluster.local:4222"
     credentialsSecretRef:
       name: tbite-nats
       key: creds
@@ -360,6 +379,13 @@ hooks:
 # CloudNativePG (operator subchart name 'cloudnative-pg' aliased to cloudnativePgOperator)
 postgres:
   enabled: true
+  operator:
+    # When true, the chart pulls in the CloudNativePG operator as a
+    # subchart. Default is false: install the operator cluster-wide
+    # once (`helm install cnpg cnpg/cloudnative-pg -n cnpg-system`).
+    # See chart/tbite-platform/README.md for the platform-team
+    # bootstrap sequence.
+    bundled: false
   byo:
     enabled: false # if true, skip the Cluster CR; just consume secret refs.
   cluster:

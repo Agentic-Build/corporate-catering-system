@@ -44,6 +44,7 @@ spec:
             - configMapRef:
                 name: {{ include "tbite.fullname" . }}-app-env
           env:
+            {{- include "tbite.appSecretEnv" . | nindent 12 }}
             - name: TBITE_ROLE
               value: cutoff-sweeper
             - name: TBITE_METRICS_PORT

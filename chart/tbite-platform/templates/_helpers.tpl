@@ -271,3 +271,51 @@ failureThreshold: 3
     name: {{ . | quote }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Bridge secret refs into the Go binary's expected env var names. All
+roles that touch Postgres, NATS, object storage, or OIDC consume the
+same logical set of secret-backed variables; central them in one
+helper so each Deployment template gets identical wiring.
+*/}}
+{{- define "tbite.appSecretEnv" -}}
+- name: DATABASE_RW_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.api.database.rwUrlSecretRef.name | quote }}
+      key:  {{ .Values.api.database.rwUrlSecretRef.key | quote }}
+- name: DATABASE_RO_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.api.database.roUrlSecretRef.name | quote }}
+      key:  {{ .Values.api.database.roUrlSecretRef.key | quote }}
+- name: S3_ACCESS_KEY_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.global.s3.credentialsSecretRef.name | quote }}
+      key:  {{ .Values.global.s3.credentialsSecretRef.accessKeyKey | quote }}
+- name: S3_SECRET_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.global.s3.credentialsSecretRef.name | quote }}
+      key:  {{ .Values.global.s3.credentialsSecretRef.secretKeyKey | quote }}
+- name: AUTHENTIK_API_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.global.authentik.apiTokenSecretRef.name | quote }}
+      key:  {{ .Values.global.authentik.apiTokenSecretRef.key | quote }}
+- name: AUTH_PROVIDER_AUTHENTIK_ISSUER_URL
+  value: {{ .Values.global.oidcIssuerURL | quote }}
+- name: AUTH_PROVIDER_AUTHENTIK_DISPLAY_NAME
+  value: "Authentik"
+- name: AUTH_PROVIDER_AUTHENTIK_CLIENT_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.global.oidcClientsSecretRef.name | quote }}
+      key:  "apiClientID"
+- name: AUTH_PROVIDER_AUTHENTIK_CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.global.oidcClientsSecretRef.name | quote }}
+      key:  "apiClientSecret"
+{{- end -}}

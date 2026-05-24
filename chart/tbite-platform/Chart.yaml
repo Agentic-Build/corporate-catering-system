@@ -37,8 +37,13 @@ dependencies:
   - name: cloudnative-pg
     version: 0.28.2
     repository: https://cloudnative-pg.github.io/charts
-    condition: postgres.enabled
-    alias: cloudnativePgOperator
+    # Operator is conventionally installed cluster-wide once and
+    # owned by the platform team; this umbrella does NOT bundle it
+    # by default. Set postgres.operator.bundled=true to enable the
+    # operator subchart for clusters where no platform install
+    # exists.
+    condition: postgres.operator.bundled
+    alias: cnpg-operator
     tags:
       - postgres
 
@@ -57,7 +62,7 @@ dependencies:
       - messaging
 
   - name: operator
-    alias: minioOperator
+    alias: minio-operator
     version: 7.1.1
     repository: https://operator.min.io
     condition: minio.operator.enabled
@@ -65,7 +70,7 @@ dependencies:
       - object-storage
 
   - name: tenant
-    alias: minioTenant
+    alias: minio-tenant
     version: 7.1.1
     repository: https://operator.min.io
     condition: minio.tenant.enabled
