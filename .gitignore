@@ -69,6 +69,8 @@ playwright-report/
 # Worktrees
 .worktrees/
 
-# Helm subchart tarballs (operators resolve via `make chart-deps`).
-# Chart.lock IS committed so versions stay reproducible.
-chart/*/charts/*.tgz
+# Helm subchart tarballs are committed alongside Chart.lock so the
+# ArgoCD repo-server does not have to reach every upstream Helm repo
+# (bitnami, jetstack, victoriametrics, ...) on every reconcile — and
+# so a single registry outage does not block a sync. Update procedure:
+# `make chart-deps` then commit both Chart.lock and the new .tgz set.
