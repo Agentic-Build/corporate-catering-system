@@ -210,8 +210,10 @@ services:
   # ─────────────────────────────────────────────────────────────────────────
   # Observability stack — Victoria + OTel Collector + Grafana + exporters
   #
-  # Local design mirrors production (ops/observability/otel/collector.yaml,
-  # ops/kubernetes/monitoring/). The host-side API exports OTLP to
+  # Local design mirrors production (ops/kubernetes/monitoring/ holds the
+  # canonical config + dashboard sources; the compose mounts below point at
+  # the same files so dev and Kustomize stay on one source of truth).
+  # The host-side API exports OTLP to
   # localhost:4318 (HTTP) — see scripts/dev/dev-app.sh. Grafana lives on
   # http://localhost:3001 with anonymous Admin (dev convenience only).
   # ─────────────────────────────────────────────────────────────────────────
@@ -283,6 +285,7 @@ services:
         condition: service_healthy
     volumes:
       - ../observability/otel/collector.local.yaml:/etc/otelcol/config.yaml:ro
+      # Dev-only — different endpoints than production's otel-collector-config.yaml.
     ports:
       - "4317:4317"   # OTLP gRPC — host API
       - "4318:4318"   # OTLP HTTP — host API
@@ -303,7 +306,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ../observability/postgres-exporter/queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+      - ../kubernetes/monitoring/postgres-exporter-queries.yaml:/etc/postgres-exporter/queries.yaml:ro
     ports:
       - "9187:9187"
 
@@ -336,7 +339,7 @@ services:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
       - "--storage.path=/data"
     volumes:
-      - ../observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ../kubernetes/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/data
     ports:
       - "9093:9093"
@@ -362,7 +365,7 @@ services:
       alertmanager:
         condition: service_healthy
     volumes:
-      - ../observability/vmalert/rules.yaml:/etc/vmalert/rules.yaml:ro
+      - ../kubernetes/monitoring/vmalert-rules.yaml:/etc/vmalert/rules.yaml:ro
     ports:
       - "8880:8880"
     healthcheck:
@@ -393,8 +396,8 @@ services:
       - "3001:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ../kubernetes/monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
+      - ../kubernetes/monitoring/dashboards:/var/lib/grafana/dashboards:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
       interval: 10s

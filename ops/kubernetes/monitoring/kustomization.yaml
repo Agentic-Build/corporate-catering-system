@@ -21,42 +21,46 @@ resources:
   - grafana-runtime-config.yaml
   - networkpolicy.yaml
 
-# Source-of-truth bundles. Editing the source file is enough — kustomize
-# regenerates the ConfigMap on every render.
+# Source-of-truth bundles. Each canonical config / dashboard file lives
+# alongside this kustomization (no `../../`) so kustomize's default
+# load-restrictor — which ArgoCD also enforces — accepts the build without
+# `--load-restrictor=LoadRestrictionsNone`. The same files are mounted by
+# ops/local/docker-compose.dev.yml at these paths, keeping the K8s and
+# compose surfaces on one source of truth.
 configMapGenerator:
   - name: otel-collector-config
     files:
-      - collector.yaml=../../observability/otel/collector.yaml
+      - collector.yaml=otel-collector-config.yaml
   - name: grafana-datasources
     files:
-      - datasources.yml=../../observability/grafana/provisioning/datasources/datasources.yml
+      - datasources.yml=grafana-provisioning/datasources/datasources.yml
   - name: grafana-dashboards-provider
     files:
-      - dashboards.yml=../../observability/grafana/provisioning/dashboards/dashboards.yml
+      - dashboards.yml=grafana-provisioning/dashboards/dashboards.yml
   - name: vmalert-rules
     files:
-      - rules.yaml=../../observability/vmalert/rules.yaml
+      - rules.yaml=vmalert-rules.yaml
   - name: alertmanager-config
     files:
-      - alertmanager.yml=../../observability/alertmanager/alertmanager.yml
+      - alertmanager.yml=alertmanager.yml
   - name: postgres-exporter-queries
     files:
-      - queries.yaml=../../observability/postgres-exporter/queries.yaml
+      - queries.yaml=postgres-exporter-queries.yaml
   - name: grafana-dashboards
     files:
-      - ../../observability/grafana/dashboards/system-status.json
-      - ../../observability/grafana/dashboards/oncall-overview.json
-      - ../../observability/grafana/dashboards/order-api-slo.json
-      - ../../observability/grafana/dashboards/order-lifecycle.json
-      - ../../observability/grafana/dashboards/async-plane.json
-      - ../../observability/grafana/dashboards/infra-health.json
-      - ../../observability/grafana/dashboards/supply-health.json
-      - ../../observability/grafana/dashboards/pickup-floor.json
-      - ../../observability/grafana/dashboards/settlement-payroll.json
-      - ../../observability/grafana/dashboards/mcp-ai-surface.json
-      - ../../observability/grafana/dashboards/auth.json
-      - ../../observability/grafana/dashboards/business-kpi.json
-      - ../../observability/grafana/dashboards/dev-loop.json
+      - dashboards/system-status.json
+      - dashboards/oncall-overview.json
+      - dashboards/order-api-slo.json
+      - dashboards/order-lifecycle.json
+      - dashboards/async-plane.json
+      - dashboards/infra-health.json
+      - dashboards/supply-health.json
+      - dashboards/pickup-floor.json
+      - dashboards/settlement-payroll.json
+      - dashboards/mcp-ai-surface.json
+      - dashboards/auth.json
+      - dashboards/business-kpi.json
+      - dashboards/dev-loop.json
 
 generatorOptions:
   disableNameSuffixHash: true
