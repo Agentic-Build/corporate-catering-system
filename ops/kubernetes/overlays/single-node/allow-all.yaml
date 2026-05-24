@@ -1,0 +1,28 @@
+# Single-node staging relaxation.
+#
+# The base `default-deny` NetworkPolicy (podSelector: {} + Ingress/Egress with
+# no allow rules) blocks ALL traffic — including DNS egress and pod-to-pod
+# traffic — which k3s enforces. That left every app pod unable to reach
+# Postgres / Authentik / Hydra and crashing on boot.
+#
+# NetworkPolicy rules are additive (OR semantics), so this allow-all policy
+# re-opens traffic on the trusted single-node box without touching the base
+# default-deny. Strict micro-segmentation (per-service ingress/egress allow
+# rules) is future work and should live in the production overlays.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all
+  namespace: tbite
+  labels:
+    app.kubernetes.io/part-of: tbite
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - {}
+  egress:
+    - {}
