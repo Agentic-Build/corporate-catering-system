@@ -78,3 +78,11 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+  # The api Deployment is scaled by an HPA (ops/kubernetes/base/hpa-api.yaml).
+  # Ignore replica drift so ArgoCD doesn't perpetually report OutOfSync and
+  # selfHeal-revert the autoscaler's chosen replica count on every reconcile.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
