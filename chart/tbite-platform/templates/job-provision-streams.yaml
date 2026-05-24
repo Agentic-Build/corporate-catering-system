@@ -8,8 +8,12 @@ metadata:
     {{- include "tbite.labels" . | nindent 4 }}
     app.kubernetes.io/component: provision-streams
   annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "-10"
+    # post-install: NATS is installed in the main sync, so this Job cannot
+    # reach a NATS endpoint as a pre-install hook on an ArgoCD-driven
+    # install. Weight 15 keeps it ahead of bucket-bootstrap (20) but after
+    # identity-db-init (5).
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "15"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: {{ .Values.hooks.provisionStreams.backoffLimit }}
