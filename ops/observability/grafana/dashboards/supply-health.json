@@ -207,8 +207,8 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (vendor_id, menu_item_id) (rate(catering_quota_exhausted_count_total[5m])))",
-          "legendFormat": "{{vendor_id}}/{{menu_item_id}}",
+          "expr": "topk(10, sum by (vendor_id, menu_item_id) (rate(catering_quota_exhausted_count_total[5m])) + on (menu_item_id) group_left(item_name, vendor_name) (0 * max by (menu_item_id, item_name, vendor_name) (tbite_item_supply_capacity{vendor_name!=\"\"})))",
+          "legendFormat": "{{item_name}} ({{vendor_name}})",
           "refId": "A"
         }
       ]

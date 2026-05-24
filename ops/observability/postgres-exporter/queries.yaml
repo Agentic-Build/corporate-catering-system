@@ -86,6 +86,7 @@ tbite_item_supply:
   query: |
     SELECT
       mi.vendor_id::text AS vendor_id,
+      v.display_name AS vendor_name,
       s.menu_item_id::text AS menu_item_id,
       mi.name AS item_name,
       to_char(s.supply_date, 'YYYY-MM-DD') AS supply_date,
@@ -93,16 +94,20 @@ tbite_item_supply:
       s.remain::bigint AS remain
     FROM meal_supply s
     JOIN menu_item mi ON mi.id = s.menu_item_id
+    JOIN vendor v ON v.id = mi.vendor_id
     WHERE s.supply_date BETWEEN current_date AND current_date + INTERVAL '7 days'
   master: true
   metrics:
     - vendor_id:
         usage: "LABEL"
+    - vendor_name:
+        usage: "LABEL"
+        description: "Human-readable vendor name (joined from vendor table)"
     - menu_item_id:
         usage: "LABEL"
     - item_name:
         usage: "LABEL"
-        description: "Human-readable menu item name for dashboard tables"
+        description: "Human-readable menu item name (joined from menu_item table)"
     - supply_date:
         usage: "LABEL"
     - capacity:

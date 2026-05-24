@@ -419,12 +419,12 @@
     },
     {
       "type": "stat",
-      "title": "\u26a0\ufe0f Items configured at capacity=0",
+      "title": "% place attempts blocked by quota (5m)",
       "datasource": {
         "type": "prometheus",
         "uid": "victoria-metrics"
       },
-      "description": "Config-drift detector \u2014 counts menu items where capacity=0 was set (intentionally or by mistake). Catches the silent ops failure mode where one item is fully blocked even at low traffic \u2014 would otherwise hide behind the aggregate 'quota_exhausted' counter. Click to open Supply Health for the per-item list.",
+      "description": "Fraction of place-order attempts that were rejected with outcome=quota_exhausted, over the last 5 minutes. A low number is the healthy steady state (capacity is keeping up with demand). A sustained spike means supply is too tight for the load \u2014 either an item's capacity was set too low, or a flash crowd hit one vendor. Click through to Supply Health for the per-item / per-day breakdown that pinpoints which row needs adjusting. (Note: capacity=0 by itself is not a misconfig \u2014 vendors may legitimately mark an item not-offered for a given day.)",
       "gridPos": {
         "h": 6,
         "w": 12,
@@ -433,22 +433,17 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {"color": "green", "value": null},
-              {"color": "red", "value": 1}
+              {"color": "yellow", "value": 0.05},
+              {"color": "red", "value": 0.20}
             ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {"text": "\u2713 OK", "color": "green"}
-              }
-            }
-          ]
+          }
         }
       },
       "options": {
@@ -458,14 +453,13 @@
           "values": false
         },
         "colorMode": "background",
-        "graphMode": "none",
+        "graphMode": "area",
         "textMode": "auto",
         "justifyMode": "center"
       },
       "targets": [
         {
-          "expr": "count(tbite_item_supply_capacity == 0) or on() vector(0)",
-          "instant": true,
+          "expr": "sum(rate(catering_quota_exhausted_count_total[5m])) / clamp_min(sum(rate(catering_order_placed_count_total[5m])), 1e-9)",
           "refId": "A"
         }
       ],
@@ -1053,7 +1047,7 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (vendor_id, menu_item_id, plant_id) (rate(catering_quota_exhausted_count_total[5m])))",
+          "expr": "topk(10, sum by (vendor_id, menu_item_id, plant_id) (rate(catering_quota_exhausted_count_total[5m])) + on (menu_item_id) group_left(item_name, vendor_name) (0 * max by (menu_item_id, item_name, vendor_name) (tbite_item_supply_capacity{vendor_name!=\"\"})))",
           "instant": true,
           "format": "table",
           "refId": "A"
@@ -1064,13 +1058,19 @@
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true
+              "Time": true,
+              "menu_item_id": true,
+              "vendor_id": true
             },
             "indexByName": {
               "plant_id": 0,
-              "vendor_id": 1,
-              "menu_item_id": 2,
+              "vendor_name": 1,
+              "item_name": 2,
               "Value": 3
+            },
+            "renameByName": {
+              "vendor_name": "vendor",
+              "item_name": "item"
             }
           }
         }
