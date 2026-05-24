@@ -21,35 +21,67 @@ BYO (bring-your-own) external endpoints in production.
 
 ## Sizing profiles
 
-The chart ships three values files, each targeting a different deployment
-shape. `values.yaml` is the default and aligns with ADR-0008
-(one-enterprise-per-stack); the other two are overlays applied on top.
+The chart ships **one base values file plus three overlays**. `values.yaml`
+is the canonical single-enterprise production sizing (ADR-0008); each
+overlay layers on top to change either the workload shape or the
+ingress topology.
+
+### Sizing overlays
 
 | File | Use case | Cluster | Memory | Capacity |
 | --- | --- | --- | --- | --- |
-| `values.yaml` (default) | **Single-enterprise production**, ADR-0008 sizing | ≥ 16 cores / 32 GiB single-node | ~18 GiB requests | ~5K–10K employees, ~50 orders/sec sustained, ~200/sec burst |
-| `values-dev.yaml` (overlay) | Laptop kind/k3d/OrbStack iteration | ≥ 8 GiB | ~6 GiB requests | smoke only |
-| `values-prod-ha.yaml` (overlay) | Multi-AZ HA for > 10K employees | ≥ 64 GiB cluster | ~32 GiB requests | enterprise scale |
+| `values.yaml` (base) | **Single-enterprise production**, ADR-0008 sizing | ≥ 16 cores / 32 GiB single-node | ~18 GiB requests | ~5K–10K employees, ~50 orders/sec sustained, ~200/sec burst |
+| `values-dev.yaml` | Laptop kind/k3d/OrbStack iteration | ≥ 8 GiB | ~6 GiB requests | smoke only |
+| `values-prod-ha.yaml` | Multi-AZ HA for > 10K employees | ≥ 64 GiB cluster | ~32 GiB requests | enterprise scale |
+
+The base sizing carries one primary CNPG instance + one hot standby
+(not three), standalone Valkey with persistence (not Sentinel HA), a
+single-pod MinIO Deployment (not a 4×4 Tenant), a single-replica
+Authentik + Hydra reusing the main CNPG cluster (not their bundled
+Postgres), and a slim observability stack (VictoriaMetrics single +
+Grafana + OTel collector — no alertmanager, vmagent, kube-state-metrics,
+or node-exporter). All of those upgrades live in `values-prod-ha.yaml`.
+
+### Ingress overlays
+
+| File | Public-traffic path | Trade-off |
+| --- | --- | --- |
+| (none — base default) | **Traefik + Gateway API + cert-manager + Let's Encrypt** — cluster owns its public IP; TLS issued in-cluster; supports the air-gapped baseline (ADR-0006) | Requires a routable LoadBalancer IP, DNS records pointing at it, and an ACME-reachable network |
+| `values-cloudflared.yaml` | **Cloudflare Tunnel** — cloudflared dials out to Cloudflare's edge over QUIC/HTTPS; TLS terminates at Cloudflare; zero inbound ports on the cluster; ArgoCD / Grafana / Authentik routes folded into the same tunnel; cross-namespace route to ArgoCD wired by default | Adds a vendor on the public data path (out of scope for air-gapped installs); SSE long-lived connections rely on the application's 20s heartbeat to survive Cloudflare's 100s edge timeout |
+
+When `values-cloudflared.yaml` is applied, the Traefik subchart,
+cert-manager subchart, Gateway API resources, every HTTPRoute, the
+Traefik Middleware, and the cert-manager Issuer / ClusterIssuer /
+Certificates all disappear from the rendered output — cloudflared
+takes over their job. The two ingress modes are mutually exclusive
+per cluster.
+
+### Combinations
 
 ```bash
-# Single-enterprise prod (default)
+# Single-enterprise prod, Traefik+LE ingress (default)
 helm template tbite . -f values.yaml
 
 # Laptop / OrbStack single-node iteration
 helm template tbite . -f values.yaml -f values-dev.yaml
 
-# Multi-AZ HA scale-up
+# Multi-AZ HA scale-up, Traefik+LE ingress
 helm template tbite . -f values.yaml -f values-prod-ha.yaml
+
+# Single-enterprise prod via Cloudflare Tunnel
+helm template tbite . -f values.yaml -f values-cloudflared.yaml \
+  --set cloudflared.tunnel.id=<UUID-from-cloudflared-tunnel-create>
+
+# Multi-AZ HA via Cloudflare Tunnel (overlays stack)
+helm template tbite . -f values.yaml -f values-prod-ha.yaml -f values-cloudflared.yaml \
+  --set cloudflared.tunnel.id=<UUID>
 ```
 
-The default sizing carries one primary CNPG instance + one hot
-standby (not three), standalone Valkey with persistence (not
-Sentinel HA), a single-pod MinIO Deployment (not a 4×4 Tenant), a
-single-replica Authentik + Hydra reusing the main CNPG cluster (not
-their bundled Postgres), and a slim observability stack
-(VictoriaMetrics single + Grafana + OTel collector — no
-alertmanager, vmagent, kube-state-metrics, or node-exporter). All
-of those upgrades live in `values-prod-ha.yaml`.
+When using Cloudflare Tunnel, encrypt the tunnel token into a SOPS
+secret named `tbite-cloudflared` (key `token`); cloudflared reads it
+at boot. The tunnel id passed via `--set` becomes part of the
+release; ArgoCD users put it in a private overlay or a sealed
+parameter file rather than committing it as plain values.
 
 ## Install (after generating the lock file)
 

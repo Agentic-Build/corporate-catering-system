@@ -1,0 +1,75 @@
+# tbite-platform — Cloudflare Tunnel overlay.
+#
+# Apply ON TOP of the default values.yaml when public traffic enters
+# the cluster through a Cloudflare Tunnel rather than a cluster-local
+# Gateway API LoadBalancer + Let's Encrypt:
+#
+#   helm install tbite chart/tbite-platform \
+#     -f chart/tbite-platform/values.yaml \
+#     -f chart/tbite-platform/values-cloudflared.yaml \
+#     --set cloudflared.tunnel.id=<UUID-from-cloudflared-tunnel-create>
+#
+# Stackable with values-prod-ha.yaml when both multi-AZ HA *and*
+# Cloudflare exposure are required:
+#
+#   helm install tbite chart/tbite-platform \
+#     -f chart/tbite-platform/values.yaml \
+#     -f chart/tbite-platform/values-prod-ha.yaml \
+#     -f chart/tbite-platform/values-cloudflared.yaml
+#
+# Architectural caveat: Cloudflare Tunnel is an opt-in deviation from
+# ADR-0006's air-gapped-baseline product requirement. Operators choose
+# this overlay when their deployment shape accepts an external
+# vendor on the data path (public-internet, multi-tenant SaaS, or
+# non-regulated workloads). For on-prem / air-gapped enterprise
+# installs, leave this overlay off and use the default Gateway API +
+# cert-manager path.
+
+#-----------------------------------------------------------------------------
+# Enable the cloudflared workload.
+#-----------------------------------------------------------------------------
+cloudflared:
+  enabled: true
+  # tunnel.id MUST be supplied via --set or a private overlay; this
+  # overlay deliberately does not pin a tunnel id.
+  tunnel:
+    tokenSecretRef:
+      name: tbite-cloudflared
+      key: token
+  # ArgoCD route is opt-in but defaults to the common-case host
+  # (operators override via --set or a private overlay).
+  ingress:
+    argocd:
+      enabled: true
+      host: argocd.tbite.example.com
+      serviceURL: http://argocd-server.argocd.svc.cluster.local:80
+
+#-----------------------------------------------------------------------------
+# Disable the Traefik + cert-manager + Gateway API path. Cloudflare
+# terminates TLS at its edge; the in-cluster path is plain HTTP from
+# cloudflared to each role's Service. The Gateway resource and every
+# HTTPRoute / Middleware / Certificate / Issuer / ClusterIssuer in
+# templates/ becomes inert when these flags flip — the templates
+# themselves still ship for operators that may want to re-enable
+# the canonical path later without re-rendering.
+#-----------------------------------------------------------------------------
+traefik:
+  enabled: false
+
+certManager:
+  enabled: false
+
+ingress:
+  gateway:
+    enabled: false
+  certManager:
+    enabled: false
+
+#-----------------------------------------------------------------------------
+# Application baseURLs default to https:// in values.yaml because the
+# Gateway API path terminates TLS. Cloudflare also terminates TLS so
+# the public URLs keep their https:// scheme; no override needed
+# here. The realtime gateway's SSE timeout is already 1h in the chart
+# default; Cloudflare proxy enforces a 100s edge timeout which the
+# realtime handler's 20s heartbeat absorbs.
+#-----------------------------------------------------------------------------
