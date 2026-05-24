@@ -47,6 +47,11 @@ spec:
               {{- end }}
               echo "bucket bootstrap complete"
           env:
+            # mc writes config to $HOME/.mc; with runAsNonRoot + readOnly
+            # root FS, the default HOME (root's /root or empty) lands on
+            # the read-only layer. Point HOME at the writable emptyDir.
+            - name: HOME
+              value: /tmp
             - name: TBITE_S3_ENDPOINT
               value: {{ .Values.global.s3.endpoint | quote }}
             - name: TBITE_S3_BUCKET
