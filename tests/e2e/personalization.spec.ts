@@ -1,12 +1,16 @@
 import { test, expect } from "@playwright/test";
-import { loginEmployee } from "./auth";
+import { loginEmployee, pickTomorrow } from "./auth";
 
 // P9 personalization: chip carousels + ⭐ favorites. Runs against the local
 // dev stack (`make dev`) — same prerequisites as the
 // other employee specs in this directory.
 
 test("cold-start employee sees three empty chip rows with onboarding hints", async ({ page }) => {
-  await loginEmployee(page);
+  // Use a dedicated employee that no other spec orders/favorites for, so the
+  // cold-start assumptions hold regardless of test order (the suite shares one
+  // DB with no per-test reset; the default e2e-employee accrues orders from the
+  // order specs).
+  await loginEmployee(page, "emp-tnb@tbite.test");
 
   // The three chip-row headings are stable anchors; the empty placeholders
   // carry the spec-mandated copy.
@@ -21,23 +25,30 @@ test("cold-start employee sees three empty chip rows with onboarding hints", asy
 test("clicking ⭐ on a meal card surfaces it in the 我的最愛 row", async ({ page }) => {
   await loginEmployee(page);
 
-  // Pick "明天" so a non-cutoff menu is loaded with star buttons available.
-  await page.getByRole("button", { name: /明天/ }).click();
+  // Pick tomorrow so a non-cutoff menu is loaded with star buttons available.
+  await pickTomorrow(page);
 
-  const firstCard = page.locator("article").first();
+  // First menu card that is not yet favorited (favorited cards carry the
+  // "取消最愛" label instead). Scoping by the star avoids picking a featured-row
+  // card that lacks a favorite toggle.
+  const firstCard = page.locator('article:has(button[aria-label="加入最愛"])').first();
   await expect(firstCard).toBeVisible({ timeout: 10_000 });
   const itemName = await firstCard.locator("h3, [class*='font-bold']").first().textContent();
 
-  // Toggle the star — uses optimistic UI then refetches.
+  // Toggle the star — the home row updates optimistically, but the favorite is
+  // POSTed asynchronously. Wait for that save to land before navigating to the
+  // favorites page, whose SSR load reads the persisted state.
   const star = firstCard.getByRole("button", { name: "加入最愛" });
+  const favSaved = page.waitForResponse((r) => /addFavorite/.test(r.url()));
   await star.click();
+  await favSaved;
 
   // After invalidateAll the 我的最愛 carousel should contain the item.
   const favRow = page.getByRole("region", { name: "我的最愛" });
   await expect(favRow).toContainText(itemName?.trim() ?? "", { timeout: 5_000 });
 
-  // 「看更多」 page also lists it.
-  await favRow.getByRole("link", { name: /看更多/ }).click();
+  // 「查看全部」 page also lists it.
+  await favRow.getByRole("link", { name: /查看全部/ }).click();
   await page.waitForURL(/\/menu\/favorites/);
   await expect(page.getByText(itemName?.trim() ?? "")).toBeVisible();
 });
