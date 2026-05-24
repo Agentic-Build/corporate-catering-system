@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	mcpsrv "github.com/mark3labs/mcp-go/server"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 )
@@ -56,6 +57,20 @@ func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(c
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return otelhttp.NewHandler(next, "tbite.http")
+	})
+	// Add the chi-resolved route pattern as an OTel attribute so metrics +
+	// spans carry `http.route` (otelhttp can't infer it before chi routes).
+	// Runs as a wrapper so labeler attrs land before otelhttp records.
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+			if rctx := chi.RouteContext(r.Context()); rctx != nil {
+				if pattern := rctx.RoutePattern(); pattern != "" {
+					labeler, _ := otelhttp.LabelerFromContext(r.Context())
+					labeler.Add(attribute.String("http.route", pattern))
+				}
+			}
+		})
 	})
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)

@@ -103,6 +103,17 @@ func main() {
 			_ = shutdownTracer(sd)
 		}()
 	}
+	shutdownMeter, err := observability.InitMeter(ctx, "tbite-"+string(role), "0.1.0")
+	if err != nil {
+		logger.Warn("otel meter init failed; continuing without metrics", "err", err)
+	} else {
+		defer func() {
+			sd, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = shutdownMeter(sd)
+		}()
+	}
+	observability.MustInitMetrics()
 
 	switch role {
 	case config.RoleAPI:

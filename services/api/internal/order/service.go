@@ -2,6 +2,7 @@ package order
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,8 +10,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
+
+// defaultMealWindow tags every order/quota metric with the single-meal-per-day
+// window this system currently supports. When multi-window support lands the
+// constant becomes a derived field on Order/Supply (PickupWindow).
+const defaultMealWindow = "lunch"
 
 // QuotaTx is the subset of the quota repo Service needs inside a transaction.
 type QuotaTx interface {
@@ -94,7 +102,19 @@ type PlaceOrderInput struct {
 // so quota decrements are released and no order / state / outbox / audit row
 // is left behind.
 func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error) {
+	startedAt := time.Now()
+	// outcome / vendorIDRef are mutated along the function and read by the
+	// deferred emitter so dashboards can attribute every termination — empty,
+	// multi_vendor, vendor_plant_mismatch, cutoff_passed, quota_exhausted,
+	// concurrent_modification, tx_error, success — to (plant, vendor) labels.
+	outcome := "success"
+	vendorIDRef := ""
+	defer func() {
+		observability.RecordOrderPlaceLatency(ctx, time.Since(startedAt).Seconds(), in.Plant, defaultMealWindow, outcome)
+		observability.RecordOrderPlaced(ctx, in.Plant, vendorIDRef, defaultMealWindow, outcome)
+	}()
 	if len(in.Items) == 0 {
+		outcome = "empty"
 		return nil, ErrEmptyOrder
 	}
 
@@ -106,15 +126,19 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 	domainItems := make([]Item, 0, len(in.Items))
 	for _, pi := range in.Items {
 		if pi.Qty <= 0 {
+			outcome = "invalid_qty"
 			return nil, fmt.Errorf("order: item qty must be positive")
 		}
 		mi, err := s.Items.GetByID(ctx, pi.MenuItemID)
 		if err != nil {
+			outcome = "menu_item_lookup_failed"
 			return nil, err
 		}
 		if vendorID == "" {
 			vendorID = mi.VendorID
+			vendorIDRef = vendorID
 		} else if vendorID != mi.VendorID {
+			outcome = "multi_vendor"
 			return nil, ErrMultiVendor
 		}
 		domainItems = append(domainItems, Item{
@@ -128,6 +152,7 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 	// Verify the vendor serves the requesting plant.
 	plants, err := s.Plants.ListByVendor(ctx, vendorID)
 	if err != nil {
+		outcome = "plants_lookup_failed"
 		return nil, err
 	}
 	served := false
@@ -138,6 +163,7 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		}
 	}
 	if !served {
+		outcome = "vendor_plant_mismatch"
 		return nil, ErrVendorPlantMismatch
 	}
 
@@ -145,6 +171,7 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 	// the supply date.
 	v, err := s.Vendors.GetByID(ctx, vendorID)
 	if err != nil {
+		outcome = "vendor_lookup_failed"
 		return nil, err
 	}
 	loc := s.Location
@@ -154,6 +181,7 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 	cutoffAt := time.Date(in.SupplyDate.Year(), in.SupplyDate.Month(), in.SupplyDate.Day()-1, v.CutoffHour, 0, 0, 0, loc)
 	now := s.Clock.Now()
 	if !now.Before(cutoffAt) {
+		outcome = "cutoff_passed"
 		return nil, ErrCutoffPassed
 	}
 
@@ -171,10 +199,16 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		Items:           domainItems,
 	}
 
-	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+	// quotaExhaustedItem is set inside the closure when Decrement returns
+	// ErrOutOfStock so the post-commit emit can include the offending item.
+	var quotaExhaustedItem string
+	err = MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		// 1. Decrement quota for each item — conditional UPDATE per row.
 		for _, it := range o.Items {
 			if _, err := s.QuotaTx.DecrementTx(ctx, tx, it.MenuItemID, in.SupplyDate, it.Qty); err != nil {
+				if errors.Is(err, quota.ErrOutOfStock) {
+					quotaExhaustedItem = it.MenuItemID
+				}
 				return err
 			}
 		}
@@ -202,10 +236,21 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		}
 		// 5. Audit trail.
 		return s.AuditTx.WriteTx(ctx, tx, &in.UserID, &role, "order.place", "order", o.ID, payload, "")
-	})
+	}))
 	if err != nil {
+		if quotaExhaustedItem != "" {
+			outcome = "quota_exhausted"
+			observability.RecordQuotaExhausted(ctx, in.Plant, vendorID, defaultMealWindow, quotaExhaustedItem)
+		} else if errors.Is(err, ErrConcurrentModification) {
+			outcome = "concurrent_modification"
+		} else {
+			outcome = "tx_error"
+		}
 		return nil, err
 	}
+	// outcome stays "success"; deferred RecordOrderPlaced fires. Emit the
+	// success-only price histogram.
+	observability.RecordOrderPrice(ctx, totalPrice, in.Plant, vendorID)
 	return o, nil
 }
 
@@ -228,7 +273,7 @@ func (s *Service) Cancel(ctx context.Context, orderID, userID string) error {
 		return ErrInvalidTransition
 	}
 
-	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+	err = MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		if err := s.OrdersTx.UpdateStatusTx(ctx, tx, o.ID, StatusPlaced, StatusCancelled); err != nil {
 			return err
 		}
@@ -255,7 +300,12 @@ func (s *Service) Cancel(ctx context.Context, orderID, userID string) error {
 			return err
 		}
 		return s.AuditTx.WriteTx(ctx, tx, &userID, &role, "order.cancel", "order", o.ID, payload, "")
-	})
+	}))
+	if err != nil {
+		return err
+	}
+	observability.RecordOrderCancelled(ctx, o.Plant, o.VendorID, "user_cancel", "employee")
+	return nil
 }
 
 type ModifyOrderInput struct {
@@ -322,7 +372,7 @@ func (s *Service) Modify(ctx context.Context, in ModifyOrderInput) (*Order, erro
 		delta[it.MenuItemID] += it.Qty
 	}
 
-	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+	err = MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		for itemID, d := range delta {
 			switch {
 			case d > 0:
@@ -347,10 +397,11 @@ func (s *Service) Modify(ctx context.Context, in ModifyOrderInput) (*Order, erro
 		}
 		role := "employee"
 		return s.AuditTx.WriteTx(ctx, tx, &in.UserID, &role, "order.modify", "order", o.ID, payload, "")
-	})
+	}))
 	if err != nil {
 		return nil, err
 	}
+	observability.RecordOrderModified(ctx, o.Plant, o.VendorID)
 	return s.Orders.GetByID(ctx, o.ID)
 }
 
@@ -381,7 +432,7 @@ func (s *Service) ListByVendorDay(ctx context.Context, vendorID string, day time
 // All orders must belong to vendorID; any forbidden / invalid-state order
 // aborts the whole batch (transaction rolls back).
 func (s *Service) MarkReady(ctx context.Context, vendorID string, orderIDs []string, actorID string) error {
-	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+	err := MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		for _, id := range orderIDs {
 			o, err := s.Orders.GetByID(ctx, id)
 			if err != nil {
@@ -418,7 +469,14 @@ func (s *Service) MarkReady(ctx context.Context, vendorID string, orderIDs []str
 			}
 		}
 		return nil
-	})
+	}))
+	if err != nil {
+		return err
+	}
+	if len(orderIDs) > 0 {
+		observability.RecordOrderReady(ctx, vendorID, len(orderIDs))
+	}
+	return nil
 }
 
 // Pickup atomically transitions READY → PICKED_UP for the order's OWNER.
@@ -426,19 +484,29 @@ func (s *Service) MarkReady(ctx context.Context, vendorID string, orderIDs []str
 // is enforced here (o.UserID != employeeID → ErrForbidden). The conditional
 // UPDATE inside MarkPickedUpTx guarantees one-time idempotency — exactly one
 // concurrent call wins, all others see ErrInvalidTransition.
-func (s *Service) Pickup(ctx context.Context, orderID, employeeID string) error {
+func (s *Service) Pickup(ctx context.Context, orderID, employeeID string) (err error) {
+	var plant, vendor string
+	outcome := "tx_error"
+	defer func() {
+		observability.RecordPickupVerified(ctx, plant, vendor, outcome)
+	}()
+
 	o, err := s.Orders.GetByID(ctx, orderID)
 	if err != nil {
+		outcome = "order_lookup_failed"
 		return err
 	}
+	plant, vendor = o.Plant, o.VendorID
 	if o.UserID != employeeID {
+		outcome = "forbidden"
 		return ErrForbidden
 	}
 	if o.Status != StatusReady {
+		outcome = "wrong_state"
 		return ErrInvalidTransition
 	}
 
-	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+	err = MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		if err := s.OrdersTx.MarkPickedUpTx(ctx, tx, orderID); err != nil {
 			return err
 		}
@@ -460,7 +528,15 @@ func (s *Service) Pickup(ctx context.Context, orderID, employeeID string) error 
 			return err
 		}
 		return s.AuditTx.WriteTx(ctx, tx, &employeeID, &evRole, "order.picked_up", "order", orderID, payload, "")
-	})
+	}))
+	if err != nil {
+		if errors.Is(err, ErrConcurrentModification) {
+			outcome = "concurrent_modification"
+		}
+		return err
+	}
+	outcome = "success"
+	return nil
 }
 
 // MarkNoShow transitions READY orders whose ready_at is older than cutoffAge
@@ -475,7 +551,7 @@ func (s *Service) MarkNoShow(ctx context.Context, cutoffAge time.Duration) (int,
 	}
 	n := 0
 	for _, o := range pending {
-		err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		err := MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 			if err := s.OrdersTx.MarkNoShowTx(ctx, tx, o.ID); err != nil {
 				return err
 			}
@@ -496,10 +572,13 @@ func (s *Service) MarkNoShow(ctx context.Context, cutoffAge time.Duration) (int,
 				return err
 			}
 			return s.AuditTx.WriteTx(ctx, tx, nil, &sysRole, "order.no_show", "order", o.ID, payload, "")
-		})
+		}))
 		if err == nil {
 			n++
 		}
+	}
+	if n > 0 {
+		observability.RecordOrderNoShow(ctx, n)
 	}
 	return n, nil
 }

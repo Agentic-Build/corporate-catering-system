@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 )
 
 // Service exposes vendor-facing quota operations (capacity management + reads).
@@ -65,7 +66,27 @@ func (s *Service) SetCapacity(ctx context.Context, vendorID string, in SetCapaci
 	if err := s.Supplies.Upsert(ctx, sp); err != nil {
 		return nil, err
 	}
+	emitSupplyAdjusted(ctx, vendorID, existing, sp)
 	return sp, nil
+}
+
+// emitSupplyAdjusted converts a capacity change into a directional event so
+// dashboards can see whether merchants are adding or pulling supply.
+func emitSupplyAdjusted(ctx context.Context, vendorID string, existing, sp *Supply) {
+	prev := 0
+	if existing != nil {
+		prev = existing.Capacity
+	}
+	delta := sp.Capacity - prev
+	if delta == 0 {
+		return
+	}
+	direction := "up"
+	if delta < 0 {
+		direction = "down"
+		delta = -delta
+	}
+	observability.RecordSupplyAdjusted(ctx, vendorID, direction, delta)
 }
 
 // SetSoldOut flips the temporary sold-out flag for a vendor's supply on a

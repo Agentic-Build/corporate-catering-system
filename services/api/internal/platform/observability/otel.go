@@ -40,11 +40,16 @@ func Init(ctx context.Context, serviceName, version string) (func(context.Contex
 		return nil, fmt.Errorf("otlp exporter: %w", err)
 	}
 
-	res, _ := resource.Merge(resource.Default(), resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceName(serviceName),
-		semconv.ServiceVersion(version),
-	))
+	// resource.Default() reads OTEL_SERVICE_NAME + OTEL_RESOURCE_ATTRIBUTES,
+	// so passing it second lets env vars override the role-derived defaults.
+	res, _ := resource.Merge(
+		resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName(serviceName),
+			semconv.ServiceVersion(version),
+		),
+		resource.Default(),
+	)
 
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter, sdktrace.WithBatchTimeout(5*time.Second)),

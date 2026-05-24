@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
@@ -191,7 +192,15 @@ func (s *Service) ListVendorDocuments(ctx context.Context, vendorID string, incl
 
 // OpenAnomaly is the worker-facing path; idempotent via dedup index.
 func (s *Service) OpenAnomaly(ctx context.Context, a *Anomaly) error {
-	return s.Anomaly.Open(ctx, a)
+	if err := s.Anomaly.Open(ctx, a); err != nil {
+		return err
+	}
+	vendorID := ""
+	if a.TargetKind == "vendor" {
+		vendorID = a.TargetID
+	}
+	observability.RecordComplianceViolation(ctx, a.Kind, string(a.Severity), vendorID)
+	return nil
 }
 
 // Governance actions a welfare admin may attach when triaging an anomaly.
