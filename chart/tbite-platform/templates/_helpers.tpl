@@ -103,7 +103,7 @@ app.kubernetes.io/component: {{ .role }}
 {{- define "tbite.otelEnv" -}}
 {{- if .Values.observability.otelCollector.enabled }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
-  value: {{ printf "http://%s" (include "tbite.otelCollectorEndpoint" .) | quote }}
+  value: {{ if eq .Values.otel.exporterProtocol "http/protobuf" }}{{ printf "http://%s" (include "tbite.otelCollectorEndpoint" .) | quote }}{{ else }}{{ include "tbite.otelCollectorEndpoint" . | quote }}{{ end }}
 - name: OTEL_EXPORTER_OTLP_PROTOCOL
   value: {{ .Values.otel.exporterProtocol | quote }}
 - name: OTEL_SERVICE_NAMESPACE

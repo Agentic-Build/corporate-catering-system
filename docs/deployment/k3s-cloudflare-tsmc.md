@@ -187,23 +187,26 @@ matching DNS CNAME automatically the moment you save each one.
 
 | Subdomain | Domain | Service type | URL |
 | --- | --- | --- | --- |
-| `api` | `tbite.example.com` | HTTP | `tbite-tbite-platform-api.tbite.svc.cluster.local:8080` |
-| `app` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-employee.tbite.svc.cluster.local:3000` |
-| `merchant` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-merchant.tbite.svc.cluster.local:3000` |
-| `admin` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-admin.tbite.svc.cluster.local:3000` |
-| `rt` | `tbite.example.com` | HTTP | `tbite-tbite-platform-realtime.tbite.svc.cluster.local:8081` |
+| `api` | `tbite.example.com` | HTTP | `tbite-tbite-platform-api.tbite.svc.cluster.local:80` |
+| `app` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-employee.tbite.svc.cluster.local:80` |
+| `merchant` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-merchant.tbite.svc.cluster.local:80` |
+| `admin` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-admin.tbite.svc.cluster.local:80` |
+| `rt` | `tbite.example.com` | HTTP | `tbite-tbite-platform-realtime.tbite.svc.cluster.local:80` |
 | `auth` | `tbite.example.com` | HTTP | `tbite-authentik-server.tbite.svc.cluster.local:80` |
 | `hydra` | `tbite.example.com` | HTTP | `tbite-hydra-public.tbite.svc.cluster.local:4444` |
 | `grafana` | `tbite.example.com` | HTTP | `tbite-grafana.tbite.svc.cluster.local:80` |
 | `argocd` | `tbite.example.com` | HTTP | `argocd-server.argocd.svc.cluster.local:80` |
 
-Replace `tbite.example.com` with your actual zone. The `:port` values
-match the chart's default Service ports (`api.port: 8080`,
-`realtime.port: 8081`, `web.*.port: 3000`); change if you override
-them. For the realtime SSE hostname, expand **Additional application
-settings → TLS** and set **HTTP2 connection** off and **Disable
-Chunked Encoding** off — the application emits a 20s heartbeat so
-Cloudflare's 100s idle timeout does not drop SSE streams.
+Replace `tbite.example.com` with your actual zone. All chart-managed
+Service ports default to `80` (mapped to the per-role container port
+via the Service's `targetPort` — e.g. api Service port 80 → api
+container port 8080). The two exceptions are Hydra's public port
+(4444, owned by the upstream subchart) and Grafana / ArgoCD (80,
+also subchart-managed). For the realtime SSE hostname, expand
+**Additional application settings → TLS** and set **HTTP2 connection**
+off and **Disable Chunked Encoding** off — the application emits a
+20s heartbeat so Cloudflare's 100s idle timeout does not drop SSE
+streams.
 
 ### 4c. (Optional) Add Cloudflare Access policies
 

@@ -690,6 +690,18 @@ authentikBlueprints:
   devUsers:
     enabled: false # opt-in; loads E2E users from blueprints/tbite-dev-users.yaml
 
+# AUTHENTIK_BOOTSTRAP_PASSWORD + TOKEN seed the akadmin user on
+# first boot. Operators rotate these via the Authentik UI day-1.
+# Leave authentikBootstrap.enabled=true (default) for chart-managed
+# bootstrap; flip to false and supply a Secret named
+# `<release>-tbite-platform-authentik-bootstrap` out-of-band when
+# the bootstrap credentials live in an external secret store.
+authentikBootstrap:
+  enabled: true
+  password: "PLEASE-REPLACE-VIA-SOPS"
+  apiToken: "PLEASE-REPLACE-VIA-SOPS"
+  email: "ops@tbite.example.com"
+
 authentik:
   enabled: true
   externalHost: ""
@@ -709,11 +721,17 @@ authentik:
     resources:
       requests: { cpu: 200m, memory: 512Mi }
       limits:   { cpu: 1,    memory: 1Gi }
+    envFrom:
+      - secretRef:
+          name: tbite-tbite-platform-authentik-bootstrap
   worker:
     replicas: 1
     resources:
       requests: { cpu: 200m, memory: 384Mi }
       limits:   { cpu: 1,    memory: 768Mi }
+    envFrom:
+      - secretRef:
+          name: tbite-tbite-platform-authentik-bootstrap
   postgresql:
     enabled: false
   redis:
@@ -730,6 +748,14 @@ authentik:
   blueprints:
     configMaps:
       - tbite-tbite-platform-authentik-blueprints
+  # Bootstrap akadmin credentials are mounted as env from the
+  # chart-managed Secret (templates/secret-authentik-bootstrap.yaml).
+  # Without this, Authentik creates akadmin with a random password
+  # that only appears in the server log on first boot. The
+  # subchart's top-level envFrom field was deprecated in 2026.5; the
+  # canonical place is now the per-component (server / worker)
+  # envFrom blocks. Both need it because the worker writes audit
+  # events on first reconcile that assume akadmin exists.
 
 hydra:
   enabled: true

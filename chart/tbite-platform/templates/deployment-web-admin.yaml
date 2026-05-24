@@ -55,15 +55,22 @@ spec:
               value: {{ $cfg.port | quote }}
             - name: PUBLIC_BASE_URL
               value: {{ $cfg.baseURL | quote }}
+            # SvelteKit SSR fetches the api role over the
+            # in-cluster Service (avoids hairpinning through
+            # the public Cloudflare hostname for every SSR
+            # render). PUBLIC_API_BASE_URL above is the
+            # browser-side URL.
+            - name: API_BASE_URL
+              value: {{ printf "http://%s-tbite-platform-api.%s.svc.cluster.local" .Release.Name (include "tbite.namespace" .) | quote }}
             - name: PUBLIC_API_BASE_URL
               value: {{ .Values.global.baseURL.api | quote }}
             - name: PUBLIC_OIDC_ISSUER_URL
               value: {{ .Values.global.oidcIssuerURL | quote }}
             {{- include "tbite.otelEnv" . | nindent 12 }}
           readinessProbe:
-            {{- include "tbite.httpReadinessProbe" (dict "port" "http") | nindent 12 }}
+            {{- include "tbite.tcpProbe" (dict "port" "http") | nindent 12 }}
           livenessProbe:
-            {{- include "tbite.httpLivenessProbe" (dict "port" "http") | nindent 12 }}
+            {{- include "tbite.tcpProbe" (dict "port" "http") | nindent 12 }}
           resources:
             {{- toYaml $cfg.resources | nindent 12 }}
           securityContext:

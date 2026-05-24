@@ -33,7 +33,12 @@ data:
   TBITE_REALTIME_TOPIC_SCOPE: {{ .Values.realtime.topicScope | quote }}
   TBITE_REALTIME_SSE_IDLE_TIMEOUT: {{ .Values.realtime.sseIdleTimeout | quote }}
 {{- if .Values.observability.otelCollector.enabled }}
-  OTEL_EXPORTER_OTLP_ENDPOINT: {{ printf "http://%s" (include "tbite.otelCollectorEndpoint" .) | quote }}
+  # OTEL_EXPORTER_OTLP_ENDPOINT is a bare `host:port` for the gRPC
+  # protocol (no scheme prefix); the OTel Go SDK rejects values that
+  # already carry `http://` because it concatenates `/v1/traces`
+  # producing malformed URLs like `http://http://host:port/v1/traces`.
+  # For http/protobuf, prepend the scheme; for grpc, do not.
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ if eq .Values.otel.exporterProtocol "http/protobuf" }}{{ printf "http://%s" (include "tbite.otelCollectorEndpoint" .) | quote }}{{ else }}{{ include "tbite.otelCollectorEndpoint" . | quote }}{{ end }}
   OTEL_EXPORTER_OTLP_PROTOCOL: {{ .Values.otel.exporterProtocol | quote }}
   OTEL_SERVICE_NAMESPACE: {{ .Values.otel.serviceNamespace | quote }}
 {{- end }}
