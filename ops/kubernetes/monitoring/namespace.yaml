@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    app.kubernetes.io/part-of: tbite-observability
+    app.kubernetes.io/managed-by: kustomize
+    # Allow tbite namespace pods to reach this namespace via egress rules
+    # that match on namespace labels.
+    name: monitoring

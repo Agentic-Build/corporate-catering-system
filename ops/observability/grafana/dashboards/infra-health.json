@@ -1,0 +1,515 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Postgres / Redis / NATS / Victoria + OTel collector infrastructure health. Use-style \u2014 saturation indicators per component.",
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "panels": [
+    {
+      "type": "row",
+      "title": "Postgres",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Connections by state",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (state) (pg_stat_activity_count{datname=\"tbite\"})",
+          "legendFormat": "{{state}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache hit ratio",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(pg_stat_database_blks_hit_total{datname=\"tbite\"}[5m])) / clamp_min(sum(rate(pg_stat_database_blks_hit_total{datname=\"tbite\"}[5m])) + sum(rate(pg_stat_database_blks_read_total{datname=\"tbite\"}[5m])), 1)",
+          "legendFormat": "hit ratio",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Deadlocks + rollbacks (rate)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(pg_stat_database_deadlocks_total{datname=\"tbite\"}[5m])",
+          "legendFormat": "deadlocks",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(pg_stat_database_xact_rollback_total{datname=\"tbite\"}[5m])",
+          "legendFormat": "rollbacks",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Redis",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Commands per second",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(redis_commands_processed_total[1m])",
+          "legendFormat": "cmds/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory used",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "redis_memory_used_bytes",
+          "legendFormat": "used",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Connected clients",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "redis_connected_clients",
+          "legendFormat": "clients",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "NATS",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Connections + subscriptions",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "gnatsd_varz_connections",
+          "legendFormat": "connections",
+          "refId": "A"
+        },
+        {
+          "expr": "gnatsd_varz_subscriptions",
+          "legendFormat": "subscriptions",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Messages in/out (rate)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(gnatsd_varz_in_msgs[1m])",
+          "legendFormat": "in",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(gnatsd_varz_out_msgs[1m])",
+          "legendFormat": "out",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Observability stack",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "OTel Collector \u2014 ingest + export",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(otelcol_receiver_accepted_spans_total[1m])",
+          "legendFormat": "spans in",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(otelcol_receiver_accepted_metric_points_total[1m])",
+          "legendFormat": "metric points in",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(otelcol_receiver_accepted_log_records_total[1m])",
+          "legendFormat": "logs in",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(otelcol_exporter_send_failed_spans_total[5m])",
+          "legendFormat": "trace export fail",
+          "refId": "D"
+        },
+        {
+          "expr": "rate(otelcol_exporter_send_failed_metric_points_total[5m])",
+          "legendFormat": "metric export fail",
+          "refId": "E"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "VictoriaMetrics \u2014 ingest + disk",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoria-metrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(vm_rows_inserted_total[1m])",
+          "legendFormat": "rows/s ({{type}})",
+          "refId": "A"
+        },
+        {
+          "expr": "vm_data_size_bytes",
+          "legendFormat": "data bytes",
+          "refId": "B"
+        },
+        {
+          "expr": "vm_free_disk_space_bytes",
+          "legendFormat": "free disk",
+          "refId": "C"
+        }
+      ]
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [
+    "infra",
+    "use"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Infra Health",
+  "uid": "infra-health",
+  "version": 1,
+  "links": [
+    {
+      "title": "\u2605 System Status",
+      "type": "link",
+      "url": "/d/status",
+      "icon": "external link",
+      "targetBlank": false
+    },
+    {
+      "title": "\u25c6 Service Health",
+      "type": "link",
+      "url": "/d/oncall-overview",
+      "icon": "external link",
+      "targetBlank": false
+    }
+  ]
+}

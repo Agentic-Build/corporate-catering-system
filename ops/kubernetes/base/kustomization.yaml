@@ -31,3 +31,4 @@ resources:
   - pdb-web-merchant.yaml
   - pdb-web-admin.yaml
   - networkpolicy-default-deny.yaml
+  - networkpolicy-allow-otel.yaml

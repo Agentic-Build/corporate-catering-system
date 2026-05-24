@@ -26,3 +26,7 @@ data:
   APP_BASE_URL_EMPLOYEE: ""
   APP_BASE_URL_MERCHANT: ""
   APP_BASE_URL_ADMIN: ""
+  # OpenTelemetry — points at the in-cluster collector. The collector
+  # fans out to VictoriaMetrics/Logs/Traces in the monitoring namespace.
+  OTEL_EXPORTER_OTLP_ENDPOINT: "otel-collector.monitoring.svc.cluster.local:4318"
+  OTEL_SERVICE_NAMESPACE: "corporate-catering"

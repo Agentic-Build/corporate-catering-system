@@ -19,32 +19,32 @@ receivers:
         - job_name: vmsingle
           metrics_path: /metrics
           static_configs:
-            - targets: ["vmsingle.monitoring.svc.cluster.local:8428"]
+            - targets: ["vmsingle:8428"]
         - job_name: victoria-logs
           metrics_path: /metrics
           static_configs:
-            - targets: ["victoria-logs.monitoring.svc.cluster.local:9428"]
+            - targets: ["victoria-logs:9428"]
         - job_name: victoria-traces
           metrics_path: /metrics
           static_configs:
-            - targets: ["victoria-traces.monitoring.svc.cluster.local:10428"]
+            - targets: ["victoria-traces:10428"]
         - job_name: postgres-exporter
           static_configs:
-            - targets: ["postgres-exporter.monitoring.svc.cluster.local:9187"]
+            - targets: ["postgres-exporter:9187"]
         - job_name: redis-exporter
           static_configs:
-            - targets: ["redis-exporter.monitoring.svc.cluster.local:9121"]
+            - targets: ["redis-exporter:9121"]
         - job_name: nats-exporter
           static_configs:
-            - targets: ["nats-exporter.monitoring.svc.cluster.local:7777"]
+            - targets: ["nats-exporter:7777"]
 
 processors:
   memory_limiter:
     check_interval: 1s
-    limit_mib: 512
-    spike_limit_mib: 128
+    limit_mib: 256
+    spike_limit_mib: 64
   batch:
-    send_batch_size: 8192
+    send_batch_size: 4096
     timeout: 5s
   resource/correlation:
     attributes:
@@ -52,7 +52,7 @@ processors:
         value: corporate-catering
         action: upsert
       - key: deployment.environment
-        value: production
+        value: development
         action: upsert
       - key: telemetry.stack
         value: victoria
@@ -74,21 +74,23 @@ processors:
 
 exporters:
   otlphttp/victoria_traces:
-    endpoint: http://victoria-traces.monitoring.svc.cluster.local:10428
-    traces_endpoint: http://victoria-traces.monitoring.svc.cluster.local:10428/insert/opentelemetry/v1/traces
+    endpoint: http://victoria-traces:10428
+    traces_endpoint: http://victoria-traces:10428/insert/opentelemetry/v1/traces
     tls:
       insecure: true
   prometheusremotewrite/victoria_metrics:
-    endpoint: http://vmsingle.monitoring.svc.cluster.local:8428/api/v1/write
+    endpoint: http://vmsingle:8428/api/v1/write
     tls:
       insecure: true
     resource_to_telemetry_conversion:
       enabled: true
   otlphttp/victoria_logs:
-    endpoint: http://victoria-logs.monitoring.svc.cluster.local:9428
-    logs_endpoint: http://victoria-logs.monitoring.svc.cluster.local:9428/insert/opentelemetry/v1/logs
+    endpoint: http://victoria-logs:9428
+    logs_endpoint: http://victoria-logs:9428/insert/opentelemetry/v1/logs
     tls:
       insecure: true
+  debug:
+    verbosity: basic
 
 service:
   extensions:

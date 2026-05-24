@@ -207,6 +207,200 @@ services:
       - "4444:4444" # public OAuth endpoints
       - "4445:4445" # admin API (used by our consent app, NOT exposed in prod)
 
+  # ─────────────────────────────────────────────────────────────────────────
+  # Observability stack — Victoria + OTel Collector + Grafana + exporters
+  #
+  # Local design mirrors production (ops/observability/otel/collector.yaml,
+  # ops/kubernetes/monitoring/). The host-side API exports OTLP to
+  # localhost:4318 (HTTP) — see scripts/dev/dev-app.sh. Grafana lives on
+  # http://localhost:3001 with anonymous Admin (dev convenience only).
+  # ─────────────────────────────────────────────────────────────────────────
+  vmsingle:
+    image: victoriametrics/victoria-metrics:v1.143.0
+    container_name: tbite-vmsingle
+    restart: unless-stopped
+    command:
+      - "-storageDataPath=/storage"
+      - "-retentionPeriod=14d"
+      - "-httpListenAddr=:8428"
+    ports:
+      - "8428:8428"
+    volumes:
+      - vmsingle-data:/storage
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8428/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+
+  victoria-logs:
+    image: victoriametrics/victoria-logs:v1.50.0
+    container_name: tbite-victoria-logs
+    restart: unless-stopped
+    command:
+      - "-storageDataPath=/storage"
+      - "-retentionPeriod=14d"
+      - "-httpListenAddr=:9428"
+    ports:
+      - "9428:9428"
+    volumes:
+      - victoria-logs-data:/storage
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9428/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+
+  victoria-traces:
+    image: victoriametrics/victoria-traces:v0.9.0
+    container_name: tbite-victoria-traces
+    restart: unless-stopped
+    command:
+      - "-storageDataPath=/storage"
+      - "-retentionPeriod=14d"
+      - "-httpListenAddr=:10428"
+    ports:
+      - "10428:10428"
+    volumes:
+      - victoria-traces-data:/storage
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:10428/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.152.1
+    container_name: tbite-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    depends_on:
+      vmsingle:
+        condition: service_healthy
+      victoria-logs:
+        condition: service_healthy
+      victoria-traces:
+        condition: service_healthy
+    volumes:
+      - ../observability/otel/collector.local.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC — host API
+      - "4318:4318"   # OTLP HTTP — host API
+      - "8888:8888"   # collector's own /metrics (scraped via prometheus receiver)
+      - "13133:13133" # health_check extension
+    # No healthcheck: otel-collector-contrib is distroless, no wget/curl/sh.
+    # Liveness is observable via the /-/healthy endpoint on port 13133 and via
+    # otelcol_* metrics scraped by the prometheus receiver.
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: tbite-postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://tbite:tbite@postgres:5432/tbite?sslmode=disable"
+      PG_EXPORTER_EXTEND_QUERY_PATH: "/etc/postgres-exporter/queries.yaml"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../observability/postgres-exporter/queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+    ports:
+      - "9187:9187"
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    container_name: tbite-redis-exporter
+    restart: unless-stopped
+    command: ["--redis.addr=redis://redis:6379"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "9121:9121"
+
+  nats-exporter:
+    image: natsio/prometheus-nats-exporter:0.16.0
+    container_name: tbite-nats-exporter
+    restart: unless-stopped
+    command: ["-varz", "-jsz=all", "-connz", "-subz", "-serverz", "http://nats:8222"]
+    depends_on:
+      - nats
+    ports:
+      - "7777:7777"
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    container_name: tbite-alertmanager
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/data"
+    volumes:
+      - ../observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/data
+    ports:
+      - "9093:9093"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9093/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  vmalert:
+    image: victoriametrics/vmalert:v1.143.0
+    container_name: tbite-vmalert
+    restart: unless-stopped
+    command:
+      - "-datasource.url=http://vmsingle:8428"
+      - "-notifier.url=http://alertmanager:9093"
+      - "-remoteWrite.url=http://vmsingle:8428"
+      - "-rule=/etc/vmalert/rules.yaml"
+      - "-httpListenAddr=:8880"
+    depends_on:
+      vmsingle:
+        condition: service_healthy
+      alertmanager:
+        condition: service_healthy
+    volumes:
+      - ../observability/vmalert/rules.yaml:/etc/vmalert/rules.yaml:ro
+    ports:
+      - "8880:8880"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8880/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  grafana:
+    image: grafana/grafana-oss:13.0.1
+    container_name: tbite-grafana
+    restart: unless-stopped
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_USERS_DEFAULT_THEME: "dark"
+      GF_INSTALL_PLUGINS: "victoriametrics-logs-datasource"
+      GF_FEATURE_TOGGLES_ENABLE: "traceqlEditor"
+    depends_on:
+      vmsingle:
+        condition: service_healthy
+      victoria-logs:
+        condition: service_healthy
+      victoria-traces:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+
 volumes:
   postgres-data:
   redis-data:
@@ -215,3 +409,8 @@ volumes:
   authentik-postgresql-data:
   authentik-media:
   hydra-postgresql-data:
+  vmsingle-data:
+  victoria-logs-data:
+  victoria-traces-data:
+  grafana-data:
+  alertmanager-data:

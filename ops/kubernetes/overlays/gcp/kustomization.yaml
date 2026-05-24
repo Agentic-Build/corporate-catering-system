@@ -22,11 +22,14 @@ kind: Kustomization
 #   - Cloud Armor security policy `tbite-prod-armor` reserved in the project
 #   - Reserved global static IP `tbite-prod-ip`
 #   - Managed Certificate domains pointed via Cloud DNS to that IP
-
-namespace: tbite
+#
+# No top-level `namespace:` because we compose two bases (../../base in
+# tbite and ../../monitoring in monitoring) — letting kustomize rewrite both
+# to a single namespace would collide.
 
 resources:
   - ../../base
+  - ../../monitoring
   - cloudsql-binding.yaml
   - memorystore-binding.yaml
   - gcs-binding.yaml
@@ -34,6 +37,7 @@ resources:
   - gke-ingress.yaml
   - cloud-armor-policy.yaml
   - external-secrets.yaml
+  - monitoring-external-secrets.yaml
 
 # Patches applied on top of the base manifests.
 patches:
