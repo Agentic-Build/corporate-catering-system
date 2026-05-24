@@ -2,10 +2,9 @@ package mhttp
 
 // Presigned upload path for menu-item images (architecture issue #60).
 // The API authorises the operation and returns a time-bounded URL the
-// client uses to PUT bytes directly to object storage. The legacy
-// multipart upload at POST /api/merchant/uploads remains wired for
-// backwards compatibility but is deprecated; new clients should use
-// POST /api/merchant/uploads/presigned and PUT directly.
+// client uses to PUT bytes directly to object storage. This is the
+// only menu-image transport path; the previous multipart-to-API
+// upload was removed in the backward-compat strip.
 
 import (
 	"context"
@@ -59,9 +58,9 @@ func imageObjectKey(vendorID, ext string) string {
 }
 
 // presignedUploadInput carries the client's declared content-type and
-// byte size. The handler validates both against the same policy used
-// by the legacy memory-path upload (validateImageUpload) so policy
-// stays uniform across transports.
+// byte size. The handler validates both via validateImageUpload so
+// the storage-side ContentLength signed into the presigned URL cannot
+// be inflated past the image-policy ceiling.
 type presignedUploadInput struct {
 	Body struct {
 		ContentType string `json:"content_type" doc:"image/jpeg, image/png, or image/webp" required:"true"`
@@ -178,8 +177,8 @@ func (a *API) presignedMenuImageDownload(ctx context.Context, in *struct {
 }
 
 // RegisterPresigned mounts the presigned upload/download operations.
-// Wired separately from Register() so the chart's BYO-storage mode can
-// skip the legacy multipart endpoint without dropping these.
+// Wired separately from Register() so wiring stays parallel between
+// the menu API's small per-area registrars.
 func (a *API) RegisterPresigned(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "presignedMenuImageUpload",

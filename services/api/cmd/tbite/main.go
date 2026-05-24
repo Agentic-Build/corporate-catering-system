@@ -113,9 +113,8 @@ func main() {
 	observability.MustInitMetrics()
 
 	// Dispatch table for the cloud-native split roles (architecture
-	// issues #56, #58, #62). These short-circuit before the larger
-	// legacy switch so the per-role bodies stay in roles.go and main.go
-	// retains the historical api/worker/scheduler/mcp-stdio layout.
+	// issues #56, #58, #62). These short-circuit before the api and
+	// mcp-stdio switch so the per-role bodies stay in roles.go.
 	switch role {
 	case config.RoleOutboxRelay:
 		if err := runOutboxRelay(ctx, logger, cfg); err != nil {

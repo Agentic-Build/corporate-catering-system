@@ -32,8 +32,10 @@ const (
 // existing anomaly_alert partial unique index, so opening the same anomaly
 // repeatedly just refreshes payload + severity.
 //
-// It mirrors compliance/scanner.DocumentExpiryScanner: a RunOnce single pass
-// plus a Run interval loop, intended to run in the --role=scheduler binary.
+// It mirrors compliance/scanner.DocumentExpiryScanner: a RunOnce single
+// pass plus a Run interval loop, running in the --role=feedback-scanner
+// singleton (one of the split scheduler roles introduced by
+// architecture #56).
 type FeedbackScanner struct {
 	Ratings    RatingRepository
 	Complaints ComplaintRepository

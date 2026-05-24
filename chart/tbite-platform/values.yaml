@@ -543,6 +543,58 @@ minio-tenant:
   fullnameOverride: ""
 
 #-----------------------------------------------------------------------------
+# Cloudflare Tunnel (cloudflared) — outbound-only ingress alternative
+#-----------------------------------------------------------------------------
+# Replaces the Traefik + cert-manager + Gateway API ingress path with
+# a cloudflared Deployment that dials out to Cloudflare's edge. TLS
+# terminates at Cloudflare; in-cluster traffic stays plain HTTP. The
+# tunnel is named (operators create it via `cloudflared tunnel
+# create`) and authenticated by a tunnel token stored in a SOPS-
+# encrypted Secret.
+#
+# When cloudflared.enabled=true, operators typically also set
+# traefik.enabled=false, ingress.gateway.enabled=false,
+# certManager.enabled=false, ingress.certManager.enabled=false —
+# the umbrella's TLS chain becomes Cloudflare's, not Let's Encrypt's.
+cloudflared:
+  enabled: false
+  replicaCount: 2
+  image:
+    repository: cloudflare/cloudflared
+    tag: "2024.11.1"
+    pullPolicy: IfNotPresent
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 500m, memory: 256Mi }
+  tunnel:
+    # The tunnel id is the UUID printed by
+    # `cloudflared tunnel create <name>`. Required.
+    id: ""
+    # Token-mode auth (recommended). Operators paste the
+    # `cloudflared tunnel token <name>` output into the named
+    # SOPS-encrypted Secret under the named key.
+    tokenSecretRef:
+      name: tbite-cloudflared
+      key: token
+    # File-mode auth (alternative). When credentialsFile is set,
+    # the chart mounts credentialsSecretRef as a Secret volume at
+    # /etc/cloudflared/creds/<UUID>.json.
+    credentialsFile: ""
+    credentialsSecretRef:
+      name: tbite-cloudflared-creds
+  ingress:
+    # Cross-namespace route to ArgoCD (typically installed by the
+    # platform team in its own namespace).
+    argocd:
+      enabled: false
+      host: argocd.tbite.example.com
+      serviceURL: http://argocd-server.argocd.svc.cluster.local:80
+    # Additional ad-hoc routes operators want to expose through the
+    # same tunnel (e.g. a tools dashboard, internal docs portal).
+    # Each entry: { hostname: <fqdn>, service: <url> }.
+    extra: []
+
+#-----------------------------------------------------------------------------
 # Ingress / Gateway API
 #-----------------------------------------------------------------------------
 ingress:
@@ -637,6 +689,16 @@ cert-manager:
 # Job) plus the main Valkey for Authentik's cache. This saves
 # ~2 GiB versus bundling their own Postgres + Redis.
 #-----------------------------------------------------------------------------
+# Authentik blueprint mounted into the server pod's /blueprints/
+# directory. The chart's templates/configmap-authentik-blueprints.yaml
+# renders a ConfigMap from chart/tbite-platform/blueprints/ and the
+# authentik.* values below mount it. Set authentikBlueprints.enabled
+# to false when an external Authentik is configured via BYO mode.
+authentikBlueprints:
+  enabled: true
+  devUsers:
+    enabled: false # opt-in; loads E2E users from blueprints/tbite-dev-users.yaml
+
 authentik:
   enabled: true
   externalHost: ""
@@ -669,6 +731,14 @@ authentik:
   # ingress block were both deprecated in 2026.5.0. We expose the
   # server via our own HTTPRoute (templates/httproute-authentik.yaml)
   # at `global.baseURL.api`-derived host instead.
+  #
+  # Blueprint ConfigMap is mounted via the subchart's first-class
+  # blueprints.configMaps mechanism (Authentik 2026.5+). Only keys
+  # ending in `.yaml` are discovered; tbite.yaml and the optional
+  # tbite-dev-users.yaml both qualify.
+  blueprints:
+    configMaps:
+      - tbite-tbite-platform-authentik-blueprints
 
 hydra:
   enabled: true

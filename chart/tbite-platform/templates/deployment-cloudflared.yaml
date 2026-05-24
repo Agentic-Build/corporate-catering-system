@@ -1,0 +1,107 @@
+{{- if .Values.cloudflared.enabled }}
+{{- /*
+cloudflared Deployment. Outbound-only — dials out to
+Cloudflare's edge over QUIC/HTTPS and proxies inbound
+requests routed via the named tunnel into the in-cluster
+Services declared in the configmap-cloudflared.yaml ingress
+map. Multiple replicas attach to the same tunnel for
+high-availability (Cloudflare load-balances across
+connections).
+
+Auth modes:
+  * `tunnel.tokenSecretRef` — the simplest mode; the token
+    encodes the tunnel id + credentials. Operators paste the
+    `cloudflared tunnel token <name>` output into a SOPS-
+    encrypted Secret.
+  * `tunnel.credentialsFile` — for the older
+    cert.pem + <UUID>.json file pair. Operators mount the
+    JSON via a Secret + the cred path in the config map.
+*/ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tbite.fullname" . }}-cloudflared
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cloudflared
+spec:
+  replicas: {{ .Values.cloudflared.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "tbite.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: cloudflared
+  template:
+    metadata:
+      labels:
+        {{- include "tbite.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: cloudflared
+      annotations:
+        checksum/configmap: {{ include (print $.Template.BasePath "/configmap-cloudflared.yaml") . | sha256sum }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      containers:
+        - name: cloudflared
+          image: "{{ .Values.cloudflared.image.repository }}:{{ .Values.cloudflared.image.tag }}"
+          imagePullPolicy: {{ .Values.cloudflared.image.pullPolicy }}
+          args:
+            - tunnel
+            - --config
+            - /etc/cloudflared/config.yaml
+            - --no-autoupdate
+            - --metrics
+            - 0.0.0.0:2000
+            {{- if .Values.cloudflared.tunnel.tokenSecretRef.name }}
+            - run
+            {{- else }}
+            - run
+            - {{ .Values.cloudflared.tunnel.id | quote }}
+            {{- end }}
+          {{- if .Values.cloudflared.tunnel.tokenSecretRef.name }}
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.cloudflared.tunnel.tokenSecretRef.name | quote }}
+                  key:  {{ .Values.cloudflared.tunnel.tokenSecretRef.key | quote }}
+          {{- end }}
+          ports:
+            - name: metrics
+              containerPort: 2000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared
+              readOnly: true
+            {{- if .Values.cloudflared.tunnel.credentialsFile }}
+            - name: credentials
+              mountPath: /etc/cloudflared/creds
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.cloudflared.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "tbite.fullname" . }}-cloudflared
+        {{- if .Values.cloudflared.tunnel.credentialsFile }}
+        - name: credentials
+          secret:
+            secretName: {{ .Values.cloudflared.tunnel.credentialsSecretRef.name | quote }}
+        {{- end }}
+{{- end }}

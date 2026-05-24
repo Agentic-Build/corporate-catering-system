@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=https://goauthentik.io/blueprints/schema.json
+#
+# Optional dev-only T-Bite users. Loaded into the Authentik server
+# pod at /blueprints/tbite-dev-users.yaml when
+# authentikBlueprints.devUsers.enabled=true. The default value is
+# false so a production install carries only the structural blueprint
+# (tbite.yaml).
+#
+# Dev users mirror the dev seed in scripts/dev/data so a fresh
+# install can complete the OIDC handshake end-to-end without any
+# operator-side user provisioning. All users share the password
+# `tbite-dev-pass`. Do not enable this blueprint in production.
+version: 1
+metadata:
+  name: T-Bite dev users
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+
+entries:
+  - id: tbite-dev-employee
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: e2e-employee@tbite.test
+    attrs:
+      name: E2E Employee
+      email: e2e-employee@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !Find [authentik_core.group, [name, "tbite:role:employee"]]
+      attributes:
+        tbite_role: employee
+        tbite_employee_id: E2E001
+        tbite_plant: tn-a
+        tbite_department: IT
+
+  - id: tbite-dev-admin
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: e2e-admin@tbite.test
+    attrs:
+      name: E2E Admin
+      email: e2e-admin@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !Find [authentik_core.group, [name, "tbite:role:welfare_admin"]]
+      attributes:
+        tbite_role: welfare_admin
+
+  - id: tbite-dev-merchant
+    model: authentik_core.user
+    state: present
+    identifiers:
+      username: e2e-merchant@tbite.test
+    attrs:
+      name: E2E Merchant
+      email: e2e-merchant@tbite.test
+      is_active: true
+      type: internal
+      path: tbite/dev
+      password: tbite-dev-pass
+      groups:
+        - !Find [authentik_core.group, [name, "tbite:role:vendor_operator"]]
+      attributes:
+        tbite_role: vendor_operator
+        tbite_vendor_id: a1111111-1111-1111-1111-111111111111
