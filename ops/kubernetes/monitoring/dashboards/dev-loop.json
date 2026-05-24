@@ -108,7 +108,30 @@
             "fillOpacity": 10,
             "showPoints": "never"
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "deadlocks/s"},
+            "properties": [
+              {"id": "unit", "value": "ops"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "rollbacks/s"},
+            "properties": [
+              {"id": "unit", "value": "ops"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "oldest open tx (s)"},
+            "properties": [
+              {"id": "unit", "value": "s"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
