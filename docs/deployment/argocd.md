@@ -1,6 +1,6 @@
 # ArgoCD 持續部署（CD）
 
-以 ArgoCD 為核心的 GitOps 部署流程：程式碼推上 `main` 後，GitHub Actions 自動 build 四個 container image 並推到 GitHub Container Registry（GHCR），ArgoCD（搭配 Image Updater）偵測到新 image 後，把 single-node overlay 同步到叢集。
+以 ArgoCD 為核心的 GitOps 部署流程：程式碼推上 `main` 後，GitHub Actions 自動 build 四個 container image 並推到 GitHub Container Registry（GHCR）；同一個 workflow 接著把該次 build 的不可變 `sha-<gitsha>` tag **git write-back** 進 single-node overlay 的 `images:`（commit 回 `main`）；ArgoCD 偵測到 overlay 的 git 變更，自動把新版同步到叢集——形成 push → 自動部署的閉環。
 
 ## 流程總覽
 
@@ -16,15 +16,11 @@
         │         tbite-<name>           │
         │  tag: sha-<short> / latest /   │
         │       semver                   │
-        └───────────────┬───────────────┘
-                        │ 新 image 出現在 GHCR
-                        ▼
-        ┌───────────────────────────────┐
-        │ argocd-image-updater           │
-        │  偵測新的 sha-* tag             │
-        │  write-back 到 Git             │
-        │  （改寫 Application 的          │
-        │    kustomize.images tag）       │
+        ├───────────────────────────────┤
+        │ job: bump-image-tags           │
+        │  sed overlay images newTag     │
+        │   → sha-<short>                │
+        │  commit [skip ci] → main       │
         └───────────────┬───────────────┘
                         │ Git commit 觸發
                         ▼
@@ -32,7 +28,7 @@
         │ ArgoCD Application             │
         │  tbite-single-node             │
         │  path = overlays/single-node   │
-        │  kustomize.images 覆寫成 GHCR  │
+        │  (images 釘 GHCR sha，不覆寫)  │
         │  syncPolicy: automated         │
         │   (prune + selfHeal)           │
         └───────────────┬───────────────┘
@@ -41,7 +37,7 @@
                    叢集 namespace: tbite
 ```
 
-設計重點：ArgoCD 的 `Application.spec.source.path` 直接指向 `ops/kubernetes/overlays/single-node`，但**不修改該 overlay 本身**。overlay 仍把四個 app 釘在本地 `tbite/<name>:dev`（保留 `make dev` 的本地開發語意）；ArgoCD 透過 `Application.spec.source.kustomize.images` 在部署時把這四個 image **覆寫**成 GHCR 上的版本。本地開發與叢集部署因此各走各的 image，互不干擾。
+設計重點：image tag 的**唯一來源**是 overlay 的 `images:`（釘不可變的 `ghcr.io/agentic-build/tbite-<name>:sha-<gitsha>`），由 `cd-publish-images` 的 `bump-image-tags` job 在每次 push `main` 時 write-back 更新。ArgoCD 直接同步該 overlay（**不**再用 `Application.spec.source.kustomize.images` 覆寫，也不依賴 argocd-image-updater）。`make dev` 是在 host 上跑 app（vite + go run），不經此 overlay，因此本地開發不受影響。
 
 ## image 命名與 tag 策略
 
@@ -60,11 +56,11 @@ CI 推送、ArgoCD 覆寫、本文件三處的 image 名稱**完全一致**：
 
 | tag                | 觸發時機            | 用途                                        |
 | ------------------ | ------------------- | ------------------------------------------- |
-| `sha-<short-sha>`  | 每次 push / tag     | 不可變，Image Updater 追蹤的就是這個        |
+| `sha-<short-sha>`  | 每次 push / tag     | 不可變，overlay 釘的就是這個（部署用）      |
 | `latest`           | push 到 `main`      | 可變，方便手動 / 首次 bootstrap 拉取        |
 | `<semver>`         | push tag `v*`       | 例如 `v1.2.3` → `1.2.3` 與 `1.2`            |
 
-Image Updater 採 `newest-build` 策略，只接受符合 `^sha-[0-9a-f]+$` 的 tag——亦即追蹤不可變的 commit image，而非可變的 `latest`。
+overlay 釘的是不可變的 `sha-<short-sha>` tag；`bump-image-tags` 每次 push `main` 都會把它更新成該次 build 的 sha。`latest` 仍會推，但部署不依賴它（不可變 tag 才能精確對應 commit）。
 
 ## 前置作業（每個環境一次）
 
@@ -76,35 +72,11 @@ Image Updater 採 `newest-build` 策略，只接受符合 `^sha-[0-9a-f]+$` 的 
    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
    ```
 
-3. **安裝 ArgoCD Image Updater**（image 自動化所需）：
-
-   ```bash
-   kubectl apply -n argocd \
-     -f https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/manifests/install.yaml
-   ```
-
-4. **GHCR 認證**，二選一：
+3. **GHCR 認證**，二選一：
    - **（建議）把四個 package 設為 public**：在 GitHub →  org `Agentic-Build` → Packages → 各 `tbite-*` package → Package settings → 改為 Public。叢集即可匿名拉取，不需要 imagePullSecret。
    - **若維持 private**：依 `ops/argocd/ghcr-pull-secret.example.yaml` 的說明建立一個 `docker-registry` 型別的 Secret（內含 read:packages 權限的 PAT），並掛到 `tbite` namespace 的 ServiceAccount 或 Deployment。**切勿把真實 token commit 進 repo。**
 
-     Image Updater 若要讀取 private registry，另需在 `argocd-image-updater-config` ConfigMap 設定對應的 registry 認證（見官方文件 *Private registries*）。
-
-5. **Git write-back 認證**：Image Updater 要把新 tag 寫回 `main`，需要一把對本 repo 有寫入權限的憑證。最常見的做法是建立一個 secret 並讓 Image Updater 引用：
-
-   ```bash
-   kubectl -n argocd create secret generic git-creds \
-     --from-literal=username=<github-username> \
-     --from-literal=password=<github-PAT-with-repo-write>
-   ```
-
-   再於 Application 上補一個 annotation 指向它（若採此 secret 名稱）：
-
-   ```
-   argocd-image-updater.argoproj.io/write-back-target: kustomization
-   argocd-image-updater.argoproj.io/git-credentials: argocd/git-creds
-   ```
-
-   > 若暫時不想啟用 write-back，可改用 `write-back-method: argocd`（直接改 live state），但會與 `selfHeal` 互相拉扯，不建議。本 repo 預設採 `git` write-back。
+> 自動部署（image 更新）**不需要 argocd-image-updater，也不需要額外的 git 憑證**：由 `cd-publish-images.yml` 的 `bump-image-tags` job 用內建的 `GITHUB_TOKEN`（`contents: write`）把新 sha tag write-back 進 overlay。commit 帶 `[skip ci]`（且 `GITHUB_TOKEN` 推送本就不會觸發 workflow，雙重防遞迴）。
 
 ## 部署
 
@@ -135,11 +107,9 @@ kubectl -n argocd get applications
 kubectl -n tbite get pods -w
 ```
 
-## imagePullPolicy 的考量
+## image 為什麼用不可變 tag
 
-Application 內含一個 kustomize patch，把所有 Deployment 第一個 container 的 `imagePullPolicy` 設為 `Always`。原因：`kustomize.images` 預設覆寫成 `:latest`（可變 tag），若用預設的 `IfNotPresent`，節點上一旦快取過 `latest` 就不會再拉新版。設成 `Always` 可保證首次 bootstrap 一定抓到最新。
-
-待 Image Updater 開始運作後，它會把 tag 改寫成不可變的 `sha-<short>`，屆時 `Always` 實質上是 no-op（同一 tag 內容固定），但保留它不會有副作用。
+overlay 釘不可變的 `sha-<gitsha>`：每次部署的 image ref 都不同，kubelet 自然會拉新版，因此**不需要** `imagePullPolicy: Always`（用預設的 `IfNotPresent` 即可，同一 sha 內容固定）。早期為搭配可變 `:latest` 而加的 `Always` patch 已隨改用不可變 tag 一併移除。
 
 ## 手動 sync
 
@@ -149,7 +119,7 @@ argocd app sync tbite-single-node
 
 或在 ArgoCD Web UI 點該 Application 的 **SYNC**。
 
-若只想手動換 image 而不等 Image Updater，可直接編輯 `ops/argocd/application-single-node.yaml` 裡 `kustomize.images` 的 tag（例如把 `:latest` 換成某個 `sha-<short>`），commit 後 ArgoCD 會自動同步。
+若只想手動換 image，直接編輯 `ops/kubernetes/overlays/single-node/kustomization.yaml` 裡 `images:` 的 `newTag`（換成某個 `sha-<short>`），commit 後 ArgoCD 會自動同步。
 
 ## 回滾
 
@@ -162,12 +132,11 @@ GitOps 的回滾就是把 Git 退回上一個好的狀態：
   argocd app rollback tbite-single-node <ID>    # 回滾到指定的歷史 revision
   ```
 
-- **用 Git**：把 `kustomize.images` 的 tag 改回前一個 `sha-<short>`（或 `git revert` Image Updater 的 write-back commit），push 後 ArgoCD 自動同步回去。
+- **用 Git**：把 overlay `images:` 的 `newTag` 改回前一個 `sha-<short>`（或 `git revert` 那次 `bump-image-tags` 的 write-back commit），push 後 ArgoCD 自動同步回去。
 
 > 提醒：`syncPolicy.automated.selfHeal` 會持續把叢集拉回 Git 宣告的狀態，所以直接 `kubectl edit` 改 live image 會被 ArgoCD 還原——回滾務必走 Git 或 `argocd app rollback`。
 
 ## 與本地開發的關係
 
-- `make dev` / single-node overlay 仍使用本地 `tbite/<name>:dev`，不受本流程影響。
-- 本 CD 流程只在「真實叢集 + ArgoCD」情境下，透過 Application 的 image 覆寫改用 GHCR image。
-- 兩者共用同一份 overlay，差別只在 ArgoCD 額外疊上的 `kustomize.images` 與 patch。
+- `make dev` 在 host 上跑 app（vite + go run），不經 single-node overlay，因此不受本流程影響。
+- single-node overlay 的 `images:` 釘 GHCR `sha-<gitsha>`，由 CI write-back 維護；ArgoCD 同步它部署到叢集。
