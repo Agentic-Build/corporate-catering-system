@@ -67,6 +67,10 @@ cat <<EOF
    api        http://localhost:8080/healthz
    authentik  http://localhost:9002 (akadmin / tbite-dev-admin)
    minio      http://localhost:9001 (tbite / tbite-dev-secret)
+   grafana    http://localhost:3001 (anonymous Admin)
+   vm metrics http://localhost:8428
+   vm logs    http://localhost:9428
+   vm traces  http://localhost:10428
 
 Ctrl-C stops host processes. Deps stay up — 'make dev-down' to stop them.
 
@@ -103,6 +107,13 @@ export APP_BASE_URL_ADMIN="http://localhost:5175"
 # Ory Hydra sidecar — OAuth + DCR for MCP remote clients.
 export HYDRA_PUBLIC_URL="http://localhost:4444"
 export HYDRA_ADMIN_URL="http://localhost:4445"
+
+# OpenTelemetry — host API exports OTLP to the in-compose collector on
+# localhost:4318. Grafana is at http://localhost:3001 (anonymous Admin).
+export OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4318"
+export OTEL_SERVICE_NAME="catering-http-api"
+export OTEL_SERVICE_VERSION="dev"
+export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=development,service.namespace=corporate-catering"
 
 go run ./services/api/cmd/tbite --role=api &
 pnpm --filter @tbite/employee dev &

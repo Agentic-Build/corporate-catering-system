@@ -60,6 +60,7 @@ func New(deps Deps) *server.MCPServer {
 		"T-Bite MCP",
 		"0.1.0",
 		server.WithToolCapabilities(true),
+		server.WithHooks(buildMetricsHooks()),
 	)
 	registerOrderTools(s, deps)
 	registerMenuTools(s, deps)

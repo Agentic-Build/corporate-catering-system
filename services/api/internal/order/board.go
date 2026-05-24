@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -138,11 +139,18 @@ func RunBoardConsumer(ctx context.Context, js jetstream.JetStream, hub *BoardHub
 	if err != nil {
 		return err
 	}
+	// Name the consumer deterministically so multiple API replicas show up as
+	// distinct entries in monitoring (one per pod), and shorten
+	// InactiveThreshold so a crashed pod's consumer reaps fast — otherwise the
+	// JetStream consumer-lag panel would point at zombie consumers from
+	// previously-restarted pods for up to an hour and inflate "lag" metrics.
+	hostname, _ := os.Hostname()
 	cons, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+		Name:              "board-fanout-" + hostname,
 		FilterSubject:     "order.>",
 		AckPolicy:         jetstream.AckNonePolicy,
 		DeliverPolicy:     jetstream.DeliverNewPolicy,
-		InactiveThreshold: time.Hour,
+		InactiveThreshold: 30 * time.Second,
 	})
 	if err != nil {
 		return err

@@ -1,0 +1,14 @@
+# Single-node dev convenience: anonymous Admin login on Grafana. The
+# overlay's nginx-ingress is the only external entry point, so this is
+# acceptable in throwaway dev clusters. Never use in production.
+#
+# This file is applied as a strategic-merge patch onto the
+# grafana-runtime-config ConfigMap in the monitoring base.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-runtime-config
+  namespace: monitoring
+data:
+  GF_AUTH_ANONYMOUS_ENABLED: "true"
+  GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"

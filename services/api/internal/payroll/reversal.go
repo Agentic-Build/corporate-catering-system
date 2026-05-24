@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 )
 
 // ReverseOrder reverses (沖銷) the salary deduction for a single charged order.
@@ -71,7 +72,7 @@ func (s *Service) ReverseOrder(ctx context.Context, orderID string) error {
 	}
 	hasEntry := err == nil
 
-	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		if err := s.OrderTx.UpdateStatusTx(ctx, tx, orderID, o.Status, order.StatusRefunded); err != nil {
 			return err
 		}
@@ -92,4 +93,13 @@ func (s *Service) ReverseOrder(ctx context.Context, orderID string) error {
 		}
 		return s.Audit.WriteTx(ctx, tx, nil, &sysRole, "payroll.order_reverse", "order", orderID, payload, "")
 	})
+	if err != nil {
+		return err
+	}
+	reason := "auto_refund"
+	if !hasEntry {
+		reason = "current_period_refund"
+	}
+	observability.RecordPayrollReversal(ctx, reason)
+	return nil
 }

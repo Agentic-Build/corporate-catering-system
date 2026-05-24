@@ -6,6 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 )
 
 const auditActorRole = "welfare_admin"
@@ -34,6 +36,7 @@ type CloseSettlementInput struct {
 // that already has an active (status='closed') row for any of those vendors is
 // rejected with ErrPeriodAlreadyClosed — void the prior settlement first.
 func (s *Service) CloseSettlement(ctx context.Context, in CloseSettlementInput) ([]*Settlement, error) {
+	startedAt := time.Now()
 	if in.PeriodStart.After(in.PeriodEnd) {
 		return nil, ErrInvalidPeriod
 	}
@@ -76,6 +79,10 @@ func (s *Service) CloseSettlement(ctx context.Context, in CloseSettlementInput) 
 	})
 	if err != nil {
 		return nil, err
+	}
+	dur := time.Since(startedAt).Seconds()
+	for _, st := range out {
+		observability.RecordSettlementRun(ctx, st.VendorID, "closed", dur, st.GrossMinor)
 	}
 	return out, nil
 }

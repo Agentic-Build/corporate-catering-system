@@ -14,6 +14,7 @@ import (
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 )
 
 // DocumentExpiryScanner runs every Interval and:
@@ -81,6 +82,7 @@ func (s *DocumentExpiryScanner) RunOnce(ctx context.Context) (int, error) {
 			s.Logger.Warn("open expired anomaly", "doc_id", d.ID, "err", err)
 			continue
 		}
+		observability.RecordComplianceViolation(ctx, "document_expired", string(compliance.SeverityCritical), d.VendorID)
 		handled++
 	}
 
@@ -123,6 +125,7 @@ func (s *DocumentExpiryScanner) RunOnce(ctx context.Context) (int, error) {
 			s.Logger.Warn("open expiring anomaly", "doc_id", d.ID, "err", err)
 			continue
 		}
+		observability.RecordComplianceDocExpiring(ctx, d.VendorID, daysUntil)
 		handled++
 	}
 

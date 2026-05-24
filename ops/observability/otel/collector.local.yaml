@@ -1,0 +1,137 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: otel-collector
+          static_configs:
+            - targets: ["localhost:8888"]
+        - job_name: vmsingle
+          metrics_path: /metrics
+          static_configs:
+            - targets: ["vmsingle:8428"]
+        - job_name: victoria-logs
+          metrics_path: /metrics
+          static_configs:
+            - targets: ["victoria-logs:9428"]
+        - job_name: victoria-traces
+          metrics_path: /metrics
+          static_configs:
+            - targets: ["victoria-traces:10428"]
+        - job_name: postgres-exporter
+          static_configs:
+            - targets: ["postgres-exporter:9187"]
+        - job_name: redis-exporter
+          static_configs:
+            - targets: ["redis-exporter:9121"]
+        - job_name: nats-exporter
+          static_configs:
+            - targets: ["nats-exporter:7777"]
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  batch:
+    send_batch_size: 4096
+    timeout: 5s
+  resource/correlation:
+    attributes:
+      - key: service.namespace
+        value: corporate-catering
+        action: upsert
+      - key: deployment.environment
+        value: development
+        action: upsert
+      - key: telemetry.stack
+        value: victoria
+        action: upsert
+  attributes/correlation:
+    actions:
+      - key: trace_id
+        from_attribute: trace_id
+        action: upsert
+      - key: span_id
+        from_attribute: span_id
+        action: upsert
+      - key: request_id
+        from_attribute: request_id
+        action: upsert
+      - key: operation_id
+        from_attribute: operation_id
+        action: upsert
+
+exporters:
+  otlphttp/victoria_traces:
+    endpoint: http://victoria-traces:10428
+    traces_endpoint: http://victoria-traces:10428/insert/opentelemetry/v1/traces
+    tls:
+      insecure: true
+  prometheusremotewrite/victoria_metrics:
+    endpoint: http://vmsingle:8428/api/v1/write
+    tls:
+      insecure: true
+    resource_to_telemetry_conversion:
+      enabled: true
+  otlphttp/victoria_logs:
+    endpoint: http://victoria-logs:9428
+    logs_endpoint: http://victoria-logs:9428/insert/opentelemetry/v1/logs
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+service:
+  extensions:
+    - health_check
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+    logs:
+      level: info
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/correlation
+        - batch
+      exporters:
+        - otlphttp/victoria_traces
+    metrics:
+      receivers:
+        - otlp
+        - prometheus
+      processors:
+        - memory_limiter
+        - resource/correlation
+        - batch
+      exporters:
+        - prometheusremotewrite/victoria_metrics
+    logs:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/correlation
+        - attributes/correlation
+        - batch
+      exporters:
+        - otlphttp/victoria_logs

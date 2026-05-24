@@ -3,6 +3,8 @@ package ohttp
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -653,6 +655,7 @@ func mapErr(err error) error {
 		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, order.ErrInvalidTransition),
 		errors.Is(err, order.ErrCutoffPassed),
+		errors.Is(err, order.ErrConcurrentModification),
 		errors.Is(err, quota.ErrOutOfStock),
 		errors.Is(err, quota.ErrSupplyNotFound):
 		return huma.Error409Conflict(err.Error())
@@ -662,5 +665,12 @@ func mapErr(err error) error {
 		errors.Is(err, order.ErrPlantMismatch):
 		return huma.Error400BadRequest(err.Error())
 	}
+	// Diagnostic: surface the unmapped error class so we can spot
+	// race-condition / leaked-tx errors in production logs. Kept permanent —
+	// a 500 from an unmapped error is always a bug we want to fix.
+	slog.Error("order http unmapped error → 500",
+		"err", err.Error(),
+		"type", fmt.Sprintf("%T", err),
+	)
 	return huma.Error500InternalServerError("internal", err)
 }

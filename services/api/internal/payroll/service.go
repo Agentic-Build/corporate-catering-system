@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 )
 
 // AuditTx mirrors the audit-repo shape used by order.Service so we can share
@@ -135,6 +136,10 @@ func (s *Service) BuildDraft(ctx context.Context, in BuildDraftInput) (*Batch, e
 	if err != nil {
 		return nil, err
 	}
+	period := batch.PeriodStart.Format("2006-01")
+	for _, a := range byUser {
+		observability.RecordPayrollEntry(ctx, period, a.amount)
+	}
 	return batch, nil
 }
 
@@ -249,7 +254,7 @@ func (s *Service) ResolveDispute(ctx context.Context, in ResolveDisputeInput) er
 		return ErrInvalidTransition
 	}
 
-	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		if err := s.Disputes.UpdateStatusTx(ctx, tx, in.DisputeID, in.Status, &in.ResolvedBy, in.Resolution, in.RefundMinor); err != nil {
 			return err
 		}
@@ -282,6 +287,11 @@ func (s *Service) ResolveDispute(ctx context.Context, in ResolveDisputeInput) er
 		}
 		return s.Audit.WriteTx(ctx, tx, &in.ResolvedBy, &adminRole, "payroll.dispute_resolve", "payroll_dispute", in.DisputeID, payload, "")
 	})
+	if err != nil {
+		return err
+	}
+	observability.RecordPayrollDispute(ctx, string(in.Status))
+	return nil
 }
 
 // ListBatches returns batches filtered by status (nil → all).

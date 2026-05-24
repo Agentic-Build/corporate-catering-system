@@ -5,13 +5,19 @@ kind: Kustomization
 # Adds self-hosted single-pod Postgres / Redis / NATS / MinIO / Authentik /
 # Hydra + a dev Secret + an allow-all NetworkPolicy (relaxes the base
 # default-deny on this trusted single-node box) + patches the base ConfigMap
-# with in-cluster connection strings. HA / clustered variants land in P8.
-
-namespace: tbite
+# with in-cluster connection strings, AND composes the monitoring stack
+# (../../monitoring) so Grafana/VM/VL/VT/OTel/exporters/vmalert run alongside
+# the app. HA / clustered variants land in P8.
+#
+# No top-level `namespace:` because we compose two bases (../../base in tbite
+# and ../../monitoring in monitoring) — letting kustomize rewrite both to a
+# single namespace would collide.
 
 resources:
   - ../../base
+  - ../../monitoring
   - secrets-bootstrap.yaml
+  - monitoring-secrets.yaml
   - allow-all.yaml
   - postgres.yaml
   - redis.yaml
@@ -41,6 +47,11 @@ patches:
     target:
       kind: ConfigMap
       name: tbite-config
+  # Single-node Grafana: anonymous Admin so devs land straight in the UI.
+  - path: grafana-runtime-patch.yaml
+    target:
+      kind: ConfigMap
+      name: grafana-runtime-config
 
 # Pin app images to the local :dev tag built by `make dev-up` (Task 14).
 images:
