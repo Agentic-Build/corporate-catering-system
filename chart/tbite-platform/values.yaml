@@ -40,8 +40,11 @@ global:
   # Postgres URLs are referenced via per-role secret refs (e.g. api.database.*).
 
 image:
-  repository: ghcr.io/jacoblincool/corporate-catering-system/tbite
-  tag: "" # defaults to .Chart.AppVersion when empty
+  # Single image holds every --role. Tag override is required because the
+  # chart's AppVersion is independent of the API image's git-sha-based tag;
+  # CI bumps the tag here (or in values-prod.yaml) on every main merge.
+  repository: ghcr.io/agentic-build/tbite-api
+  tag: "sha-766bf49"
   pullSecrets: []
 
 serviceAccount:

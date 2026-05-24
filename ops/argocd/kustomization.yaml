@@ -13,3 +13,8 @@ namespace: argocd
 resources:
   - project.yaml
   - application-single-node.yaml
+  # Helm umbrella chart Application (architecture #47). Picks the
+  # canonical chart/tbite-platform path. Co-exists with the kustomize
+  # Application during migration; on a per-cluster basis, operators
+  # select one Application to be the live source of truth.
+  - application-helm.yaml
