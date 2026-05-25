@@ -61,6 +61,10 @@ global:
     region: "us-east-1"
     bucket: "tbite-prod"
     usePathStyle: "1"
+    # publicBaseURL is the externally-reachable MinIO base URL that browsers
+    # use to fetch images directly (path-style: {publicBaseURL}/{bucket}/{key}).
+    # For Cloudflare Tunnel deployments, set this to the files-* tunnel host.
+    publicBaseURL: "https://files.tbite.example.com"
     credentialsSecretRef:
       name: tbite-s3
       accessKeyKey: accessKeyID

@@ -84,6 +84,7 @@ type Config struct {
 	S3SecretAccessKey string
 	S3Bucket          string
 	S3UsePathStyle    bool
+	S3PublicBaseURL   string
 
 	// HydraPublicURL / HydraAdminURL configure the Ory Hydra sidecar that
 	// fronts our OAuth surface so MCP clients (Claude.ai, ChatGPT) get
@@ -142,6 +143,7 @@ func FromEnv() (Config, error) {
 		S3SecretAccessKey: os.Getenv("S3_SECRET_ACCESS_KEY"),
 		S3Bucket:          getenv("S3_BUCKET", "tbite"),
 		S3UsePathStyle:    os.Getenv("S3_USE_PATH_STYLE") == "1",
+		S3PublicBaseURL:   getenv("S3_PUBLIC_BASE_URL", "http://localhost:9000"),
 
 		HydraPublicURL: strings.TrimRight(os.Getenv("HYDRA_PUBLIC_URL"), "/"),
 		HydraAdminURL:  strings.TrimRight(os.Getenv("HYDRA_ADMIN_URL"), "/"),

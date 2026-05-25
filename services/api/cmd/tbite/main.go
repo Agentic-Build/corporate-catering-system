@@ -322,7 +322,11 @@ func main() {
 			Items:      itemRepo,
 			Images:     mpgrepo.NewImageRepo(pool),
 		}
-		menuAPI := &mhttp.API{Svc: menuService}
+		menuAPI := &mhttp.API{
+			Svc:                  menuService,
+			StoragePublicBaseURL: cfg.S3PublicBaseURL,
+			StorageBucket:        cfg.S3Bucket,
+		}
 
 		// 7d. Quota service + merchant handlers (vendor capacity management)
 		supplyRepo := qpgrepo.NewSupplyRepo(pool)
@@ -395,9 +399,8 @@ func main() {
 		if err := s3API.EnsureBucket(ctx); err != nil {
 			logger.Warn("ensure bucket failed; uploads will fail until storage is reachable", "err", err)
 		}
-		// Menu-item images travel via presigned PUT/GET to object
-		// storage. The API authorises and signs URLs; bytes never
-		// traverse the API path.
+		// Menu-item images travel via presigned PUT/GET or direct upload to
+		// object storage. The API authorises both paths.
 		menuAPI.Storage = s3API
 		complianceService := &compliance.Service{
 			Pool:      pool,
@@ -590,6 +593,9 @@ func main() {
 		}
 
 		srv := httpserver.New(cfg.HTTPAddr, logger, api, func(r chi.Router) {
+			// Direct multipart upload — vendor-scoped, returns public MinIO URL.
+			r.Post("/api/merchant/uploads", menuAPI.HandleDirectUpload)
+
 			// Hydra OAuth bridge — only mounted when the sidecar is wired.
 			// These endpoints are anonymous: they're the URLs Hydra
 			// redirects the user's browser to during the login/consent
