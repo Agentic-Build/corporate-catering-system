@@ -9,5 +9,6 @@ export const handle = sequence(
     apiBaseUrl,
     cookieSecure: env.NODE_ENV === "production",
     cookieDomain: env.COOKIE_DOMAIN || undefined,
+    cookieName: "tbite_sid_admin",
   }),
 );

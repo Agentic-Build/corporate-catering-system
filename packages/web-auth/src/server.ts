@@ -14,12 +14,12 @@ declare global {
 
 export const COOKIE_NAME = "tbite_sid";
 
-export function getToken(event: RequestEvent): string | undefined {
-  return event.cookies.get(COOKIE_NAME);
+export function getToken(event: RequestEvent, cookieName: string = COOKIE_NAME): string | undefined {
+  return event.cookies.get(cookieName);
 }
 
 export function setSessionCookie(event: RequestEvent, token: string, opts: AuthOptions) {
-  event.cookies.set(COOKIE_NAME, token, {
+  event.cookies.set(opts.cookieName ?? COOKIE_NAME, token, {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
@@ -30,12 +30,12 @@ export function setSessionCookie(event: RequestEvent, token: string, opts: AuthO
 }
 
 export function clearSessionCookie(event: RequestEvent, opts: AuthOptions) {
-  event.cookies.delete(COOKIE_NAME, { path: "/", domain: opts.cookieDomain });
+  event.cookies.delete(opts.cookieName ?? COOKIE_NAME, { path: "/", domain: opts.cookieDomain });
 }
 
 export function createAuthHandle(opts: AuthOptions): Handle {
   return async ({ event, resolve }) => {
-    const token = getToken(event);
+    const token = getToken(event, opts.cookieName ?? COOKIE_NAME);
     let user: SessionUser | null = null;
     if (token) {
       const client = createApiClient(opts.apiBaseUrl, token);

@@ -15,6 +15,10 @@
   let { open, onClose, plant, supplyDate }: Props = $props();
 
   const entries = $derived(Object.entries(cart.items));
+
+  // Surface a failed `?/placeOrder` (e.g. duplicate same-day order) inside the
+  // drawer, where the user is looking — the home page's error banner sits behind it.
+  let submitError = $state<string | null>(null);
 </script>
 
 <Drawer {open} {onClose}>
@@ -115,11 +119,15 @@
     <form
       method="POST"
       action="/?/placeOrder"
-      use:enhance={() =>
-        ({ result, update }) => {
+      use:enhance={() => {
+        submitError = null;
+        return ({ result, update }) => {
           if (result.type === "redirect") cart.clear();
+          else if (result.type === "failure")
+            submitError = (result.data?.error as string) ?? "送出預訂失敗，請稍後再試。";
           update();
-        }}
+        };
+      }}
       class="mt-3"
     >
       <input type="hidden" name="plant" value={plant} />
@@ -138,6 +146,11 @@
         <input type="hidden" name="item_id" value={id} />
         <input type="hidden" name="qty" value={line.qty} />
       {/each}
+      {#if submitError}
+        <p class="mb-2 rounded-tb-xl bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700" role="alert">
+          {submitError}
+        </p>
+      {/if}
       <Button variant="primary" size="md" type="submit" fullWidth disabled={entries.length === 0}>
         送出預訂 · 由本月薪資代扣
       </Button>

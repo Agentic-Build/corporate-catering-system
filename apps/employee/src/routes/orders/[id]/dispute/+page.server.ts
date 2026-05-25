@@ -28,7 +28,14 @@ export const actions: Actions = {
     const r = await client.POST("/api/employee/disputes", {
       body: { order_id: params.id, reason } as any,
     });
-    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    if (r.error) {
+      // RFC 9457 problem-details — surface a calm Chinese message, not raw JSON.
+      // Backend rejects (4xx) when the order has no payroll entry yet.
+      const err = r.error as { status?: number; detail?: string };
+      return fail(err.status ?? 400, {
+        error: err.detail ?? "送出申訴失敗，此訂單可能尚未產生薪資代扣紀錄，請稍後再試。",
+      });
+    }
     throw redirect(303, "/disputes");
   },
 };

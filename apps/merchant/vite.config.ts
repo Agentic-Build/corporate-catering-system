@@ -8,7 +8,8 @@ export default defineConfig({
   // image only ships build/ + package.json (no production node_modules), so
   // any externalised package fails at runtime with ERR_MODULE_NOT_FOUND.
   // openapi-fetch reaches the SSR bundle via @tbite/api-client (server load
-  // functions) and qrcode is a top-level import in a route component; bundle
-  // both in so the build is self-contained.
-  ssr: { noExternal: ["openapi-fetch", "qrcode"] },
+  // functions); bundle it in so the build is self-contained.
+  // (qrcode is CommonJS and is imported lazily in the browser only — see
+  // routes/labels/+page.svelte — so it never enters the SSR graph.)
+  ssr: { noExternal: ["openapi-fetch"] },
 });

@@ -15,4 +15,7 @@ export interface AuthOptions {
   apiBaseUrl: string;
   cookieDomain?: string;
   cookieSecure?: boolean;
+  // Per-app cookie name so the 3 apps don't collide on localhost (cookies aren't port-scoped).
+  // Defaults to COOKIE_NAME for backward compatibility.
+  cookieName?: string;
 }
