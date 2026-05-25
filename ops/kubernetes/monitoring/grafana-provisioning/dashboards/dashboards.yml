@@ -1,0 +1,19 @@
+apiVersion: 1
+
+# Dashboard provider: walks /var/lib/grafana/dashboards recursively and loads
+# every *.json on a 30s refresh. Dashboards are non-editable in the UI — the
+# source of truth lives at ops/kubernetes/monitoring/dashboards/.
+
+providers:
+  - name: tbite-observability
+    orgId: 1
+    folder: ""
+    folderUid: ""
+    type: file
+    disableDeletion: false
+    editable: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: true
