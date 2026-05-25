@@ -4,9 +4,9 @@ This playbook is for an operator using the repo for the first time. It
 walks from "empty machine + Cloudflare account + a domain" to a running
 production-shaped deployment exposing the three SvelteKit apps,
 Authentik, Hydra, ArgoCD, and Grafana through one Cloudflare Tunnel.
-End state: ~28-30 pods Ready, ~9 GiB memory in use, eight public
-hostnames serving nineteen TSMC pickup-location demo plants across
-nine fab sites.
+End state: ~28-30 pods Ready, ~9 GiB memory in use, nine public
+hostnames, nineteen TSMC pickup locations across nine fab sites, and
+50,000 seeded employee records for the enterprise-scale demo.
 
 Roughly 45 minutes start-to-finish on a fresh box.
 
@@ -18,15 +18,16 @@ Roughly 45 minutes start-to-finish on a fresh box.
 | `app.tbite.example.com` | Employee SvelteKit app (place order, pick up) |
 | `merchant.tbite.example.com` | Merchant SvelteKit app (prep board, live SSE) |
 | `admin.tbite.example.com` | 福委會 / Welfare admin SvelteKit app |
+| `rt.tbite.example.com` | Realtime SSE gateway |
 | `auth.tbite.example.com` | Authentik SSO (admin UI + OIDC) |
 | `hydra.tbite.example.com` | Ory Hydra (MCP DCR endpoint) |
 | `grafana.tbite.example.com` | Grafana dashboards (VictoriaMetrics + alerts) |
 | `argocd.tbite.example.com` | ArgoCD UI |
 
-All eight terminate TLS at Cloudflare's edge; no inbound port is open
+All public hosts terminate TLS at Cloudflare's edge; no inbound port is open
 on the cluster.
 
-Eleven TSMC pickup locations across five fab sites are seeded:
+Nineteen TSMC pickup locations across nine fab/admin sites are seeded:
 
 | Site | Code | Pickup locations |
 | --- | --- | --- |
@@ -98,6 +99,7 @@ chart/tbite-platform/values.yaml                  # base (single-enterprise prod
 chart/tbite-platform/values-cloudflared.yaml      # ingress overlay you'll use
 chart/tbite-platform/blueprints/                  # Authentik blueprints
 scripts/dev/seed-tsmc.sql       # TSMC plant + pickup-location seed
+scripts/dev/seed-tsmc-scale.sql # 50,000-employee enterprise demo seed
 ops/secrets/                    # SOPS-encrypted secret templates
 ```
 
@@ -159,6 +161,32 @@ kubectl -n cnpg-system get pods
 # cnpg-cloudnative-pg-xxx             1/1     Running   0          45s
 ```
 
+### Step 3b — Install ArgoCD
+
+ArgoCD is installed as a platform control-plane service. The application
+can still be bootstrapped by Helm during this first install; ArgoCD gives
+operators the UI and GitOps reconciliation path for day-2 changes.
+
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl -n argocd rollout status deploy/argocd-server --timeout=5m
+kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=5m
+```
+
+If you want ArgoCD to own the chart, first move the secret-bearing Helm
+values from Steps 5-8 into a private SOPS-managed values overlay or ArgoCD
+SOPS plugin flow. Do not sync the public demo override alone; it intentionally
+does not contain `authentik.secret_key`, Hydra system secrets, or bootstrap
+passwords. After that private overlay exists, adapt the hostnames in
+`ops/argocd/values-overrides/tbite-tsmc-demo.yaml`, add the private overlay
+to `ops/argocd/application-tsmc-demo.yaml`, and apply:
+
+```bash
+kubectl apply -f ops/argocd/project.yaml
+kubectl apply -f ops/argocd/application-tsmc-demo.yaml
+```
+
 ---
 
 ## Step 4 — Create the Cloudflare Tunnel in the dashboard
@@ -179,7 +207,7 @@ binary is needed for this step.
    base64 token string** (the part after `--token` in the example
    command). You will paste it into a Secret in Step 5.
 
-### 4b. Add the eight public hostnames
+### 4b. Add the nine public hostnames
 
 Still in the dashboard, under the tunnel's **Public Hostnames** tab,
 **Add a public hostname** for each entry below. Cloudflare creates the
@@ -267,7 +295,7 @@ EOF
 chmod 600 demo-secrets.local
 
 # 3. Application secrets (placeholders for OIDC + S3 + Authentik token;
-#    rotated in Step 9 after Authentik is up).
+#    rotated in Step 10 after Authentik is up).
 kubectl -n tbite create secret generic tbite-valkey \
   --from-literal=password="$VALKEY_PW" \
   --from-literal=valkey-password="$VALKEY_PW"
@@ -438,8 +466,10 @@ kubectl -n tbite run hydra-mig --rm -i \
 Provision the JetStream streams the workers consume:
 
 ```bash
+PLATFORM_IMAGE="ghcr.io/agentic-build/tbite-api:$(yq -r '.image.tag' chart/tbite-platform/values.yaml)"
+
 kubectl -n tbite run prov --rm -i \
-  --image=ghcr.io/agentic-build/tbite-api:sha-766bf49 \
+  --image="$PLATFORM_IMAGE" \
   --restart=Never \
   --env="NATS_URL=nats://tbite-nats.tbite.svc.cluster.local:4222" \
   --env="DATABASE_RW_URL=$PG_URL" \
@@ -465,50 +495,41 @@ kubectl -n tbite get pods
 
 ---
 
-## Step 9 — Seed TSMC plants and pickup locations
+## Step 9 — Seed the TSMC enterprise demo
 
 The application catalog (10 vendors + 150 menu items + meal supply for
-7 days) lives in `scripts/dev/seed-p2.sql`. Apply it, then layer the
-TSMC plant remap from `scripts/dev/seed-tsmc.sql`:
+7 days) lives in `scripts/dev/seed-p2.sql`. The full TSMC demo then
+layers canonical demo orders, pickup-location remapping, and 50,000
+synthetic employees:
 
 ```bash
-kubectl -n tbite cp scripts/dev/seed-p2.sql   tbite-pg-1:/tmp/seed-p2.sql   -c postgres
-kubectl -n tbite cp scripts/dev/seed-tsmc.sql tbite-pg-1:/tmp/seed-tsmc.sql -c postgres
-
-kubectl -n tbite exec tbite-pg-1 -c postgres -- \
-  psql -U postgres -d tbite -f /tmp/seed-p2.sql
-kubectl -n tbite exec tbite-pg-1 -c postgres -- \
-  psql -U postgres -d tbite -f /tmp/seed-tsmc.sql
+make demo-seed-tsmc
 ```
 
-`seed-tsmc.sql` replaces the default `tn-a..tn-d` plant codes with the
-eleven TSMC pickup locations, sets per-vendor `service_window`, and moves
-the five canonical demo employees onto realistic TSMC plants.
+`ops/demo/seed-tsmc-enterprise.sh` reads the chart contract Secret
+`tbite-db` key `rwUrl`, starts short-lived psql pods, and applies:
+
+1. `scripts/dev/seed-p2.sql` — vendors, menu, image rows, 7 days of supply.
+2. `scripts/dev/seed-demo.sql` — canonical demo users and visible orders.
+3. `scripts/dev/seed-tsmc.sql` — 19 pickup locations and service windows.
+4. `scripts/dev/seed-tsmc-scale.sql` — 50,000 employees and scaled supply.
 
 Confirm:
 
 ```bash
-kubectl -n tbite exec tbite-pg-1 -c postgres -- \
-  psql -U postgres -d tbite -tAc "SELECT plant, count(*) FROM vendor_plant_mapping GROUP BY plant ORDER BY plant;"
-# hc-12a-1f|10
-# hc-12a-3f|10
-# hc-12b-1f|10
-# hc-12b-3f|10
-# hc-hq-p5-1f|10
-# hc-hq-r1-b1|10
-# hc-hq-r2-2f|10
-# tc-15a-1f|10
-# tc-15a-3f|10
-# tc-15b-1f|10
-# tc-15b-3f|10
-# tn-14-2f|10
-# tn-18p1-1f|10
-# tn-18p1-3f|10
-# tn-18p1-b1|10
-# tn-18p3-1f|10
-# tn-18p3-3f|10
-# tn-18p3-b1|10
-# tn-18p7-2f|10
+kubectl -n tbite run tsmc-seed-check --rm -i --restart=Never \
+  --image=ghcr.io/cloudnative-pg/postgresql:17.2 \
+  --env="DATABASE_RW_URL=$(kubectl -n tbite get secret tbite-db -o jsonpath='{.data.rwUrl}' | base64 -d)" \
+  --command -- sh -ec 'psql "$DATABASE_RW_URL" -tAc "
+    SELECT plant, count(*)
+    FROM \"user\"
+    WHERE primary_email ~ '\''^tsmc[0-9]{5}@tbite\.test$'\''
+    GROUP BY plant
+    ORDER BY plant;
+  "'
+# hc-12a-1f|3600
+# ...
+# tn-18p7-2f|4000
 ```
 
 ---
@@ -564,7 +585,7 @@ kubectl -n tbite logs deploy/tbite-tbite-platform-api --tail=10
 | `https://merchant.tbite.example.com` | `e2e-merchant@tbite.test` / `tbite-dev-pass` (vendor `r001 阿城炙燒便當`) | Prep board; place an order from the employee app and watch it appear live via SSE (no refresh) |
 | `https://admin.tbite.example.com` | `e2e-admin@tbite.test` / `tbite-dev-pass` | Welfare admin view: order board across all 19 pickup locations, vendor approval queue, payroll cycle, compliance docs |
 | `https://grafana.tbite.example.com` | `admin` / value of `$GRAFANA_PW` from `demo-secrets.local` | 19 dashboards grouped by domain tags such as `overview`, `platform`, `infra`, `domain`, and `slo`; start with **outbox-and-events**, **pg-routing**, **sse-gateway**, and **role-readiness** for operational checks |
-| `https://argocd.tbite.example.com` | `admin` / `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` (only when ArgoCD is installed separately) | Cluster sync status (this playbook does not install ArgoCD — the route is wired so it works the moment you do) |
+| `https://argocd.tbite.example.com` | `admin` / `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` | Cluster sync status and day-2 reconciliation |
 
 End-to-end SSE check from the employee side: place an order in
 employee app → merchant app instantly shows new order on the prep
@@ -614,6 +635,35 @@ kubectl -n tbite get pods -o json | \
   awk 'function b(v){if(v~/Gi$/)return substr(v,1,length(v)-2)*1024;if(v~/Mi$/)return substr(v,1,length(v)-2);return 0}{m+=b($0)}END{printf "%.1f GiB across %d containers\n",m/1024,NR}'
 # 8.9 GiB across 31 containers
 ```
+
+---
+
+## Step 13 — Run the applied SRE demo
+
+The applied demo is intentionally short:
+
+```bash
+# Generate lunch-peak traffic through local port-forwards.
+DURATION=8m RPS=12 CONCURRENCY=16 EMPLOYEES=800 make demo-load-tsmc
+
+# In another terminal, delete one pod and watch self-healing.
+make demo-crisis component=api
+kubectl -n tbite rollout status deploy -l app.kubernetes.io/component=api --timeout=3m
+```
+
+Grafana views to keep open:
+
+- `oncall-overview`
+- `order-api-slo`
+- `role-readiness`
+- `supply-health`
+- `outbox-and-events`
+- `sse-gateway`
+
+Repeat with `component=realtime`, `component=worker-outbox-relay`, or
+`component=cloudflared` to demonstrate different failure surfaces. The
+full demo checklist lives in
+[`docs/demo/tsmc-applied-playbook.md`](../demo/tsmc-applied-playbook.md).
 
 ---
 

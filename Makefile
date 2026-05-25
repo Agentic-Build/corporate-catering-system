@@ -14,12 +14,13 @@ CHART_VALUES ?= $(CHART_DIR)/values.yaml
 
 .PHONY: help \
         dev dev-down dev-reset dev-logs \
-        migrate-up migrate-down migrate-new seed \
+        migrate-up migrate-down migrate-new seed seed-tsmc \
         contract-sync test-go test-web test-e2e \
         build clean \
         sops-encrypt sops-decrypt sops-edit \
         chart-deps chart-lint chart-render chart-install chart-upgrade chart-uninstall \
-        image-build-local
+        image-build-local \
+        demo-seed-tsmc demo-load-tsmc demo-crisis
 
 help:
 	@awk -F':.*##' '/^[a-zA-Z0-9_-]+:.*##/ {printf "  \033[36m%-20s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -47,6 +48,9 @@ migrate-new: ## Create new migration (name=xxx)
 
 seed: ## Seed/refresh the dev DB with demo data (idempotent)
 	@scripts/db/seed.sh
+
+seed-tsmc: ## Seed/refresh the local DB with the 50k-person TSMC demo scenario
+	@scripts/db/seed-tsmc.sh
 
 contract-sync: ## Generate OpenAPI from Go and regenerate TS client
 	@go run ./services/api/cmd/contract-export
@@ -115,6 +119,15 @@ image-build-local: ## Build the platform image for the local Docker daemon's nat
 	@TAG=$${TAG:-local}; \
 	docker build -f services/api/Dockerfile -t ghcr.io/agentic-build/tbite-api:$$TAG . && \
 	echo "built ghcr.io/agentic-build/tbite-api:$$TAG"
+
+demo-seed-tsmc: ## Seed current Kubernetes context with the 50k-person TSMC demo scenario
+	@ops/demo/seed-tsmc-enterprise.sh
+
+demo-load-tsmc: ## Run TSMC lunch-crunch traffic against current Kubernetes context
+	@ops/demo/run-tsmc-load.sh
+
+demo-crisis: ## Delete one demo component pod (component=api|realtime|worker-outbox-relay|cloudflared|minio)
+	@ops/demo/crisis-drill.sh $(or $(component),api)
 
 sops-encrypt:  ## Encrypt a YAML file in place. Usage: make sops-encrypt FILE=ops/secrets/example.sops.yaml
 	@test -n "$(FILE)" || (echo "FILE=... required"; exit 1)

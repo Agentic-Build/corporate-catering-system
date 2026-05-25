@@ -100,8 +100,8 @@ chart-of-charts CRD-bootstrap pitfall, not a chart bug.
 ### First-time end-to-end walkthrough
 
 For a step-by-step playbook that takes a fresh Linux box from "no
-cluster" to "twenty-eight pods Ready, eight public hostnames" using
-k3s + Cloudflare Tunnel + the TSMC pickup-location seed, see
+cluster" to a production-shaped k3s deployment with Cloudflare Tunnel,
+ArgoCD, Grafana, and the 50,000-employee TSMC pickup-location seed, see
 [`docs/deployment/k3s-cloudflare-tsmc.md`](../../docs/deployment/k3s-cloudflare-tsmc.md).
 
 ### Two-pass install (recommended for fresh clusters)

@@ -1,0 +1,60 @@
+# ArgoCD Application for the generic TSMC demo deployment.
+#
+# Use this when following docs/demo/tsmc-applied-playbook.md on a fresh
+# single-node cluster. It intentionally lives beside application-helm.yaml
+# rather than replacing it because application-helm.yaml is environment-specific
+# and points at the tbite-nycu override file.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tbite-tsmc-demo
+  namespace: argocd
+spec:
+  project: tbite
+  source:
+    repoURL: https://github.com/Agentic-Build/corporate-catering-system.git
+    targetRevision: main
+    path: chart/tbite-platform
+    helm:
+      releaseName: tbite
+      valueFiles:
+        - values.yaml
+        - values-cloudflared.yaml
+        - ../../ops/argocd/values-overrides/tbite-tsmc-demo.yaml
+      parameters:
+        - name: profile.size
+          value: prod
+        - name: crdsReady
+          value: "true"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tbite
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/replicas
+        - /spec/persistentVolumeClaimRetentionPolicy
+        - /spec/revisionHistoryLimit
+        - /spec/updateStrategy
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[]?.status

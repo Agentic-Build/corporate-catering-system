@@ -85,13 +85,14 @@ canonical packaging per [ADR-0002](docs/architecture/adr-0002-helm-umbrella-char
 It ships the application, the self-hosted data plane (CloudNativePG, PgBouncer,
 Valkey HA, NATS JetStream, MinIO Operator), the Traefik gateway with cert-manager,
 the Victoria observability stack, the OpenTelemetry Collector, KEDA, and the
-optional Authentik + Hydra identity providers. The same chart renders for
-dev (`values-dev.yaml`) and prod (`values-prod.yaml`); BYO endpoints are
-supplied through values without changing application code.
+optional Authentik + Hydra identity providers. The base `values.yaml` is the
+single-enterprise production profile; `values-dev.yaml` and
+`values-prod-ha.yaml` are overlays for laptop and multi-AZ HA shapes. BYO
+endpoints are supplied through values without changing application code.
 
 ```bash
 make chart-deps              # one-shot, populates chart/tbite-platform/charts/
-make chart-lint              # lints against values-dev + values-prod
+make chart-lint              # lints against values-dev + values-prod-ha
 make chart-render            # dry-renders to stdout (VALUES=… to override)
 make chart-install           # installs into current kubectl context (interactive)
 make chart-upgrade           # upgrades the release
@@ -102,11 +103,12 @@ and [`docs/deployment/airgapped.md`](docs/deployment/airgapped.md).
 
 ### ArgoCD
 
-`ops/argocd/application-helm.yaml` declares the ArgoCD `Application` pointing
-at `chart/tbite-platform`. Sync options enable `ServerSideApply` plus a
-five-retry exponential backoff so the chart-of-charts CRD bootstrap converges
-in a single Application. `kubectl apply -k ops/argocd/` bootstraps the
-AppProject + Application on a cluster that already runs ArgoCD.
+`ops/argocd/application-helm.yaml` declares the environment-specific ArgoCD
+`Application` pointing at `chart/tbite-platform`; `application-tsmc-demo.yaml`
+is the generic TSMC demo variant. Sync options enable `ServerSideApply` plus
+a five-retry exponential backoff so the chart-of-charts CRD bootstrap
+converges in a single Application. Apply `ops/argocd/project.yaml` plus the
+Application you want on a cluster that already runs ArgoCD.
 
 ## Operations
 
@@ -118,6 +120,7 @@ AppProject + Application on a cluster that already runs ArgoCD.
 | Security scan | `scripts/security-scan.sh` (trivy + kubesec) |
 | SQL-injection guard | `scripts/security/check-sql-strings.sh` (runs in `ci-lint-test`) |
 | Chaos drill | [`ops/chaos/drill-runbook.md`](ops/chaos/drill-runbook.md) |
+| TSMC applied demo | [`docs/demo/tsmc-applied-playbook.md`](docs/demo/tsmc-applied-playbook.md) |
 | Security baseline | [`ops/security/checklist.md`](ops/security/checklist.md) |
 | MCP server | [`docs/mcp.md`](docs/mcp.md) |
 | Branding policy | [`docs/branding.md`](docs/branding.md) |
@@ -132,7 +135,7 @@ migrations/                          golang-migrate SQL
 ops/local/                           docker-compose dev stack
 chart/tbite-platform/                Helm umbrella chart (canonical deployment)
 ops/argocd/                          ArgoCD AppProject + Application
-ops/{load,chaos,security}/           runbooks + scripts
+ops/{load,chaos,demo,security}/      runbooks + scripts
 ops/secrets/                         SOPS-encrypted operator secrets
 contract/openapi/                    generated OpenAPI artifacts
 docs/architecture/                   ADRs + architecture specifications
@@ -146,11 +149,13 @@ docs/                                deployment runbooks, MCP, branding, plans
 | `make dev` | One-stop dev — compose deps + migrate + seed + host processes |
 | `make dev-down` / `make dev-reset` | Stop deps (keep / wipe volumes) |
 | `make migrate-up` / `migrate-down` / `migrate-new name=xxx` | Schema |
+| `make seed-tsmc` | Seed local DB with the 50k-person TSMC demo |
 | `make contract-sync` | Regenerate OpenAPI + TS client from Go |
 | `make test-go` / `make test-web` / `make test-e2e` | Tests |
 | `make chart-deps` / `chart-lint` / `chart-render` / `chart-install` / `chart-upgrade` / `chart-uninstall` | Helm umbrella chart lifecycle |
 | `make sops-encrypt` / `sops-decrypt` / `sops-edit` | SOPS workflow |
 | `make image-build-local` | Build the platform image for the local Docker daemon |
+| `make demo-seed-tsmc` / `demo-load-tsmc` / `demo-crisis component=api` | Kubernetes TSMC demo operations |
 | `make build` / `make clean` | Bundle + binary / wipe artifacts |
 
 Full list: `make help`.

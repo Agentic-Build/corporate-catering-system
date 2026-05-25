@@ -1,0 +1,64 @@
+# Generic values override for the TSMC applied demo.
+#
+# Replace tbite.example.com with the zone you configure in Cloudflare.
+# Sensitive values are still created out-of-band as Kubernetes Secrets in
+# docs/deployment/k3s-cloudflare-tsmc.md. Secret-bearing Helm values such as
+# Authentik secret_key and Hydra system secrets must come from a private
+# SOPS-managed overlay before this Application is synced.
+
+global:
+  domain: tbite.example.com
+  baseURL:
+    api: https://api.tbite.example.com
+    employee: https://app.tbite.example.com
+    merchant: https://merchant.tbite.example.com
+    admin: https://admin.tbite.example.com
+  oidcIssuerURL: https://auth.tbite.example.com/application/o/tbite/
+  authentik:
+    baseURL: http://tbite-authentik-server.tbite.svc.cluster.local:80
+  s3:
+    endpoint: http://minio.tbite.svc.cluster.local
+  nats:
+    url: nats://tbite-nats.tbite.svc.cluster.local:4222
+
+hydra:
+  hydra:
+    config:
+      urls:
+        self:
+          issuer: https://hydra.tbite.example.com
+        login: https://app.tbite.example.com/login
+        consent: https://app.tbite.example.com/consent
+        logout: https://app.tbite.example.com/logout
+
+observability:
+  grafana:
+    ingressHost: grafana.tbite.example.com
+
+victoria-metrics-k8s-stack:
+  grafana:
+    grafana.ini:
+      server:
+        domain: grafana.tbite.example.com
+        root_url: https://grafana.tbite.example.com
+        serve_from_sub_path: false
+
+authentikBlueprints:
+  devUsers:
+    enabled: true
+
+# The current CI publishes the platform image but not a separate migrations
+# image. Run migrations from the deployment playbook before syncing this app.
+hooks:
+  dbMigrate:
+    enabled: false
+
+postgres:
+  operator:
+    bundled: false
+  cluster:
+    monitoring:
+      enabled: false
+    resources:
+      requests: { cpu: 500m, memory: 2Gi }
+      limits: { cpu: 2, memory: 2Gi }

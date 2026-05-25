@@ -1,131 +1,123 @@
-# T-Bite Chaos Drill Runbook — Lunch-Peak API Pod Kill
+# T-Bite Chaos Drill Runbook — TSMC Lunch Peak
 
-> **Goal:** Verify the system survives a single API pod being killed during
-> peak load without dropping orders.
+## Goal
 
-This runbook is **manual** by design. P8 does not deploy chaos-mesh; we use
-`kubectl delete pod` against a 3-replica API deployment while k6 lunch-peak
-runs. Automated chaos is a future hardening item.
+Verify that the production-shaped single-node deployment detects and recovers
+from one service pod being deleted during lunch-peak traffic.
 
----
+This runbook uses the current Helm/k3s deployment path, the TSMC 50,000-user
+seed, Grafana dashboards, and the helper scripts in `ops/demo/`.
 
 ## Pre-conditions
 
-1. A k8s cluster with the `tbite` namespace populated by the
-   `ops/kubernetes/overlays/single-node` overlay. Bring it up against your
-   current kubectl context (e.g. a k3s box or a throwaway GKE cluster):
+1. The k3s + Cloudflare Tunnel deployment is complete:
 
    ```bash
-   make prod-up env=single-node
    kubectl -n tbite get pods
+   helm -n tbite status tbite
    ```
 
-2. API deployment scaled to at least 3 replicas (otherwise PDB
-   `minAvailable: 1` cannot tolerate a deletion mid-drill).
+2. The TSMC enterprise seed has been applied:
 
    ```bash
-   kubectl -n tbite scale deployment/api --replicas=3
-   kubectl -n tbite get pdb api -o wide   # expect ALLOWED DISRUPTIONS >= 1
+   make demo-seed-tsmc
    ```
 
-3. k6 installed locally, lunch-peak script ready to run.
+3. Grafana is reachable through the public hostname. Open these dashboards:
 
-4. A second terminal open to watch pod state, plus a third for the audit
-   query.
+   - `oncall-overview`
+   - `order-api-slo`
+   - `role-readiness`
+   - `supply-health`
+   - `outbox-and-events`
+   - `sse-gateway`
 
----
+4. The operator workstation has `kubectl` and Go available. The load script
+   uses `kubectl port-forward` plus `go run ./services/api/cmd/stress`.
 
-## Drill steps
+## Drill: API Pod Deletion
 
-### 1. Start background load
-
-```bash
-# Terminal 1 — start the 3-scenario lunch-peak script in the background.
-# run-loadtest.sh assumes the API + workers + scheduler are already up
-# (via `make prod-up env=single-node` or as separate processes).
-ops/load/run-loadtest.sh &
-LOAD_PID=$!
-
-# Let traffic ramp.
-sleep 30
-```
-
-### 2. Kill one random API pod
+### 1. Start lunch-peak traffic
 
 ```bash
-# Terminal 2 — pick a random API pod and delete it.
-TARGET=$(kubectl -n tbite get pods -l app.kubernetes.io/name=api -o name | shuf | head -1)
-echo "Deleting $TARGET at $(date -u +%H:%M:%S)"
-kubectl -n tbite delete "$TARGET"
+DURATION=8m RPS=12 CONCURRENCY=16 EMPLOYEES=800 make demo-load-tsmc
 ```
 
-### 3. Watch the remaining replicas pick up traffic
+The default scenario is `lunch-crunch`: it focuses order placement on
+`hc-12a-1f`, vendor `a1111111-1111-1111-1111-111111111111`, and item
+`4f26e612-b35f-5500-8f2a-63eded235675`.
+
+### 2. Delete one API pod
+
+In a second terminal:
 
 ```bash
-# Terminal 2 — keep watching until a fresh pod is Running + Ready.
-kubectl -n tbite get pods -l app.kubernetes.io/name=api -w
+make demo-crisis component=api
+kubectl -n tbite rollout status deploy -l app.kubernetes.io/component=api --timeout=3m
 ```
 
-Expected timeline:
-- `0s`: deleted pod enters `Terminating`; remaining 2 replicas continue serving.
-- `~5-10s`: new pod scheduled, `Pending` -> `ContainerCreating`.
-- `~15-25s`: new pod passes `readinessProbe` and rejoins the Service.
-
-### 4. Verify no order placements were dropped
+Watch pods if you want the live timeline:
 
 ```bash
-# Terminal 3 — query order table for the drill window.
-psql "$(kubectl -n tbite get secret tbite-dev-secrets -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)" \
-  -h $(kubectl -n tbite get svc postgres -o jsonpath='{.spec.clusterIP}') \
-  -U tbite -d tbite \
-  -c "SELECT count(*), max(created_at) FROM \"order\" WHERE created_at > now() - interval '5 minutes';"
+kubectl -n tbite get pods -l app.kubernetes.io/component=api -w
 ```
 
-### 5. Tear down
+### 3. Observe expected signals
+
+- `role-readiness`: one API pod becomes unready, then a replacement becomes
+  ready.
+- `order-api-slo`: latency may bump; sustained 5xx must not appear.
+- `supply-health`: the hot item may show quota pressure or 409 conflicts.
+- `outbox-and-events`: outbox age should stay bounded.
+- ArgoCD: app remains synced; no manual drift repair is required.
+
+## Variants
+
+Run each variant while `make demo-load-tsmc` is still active:
 
 ```bash
-wait $LOAD_PID
-# Inspect the k6 summary printed at exit.
+make demo-crisis component=realtime
+make demo-crisis component=worker-outbox-relay
+make demo-crisis component=cloudflared
+make demo-crisis component=minio
 ```
 
----
+Expected variant-specific signals:
 
-## Success criteria
+| Component | Primary dashboard | Expected recovery |
+| --- | --- | --- |
+| `realtime` | `sse-gateway` | SSE connections reconnect after replacement pod readiness. |
+| `worker-outbox-relay` | `outbox-and-events` | Unpublished outbox age may rise, then drain after worker recovery. |
+| `cloudflared` | `infra-health` / Cloudflare dashboard | Remaining connector serves traffic; deleted pod is recreated. |
+| `minio` | `object-storage` | Pod restarts with persistent volume; API media paths recover. |
 
-The drill is considered a pass if **all** of the following hold:
+## Pass criteria
 
-- k6 reports `http_req_failed{...} rate < 0.005` (i.e. less than 0.5%) during
-  the 30-second pod-recreation window.
-- No `place_order` request returns 5xx **without** a corresponding audit
-  trail row in `audit_event` (place_order is either fully committed with
-  audit, fully aborted, or returns 409 cleanly when quota races).
-- `order` row count growth is monotonic and matches k6's reported success
-  count for the place_order scenario (modulo conditional-decrement 409s,
-  which are by-design and not lost orders).
-- `audit_event` trail is intact (no gaps in `order_id` for orders that
-  reached `PLACED`).
+The drill passes when all conditions hold:
 
----
+- Deleted pod's owning controller returns to Ready within 3 minutes.
+- Employee menu browsing remains available during the drill.
+- Order placement returns success or expected 409 quota conflicts; sustained
+  5xx is a failure.
+- Grafana shows both the fault and the recovery without relying on log tailing.
+- No database mutation or manual data repair is needed.
 
-## Failure modes & remediations
+## Failure modes and remediations
 
 | Symptom | Likely cause | Remediation |
 | --- | --- | --- |
-| k6 error rate > 5% during the kill window | PDB `minAvailable` allowed too aggressive disruption; only 1 replica left under load | Bump `ops/kubernetes/base/pdb-api.yaml` `minAvailable` to 2 (requires `replicas: >= 3`). |
-| Errors are 5xx (not 409) | Remaining 2 replicas insufficient for traffic | Bump HPA min replicas in `ops/kubernetes/base/hpa-api.yaml`; re-run drill. |
-| Errors persist after new pod is Ready | Service endpoint cache stale on caller side; OR readinessProbe declared Ready before app actually accepts traffic | Tighten `readinessProbe.initialDelaySeconds` / `periodSeconds`; ensure the app delays Ready until pgx pool is healthy. |
-| `order` row count regresses | Phantom rollback in place_order transaction; should be impossible given P3 design | Pause drill, capture pg logs, file a P0 bug. |
-| `audit_event` row missing for an `order` that reached `PLACED` | Outbox-relay worker lost the event; check `outbox_event` table for stuck rows | Re-run outbox-relay worker; inspect NATS stream consumer lag. |
+| API 5xx continues after replacement pod is Ready | Readiness probe is too weak or downstream dependency is unhealthy | Check `/readyz`, Postgres, Valkey, and NATS dashboards; tighten readiness before retrying. |
+| HPA reaches max replicas under normal demo load | API CPU/concurrency target too low for this node | Increase `api.hpa.maxReplicas` or reduce demo `RPS` / `CONCURRENCY`. |
+| Outbox age keeps rising after worker recovery | NATS or worker handler failure | Inspect `outbox-and-events`, worker logs, and NATS JetStream consumer lag. |
+| Cloudflare public host returns 502 | Tunnel connector or service endpoint unavailable | Check `cloudflared` pods and `kubectl -n tbite get endpoints`. |
+| MinIO does not recover | PVC or node disk issue | Check PVC binding, node disk, and MinIO pod events. |
 
----
+## Evidence to keep
 
-## After-action
+Save the following after the run:
 
-1. Save the k6 summary JSON to `ops/load/evidence/<date>-chaos-drill.json`.
-2. Note the drill date + outcome in the on-call runbook.
-3. If any failure mode triggered, open an issue tagged `chaos-drill-finding`.
-
----
-
-_This runbook should be exercised at least once per quarter, and after any
-change that touches the API deployment, PDB, HPA, or place_order code path._
+- Component name and deletion timestamp.
+- Stress summary printed by `make demo-load-tsmc`.
+- Grafana screenshots for the affected dashboards.
+- `kubectl -n tbite get pods -o wide` after recovery.
+- Any remediation applied before declaring pass/fail.
