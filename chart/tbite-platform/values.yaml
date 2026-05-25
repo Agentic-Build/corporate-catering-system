@@ -321,7 +321,7 @@ scheduler:
 hooks:
   dbMigrate:
     enabled: true
-    image: { repository: migrate/migrate, tag: v4.18.1 }
+    image: { repository: migrate/migrate, tag: v4.19.1 }
     migrationsConfigMap: ""
     migrationsImage:
       repository: ghcr.io/agentic-build/tbite-migrations
@@ -340,7 +340,7 @@ hooks:
       limits:   { cpu: 500m, memory: 256Mi }
   bucketBootstrap:
     enabled: true
-    image: { repository: minio/mc, tag: RELEASE.2024-11-21T17-21-54Z }
+    image: { repository: minio/mc, tag: RELEASE.2025-08-13T08-35-41Z }
     backoffLimit: 3
     activeDeadlineSeconds: 600
     resources:
@@ -377,7 +377,7 @@ postgres:
   cluster:
     name: tbite-pg
     instances: 2
-    imageName: ghcr.io/cloudnative-pg/postgresql:17.2
+    imageName: ghcr.io/cloudnative-pg/postgresql:18.4
     storage:
       size: 50Gi
       storageClass: ""
@@ -530,7 +530,7 @@ minioStandalone:
   enabled: true
   image:
     repository: minio/minio
-    tag: RELEASE.2024-11-07T00-52-20Z
+    tag: RELEASE.2025-10-15T17-29-55Z
   storage:
     size: 50Gi
     storageClass: ""
@@ -578,7 +578,7 @@ cloudflared:
   replicaCount: 2
   image:
     repository: cloudflare/cloudflared
-    tag: "2024.11.1"
+    tag: "2026.5.1"
     pullPolicy: IfNotPresent
   resources:
     requests: { cpu: 50m, memory: 64Mi }
@@ -697,30 +697,30 @@ authentikBlueprints:
   devUsers:
     enabled: false # opt-in; loads E2E users from blueprints/tbite-dev-users.yaml
 
-# AUTHENTIK_BOOTSTRAP_PASSWORD + TOKEN seed the akadmin user on
-# first boot. Operators rotate these via the Authentik UI day-1.
-# Leave authentikBootstrap.enabled=true (default) for chart-managed
-# bootstrap; flip to false and supply a Secret named
-# `<release>-tbite-platform-authentik-bootstrap` out-of-band when
-# the bootstrap credentials live in an external secret store.
+# AUTHENTIK_BOOTSTRAP_PASSWORD + TOKEN seed the akadmin user on first boot.
+# The secure default is external secret ownership: keep
+# authentikBootstrap.enabled=false and provide a SOPS/ExternalSecret-backed
+# Secret named `<release>-tbite-platform-authentik-bootstrap`.
 authentikBootstrap:
-  enabled: true
-  password: "PLEASE-REPLACE-VIA-SOPS"
-  apiToken: "PLEASE-REPLACE-VIA-SOPS"
+  enabled: false
+  password: ""
+  apiToken: ""
   email: "ops@tbite.example.com"
 
 authentik:
   enabled: true
   externalHost: ""
   authentik:
-    secret_key: "PLEASE-REPLACE-VIA-SOPS-OR-SEALED-SECRET"
+    secret_key: ""
+    existingSecret:
+      secretName: tbite-authentik-config
     error_reporting:
       enabled: false
     postgresql:
       host: tbite-pg-rw.tbite.svc.cluster.local
       name: authentik
       user: authentik
-      password: "PLEASE-REPLACE"
+      password: ""
     redis:
       host: tbite-valkey-primary.tbite.svc.cluster.local
   server:
@@ -756,7 +756,7 @@ authentik:
     configMaps:
       - tbite-tbite-platform-authentik-blueprints
   # Bootstrap akadmin credentials are mounted as env from the
-  # chart-managed Secret (templates/secret-authentik-bootstrap.yaml).
+  # externally managed Secret named above.
   # Without this, Authentik creates akadmin with a random password
   # that only appears in the server log on first boot. The
   # subchart's top-level envFrom field was deprecated in 2026.5; the
@@ -767,12 +767,21 @@ authentik:
 hydra:
   enabled: true
   externalUrl: ""
+  secret:
+    enabled: false
+    nameOverride: tbite-hydra
+    enableDefaultAnnotations: false
+  database:
+    passwordSecretRef:
+      name: tbite-hydra
+      key: postgresPassword
   hydra:
     config:
-      # Operators MUST set this via a SOPS-encrypted secret in real
-      # deploys (the chart's createIdentityDatabases Job ensures the
-      # `hydra` database exists in the main CNPG cluster).
-      dsn: "postgres://hydra@tbite-pg-rw.tbite.svc.cluster.local:5432/hydra?sslmode=disable"
+      # Operators MUST set the external `tbite-hydra` Secret in real deploys.
+      # It carries `dsn`, `secretsSystem`, `secretsCookie`, and
+      # `postgresPassword`; the chart's createIdentityDatabases Job ensures
+      # the `hydra` database exists in the main CNPG cluster.
+      dsn: ""
       urls:
         self:
           issuer: https://hydra.tbite.example.com
@@ -780,8 +789,7 @@ hydra:
         login: https://app.tbite.example.com/login
         logout: https://app.tbite.example.com/logout
       secrets:
-        system:
-          - "PLEASE-REPLACE-VIA-SOPS-OR-SEALED-SECRET"
+        system: []
   ingress:
     public:
       enabled: false
@@ -857,7 +865,11 @@ victoria-metrics-k8s-stack:
         limits:   { cpu: 500m, memory: 256Mi }
   grafana:
     enabled: true
-    adminPassword: "PLEASE-REPLACE-VIA-SOPS"
+    admin:
+      existingSecret: tbite-grafana-admin
+      userKey: admin-user
+      passwordKey: password
+    adminPassword: ""
     replicas: 1
     resources:
       requests: { cpu: 100m, memory: 128Mi }

@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.3"
           cache: true
       - run: go vet ./...
       - name: SQL injection guard (fmt.Sprintf with SQL keywords)
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26.3"
           cache: true
       - uses: pnpm/action-setup@v4
         with:

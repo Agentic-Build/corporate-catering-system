@@ -3233,10 +3233,7 @@ export interface operations {
     listVendorSettlements: {
         parameters: {
             query?: {
-                /**
-                 * @description Month to summarise, YYYY-MM
-                 * @example 2026-04
-                 */
+                /** @description Month to summarise, YYYY-MM */
                 period?: string;
             };
             header?: never;
@@ -5007,10 +5004,7 @@ export interface operations {
     getMerchantReconciliation: {
         parameters: {
             query?: {
-                /**
-                 * @description Month to summarise, YYYY-MM
-                 * @example 2026-04
-                 */
+                /** @description Month to summarise, YYYY-MM */
                 period?: string;
             };
             header?: never;

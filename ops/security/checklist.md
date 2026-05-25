@@ -58,14 +58,14 @@ workloads. See "Open items" below.
 
 | Item | Where enforced |
 | --- | --- |
-| No plaintext secrets baked into images | All app images are built from `gcr.io/distroless/static:nonroot` with only the compiled binary copied in — see `services/api/Dockerfile:8-13`. Web images run `node:20-alpine` with only the SvelteKit build output. No `.env` files are copied. |
-| App reads every credential from env supplied by `Secret` / `ConfigMap` | `ops/kubernetes/base/deployment-api.yaml:41-59` (`envFrom: configMapRef` + per-key `secretKeyRef` for Authentik OIDC/API credentials) |
-| Single-node uses a clearly-labelled DEV secret | `ops/kubernetes/overlays/single-node/secrets-bootstrap.yaml:1-3` (header comment explicitly warns "DO NOT USE OUTSIDE LOCAL DEV"); production overlays must override |
-| Production uses External Secrets Operator + GCP Secret Manager | `ops/kubernetes/overlays/gcp/external-secrets.yaml` — declares one `SecretStore` (L36-55) and three `ExternalSecret`s for `tbite-postgres-password` (L58-79), `tbite-redis-auth` (L82-102), and `tbite-app-secrets` (L104-126), all authenticated via Workload Identity. |
+| No plaintext secrets baked into images | The API image copies only the compiled binary into `gcr.io/distroless/static:nonroot`; web images run `node:24.16.0-alpine` with only SvelteKit build output. `.dockerignore` excludes `.env*`. |
+| App reads every credential from env supplied by `Secret` / `ConfigMap` | `chart/tbite-platform/templates/_helpers.tpl` centralizes app `secretKeyRef` wiring; subchart-owned Authentik, Hydra, and Grafana secrets are externalized via `chart/tbite-platform/values.yaml`. |
+| Production secret material is not committed in plaintext | `.sops.yaml` governs encrypted env manifests under `ops/secrets/**`; `ops/secrets/example.sops.yaml` documents required Secret shapes without real values. |
+| BYO secret manager path is supported | The chart consumes Kubernetes `Secret` objects by name/key, so SOPS, External Secrets Operator, Vault, or cloud KMS integrations can populate the same resources without changing workloads. |
 
-SOPS encryption for single-node secrets is **not yet wired up** — the bootstrap
-Secret is plaintext on the assumption it's local-only. Adding SOPS for shared
-single-node deployments is listed under "Open items" below.
+Local dev files may use obvious throwaway credentials, but any shared or
+production deployment must provide the Secret resources through SOPS or an
+equivalent external secret manager before sync.
 
 ---
 

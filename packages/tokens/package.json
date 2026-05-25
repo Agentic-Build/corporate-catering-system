@@ -8,7 +8,14 @@
     "./fonts.css": "./src/fonts.css",
     "./tailwind": "./src/tailwind-preset.cjs"
   },
-  "files": ["src", "index.ts"],
-  "scripts": { "check": "tsc --noEmit -p tsconfig.json" },
-  "devDependencies": { "typescript": "^5.6.0" }
+  "files": [
+    "src",
+    "index.ts"
+  ],
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
 }

@@ -3511,7 +3511,6 @@ paths:
             operationId: listVendorSettlements
             parameters:
                 - description: Month to summarise, YYYY-MM
-                  example: 2026-04
                   explode: false
                   in: query
                   name: period
@@ -5220,7 +5219,6 @@ paths:
             operationId: getMerchantReconciliation
             parameters:
                 - description: Month to summarise, YYYY-MM
-                  example: 2026-04
                   explode: false
                   in: query
                   name: period
