@@ -649,6 +649,63 @@
         ],
         "type": "object"
       },
+      "CreatePlantInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/CreatePlantInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "code": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sort_order": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "address",
+          "sort_order"
+        ],
+        "type": "object"
+      },
+      "CreatePlantOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/CreatePlantOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "plant": {
+            "$ref": "#/components/schemas/PlantDTO"
+          }
+        },
+        "required": [
+          "plant"
+        ],
+        "type": "object"
+      },
       "CreateVendorInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -1924,6 +1981,33 @@
         ],
         "type": "object"
       },
+      "ListPlantsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ListPlantsOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlantDTO"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "ListSettlementsOutputBody": {
         "additionalProperties": false,
         "properties": {
@@ -2692,6 +2776,35 @@
         ],
         "type": "object"
       },
+      "PlantDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "address": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "sort_order": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "address",
+          "active",
+          "sort_order"
+        ],
+        "type": "object"
+      },
       "PlantMappingDTO": {
         "additionalProperties": false,
         "properties": {
@@ -3423,6 +3536,33 @@
         ],
         "type": "object"
       },
+      "SetMerchantPlantsInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/SetMerchantPlantsInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "plants": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "plants"
+        ],
+        "type": "object"
+      },
       "SetPlantWindowInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -3840,6 +3980,62 @@
         "required": [
           "cutoff_hour",
           "preorder_window_days"
+        ],
+        "type": "object"
+      },
+      "UpdatePlantInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/UpdatePlantInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "address": {
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sort_order": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "address",
+          "active",
+          "sort_order"
+        ],
+        "type": "object"
+      },
+      "UpdatePlantOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/UpdatePlantOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "plant": {
+            "$ref": "#/components/schemas/PlantDTO"
+          }
+        },
+        "required": [
+          "plant"
         ],
         "type": "object"
       },
@@ -5011,6 +5207,145 @@
         "tags": [
           "admin",
           "payroll"
+        ]
+      }
+    },
+    "/api/admin/plants": {
+      "get": {
+        "operationId": "listPlantsAdmin",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPlantsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List all plants (admin)",
+        "tags": [
+          "admin",
+          "plant"
+        ]
+      },
+      "post": {
+        "operationId": "createPlant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlantInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePlantOutputBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a plant",
+        "tags": [
+          "admin",
+          "plant"
+        ]
+      }
+    },
+    "/api/admin/plants/{code}": {
+      "put": {
+        "operationId": "updatePlant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlantInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatePlantOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a plant",
+        "tags": [
+          "admin",
+          "plant"
         ]
       }
     },
@@ -7739,6 +8074,81 @@
         ]
       }
     },
+    "/api/merchant/plants": {
+      "get": {
+        "operationId": "getMerchantPlants",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPlantsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get own vendor's plant mappings",
+        "tags": [
+          "merchant",
+          "plant"
+        ]
+      },
+      "put": {
+        "operationId": "setMerchantPlants",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetMerchantPlantsInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set own vendor's plant assignments",
+        "tags": [
+          "merchant",
+          "plant"
+        ]
+      }
+    },
     "/api/merchant/prep-sheet": {
       "get": {
         "operationId": "merchantPrepSheet",
@@ -8185,6 +8595,42 @@
         "tags": [
           "merchant",
           "quota"
+        ]
+      }
+    },
+    "/api/plants": {
+      "get": {
+        "operationId": "listPlants",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPlantsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active plants",
+        "tags": [
+          "plant"
         ]
       }
     },

@@ -70,13 +70,19 @@ UPDATE vendor_plant_mapping SET service_window=$3
 
 func (r *PlantMappingRepo) Set(ctx context.Context, vendorID string, plants []string) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `DELETE FROM vendor_plant_mapping WHERE vendor_id = $1`, vendorID); err != nil {
-			return fmt.Errorf("delete mappings: %w", err)
+		// Drop only mappings no longer in the desired set; empty set clears all.
+		if _, err := tx.Exec(ctx, `
+DELETE FROM vendor_plant_mapping
+ WHERE vendor_id = $1 AND NOT (plant = ANY($2))`, vendorID, plants); err != nil {
+			return fmt.Errorf("delete removed mappings: %w", err)
 		}
+		// Insert new mappings; reactivate retained ones without touching
+		// service_window (admin-managed, set via SetWindow).
 		for _, p := range plants {
 			if _, err := tx.Exec(ctx, `
 INSERT INTO vendor_plant_mapping (vendor_id, plant, active)
-VALUES ($1, $2, true)`, vendorID, p); err != nil {
+VALUES ($1, $2, true)
+ON CONFLICT (vendor_id, plant) DO UPDATE SET active = true`, vendorID, p); err != nil {
 				return fmt.Errorf("insert mapping %q: %w", p, err)
 			}
 		}

@@ -45,12 +45,14 @@ VENDOR_HEX = {
 }
 VENDOR_HEX["r010"] = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
-# cuisine_category id -> banner image file under /brand/categories/.
+# cuisine_category id -> banner image file.
+# __ASSET_BASE__ is substituted at seed-apply time by seed.sh using
+# S3_PUBLIC_BASE_URL + S3_BUCKET so the committed SQL stays portable.
 CATEGORY_BANNER = {
-    "cat-taiwanese": "/brand/categories/taiwanese.jpg",
-    "cat-breakfast": "/brand/categories/breakfast.jpg",
-    "cat-drinks-desserts": "/brand/categories/drinks-desserts.jpg",
-    "cat-global-western": "/brand/categories/global-western.jpg",
+    "cat-taiwanese": "__ASSET_BASE__/brand/categories/taiwanese.jpg",
+    "cat-breakfast": "__ASSET_BASE__/brand/categories/breakfast.jpg",
+    "cat-drinks-desserts": "__ASSET_BASE__/brand/categories/drinks-desserts.jpg",
+    "cat-global-western": "__ASSET_BASE__/brand/categories/global-western.jpg",
 }
 
 # Legal-name suffix per category flavour. Generic 有限公司 is fine for a dev seed.
@@ -177,8 +179,8 @@ def main() -> None:
         rid = r["id"]
         vid = VENDOR_HEX[rid]
         email = f"{rid}@tbite.test"
-        cover = f"/brand/stores/{rid}-cover.jpg"
-        logo = f"/brand/logos/{rid}.png"
+        cover = f"__ASSET_BASE__/brand/stores/{rid}-cover.jpg"
+        logo = f"__ASSET_BASE__/brand/logos/{rid}.png"
         rows.append(
             "  ({vid}, {dn}, {ln}, {email}, 'approved', now(), {cat}, {cover}, {logo}, {rating}, {rc}, {price})".format(
                 vid=sql_str(vid),
@@ -209,6 +211,25 @@ def main() -> None:
     w("  rating_count        = EXCLUDED.rating_count,")
     w("  price_level         = EXCLUDED.price_level,")
     w("  updated_at          = now();")
+    w("")
+
+    # ---- plant registry ---------------------------------------------------
+    # The plant table (migration 000018) is the canonical pickup-location list
+    # vendor_plant_mapping.plant references via FK, so plants must exist before
+    # any mapping row. label/address are what the 福委會 admin maintains.
+    w("-- Plant registry: pickup locations the 福委會 admin maintains.")
+    w("INSERT INTO plant (code, label, address, sort_order) VALUES")
+    plant_rows = [
+        ("tn-a", "台南廠 A 區", "台南市新市區南科三路 1 號 A 棟 1F", 1),
+        ("tn-b", "台南廠 B 區", "台南市新市區南科三路 1 號 B 棟 1F", 2),
+        ("tn-c", "台南廠 C 區", "台南市善化區南科二路 12 號 C 棟 1F", 3),
+        ("tn-d", "台南廠 D 區", "台南市善化區南科二路 12 號 D 棟 1F", 4),
+    ]
+    w(",\n".join(
+        f"  ({sql_str(c)}, {sql_str(lbl)}, {sql_str(addr)}, {so})"
+        for c, lbl, addr, so in plant_rows
+    ))
+    w("ON CONFLICT (code) DO NOTHING;")
     w("")
 
     # ---- vendor_plant_mapping ---------------------------------------------
@@ -274,7 +295,7 @@ def main() -> None:
     rows = []
     for r in restaurants:
         repr_id = r["mvpRepresentativeItemId"]
-        blob = f"/brand/items/{repr_id}.jpg"
+        blob = f"__ASSET_BASE__/brand/items/{repr_id}.jpg"
         for it in r["items"]:
             iid = menu_item_id(it["id"])
             rows.append(

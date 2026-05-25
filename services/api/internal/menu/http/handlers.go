@@ -18,12 +18,15 @@ import (
 // Merchant routes require a vendor_operator bound to a vendor (user.VendorID);
 // the employee read route requires an employee with a plant assignment.
 //
-// Storage backs the presigned URL endpoints in presign.go. The chart
-// wires it so menu-item images travel direct-to-storage with no
-// API-proxied bulk transfer.
+// Storage backs the presigned URL endpoints in presign.go and the direct
+// multipart upload endpoint in upload.go.
+// StoragePublicBaseURL is the public MinIO base (e.g. http://localhost:9000)
+// used to build full public URLs returned from uploads.
 type API struct {
-	Svc     *menu.Service
-	Storage *storage.S3Client
+	Svc                  *menu.Service
+	Storage              *storage.S3Client
+	StoragePublicBaseURL string
+	StorageBucket        string
 }
 
 // ----- DTOs -----

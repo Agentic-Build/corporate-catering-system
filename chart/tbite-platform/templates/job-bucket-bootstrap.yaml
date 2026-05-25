@@ -41,7 +41,13 @@ spec:
               mc alias set tbite "${TBITE_S3_ENDPOINT}" "${TBITE_S3_ACCESS_KEY_ID}" "${TBITE_S3_SECRET_ACCESS_KEY}"
               # idempotent — ignore "bucket exists" errors
               mc mb --ignore-existing "tbite/${TBITE_S3_BUCKET}"
+              # Bucket-level policy stays restrictive — vendor-docs/* (compliance
+              # documents) live in this bucket and must never be anonymous.
               mc anonymous set {{ .Values.hooks.bucketBootstrap.policy }} "tbite/${TBITE_S3_BUCKET}" || true
+              # Expose only the public asset prefixes for direct browser reads.
+              {{- range .Values.hooks.bucketBootstrap.publicReadPrefixes }}
+              mc anonymous set download "tbite/${TBITE_S3_BUCKET}/{{ . }}" || true
+              {{- end }}
               {{- range .Values.hooks.bucketBootstrap.extraBuckets }}
               mc mb --ignore-existing "tbite/{{ . }}"
               {{- end }}

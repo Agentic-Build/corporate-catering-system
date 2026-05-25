@@ -61,6 +61,10 @@ global:
     region: "us-east-1"
     bucket: "tbite-prod"
     usePathStyle: "1"
+    # publicBaseURL is the externally-reachable MinIO base URL that browsers
+    # use to fetch images directly (path-style: {publicBaseURL}/{bucket}/{key}).
+    # For Cloudflare Tunnel deployments, set this to the files-* tunnel host.
+    publicBaseURL: "https://files.tbite.example.com"
     credentialsSecretRef:
       name: tbite-s3
       accessKeyKey: accessKeyID
@@ -348,6 +352,9 @@ hooks:
       limits:   { cpu: 500m, memory: 256Mi }
     extraBuckets: []
     policy: "private"
+    # Prefixes opened to anonymous read (browser-direct image serving).
+    # Empty by default — the whole bucket, including vendor-docs/*, stays private.
+    publicReadPrefixes: []
   # createIdentityDatabases bootstraps the `authentik` and `hydra`
   # databases inside the main CNPG Cluster so the two identity
   # subcharts can reuse the same Postgres rather than bringing up

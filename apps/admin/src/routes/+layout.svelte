@@ -10,6 +10,7 @@
   const navItems: { href: string; label: string; icon: IconName }[] = [
     { href: "/", label: "治理總覽", icon: "home" },
     { href: "/vendors", label: "商家管理", icon: "doc" },
+    { href: "/plants", label: "廠區登錄", icon: "tag" },
     { href: "/payroll", label: "薪資代扣", icon: "wallet" },
     { href: "/vendor-settlements", label: "商家結算", icon: "card" },
     { href: "/complaints", label: "升級客訴", icon: "bell" },

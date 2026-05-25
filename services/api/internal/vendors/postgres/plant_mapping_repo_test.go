@@ -18,6 +18,12 @@ func TestPlantMappingRepo_SetAndList(t *testing.T) {
 	prepo := postgres.NewPlantMappingRepo(pool)
 	ctx := context.Background()
 
+	// Pre-populate plant registry (required by FK constraint added in 000018).
+	for _, code := range []string{"F12B-3F", "F15-2F", "F18-RF"} {
+		_, err := pool.Exec(ctx, `INSERT INTO plant (code, label) VALUES ($1, $1) ON CONFLICT DO NOTHING`, code)
+		require.NoError(t, err)
+	}
+
 	v := &vendor.Vendor{DisplayName: "V", LegalName: "V Ltd", ContactEmail: "v@x.com", Status: vendor.StatusApproved}
 	require.NoError(t, vrepo.Create(ctx, v))
 
@@ -51,13 +57,17 @@ func TestPlantMappingRepo_SetEmpty(t *testing.T) {
 	prepo := postgres.NewPlantMappingRepo(pool)
 	ctx := context.Background()
 
+	// Pre-populate plant registry (required by FK constraint added in 000018).
+	_, err := pool.Exec(ctx, `INSERT INTO plant (code, label) VALUES ('F12B-3F', 'F12B-3F') ON CONFLICT DO NOTHING`)
+	require.NoError(t, err)
+
 	v := &vendor.Vendor{DisplayName: "V", LegalName: "V Ltd", ContactEmail: "empty@x.com", Status: vendor.StatusApproved}
 	require.NoError(t, vrepo.Create(ctx, v))
 	require.NoError(t, prepo.Set(ctx, v.ID, []string{"F12B-3F"}))
 
 	// Reset to empty wipes all mappings
 	require.NoError(t, prepo.Set(ctx, v.ID, []string{}))
-	list, err := prepo.ListByVendor(ctx, v.ID)
-	require.NoError(t, err)
+	list, err2 := prepo.ListByVendor(ctx, v.ID)
+	require.NoError(t, err2)
 	assert.Len(t, list, 0)
 }

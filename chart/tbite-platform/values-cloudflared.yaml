@@ -71,3 +71,29 @@ ingress:
 # default; Cloudflare proxy enforces a 100s edge timeout which the
 # realtime handler's 20s heartbeat absorbs.
 #-----------------------------------------------------------------------------
+
+#-----------------------------------------------------------------------------
+# MinIO public URL for the Cloudflare Tunnel deployment.
+#
+# Add a Public Hostname route in the Cloudflare Zero Trust dashboard:
+#   Hostname:  files-<slug>-tbite.takalawang.dev  (or files.<domain>)
+#   Service:   http://minio.<namespace>.svc.cluster.local:9000
+#
+# Then override S3_PUBLIC_BASE_URL so the API generates URLs browsers
+# can reach without going through the in-cluster endpoint.
+# NOTE: deploying to the live CD box is a separate manual step; this
+# config change only updates the chart — ArgoCD will apply it on next sync.
+#-----------------------------------------------------------------------------
+global:
+  s3:
+    # Override in your site-specific values file once the tunnel hostname is known.
+    publicBaseURL: "https://files-tbite.takalawang.dev"
+
+hooks:
+  bucketBootstrap:
+    # The bucket itself stays private — vendor-docs/* (compliance documents)
+    # share this bucket and must not be anonymously readable.
+    policy: "private"
+    # Only the image asset prefixes are exposed for browser-direct reads via
+    # the Cloudflare Tunnel MinIO hostname.
+    publicReadPrefixes: ["brand", "menu-images"]

@@ -12,13 +12,6 @@ export interface DayOption {
   sub?: string;
 }
 
-export const PLANTS: PlantOption[] = [
-  { id: "tn-a", label: "台南廠 A 區" },
-  { id: "tn-b", label: "台南廠 B 區" },
-  { id: "tn-c", label: "台南廠 C 區" },
-  { id: "tn-d", label: "台南廠 D 區" },
-];
-
 /** Next 7 days starting today, matching the home route's buildDays(). */
 export function buildDays(today = new Date(), selectedISO?: string): DayOption[] {
   const wk = ["日", "一", "二", "三", "四", "五", "六"];

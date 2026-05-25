@@ -50,6 +50,32 @@ BEGIN;
 --   tn-14, tn-18p7 — smaller, 1 location each
 -- ---------------------------------------------------------------------------
 
+-- Register the TSMC pickup locations first: vendor_plant_mapping.plant
+-- references plant(code) via FK (migration 000018), so every code below must
+-- exist in the registry before any mapping row. label/address are what the
+-- 福委會 admin maintains and the employee/merchant apps display.
+INSERT INTO plant (code, label, address, sort_order) VALUES
+  ('hc-hq-r1-b1', '新竹總部 R1 棟 B1 員工餐廳', '新竹市東區力行路 8 號 R1 棟 B1', 10),
+  ('hc-hq-p5-1f', '新竹總部 P5 棟 1F 餐廳',     '新竹市東區力行路 8 號 P5 棟 1F', 11),
+  ('hc-hq-r2-2f', '新竹總部 R2 棟 2F 茶水間',   '新竹市東區力行路 8 號 R2 棟 2F', 12),
+  ('hc-12a-1f',   '新竹 Fab 12A 1F',           '新竹科學園區園區三路 12 號 1F', 13),
+  ('hc-12a-3f',   '新竹 Fab 12A 3F',           '新竹科學園區園區三路 12 號 3F', 14),
+  ('hc-12b-1f',   '新竹 Fab 12B 1F',           '新竹科學園區園區三路 14 號 1F', 15),
+  ('hc-12b-3f',   '新竹 Fab 12B 3F',           '新竹科學園區園區三路 14 號 3F', 16),
+  ('tc-15a-1f',   '中科 Fab 15A 1F',           '臺中市西屯區中科路 15 號 1F', 17),
+  ('tc-15a-3f',   '中科 Fab 15A 3F',           '臺中市西屯區中科路 15 號 3F', 18),
+  ('tc-15b-1f',   '中科 Fab 15B 1F',           '臺中市西屯區中科路 17 號 1F', 19),
+  ('tc-15b-3f',   '中科 Fab 15B 3F',           '臺中市西屯區中科路 17 號 3F', 20),
+  ('tn-14-2f',    '南科 Fab 14 2F',            '臺南市新市區南科三路 14 號 2F', 21),
+  ('tn-18p1-1f',  '南科 Fab 18 P1 1F',         '臺南市善化區南科二路 18 號 P1 1F', 22),
+  ('tn-18p1-3f',  '南科 Fab 18 P1 3F',         '臺南市善化區南科二路 18 號 P1 3F', 23),
+  ('tn-18p1-b1',  '南科 Fab 18 P1 B1',         '臺南市善化區南科二路 18 號 P1 B1', 24),
+  ('tn-18p3-1f',  '南科 Fab 18 P3 1F',         '臺南市善化區南科二路 18 號 P3 1F', 25),
+  ('tn-18p3-3f',  '南科 Fab 18 P3 3F',         '臺南市善化區南科二路 18 號 P3 3F', 26),
+  ('tn-18p3-b1',  '南科 Fab 18 P3 B1',         '臺南市善化區南科二路 18 號 P3 B1', 27),
+  ('tn-18p7-2f',  '南科 Fab 18 P7 2F',         '臺南市善化區南科二路 18 號 P7 2F', 28)
+ON CONFLICT (code) DO NOTHING;
+
 -- Replace the legacy tn-a..tn-d plant set with the TSMC pickup-location codes.
 DELETE FROM vendor_plant_mapping;
 
