@@ -1,0 +1,118 @@
+# Custom queries fed to postgres-exporter via PG_EXPORTER_EXTEND_QUERY_PATH.
+# Each top-level key is a metric prefix; column-level `usage: GAUGE` makes
+# that column a metric (named `<prefix>_<column>`) and `usage: LABEL` makes it
+# a label dimension.
+#
+# Cardinality budget: keep label sets bounded. tbite_supply caps at vendors × 8
+# days (today + 7); tbite_dlq + tbite_outbox cap at stream / aggregate_type
+# count which is < 20 in this system.
+
+tbite_dlq:
+  query: |
+    SELECT
+      source_stream,
+      count(*) FILTER (WHERE replayed_at IS NULL AND resolved_at IS NULL) AS pending,
+      coalesce(
+        extract(epoch FROM (now() - min(first_seen_at) FILTER (WHERE replayed_at IS NULL AND resolved_at IS NULL))),
+        0
+      ) AS oldest_seconds
+    FROM dlq_message
+    GROUP BY source_stream
+  master: true
+  metrics:
+    - source_stream:
+        usage: "LABEL"
+        description: "JetStream source name"
+    - pending:
+        usage: "GAUGE"
+        description: "Pending DLQ messages by source stream"
+    - oldest_seconds:
+        usage: "GAUGE"
+        description: "Age of oldest unresolved DLQ message in seconds"
+
+tbite_outbox:
+  query: |
+    SELECT
+      aggregate_type,
+      count(*) FILTER (WHERE published_at IS NULL) AS pending,
+      coalesce(
+        extract(epoch FROM (now() - min(created_at) FILTER (WHERE published_at IS NULL))),
+        0
+      ) AS oldest_seconds
+    FROM outbox_event
+    GROUP BY aggregate_type
+  master: true
+  metrics:
+    - aggregate_type:
+        usage: "LABEL"
+        description: "Outbox aggregate type (order / payroll_dispute / ...)"
+    - pending:
+        usage: "GAUGE"
+        description: "Unpublished outbox rows by aggregate type"
+    - oldest_seconds:
+        usage: "GAUGE"
+        description: "Age of oldest unpublished outbox row in seconds"
+
+tbite_supply:
+  query: |
+    SELECT
+      mi.vendor_id::text AS vendor_id,
+      to_char(s.supply_date, 'YYYY-MM-DD') AS supply_date,
+      sum(s.remain)::bigint AS remain,
+      sum(s.capacity)::bigint AS capacity
+    FROM meal_supply s
+    JOIN menu_item mi ON mi.id = s.menu_item_id
+    WHERE s.supply_date BETWEEN current_date AND current_date + INTERVAL '7 days'
+    GROUP BY mi.vendor_id, s.supply_date
+  master: true
+  metrics:
+    - vendor_id:
+        usage: "LABEL"
+    - supply_date:
+        usage: "LABEL"
+        description: "Supply date YYYY-MM-DD (today..+7d window)"
+    - remain:
+        usage: "GAUGE"
+        description: "Remaining capacity summed across menu items"
+    - capacity:
+        usage: "GAUGE"
+        description: "Total capacity summed across menu items"
+
+# Per-menu-item supply state. Cardinality: ~4 items × 3 vendors × 8 days =
+# ~96 series × 2 metrics = ~192 series. Worth the cost because it lets the
+# Status Board surface "this single item is misconfigured (capacity=0)" —
+# a class of typo that the aggregated tbite_supply query above smooths over.
+tbite_item_supply:
+  query: |
+    SELECT
+      mi.vendor_id::text AS vendor_id,
+      v.display_name AS vendor_name,
+      s.menu_item_id::text AS menu_item_id,
+      mi.name AS item_name,
+      to_char(s.supply_date, 'YYYY-MM-DD') AS supply_date,
+      s.capacity::bigint AS capacity,
+      s.remain::bigint AS remain
+    FROM meal_supply s
+    JOIN menu_item mi ON mi.id = s.menu_item_id
+    JOIN vendor v ON v.id = mi.vendor_id
+    WHERE s.supply_date BETWEEN current_date AND current_date + INTERVAL '7 days'
+  master: true
+  metrics:
+    - vendor_id:
+        usage: "LABEL"
+    - vendor_name:
+        usage: "LABEL"
+        description: "Human-readable vendor name (joined from vendor table)"
+    - menu_item_id:
+        usage: "LABEL"
+    - item_name:
+        usage: "LABEL"
+        description: "Human-readable menu item name (joined from menu_item table)"
+    - supply_date:
+        usage: "LABEL"
+    - capacity:
+        usage: "GAUGE"
+        description: "Configured capacity for this menu item on this date"
+    - remain:
+        usage: "GAUGE"
+        description: "Remaining capacity for this menu item on this date"

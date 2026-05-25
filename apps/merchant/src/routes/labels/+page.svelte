@@ -1,7 +1,6 @@
 <script lang="ts">
   import { PageHeader, Button, Icon, EmptyState } from "@tbite/ui";
   import { buildPickupQR } from "@tbite/pickup";
-  import QRCode from "qrcode";
   import { onMount } from "svelte";
 
   let { data } = $props();
@@ -20,6 +19,10 @@
   onMount(() => {
     let cancelled = false;
     (async () => {
+      // qrcode is CommonJS and breaks SvelteKit/Vite SSR, so import it lazily
+      // here — onMount only runs in the browser, keeping it out of the SSR graph.
+      const mod = await import("qrcode");
+      const QRCode = (mod as unknown as { default?: typeof mod }).default ?? mod;
       const next: Record<string, string> = {};
       for (const o of orders) {
         next[o.id] = await QRCode.toDataURL(buildPickupQR(o.id), {

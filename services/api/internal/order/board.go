@@ -129,6 +129,20 @@ func kindFromSubject(subject string) string {
 	return subject
 }
 
+// sanitizeConsumerToken replaces every character that is invalid in a NATS
+// durable consumer name (anything outside [A-Za-z0-9_-], e.g. the '.' in a
+// macOS hostname like "host.local") with '-'. NATS rejects '.' in names.
+func sanitizeConsumerToken(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '-':
+			return r
+		default:
+			return '-'
+		}
+	}, s)
+}
+
 // RunBoardConsumer taps the ORDERS_V1 stream and feeds order events into the
 // per-vendor board hub and (if non-nil) the broadcast menu hub, until ctx is
 // cancelled. It uses an ephemeral, ack-none, deliver-new consumer: the board
@@ -146,7 +160,7 @@ func RunBoardConsumer(ctx context.Context, js jetstream.JetStream, hub *BoardHub
 	// previously-restarted pods for up to an hour and inflate "lag" metrics.
 	hostname, _ := os.Hostname()
 	cons, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		Name:              "board-fanout-" + hostname,
+		Name:              "board-fanout-" + sanitizeConsumerToken(hostname),
 		FilterSubject:     "order.>",
 		AckPolicy:         jetstream.AckNonePolicy,
 		DeliverPolicy:     jetstream.DeliverNewPolicy,

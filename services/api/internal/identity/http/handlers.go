@@ -143,6 +143,18 @@ func (a *API) completeLogin(ctx context.Context, in *completeLoginInput) (*compl
 		Provider: in.Provider, State: in.State, Code: in.Code,
 	})
 	if err != nil {
+		// This is a browser-facing callback: render a friendly redirect back
+		// to the app's login page rather than returning raw JSON. We can only
+		// do so once we know which app the user came from, which the service
+		// reports via CallbackError after the OIDC state is resolved.
+		var cbErr *identity.CallbackError
+		if errors.As(err, &cbErr) {
+			if base, ok := a.AppURLs[cbErr.App]; ok {
+				login := fmt.Sprintf("%s/login?error=%s",
+					base, url.QueryEscape(callbackErrorCode(err)))
+				return &completeLoginOutput{Status: http.StatusSeeOther, Url: login}, nil
+			}
+		}
 		return nil, mapErr(err)
 	}
 
@@ -156,6 +168,19 @@ func (a *API) completeLogin(ctx context.Context, in *completeLoginInput) (*compl
 		url.QueryEscape(out.ReturnTo),
 	)
 	return &completeLoginOutput{Status: http.StatusFound, Url: landing}, nil
+}
+
+// callbackErrorCode maps an OIDC callback failure to a short, stable code the
+// app's /login page can use to render a friendly message (no raw detail leaks).
+func callbackErrorCode(err error) string {
+	switch {
+	case errors.Is(err, identity.ErrRoleMismatch):
+		return "role_mismatch"
+	case errors.Is(err, identity.ErrAccountSuspended):
+		return "account_suspended"
+	default:
+		return "auth_failed"
+	}
 }
 
 func (a *API) providers(_ context.Context, _ *struct{}) (*providersOutput, error) {

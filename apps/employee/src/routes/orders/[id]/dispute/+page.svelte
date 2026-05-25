@@ -1,6 +1,7 @@
 <script lang="ts">
   // 提出申訴 — design-language pass. PageHeader + Card + StateTag.
   import { PageHeader, Card, StateTag, Button, Icon } from "@tbite/ui";
+  import { enhance } from "$app/forms";
 
   let { data, form } = $props();
   const o = $derived(data.order);
@@ -64,7 +65,7 @@
       <p class="rounded-tb-xl bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">{form.error}</p>
     {/if}
     <Card title="申訴內容">
-      <form method="POST" class="space-y-3">
+      <form method="POST" class="space-y-3" use:enhance>
         <label class="flex flex-col gap-1.5 text-sm">
           <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
             申訴原因

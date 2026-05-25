@@ -235,3 +235,38 @@ func TestCompleteLogin_WebAppRedirectsToLanding(t *testing.T) {
 		"expected web landing URL, got %q", loc)
 	assert.Contains(t, loc, "return_to=%2Fmenu")
 }
+
+// An employee logging into the merchant app must be redirected back to the
+// merchant /login with an error code — never shown raw JSON (issue X2).
+func TestCompleteLogin_RoleMismatchRedirectsToAppLogin(t *testing.T) {
+	states := &fakeStates{m: map[string]*oidc.StatePayload{
+		"st1": {App: "merchant", Provider: "authentik", ReturnTo: "/menu", PKCEVerifier: "v", Nonce: "n"},
+	}}
+	svc := &identity.Service{
+		Users:      &fakeUsers{byID: map[string]*identity.User{}},
+		Identities: fakeIdentities{},
+		Sessions:   newFakeSessions(),
+		Providers:  map[string]oidc.Provider{"authentik": fakeProvider{}},
+		States:     states,
+	}
+	api := &idhttp.API{
+		Svc:      svc,
+		Sessions: newFakeSessions(),
+		Users:    &fakeUsers{byID: map[string]*identity.User{}},
+		AppURLs:  idhttp.AppBaseURLs{"merchant": "http://merchant.tbite.test"},
+	}
+	srv := httptest.NewServer(buildHandler(api))
+	defer srv.Close()
+
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	req, _ := http.NewRequest("GET", srv.URL+"/auth/authentik/callback?state=st1&code=C", nil)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	loc := resp.Header.Get("Location")
+	assert.Equal(t, "http://merchant.tbite.test/login?error=role_mismatch", loc)
+}

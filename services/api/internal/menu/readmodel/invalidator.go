@@ -15,10 +15,25 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
+
+// sanitizeConsumerToken replaces every character that is invalid in a NATS
+// durable consumer name (anything outside [A-Za-z0-9_-], e.g. the '.' in a
+// macOS hostname like "host.local") with '-'. NATS rejects '.' in names.
+func sanitizeConsumerToken(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '-':
+			return r
+		default:
+			return '-'
+		}
+	}, s)
+}
 
 // orderEvent is the minimal projection the invalidator needs from
 // ORDERS_V1 payloads. Plant + supply_date drive the SCAN pattern.
@@ -39,7 +54,7 @@ func RunOrderInvalidator(ctx context.Context, js jetstream.JetStream, cache Cach
 	}
 	hostname, _ := os.Hostname()
 	cons, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		Name:              "readmodel-invalidator-" + hostname,
+		Name:              "readmodel-invalidator-" + sanitizeConsumerToken(hostname),
 		FilterSubject:     "order.>",
 		AckPolicy:         jetstream.AckNonePolicy,
 		DeliverPolicy:     jetstream.DeliverNewPolicy,
