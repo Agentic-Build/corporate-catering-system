@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Supply / vendor capacity health. Adjustments + per-vendor remaining capacity sourced from postgres-exporter custom queries (ops/observability/postgres-exporter/queries.yaml).",
+  "description": "Supply / vendor capacity health. Adjustments and per-vendor remaining capacity are emitted by the API via OpenTelemetry.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,

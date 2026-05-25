@@ -1,0 +1,25 @@
+{{- if .Values.crdsReady -}}
+{{- if and .Values.observability.victoriaMetrics.enabled .Values.postgres.enabled (not .Values.postgres.byo.enabled) }}
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: {{ include "tbite.fullname" . }}-cnpg
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ include "tbite.namespace" . }}
+  selector:
+    matchLabels:
+      cnpg.io/cluster: {{ .Values.postgres.cluster.name | quote }}
+      cnpg.io/podRole: instance
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      scheme: http
+{{- end }}
+{{- end -}}

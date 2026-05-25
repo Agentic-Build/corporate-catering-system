@@ -52,7 +52,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (state) (pg_stat_activity_count{datname=\"tbite\"})",
+          "expr": "sum by (state) (cnpg_backends_total{datname=\"tbite\"})",
           "legendFormat": "{{state}}",
           "refId": "A"
         }
@@ -91,7 +91,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(pg_stat_database_blks_hit_total{datname=\"tbite\"}[5m])) / clamp_min(sum(rate(pg_stat_database_blks_hit_total{datname=\"tbite\"}[5m])) + sum(rate(pg_stat_database_blks_read_total{datname=\"tbite\"}[5m])), 1)",
+          "expr": "sum(rate(cnpg_pg_stat_database_blks_hit{datname=\"tbite\"}[5m])) / clamp_min(sum(rate(cnpg_pg_stat_database_blks_hit{datname=\"tbite\"}[5m])) + sum(rate(cnpg_pg_stat_database_blks_read{datname=\"tbite\"}[5m])), 1)",
           "legendFormat": "hit ratio",
           "refId": "A"
         }
@@ -128,12 +128,12 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_deadlocks_total{datname=\"tbite\"}[5m])",
+          "expr": "rate(cnpg_pg_stat_database_deadlocks{datname=\"tbite\"}[5m])",
           "legendFormat": "deadlocks",
           "refId": "A"
         },
         {
-          "expr": "rate(pg_stat_database_xact_rollback_total{datname=\"tbite\"}[5m])",
+          "expr": "rate(cnpg_pg_stat_database_xact_rollback{datname=\"tbite\"}[5m])",
           "legendFormat": "rollbacks",
           "refId": "B"
         }
@@ -303,12 +303,12 @@
       },
       "targets": [
         {
-          "expr": "gnatsd_varz_connections",
+          "expr": "nats_varz_connections",
           "legendFormat": "connections",
           "refId": "A"
         },
         {
-          "expr": "gnatsd_varz_subscriptions",
+          "expr": "nats_varz_subscriptions",
           "legendFormat": "subscriptions",
           "refId": "B"
         }
@@ -345,12 +345,12 @@
       },
       "targets": [
         {
-          "expr": "rate(gnatsd_varz_in_msgs[1m])",
+          "expr": "rate(nats_varz_in_msgs[1m])",
           "legendFormat": "in",
           "refId": "A"
         },
         {
-          "expr": "rate(gnatsd_varz_out_msgs[1m])",
+          "expr": "rate(nats_varz_out_msgs[1m])",
           "legendFormat": "out",
           "refId": "B"
         }

@@ -26,7 +26,7 @@ spec:
             description: "Pod {{ "{{" }} $labels.pod {{ "}}" }} has been above {{ .Values.alerting.thresholds.poolSaturationPct }}% pool saturation for 5m."
         - alert: TbitePgReplicaLagHigh
           expr: |
-            max(cnpg_pg_replication_lag_seconds) > {{ .Values.alerting.thresholds.replicaLagSeconds }}
+            max(cnpg_pg_replication_lag) > {{ .Values.alerting.thresholds.replicaLagSeconds }}
           for: 2m
           labels:
             severity: warning
