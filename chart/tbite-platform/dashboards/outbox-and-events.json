@@ -41,7 +41,7 @@
     {
       "type": "stat",
       "title": "Oldest unpublished outbox row",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 },
       "id": 1,
       "fieldConfig": {
@@ -72,7 +72,7 @@
     {
       "type": "timeseries",
       "title": "Outbox age over time",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 6, "w": 18, "x": 6, "y": 1 },
       "id": 2,
       "fieldConfig": {
@@ -101,7 +101,7 @@
     {
       "type": "timeseries",
       "title": "Outbox relay publish rate",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "id": 3,
       "fieldConfig": {
@@ -124,7 +124,7 @@
     {
       "type": "timeseries",
       "title": "Consumer pending per worker role",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "id": 4,
       "fieldConfig": {
@@ -155,7 +155,7 @@
     {
       "type": "timeseries",
       "title": "Consumer delivery rate per role",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
       "id": 5,
       "fieldConfig": {
@@ -184,7 +184,7 @@
     {
       "type": "stat",
       "title": "DLQ messages (15m increase)",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 17 },
       "id": 6,
       "fieldConfig": {
@@ -214,7 +214,7 @@
     {
       "type": "timeseries",
       "title": "DLQ growth per source stream",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
       "id": 7,
       "fieldConfig": {

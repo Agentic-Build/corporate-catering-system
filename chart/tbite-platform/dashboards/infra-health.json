@@ -23,7 +23,7 @@
       "title": "Connections by state",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 7,
@@ -63,7 +63,7 @@
       "title": "Cache hit ratio",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 7,
@@ -102,7 +102,7 @@
       "title": "Deadlocks + rollbacks (rate)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 7,
@@ -155,7 +155,7 @@
       "title": "Commands per second",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 7,
@@ -192,7 +192,7 @@
       "title": "Memory used",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 7,
@@ -229,7 +229,7 @@
       "title": "Connected clients",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 7,
@@ -277,7 +277,7 @@
       "title": "Connections + subscriptions",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 7,
@@ -319,7 +319,7 @@
       "title": "Messages in/out (rate)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 7,
@@ -372,7 +372,7 @@
       "title": "OTel Collector \u2014 ingest + export",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 7,
@@ -433,7 +433,7 @@
       "title": "VictoriaMetrics \u2014 ingest + disk",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 7,

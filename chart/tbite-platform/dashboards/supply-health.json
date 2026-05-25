@@ -12,7 +12,7 @@
       "title": "Capacity adjustments (24h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -48,7 +48,7 @@
       "title": "Quota exhausted (24h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -97,7 +97,7 @@
       "title": "Capacity adjustments by vendor (direction)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -137,7 +137,7 @@
       "title": "Adjustment magnitude (p95 absolute delta)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -178,7 +178,7 @@
       "title": "Quota exhausted by vendor \u00d7 menu item",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -218,7 +218,7 @@
       "title": "Today \u2014 total remaining vs capacity",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -266,7 +266,7 @@
       "title": "Today \u2014 utilization (1 - remain/capacity)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -319,7 +319,7 @@
       "title": "Remaining capacity by vendor (next 7 days)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,

@@ -12,7 +12,7 @@
       "title": "Orders placed (24h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -46,7 +46,7 @@
       "title": "Cancellation rate (24h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -96,7 +96,7 @@
       "title": "Quota exhausted (24h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -145,7 +145,7 @@
       "title": "No-show (24h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -195,7 +195,7 @@
       "title": "Orders placed \u2014 outcome over time",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -235,7 +235,7 @@
       "title": "Per-plant placement rate",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -275,7 +275,7 @@
       "title": "Cancel reasons",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -316,7 +316,7 @@
       "description": "Self-service pickup ended in success, forbidden (wrong employee scanned), wrong_state (already picked up or not yet ready), or concurrent_modification (deadlock retry path). A forbidden spike suggests confused stickers; a wrong_state spike usually means double-tap retries.",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -353,7 +353,7 @@
       "title": "Order total price (minor) \u2014 p50/p95",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -433,7 +433,7 @@
         "label": "Plant",
         "datasource": {
           "type": "prometheus",
-          "uid": "victoria-metrics"
+          "uid": "VictoriaMetrics"
         },
         "query": "label_values(catering_order_placed_count_total, plant_id)",
         "refresh": 2,

@@ -28,7 +28,7 @@
       "title": "Orders marked READY (24h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -64,7 +64,7 @@
       "title": "Successful pickups (24h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -99,7 +99,7 @@
       "title": "Pickup failure ratio (1h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "description": "Failed verify attempts / total attempts. >30% = broken scanner or bad TOTP code distribution somewhere.",
       "gridPos": {
@@ -152,7 +152,7 @@
       "title": "No-show (24h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "description": "READY orders that aged out without pickup. Waste indicator + signal for vendor over-supply.",
       "gridPos": {
@@ -203,7 +203,7 @@
       "title": "Pickup attempts by outcome \u2014 broken scanner / typo / state mismatch all visible here",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -308,7 +308,7 @@
       "title": "Pickups per plant (success only)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -349,7 +349,7 @@
       "title": "Failure attribution (top vendor \u00d7 outcome, 5m)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "description": "Concentrates by (vendor, outcome) so a single vendor's failing pickup flow jumps out. Outcomes: forbidden (employee scanned someone else's QR), wrong_state (already picked up or not yet ready), concurrent_modification (deadlock retry path). Cross-check with /api/employee/orders/{id}/pickup HTTP latency below.",
       "gridPos": {
@@ -451,7 +451,7 @@
       "title": "HTTP /employee/orders/{id}/pickup latency (p50/p95/p99)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,

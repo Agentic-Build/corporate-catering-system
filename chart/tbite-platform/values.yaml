@@ -806,6 +806,9 @@ hydra:
 observability:
   dashboards:
     enabled: true
+    # dev-loop includes trace drilldowns and local-only links; only
+    # provision it when VictoriaTraces is enabled for the release.
+    includeDevLoop: false
   victoriaMetrics:
     enabled: true
     retention: "30d"
