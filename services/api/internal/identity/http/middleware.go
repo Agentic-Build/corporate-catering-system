@@ -45,8 +45,8 @@ func TokenFromContext(ctx context.Context) (string, bool) {
 // AuthMiddleware authenticates the caller by Bearer token. It tries two
 // token shapes in order:
 //
-//  1. T-Bite session token (the `tb_…` value the SvelteKit frontends use,
-//     and the historical MCP credential). Looked up in Redis.
+//  1. T-Bite session token (the `tb_…` value the SvelteKit frontends use).
+//     Looked up in Redis.
 //  2. Hydra-issued JWT access token (`eyJ…`), validated against Hydra's
 //     JWKS. Subject claim is the T-Bite user ID.
 //
@@ -54,8 +54,7 @@ func TokenFromContext(ctx context.Context) (string, bool) {
 // the mcp-stdio role doesn't.
 //
 // On either successful lookup the user is loaded and attached to ctx;
-// failures fall through to anonymous handling (matching the historical
-// behaviour for invalid session tokens).
+// failures fall through to anonymous handling for invalid session tokens.
 func (a *API) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -64,7 +63,7 @@ func (a *API) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// 1. Session-token path (legacy + web).
+		// 1. Session-token path.
 		sess, err := a.Sessions.Get(r.Context(), tok)
 		switch {
 		case err == nil:

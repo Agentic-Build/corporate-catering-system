@@ -16,8 +16,8 @@ lives in [`ops/secrets/README.md`](../../ops/secrets/README.md).
 
 The platform is designed to be **self-hostable from one box up to a multi-AZ
 cluster**, including air-gapped environments (see
-[`airgapped.md`](./airgapped.md) and architecture issue #53). Every secret
-mechanism we considered was scored against that constraint:
+[`airgapped.md`](./airgapped.md)). Every secret mechanism we considered was
+scored against that constraint:
 
 | Option                          | Verdict for the baseline                                                                                                                                  |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |

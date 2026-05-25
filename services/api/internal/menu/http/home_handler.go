@@ -32,12 +32,9 @@ type HomeAPI struct {
 	// GET /api/employee/menu does for "today".
 	MenuSvc *menu.Service
 
-	// Read-model cache (architecture issue #59). When wired, the
-	// employee home Compute() result is memoised by (user, plant,
-	// day) under a short TTL and the outbox-driven invalidator
-	// drops affected keys on order events. Leaving these zero
-	// preserves the historical uncached path — the BYO-no-Valkey
-	// mode of the chart relies on this.
+	// Read-model cache for employee home. Compute() results are
+	// memoised by (user, plant, day) under a short TTL, and the
+	// outbox-driven invalidator drops affected keys on order events.
 	Cache       readmodel.Cache
 	CacheTTL    time.Duration
 	CacheMetric readmodel.Metrics

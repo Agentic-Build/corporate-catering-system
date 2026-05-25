@@ -4,10 +4,10 @@ package main
 // mirror the huma-based handlers under services/api/internal/order/http
 // without pulling in the rest of the huma router — the realtime
 // Deployment must stay small, with no business-write endpoints
-// mounted (architecture issue #58). Topic scoping is by vendor (board)
-// and by global menu broadcast (menu), matching the current client
-// contract; plant/date scoping is exposed via the hubs' subscriber
-// keys and can be extended without changing the URL shape.
+// mounted. Topic scoping is by vendor (board) and by global menu
+// broadcast (menu), matching the current client contract; plant/date
+// scoping is exposed via the hubs' subscriber keys and can be
+// extended without changing the URL shape.
 
 import (
 	"encoding/json"

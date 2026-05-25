@@ -2,8 +2,7 @@
 {{- /*
 Loads every JSON file under chart/tbite-platform/dashboards/ into a ConfigMap
 that the Grafana subchart's sidecar picks up via the
-`grafana_dashboard=1` label selector. Replaces the legacy
-`ops/kubernetes/monitoring/dashboards/` provisioning path.
+`grafana_dashboard=1` label selector.
 */ -}}
 apiVersion: v1
 kind: ConfigMap

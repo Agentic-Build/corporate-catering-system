@@ -12,7 +12,6 @@ namespace: argocd
 
 resources:
   - project.yaml
-  # Helm umbrella chart Application (architecture #47). The legacy
-  # kustomize overlays and their Application have been removed; the
-  # Helm chart is the sole canonical deployment path.
+  # Helm umbrella chart Application. The Helm chart is the sole
+  # canonical deployment path.
   - application-helm.yaml

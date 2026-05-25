@@ -17,7 +17,7 @@
     { "type": "panel", "id": "stat", "name": "Stat", "version": "" }
   ],
   "annotations": { "list": [] },
-  "description": "Read-model cache health (architecture baseline issue #57). Hit/miss for menu/home/recommendation read models, recomputation lag, TTL distribution.",
+  "description": "Read-model cache health. Tracks hit/miss rates for menu, home, and recommendation read models, plus recomputation lag and TTL distribution.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
@@ -192,7 +192,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["tbite", "architecture-baseline-47"],
+  "tags": ["platform", "cache"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
   "timezone": "browser",

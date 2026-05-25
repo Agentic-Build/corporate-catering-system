@@ -1,10 +1,8 @@
 package mhttp
 
-// Presigned upload path for menu-item images (architecture issue #60).
-// The API authorises the operation and returns a time-bounded URL the
-// client uses to PUT bytes directly to object storage. This is the
-// only menu-image transport path; the previous multipart-to-API
-// upload was removed in the backward-compat strip.
+// Presigned upload path for menu-item images. The API authorises the
+// operation and returns a time-bounded URL the client uses to PUT bytes
+// directly to object storage.
 
 import (
 	"context"
@@ -142,8 +140,8 @@ func (a *API) presignedMenuImageUpload(ctx context.Context, in *presignedUploadI
 
 // presignedMenuImageDownload returns a presigned GET URL for an
 // already-stored menu image. Public read of menu-images/* is allowed
-// through ServeUpload too, but BYO object-storage modes (issue #60)
-// prefer signed URLs so the API host is not on the bulk path.
+// through ServeUpload too, but signed URLs keep the API host off the
+// bulk path.
 func (a *API) presignedMenuImageDownload(ctx context.Context, in *struct {
 	Key string `query:"key" required:"true"`
 }) (*presignedUploadOutput, error) {

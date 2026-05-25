@@ -1,5 +1,4 @@
-# ArgoCD Application for the canonical umbrella Helm chart
-# (architecture #47).
+# ArgoCD Application for the canonical umbrella Helm chart.
 #
 # CRD bootstrap. Several subcharts (CloudNativePG, cert-manager,
 # Traefik, MinIO Operator, KEDA, OpenTelemetry Operator,

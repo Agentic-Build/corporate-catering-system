@@ -17,7 +17,7 @@
     { "type": "panel", "id": "stat", "name": "Stat", "version": "" }
   ],
   "annotations": { "list": [] },
-  "description": "Object storage / presigned URL surface (architecture baseline issue #58). Presigned URL issuance rate, upload/download success rate, S3 latency histograms.",
+  "description": "Object storage and presigned URL health. Tracks URL issuance, upload/download success, and S3 latency histograms.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
@@ -212,7 +212,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["tbite", "architecture-baseline-47"],
+  "tags": ["platform", "object-storage"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
   "timezone": "browser",

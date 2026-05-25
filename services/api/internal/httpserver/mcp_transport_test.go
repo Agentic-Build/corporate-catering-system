@@ -2,7 +2,6 @@ package httpserver_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -10,7 +9,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -118,26 +116,15 @@ func TestMCP_CORSPreflight(t *testing.T) {
 	assert.Contains(t, allowHeaders, "authorization")
 }
 
-// TestMCP_LegacySSEAlsoMounted ensures the SSE handshake endpoint still
-// answers (older Claude Code builds and some Open WebUI plugins still use
-// SSE transport). The endpoint opens a long-lived stream; we only need to
-// confirm the route is registered (status + content-type), then close the
-// connection client-side to keep the test fast.
-func TestMCP_LegacySSEAlsoMounted(t *testing.T) {
+// TestMCP_SSETransportNotMounted locks the HTTP MCP surface to the
+// Streamable HTTP endpoint only.
+func TestMCP_SSETransportNotMounted(t *testing.T) {
 	ts := boot(t, httpserver.MCPOpts{})
 	defer ts.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/mcp/sse", nil)
-	req.Header.Set("Accept", "text/event-stream")
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.Get(ts.URL + "/mcp/sse")
 	require.NoError(t, err)
-	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-	}()
-	assert.Less(t, resp.StatusCode, 400, "legacy SSE must still be mounted")
-	assert.Contains(t, strings.ToLower(resp.Header.Get("Content-Type")), "event-stream")
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }

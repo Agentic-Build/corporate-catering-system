@@ -1,8 +1,8 @@
 // Package readmodel hosts the cache-backed projections for the hot
-// employee read paths — home, menu availability, recommendation — per
-// architecture issue #59. The package is deliberately small: a Cache
-// interface, a Valkey/Redis implementation, and a wrapper that
-// memoises HomeService.Compute results by (user, plant, day).
+// employee read paths: home, menu availability, and recommendation.
+// The package is deliberately small: a Cache interface, a Valkey/Redis
+// implementation, and a wrapper that memoises HomeService.Compute
+// results by (user, plant, day).
 //
 // The consistency model is bounded eventual consistency: write paths
 // (order placement, quota mutation, menu draft publish) emit outbox
@@ -25,11 +25,9 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// Cache is the small surface the read-model wrappers consume. A
-// real implementation must be safe for concurrent use; a no-op
-// implementation is acceptable for tests and for the BYO mode where
-// Valkey is not deployed (the wrapper then degrades to the
-// uncached repository, which is the legacy behaviour).
+// Cache is the small surface the read-model wrappers consume. A real
+// implementation must be safe for concurrent use and return
+// ErrCacheMiss when a key is not present.
 type Cache interface {
 	Get(ctx context.Context, key string) ([]byte, error)
 	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
@@ -62,8 +60,8 @@ func (r *RedisCache) Set(ctx context.Context, key string, value []byte, ttl time
 
 // Invalidate deletes keys matching the supplied pattern. The pattern
 // is expanded by SCAN; for the small per-plant-per-day key cardinality
-// we expect, this is comfortably faster than the TTL fallback. The
-// pattern is appended to the configured Prefix.
+// we expect, this is comfortably faster than waiting for TTL expiry.
+// The pattern is appended to the configured Prefix.
 func (r *RedisCache) Invalidate(ctx context.Context, pattern string) error {
 	full := r.Prefix + pattern
 	var cursor uint64
@@ -83,16 +81,6 @@ func (r *RedisCache) Invalidate(ctx context.Context, pattern string) error {
 		cursor = next
 	}
 }
-
-// NoopCache is the trivial implementation used when Valkey is not
-// wired. Every Get reports a miss; Set and Invalidate succeed.
-// Callers can swap it in without conditional branches in business
-// code.
-type NoopCache struct{}
-
-func (NoopCache) Get(context.Context, string) ([]byte, error)               { return nil, ErrCacheMiss }
-func (NoopCache) Set(context.Context, string, []byte, time.Duration) error  { return nil }
-func (NoopCache) Invalidate(context.Context, string) error                  { return nil }
 
 // Metrics holds the read-model OTel counters / gauges. NewMetrics is
 // safe to call from multiple roles; the OTel meter provider returns

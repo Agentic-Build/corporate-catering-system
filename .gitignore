@@ -69,6 +69,9 @@ playwright-report/
 # Worktrees
 .worktrees/
 
+# Local agent run state
+.agents/
+
 # Helm subchart tarballs are committed alongside Chart.lock so the
 # ArgoCD repo-server does not have to reach every upstream Helm repo
 # (bitnami, jetstack, victoriametrics, ...) on every reconcile — and

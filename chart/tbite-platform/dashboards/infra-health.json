@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Postgres / Redis / NATS / Victoria + OTel collector infrastructure health. Use-style \u2014 saturation indicators per component.",
+  "description": "Postgres / Redis / NATS / Victoria + OTel collector infrastructure health. Tracks resource saturation indicators per component.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
@@ -483,7 +483,7 @@
   "schemaVersion": 39,
   "tags": [
     "infra",
-    "use"
+    "capacity"
   ],
   "templating": {
     "list": []
@@ -498,14 +498,14 @@
   "version": 1,
   "links": [
     {
-      "title": "\u2605 System Status",
+      "title": "System Status",
       "type": "link",
       "url": "/d/status",
       "icon": "external link",
       "targetBlank": false
     },
     {
-      "title": "\u25c6 Service Health",
+      "title": "Service Health",
       "type": "link",
       "url": "/d/oncall-overview",
       "icon": "external link",

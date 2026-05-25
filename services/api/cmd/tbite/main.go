@@ -396,8 +396,8 @@ func main() {
 			logger.Warn("ensure bucket failed; uploads will fail until storage is reachable", "err", err)
 		}
 		// Menu-item images travel via presigned PUT/GET to object
-		// storage (architecture issue #60). The API authorises and
-		// signs URLs; bytes never traverse the API path.
+		// storage. The API authorises and signs URLs; bytes never
+		// traverse the API path.
 		menuAPI.Storage = s3API
 		complianceService := &compliance.Service{
 			Pool:      pool,
@@ -492,11 +492,10 @@ func main() {
 				return out, rows.Err()
 			},
 		}
-		// Wire the read-model cache for the employee home aggregate
-		// (architecture issue #59). The Valkey client is the same
-		// one used by the session store; the namespace prefix scopes
-		// the keys so SCAN-based invalidation stays bounded. Leaving
-		// the cache field unset keeps the legacy uncached path.
+		// Wire the read-model cache for the employee home aggregate.
+		// The Valkey client is the same one used by the session
+		// store; the namespace prefix scopes the keys so SCAN-based
+		// invalidation stays bounded.
 		homeCache := &readmodel.RedisCache{C: rdb, Prefix: "tbite:rm:"}
 		homeMetrics := readmodel.NewMetrics()
 		homeAPI := &mhttp.HomeAPI{

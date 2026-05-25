@@ -5,12 +5,12 @@ package readmodel
 // target_day used to render the chip carousels. Recomputing it on
 // every request fans hot reads into the order and menu tables; this
 // wrapper memoises the result by (user, plant, day-override) under a
-// short TTL and lets the Invalidator (issue #57 outbox events) clear
-// keys for the affected plant/date when an order event arrives.
+// short TTL and lets the Invalidator clear keys for the affected
+// plant/date when an order event arrives.
 //
 // Strong-consistency surfaces (order placement, quota mutation) do
 // NOT use this wrapper — they read from the transactional path
-// directly per ADR for #59.
+// directly.
 
 import (
 	"context"

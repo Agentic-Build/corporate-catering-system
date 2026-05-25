@@ -19,8 +19,8 @@ import (
 // the employee read route requires an employee with a plant assignment.
 //
 // Storage backs the presigned URL endpoints in presign.go. The chart
-// wires it; menu-item images travel direct-to-storage per
-// architecture issue #60 (no API-proxied bulk transfer).
+// wires it so menu-item images travel direct-to-storage with no
+// API-proxied bulk transfer.
 type API struct {
 	Svc     *menu.Service
 	Storage *storage.S3Client
@@ -253,10 +253,9 @@ func (a *API) Register(api huma.API) {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.listEmployeeMenu)
 
-	// Legacy multipart-to-API upload was removed; clients use
-	// POST /api/merchant/uploads/presigned and PUT directly to object
-	// storage (architecture issue #60). RegisterPresigned in
-	// presign.go mounts the replacement endpoints.
+	// Clients use POST /api/merchant/uploads/presigned and PUT directly
+	// to object storage. RegisterPresigned in presign.go mounts those
+	// endpoints.
 }
 
 // ----- Auth helpers -----

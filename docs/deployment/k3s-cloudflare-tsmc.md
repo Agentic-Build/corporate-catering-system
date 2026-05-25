@@ -481,9 +481,9 @@ kubectl -n tbite exec tbite-pg-1 -c postgres -- \
   psql -U postgres -d tbite -f /tmp/seed-tsmc.sql
 ```
 
-`seed-tsmc.sql` replaces the legacy `tn-a..tn-d` plant codes with the
-eleven TSMC pickup locations, sets per-vendor `service_window`, and
-moves the five canonical demo employees onto realistic TSMC plants.
+`seed-tsmc.sql` replaces the default `tn-a..tn-d` plant codes with the
+eleven TSMC pickup locations, sets per-vendor `service_window`, and moves
+the five canonical demo employees onto realistic TSMC plants.
 
 Confirm:
 
@@ -563,7 +563,7 @@ kubectl -n tbite logs deploy/tbite-tbite-platform-api --tail=10
 | `https://app.tbite.example.com` | `e2e-employee@tbite.test` / `tbite-dev-pass` (the dev-users blueprint seeded this) | Home page picking lunch for `hc-12a-1f`; three carousels (再點一次 / 我的最愛 / 推薦你今天); 10 vendors, 150 menu items |
 | `https://merchant.tbite.example.com` | `e2e-merchant@tbite.test` / `tbite-dev-pass` (vendor `r001 阿城炙燒便當`) | Prep board; place an order from the employee app and watch it appear live via SSE (no refresh) |
 | `https://admin.tbite.example.com` | `e2e-admin@tbite.test` / `tbite-dev-pass` | Welfare admin view: order board across all 19 pickup locations, vendor approval queue, payroll cycle, compliance docs |
-| `https://grafana.tbite.example.com` | `admin` / value of `$GRAFANA_PW` from `demo-secrets.local` | 19 dashboards (`tbite + architecture-baseline-47` tag); the **outbox-and-events**, **pg-routing**, **sse-gateway**, **role-readiness** ones are the most interesting first-time looks |
+| `https://grafana.tbite.example.com` | `admin` / value of `$GRAFANA_PW` from `demo-secrets.local` | 19 dashboards grouped by domain tags such as `overview`, `platform`, `infra`, `domain`, and `slo`; start with **outbox-and-events**, **pg-routing**, **sse-gateway**, and **role-readiness** for operational checks |
 | `https://argocd.tbite.example.com` | `admin` / `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` (only when ArgoCD is installed separately) | Cluster sync status (this playbook does not install ArgoCD — the route is wired so it works the moment you do) |
 
 End-to-end SSE check from the employee side: place an order in

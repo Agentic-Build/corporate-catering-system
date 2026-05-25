@@ -27,7 +27,7 @@
     { "type": "panel", "id": "stat", "name": "Stat", "version": "" }
   ],
   "annotations": { "list": [] },
-  "description": "Outbox + JetStream event-plane health for architecture baseline #47 (issues #54, #56, #57). Outbox age, relay throughput, JetStream consumer pending/delivery rates per worker role, DLQ counts.",
+  "description": "Outbox and JetStream event-plane health. Tracks outbox age, relay throughput, consumer pending/delivery rates per worker role, and DLQ counts.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
@@ -237,7 +237,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["tbite", "architecture-baseline-47"],
+  "tags": ["platform", "events"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
   "timezone": "browser",

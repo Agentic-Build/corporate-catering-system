@@ -1,11 +1,10 @@
 # Air-gapped baseline
 
-Per architecture issue #53, the tbite-platform runtime **must not require
-public network egress**. Every container image, Helm sub-chart, and OCI
-artifact the cluster pulls at install or upgrade time has to be reachable
-from inside the customer's network. This page is the operator playbook for
-mirroring the dependencies and the install-time invariants the runtime
-enforces.
+The tbite-platform runtime **must not require public network egress**. Every
+container image, Helm sub-chart, and OCI artifact the cluster pulls at install
+or upgrade time has to be reachable from inside the customer's network. This
+page is the operator playbook for mirroring the dependencies and the
+install-time invariants the runtime enforces.
 
 The corollary: if a component can only function with a SaaS callback
 (public OIDC discovery, telemetry hosted on the public internet, an OCR

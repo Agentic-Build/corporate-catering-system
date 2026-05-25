@@ -247,14 +247,14 @@
   "version": 1,
   "links": [
     {
-      "title": "\u2605 System Status",
+      "title": "System Status",
       "type": "link",
       "url": "/d/status",
       "icon": "external link",
       "targetBlank": false
     },
     {
-      "title": "\u25c6 Service Health",
+      "title": "Service Health",
       "type": "link",
       "url": "/d/oncall-overview",
       "icon": "external link",

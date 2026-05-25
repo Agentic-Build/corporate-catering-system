@@ -3,7 +3,7 @@ DEV_COMPOSE := docker compose -f ops/local/docker-compose.dev.yml
 KUBECTL ?= kubectl
 HELM    ?= helm
 
-# Canonical Helm umbrella chart (architecture baseline #47).
+# Canonical Helm umbrella chart.
 CHART_DIR ?= chart/tbite-platform
 CHART_RELEASE ?= tbite
 CHART_NAMESPACE ?= tbite
@@ -88,11 +88,11 @@ stress-auth-flood: ## 1500 garbage-token requests against /api/employee/orders â
 chart-deps: ## Resolve and download Helm subchart dependencies (offline-friendly after first run)
 	@$(HELM) dependency update $(CHART_DIR)
 
-chart-lint: ## Lint the umbrella chart against values-dev.yaml + values-prod.yaml
+chart-lint: ## Lint the umbrella chart against values-dev.yaml + values-prod-ha.yaml
 	@$(HELM) lint $(CHART_DIR) -f $(CHART_DIR)/values-dev.yaml
-	@$(HELM) lint $(CHART_DIR) -f $(CHART_DIR)/values-prod.yaml
+	@$(HELM) lint $(CHART_DIR) -f $(CHART_DIR)/values-prod-ha.yaml
 
-chart-render: ## Render the chart to stdout. Usage: make chart-render VALUES=chart/tbite-platform/values-prod.yaml
+chart-render: ## Render the chart to stdout. Usage: make chart-render CHART_VALUES=chart/tbite-platform/values-prod-ha.yaml
 	@$(HELM) template $(CHART_RELEASE) $(CHART_DIR) -f $(CHART_VALUES) --namespace $(CHART_NAMESPACE)
 
 chart-install: ## Install the umbrella chart into the current kubectl context

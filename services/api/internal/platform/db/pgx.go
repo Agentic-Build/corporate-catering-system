@@ -14,16 +14,15 @@ type Pool = pgxpool.Pool
 // PoolConfig carries the per-pool tuning knobs that are surfaced to
 // the chart via DB_MAX_CONNS / DB_MIN_CONNS / DB_MAX_CONNS_RO /
 // DB_MIN_CONNS_RO so that horizontal scaling never silently exceeds
-// the backend connection budget (see ADR-0007 / issue #54).
+// the backend connection budget.
 type PoolConfig struct {
 	MaxConns int32
 	MinConns int32
 }
 
-// DefaultPoolConfig returns the conservative defaults used historically
-// before the budget became an explicit chart value. Callers that load
-// PoolConfig from environment should clamp to these only when the env
-// vars are absent or invalid.
+// DefaultPoolConfig returns the conservative defaults used when callers do not
+// provide explicit chart values. Callers that load PoolConfig from environment
+// should clamp to these only when the env vars are absent or invalid.
 func DefaultPoolConfig() PoolConfig {
 	return PoolConfig{MaxConns: 16, MinConns: 2}
 }

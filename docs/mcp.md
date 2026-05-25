@@ -8,13 +8,12 @@ RBAC are not re-implemented.
 
 ## Transports
 
-T-Bite mounts three transports on the same `MCPServer`, so the same tool
-inventory is available to every client family:
+T-Bite mounts two transports on the same `MCPServer`, so the same tool
+inventory is available to remote and local clients:
 
 | Transport | Endpoint | Spec | Use it for |
 |---|---|---|---|
 | **Streamable HTTP** | `POST/GET/DELETE /mcp` | [2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) | ChatGPT Custom Connectors, Claude.ai remote MCP, Cursor (remote), Open WebUI, the official MCP SDKs |
-| **SSE** (legacy) | `GET /mcp/sse` + `POST /mcp/message` | [2024-11-05](https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#sse) | Older Claude Code builds and a handful of plugins still on the previous spec |
 | **stdio** | `tbite --role=mcp-stdio` | [2024-11-05](https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#stdio) | Claude Code, Claude Desktop, Cursor, and any other local MCP-aware editor |
 
 CORS is enabled on `/mcp` (allowed origin `*`) so browser-based MCP

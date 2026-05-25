@@ -22,8 +22,8 @@ type API struct {
 	AppURLs  AppBaseURLs
 
 	// JWT, when non-nil, lets AuthMiddleware accept JWT bearer tokens
-	// issued by Hydra in addition to legacy T-Bite session tokens. The
-	// api role wires this; mcp-stdio leaves it nil because it speaks the
+	// issued by Hydra in addition to T-Bite session tokens. The api role
+	// wires this; mcp-stdio leaves it nil because it speaks the
 	// session-token model only.
 	JWT JWTVerifier
 }

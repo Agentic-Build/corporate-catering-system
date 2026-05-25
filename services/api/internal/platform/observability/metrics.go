@@ -12,33 +12,33 @@ import (
 
 // Metrics holds every named instrument the API process emits. A single global
 // instance is initialised by MustInitMetrics() after the MeterProvider is
-// wired (or after the no-op fallback is set). Call sites use the helper
-// functions on this package (RecordOrderPlaced, RecordQuotaExhausted, …) so
+// wired. Call sites use the helper functions on this package
+// (RecordOrderPlaced, RecordQuotaExhausted, …) so
 // callers don't need to thread a *Metrics through every method.
 type Metrics struct {
-	OrderPlaced            metric.Int64Counter
-	OrderCancelled         metric.Int64Counter
-	OrderModified          metric.Int64Counter
-	OrderReady             metric.Int64Counter
-	OrderPickupVerified    metric.Int64Counter
-	OrderNoShow            metric.Int64Counter
-	OrderPlaceDurationSec  metric.Float64Histogram
-	OrderPriceMinor        metric.Int64Histogram
-	QuotaExhausted         metric.Int64Counter
-	SupplyAdjusted         metric.Int64Counter
-	SupplyAdjustedQty      metric.Int64Histogram
-	SettlementRunCount     metric.Int64Counter
-	SettlementRunDurSec    metric.Float64Histogram
-	SettlementAmountMinor  metric.Int64Histogram
-	PayrollEntryAmount     metric.Int64Histogram
-	PayrollDispute         metric.Int64Counter
-	PayrollReversal        metric.Int64Counter
-	ComplianceViolation    metric.Int64Counter
-	ComplianceDocExpiring  metric.Int64Counter
-	MCPToolInvocation      metric.Int64Counter
-	MCPToolDurationSec     metric.Float64Histogram
-	MCPToolSideEffects     metric.Int64Counter
-	MCPAuthFailure         metric.Int64Counter
+	OrderPlaced           metric.Int64Counter
+	OrderCancelled        metric.Int64Counter
+	OrderModified         metric.Int64Counter
+	OrderReady            metric.Int64Counter
+	OrderPickupVerified   metric.Int64Counter
+	OrderNoShow           metric.Int64Counter
+	OrderPlaceDurationSec metric.Float64Histogram
+	OrderPriceMinor       metric.Int64Histogram
+	QuotaExhausted        metric.Int64Counter
+	SupplyAdjusted        metric.Int64Counter
+	SupplyAdjustedQty     metric.Int64Histogram
+	SettlementRunCount    metric.Int64Counter
+	SettlementRunDurSec   metric.Float64Histogram
+	SettlementAmountMinor metric.Int64Histogram
+	PayrollEntryAmount    metric.Int64Histogram
+	PayrollDispute        metric.Int64Counter
+	PayrollReversal       metric.Int64Counter
+	ComplianceViolation   metric.Int64Counter
+	ComplianceDocExpiring metric.Int64Counter
+	MCPToolInvocation     metric.Int64Counter
+	MCPToolDurationSec    metric.Float64Histogram
+	MCPToolSideEffects    metric.Int64Counter
+	MCPAuthFailure        metric.Int64Counter
 }
 
 var (

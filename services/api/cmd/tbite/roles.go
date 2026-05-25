@@ -1,15 +1,10 @@
 package main
 
-// New cloud-native split roles (architecture issues #56, #58, #62).
-// Each function is the entire process for a single Deployment. They
-// share zero state — the only inputs are the parsed Config and a
-// scoped Context. main.go's switch dispatches to them.
-//
-// The split mirrors the worker/scheduler bundles that exist in the
-// legacy roles: each function performs one of the goroutines that
-// previously co-tenanted under RoleWorker or RoleScheduler. This
-// makes ownership, scaling rule, and failure domain visible at the
-// Kubernetes object boundary instead of at the goroutine boundary.
+// Cloud-native split roles. Each function is the entire process for a
+// single Deployment. They share zero state; the only inputs are the
+// parsed Config and a scoped Context. main.go's switch dispatches to
+// them so ownership, scaling rule, and failure domain are visible at
+// the Kubernetes object boundary.
 
 import (
 	"context"
@@ -26,9 +21,9 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance/evaluator"
 	cpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/postgres"
 	cscanner "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/scanner"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance/evaluator"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/config"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/feedback"
 	fpg "github.com/takalawang/corporate-catering-system/services/api/internal/feedback/postgres"
@@ -61,10 +56,9 @@ func newRWPool(ctx context.Context, cfg config.Config) (*db.Pool, error) {
 }
 
 // newROPool returns a read-only pool aimed at the replica DSN. When
-// DATABASE_RO_URL is unset, it returns a second pool against the RW
-// DSN — this keeps the API contract uniform across small deployments
-// without replicas, while still letting prod cap the read budget
-// separately (issue #54).
+// DATABASE_RO_URL is unset, Config.EffectiveDatabaseRO selects the RW
+// DSN so small deployments keep one database endpoint while prod caps
+// the read budget separately.
 func newROPool(ctx context.Context, cfg config.Config) (*db.Pool, error) {
 	return db.NewPoolWithConfig(ctx, cfg.EffectiveDatabaseRO(), db.PoolConfig{
 		MaxConns: cfg.DBMaxConnsRO,
@@ -85,9 +79,8 @@ func newNATS(ctx context.Context, cfg config.Config) (*messaging.Client, error) 
 
 // serveProbes starts an HTTP server on PROBE_ADDR (default :2112) that
 // exposes /healthz and /readyz with the supplied dependency checkers.
-// Headless workers reuse this so their Deployments can run a TCP/HTTP
-// probe instead of the legacy "container started" heuristic
-// (issue #62).
+// Headless workers reuse this so their Deployments can probe actual
+// runtime dependencies.
 func serveProbes(ctx context.Context, logger *slog.Logger, deps ...httpserver.Checker) error {
 	addr := os.Getenv("PROBE_ADDR")
 	if addr == "" {
@@ -118,7 +111,7 @@ func serveProbes(ctx context.Context, logger *slog.Logger, deps ...httpserver.Ch
 // runOutboxRelay drains the transactional outbox into JetStream. It
 // has no scheduling state beyond the row-level advisory lock taken
 // by the relay; horizontal scaling is safe because each replica locks
-// a disjoint batch (issue #56, #57).
+// a disjoint batch.
 func runOutboxRelay(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	pool, err := newRWPool(ctx, cfg)
 	if err != nil {
@@ -247,7 +240,7 @@ func runOnTimeEvaluator(ctx context.Context, logger *slog.Logger, cfg config.Con
 // runWithLeaseSingleton wraps a per-tick runner with the K8s
 // coordination.k8s.io Lease used by the scheduler split roles. Each
 // scheduler role takes a separate lease name so they fail / restart
-// independently (issue #56).
+// independently.
 func runWithLeaseSingleton(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -411,9 +404,8 @@ func runFeedbackScanner(ctx context.Context, logger *slog.Logger, cfg config.Con
 
 // runProvisionStreams is the one-shot role that declares JetStream
 // streams and consumers. It runs as a pre-install / pre-upgrade Helm
-// hook Job (issue #62). Ordinary worker startup no longer mutates
-// data-plane state — runOutboxRelay et al. require these streams to
-// already exist.
+// hook Job. Ordinary worker startup no longer mutates data-plane
+// state; runOutboxRelay et al. require these streams to already exist.
 func runProvisionStreams(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	if cfg.NATSURL == "" {
 		return errors.New("NATS_URL is required for provision-streams role")
@@ -434,9 +426,8 @@ func runProvisionStreams(ctx context.Context, logger *slog.Logger, cfg config.Co
 // taps JetStream's ORDERS_V1 stream through RunBoardConsumer, fanning
 // events out to local BoardHub / MenuHub instances, and exposes the
 // SSE endpoints under their familiar paths so existing SvelteKit
-// clients can be routed to this Deployment via HTTPRoute without
-// client changes. The ordinary API role no longer needs to carry the
-// long-connection load (issue #58).
+// clients can be routed to this Deployment via HTTPRoute. The ordinary
+// API role no longer needs to carry the long-connection load.
 func runRealtimeGateway(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	pool, err := newRWPool(ctx, cfg)
 	if err != nil {

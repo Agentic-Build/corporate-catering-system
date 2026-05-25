@@ -1283,7 +1283,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "\u2605 System Status",
+  "title": "System Status",
   "uid": "status",
   "version": 1
 }

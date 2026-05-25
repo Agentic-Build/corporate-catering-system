@@ -1,25 +1,6 @@
-# -----------------------------------------------------------------------------
-# Architecture baseline alignment — issue #47
-#
-# This local OTel collector mirrors the in-cluster collector (see
-# ops/kubernetes/monitoring/otel-collector-config.yaml). It must remote-write
-# the SLI metrics that back the new VMAlert rules and Grafana dashboards added
-# for issues #52 (RW/RO routing), #54 (outbox + DLQ), #56 (SSE realtime),
-# #57 (read-models), #58 (object storage), and #62 (role readiness).
-#
-# Metrics that flow through this pipeline include (but are not limited to):
-#   - tbite_outbox_oldest_unpublished_seconds     (#54, already emitted)
-#   - tbite_sse_active_connections                (#56, new)
-#   - tbite_sse_fanout_lag_seconds                (#56, new)
-#   - tbite_object_signing_errors_total           (#58, new)
-#   - tbite_readmodel_cache_{hits,misses}_total   (#57, new)
-#   - pg_pool_in_use / pg_pool_max (otelpgx)      (#52)
-#
-# The metricstransform processor below explicitly whitelists / passthroughs
-# these names so a future relabel rule that drops anything not on an allow-list
-# will not accidentally strip them. Today the pipeline is permissive — the
-# include block is documentation + future-proofing.
-# -----------------------------------------------------------------------------
+# Local OpenTelemetry Collector config for the docker-compose stack. It receives
+# application OTLP signals, scrapes local exporters, and writes traces, metrics,
+# and logs to the Victoria stack used by Grafana.
 
 extensions:
   health_check:
@@ -95,34 +76,6 @@ processors:
         from_attribute: operation_id
         action: upsert
 
-  # Architecture baseline #47: keep the new SLI metric families flowing through
-  # to vmagent / VictoriaMetrics intact. metricstransform here is a no-op
-  # passthrough that documents the contract; if/when a stricter filter is added
-  # upstream of remote_write, this block becomes the explicit allow-list to
-  # update. The `update` action with no rename is a safe identity transform
-  # that still fails fast if the metric is renamed without this file being
-  # updated.
-  metricstransform/architecture_baseline:
-    transforms:
-      - include: tbite_outbox_oldest_unpublished_seconds
-        match_type: strict
-        action: update
-      - include: tbite_sse_active_connections
-        match_type: strict
-        action: update
-      - include: tbite_sse_fanout_lag_seconds
-        match_type: strict
-        action: update
-      - include: tbite_object_signing_errors_total
-        match_type: strict
-        action: update
-      - include: tbite_readmodel_cache_hits_total
-        match_type: strict
-        action: update
-      - include: tbite_readmodel_cache_misses_total
-        match_type: strict
-        action: update
-
 exporters:
   otlphttp/victoria_traces:
     endpoint: http://victoria-traces:10428
@@ -173,7 +126,6 @@ service:
       processors:
         - memory_limiter
         - resource/correlation
-        - metricstransform/architecture_baseline
         - batch
       exporters:
         - prometheusremotewrite/victoria_metrics

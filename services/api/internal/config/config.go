@@ -166,7 +166,7 @@ func getenv(k, def string) string {
 // envInt32 parses an integer env var, returning def on unset or parse error.
 // The chart wires database pool budgets through these vars so HPA / KEDA
 // scaling can be reasoned about against a known total backend connection
-// budget (ADR-0007 / issue #54).
+// budget.
 func envInt32(k string, def int32) int32 {
 	v := os.Getenv(k)
 	if v == "" {

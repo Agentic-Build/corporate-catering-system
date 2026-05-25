@@ -23,11 +23,6 @@ modern recommended path):
     — no local config.yaml, no credentials file, no `cloudflared
     tunnel route dns` CLI calls.
 
-The legacy locally-managed-tunnel pattern (chart-rendered config.yaml +
-cred file) was removed: the dashboard path is simpler, equivalent in
-capability, and keeps Cloudflare as the single source of truth for
-public routes.
-
 See docs/deployment/k3s-cloudflare-tsmc.md for the full operator
 walkthrough and the public-hostname routing table the operator pastes
 into the dashboard.

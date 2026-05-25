@@ -18,7 +18,7 @@
     { "type": "panel", "id": "table", "name": "Table", "version": "" }
   ],
   "annotations": { "list": [] },
-  "description": "Per-role /readyz health (architecture baseline issue #62). Probe success rate, restart count by role, ready-state flapping.",
+  "description": "Per-role /readyz health. Tracks probe success rate, restart count by role, and ready-state flapping.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
@@ -166,7 +166,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["tbite", "architecture-baseline-47"],
+  "tags": ["platform", "readiness"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
   "timezone": "browser",

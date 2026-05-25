@@ -1,7 +1,7 @@
 # tbite-platform — default values.
 #
 # This file is the **canonical single-enterprise production sizing**
-# per architecture ADR-0008 (#55): one enterprise per stack, not a
+# per ADR-0008: one enterprise per stack, not a
 # multi-tenant SaaS topology. The shape fits a 16-core / 32 GiB node
 # and supports roughly 5,000–10,000 employees, ~10–30 plants, and
 # ~50 sustained orders/sec / ~200 orders/sec burst.

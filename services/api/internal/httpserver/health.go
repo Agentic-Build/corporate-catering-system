@@ -26,17 +26,16 @@ type CheckerFunc struct {
 	F func(ctx context.Context) error
 }
 
-func (c CheckerFunc) Name() string                            { return c.N }
-func (c CheckerFunc) Check(ctx context.Context) error         { return c.F(ctx) }
+func (c CheckerFunc) Name() string                    { return c.N }
+func (c CheckerFunc) Check(ctx context.Context) error { return c.F(ctx) }
 
 // Health holds the set of dependency checkers for a role. The
 // per-role binary (api / realtime-gateway / outbox-relay / ...) wires
 // only the checkers that match its actual runtime dependencies, so a
-// pod can never become Ready while a hard dependency is unreachable
-// (see architecture issue #62).
+// pod can never become Ready while a hard dependency is unreachable.
 type Health struct {
-	live  atomic.Bool
-	deps  []Checker
+	live atomic.Bool
+	deps []Checker
 }
 
 // NewHealth constructs a Health with the provided dependency
@@ -109,9 +108,8 @@ func (h *Health) ReadinessHandler() http.HandlerFunc {
 	}
 }
 
-// legacy shallow handlers retained for code paths that still wire the
-// HTTP server through the old constructor signature. New roles must
-// use the Health type above.
+// Default shallow handlers used by the main API server. Split runtime roles
+// use Health directly so readiness can include their dependency set.
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})

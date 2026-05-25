@@ -7,8 +7,9 @@ A monorepo: 3 SvelteKit frontends + a Go modular monolith + a self-hostable clou
 ## Architecture
 
 The canonical architecture is recorded in [`docs/architecture/`](docs/architecture/). The
-baseline ([#47](docs/architecture/00-baseline.md)) and the fifteen sub-decisions (ADRs
-0001–0008 and architecture specs 0001–0007) describe the locked deployment
+system-level contract ([`00-baseline.md`](docs/architecture/00-baseline.md)) and
+the fifteen sub-decisions (ADRs 0001–0008 and architecture specs 0001–0007)
+describe the locked deployment
 shape: Kubernetes-only runtime, Helm umbrella chart, CloudNativePG + PgBouncer
 + Valkey HA + NATS JetStream + MinIO Operator data plane, Victoria
 observability stack, SOPS+age secrets, plant-aware scaling, role-split

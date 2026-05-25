@@ -46,11 +46,10 @@ type MCPOpts struct {
 // invoked with the shared huma.API so their operations land on the same
 // router and OpenAPI document.
 //
-// mcp is an optional *mcpsrv.MCPServer. When non-nil, the modern MCP
-// Streamable HTTP transport is mounted at /mcp (POST/GET/DELETE) and the
-// legacy SSE transport at /mcp/sse + /mcp/message. The /mcp route returns
-// 401 + WWW-Authenticate when called without a valid Bearer token, pointing
-// clients at the RFC 9728 resource metadata at
+// mcp is an optional *mcpsrv.MCPServer. When non-nil, the MCP Streamable HTTP
+// transport is mounted at /mcp (POST/GET/DELETE). The /mcp route returns 401
+// + WWW-Authenticate when called without a valid Bearer token, pointing clients
+// at the RFC 9728 resource metadata at
 // /.well-known/oauth-protected-resource (when mcpOpts.AuthorizationServers
 // is configured).
 func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(chi.Router), mcp *mcpsrv.MCPServer, mcpOpts MCPOpts, apiBuilders ...func(huma.API)) *Server {
@@ -162,17 +161,8 @@ func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(c
 			r.Handle("/.well-known/oauth-protected-resource/mcp", meta)
 		}
 
-		// Legacy SSE transport (MCP spec 2024-11-05) for older clients
-		// that haven't migrated to Streamable HTTP yet. /mcp/sse for the
-		// initial handshake, /mcp/message for follow-up POSTs.
-		sse := mcpsrv.NewSSEServer(mcp, mcpsrv.WithStaticBasePath("/mcp"))
-		r.Handle("/mcp/sse", sse)
-		r.Handle("/mcp/message", sse)
-
 		logger.Info("mcp server mounted",
 			"streamable_http", "/mcp",
-			"legacy_sse", "/mcp/sse",
-			"legacy_message", "/mcp/message",
 			"oauth_metadata", mcpOpts.PublicBaseURL != "" && len(mcpOpts.AuthorizationServers) > 0,
 		)
 	}
@@ -193,7 +183,7 @@ func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(c
 // proper 401 with a WWW-Authenticate header pointing at the resource metadata
 // — the discovery handshake Claude.ai and ChatGPT use to find the OAuth
 // issuer. Preflight (OPTIONS) and GET (server-stream / metadata bookkeeping)
-// pass through without auth so the CORS layer and SSE upgrades can succeed
+// pass through without auth so the CORS layer and server stream can initialize
 // before the client has a token. POST/DELETE are gated.
 func mcpAuthEnforce(next http.Handler, opts MCPOpts, endpoint string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -18,7 +18,7 @@
     { "type": "panel", "id": "gauge", "name": "Gauge", "version": "" }
   ],
   "annotations": { "list": [] },
-  "description": "SSE realtime gateway (architecture baseline issue #56). Active connections per pod, fanout lag, topic subscription count, disconnect rate.",
+  "description": "SSE realtime gateway health. Tracks active connections per pod, fanout lag, topic subscription count, and disconnect rate.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
@@ -177,7 +177,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["tbite", "architecture-baseline-47"],
+  "tags": ["platform", "realtime"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
   "timezone": "browser",

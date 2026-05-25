@@ -1,8 +1,7 @@
 package main
 
-// SSE-side OTel instruments used by the realtime gateway role
-// (architecture issue #58) and observed by the dashboards added in
-// ops/kubernetes/monitoring/dashboards/sse-gateway.json.
+// SSE-side OTel instruments used by the realtime gateway role and
+// observed by chart/tbite-platform/dashboards/sse-gateway.json.
 //
 // The instruments are lazily initialised on first use so a process
 // that never opens an SSE connection (api, workers, scheduler) does

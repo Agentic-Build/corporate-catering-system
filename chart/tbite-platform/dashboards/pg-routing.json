@@ -37,7 +37,7 @@
     }
   ],
   "annotations": { "list": [] },
-  "description": "Postgres RW/RO routing health (architecture baseline issue #52). Pool saturation per role (api/realtime/worker), replica lag, deadlock rate, otelpgx query latency p99.",
+  "description": "Postgres RW/RO routing health. Tracks pool saturation per role, replica lag, deadlock rate, and otelpgx query latency p99.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
@@ -203,7 +203,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["tbite", "architecture-baseline-47"],
+  "tags": ["infra", "postgres"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
   "timezone": "browser",

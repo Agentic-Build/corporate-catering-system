@@ -2,13 +2,13 @@
   "annotations": {
     "list": []
   },
-  "description": "Layer 1 \u2014 Service Health (broad view). Start at /d/status for the headline; drop in here for HTTP RED + infra USE + domain rollups side-by-side.",
+  "description": "Layer 1 \u2014 Service Health (broad view). Start at /d/status for the headline; drop in here for HTTP RED, infrastructure saturation, and domain rollups side-by-side.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
   "links": [
     {
-      "title": "\u2605 System Status",
+      "title": "System Status",
       "type": "link",
       "url": "/d/status",
       "icon": "external link",
@@ -668,7 +668,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "\u25c6 Service Health (Layer 1)",
+  "title": "Service Health (Layer 1)",
   "uid": "oncall-overview",
   "version": 1
 }
