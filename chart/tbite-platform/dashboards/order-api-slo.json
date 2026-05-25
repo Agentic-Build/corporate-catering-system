@@ -12,7 +12,7 @@
       "title": "Availability (28d)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -65,7 +65,7 @@
       "title": "Target",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -100,7 +100,7 @@
       "title": "Error budget remaining (28d)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -151,7 +151,7 @@
       "title": "Burn rate (1h)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -202,7 +202,7 @@
       "title": "createEmployeeOrder \u2014 request rate by status",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -242,7 +242,7 @@
       "title": "createEmployeeOrder \u2014 latency quantiles",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -309,7 +309,7 @@
       "title": "Multi-window burn rates",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -360,7 +360,7 @@
       "title": "Place() service-method latency by outcome",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -400,7 +400,7 @@
       "title": "Place() outcome rate",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,

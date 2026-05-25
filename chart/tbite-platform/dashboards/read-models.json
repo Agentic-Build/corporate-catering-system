@@ -31,7 +31,7 @@
     {
       "type": "timeseries",
       "title": "Hit ratio by model",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 8, "w": 16, "x": 0, "y": 1 },
       "id": 1,
       "fieldConfig": {
@@ -64,7 +64,7 @@
     {
       "type": "stat",
       "title": "Overall hit ratio (5m)",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
       "id": 2,
       "fieldConfig": {
@@ -100,7 +100,7 @@
     {
       "type": "timeseries",
       "title": "Hits + misses per second",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
       "id": 3,
       "fieldConfig": {
@@ -128,7 +128,7 @@
     {
       "type": "timeseries",
       "title": "Read-model recomputation lag",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
       "id": 4,
       "fieldConfig": {
@@ -159,7 +159,7 @@
     {
       "type": "timeseries",
       "title": "Cached entry TTL distribution (p50/p95/p99)",
-      "datasource": { "type": "prometheus", "uid": "victoria-metrics" },
+      "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 },
       "id": 5,
       "fieldConfig": {

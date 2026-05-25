@@ -3,11 +3,11 @@ package observability
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -19,7 +19,7 @@ import (
 // Reads OTEL_EXPORTER_OTLP_ENDPOINT (default: empty -> no-op tracer).
 // Returns a shutdown func that flushes pending spans.
 func Init(ctx context.Context, serviceName, version string) (func(context.Context) error, error) {
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	endpoint := otlpEndpointFromEnv()
 	if endpoint == "" {
 		// No-op: just set the global propagator and return a no-op shutdown.
 		// The default global tracer provider is a no-op, so leaving it alone
@@ -31,11 +31,7 @@ func Init(ctx context.Context, serviceName, version string) (func(context.Contex
 		return func(context.Context) error { return nil }, nil
 	}
 
-	opts := []otlptracehttp.Option{
-		otlptracehttp.WithEndpoint(endpoint),
-		otlptracehttp.WithInsecure(),
-	}
-	exporter, err := otlptrace.New(ctx, otlptracehttp.NewClient(opts...))
+	exporter, err := newTraceExporter(ctx, endpoint, otlpProtocolFromEnv())
 	if err != nil {
 		return nil, fmt.Errorf("otlp exporter: %w", err)
 	}
@@ -62,4 +58,31 @@ func Init(ctx context.Context, serviceName, version string) (func(context.Contex
 	))
 
 	return tp.Shutdown, nil
+}
+
+func newTraceExporter(ctx context.Context, endpoint, protocol string) (*otlptrace.Exporter, error) {
+	switch protocol {
+	case otlpProtocolGRPC:
+		host, err := otlpEndpointHost(endpoint)
+		if err != nil {
+			return nil, err
+		}
+		return otlptracegrpc.New(ctx,
+			otlptracegrpc.WithEndpoint(host),
+			otlptracegrpc.WithInsecure(),
+		)
+	case otlpProtocolHTTP:
+		opts := []otlptracehttp.Option{}
+		if otlpEndpointIsURL(endpoint) {
+			opts = append(opts, otlptracehttp.WithEndpointURL(endpoint))
+		} else {
+			opts = append(opts,
+				otlptracehttp.WithEndpoint(endpoint),
+				otlptracehttp.WithInsecure(),
+			)
+		}
+		return otlptrace.New(ctx, otlptracehttp.NewClient(opts...))
+	default:
+		return nil, fmt.Errorf("unsupported OTEL_EXPORTER_OTLP_PROTOCOL %q", protocol)
+	}
 }

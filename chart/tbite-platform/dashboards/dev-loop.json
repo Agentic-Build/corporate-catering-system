@@ -13,7 +13,7 @@
       "description": "Surfaces routes that are currently erroring — the canonical 'what just broke' panel for a dev loop. 5xx (server-side bug or downstream failure) and 4xx (validation, auth, business-rule reject) are graphed together so a flip from 4xx-dominant to 5xx-dominant during a refactor jumps out.",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 12,
@@ -51,7 +51,7 @@
       "title": "HTTP request rate (all routes)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -93,7 +93,7 @@
       "description": "Catches the classic dev mistake: code path that opens a transaction but doesn't commit/rollback on every return — the connection lingers, this number climbs. Deadlock rate and rollback rate live on Infra Health (the canonical PG operational view); this panel keeps only the dev-iteration signal so the two dashboards don't double-up.",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,

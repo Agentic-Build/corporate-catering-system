@@ -23,7 +23,7 @@
       "title": "Stream messages in/out (rate)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -69,7 +69,7 @@
       "title": "Consumer pending \u2014 top 10",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -126,7 +126,7 @@
       "title": "Consumer redeliveries (rate)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -166,7 +166,7 @@
       "title": "Stream storage bytes",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -217,7 +217,7 @@
       "title": "DLQ pending",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -267,7 +267,7 @@
       "title": "DLQ oldest unresolved",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -317,7 +317,7 @@
       "title": "Outbox pending",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -367,7 +367,7 @@
       "title": "Outbox oldest unpublished",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 4,
@@ -417,7 +417,7 @@
       "title": "DLQ + outbox pending over time",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -463,7 +463,7 @@
       "title": "Postgres TPS \u2014 order/payroll/settlement tables",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,

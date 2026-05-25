@@ -73,7 +73,7 @@ archived WAL.
 1. Provision a scratch namespace and a recovery `Cluster` from the
    production object store (PITR to a recent timestamp).
 2. Confirm the cluster reaches `Cluster in healthy state` and row
-   counts on key tables (`platform.outbox`, orders, payroll batches)
+   counts on key tables (`outbox_event`, orders, payroll batches)
    match expectations for the target time.
 3. Point a throwaway API replica at the recovered `-rw`/`-ro` and run
    `/readyz` + a read smoke (`GET /api/employee/menu`).

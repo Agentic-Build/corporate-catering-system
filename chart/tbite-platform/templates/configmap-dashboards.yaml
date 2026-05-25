@@ -16,7 +16,9 @@ metadata:
 data:
   {{- $files := .Files.Glob "dashboards/*.json" }}
   {{- range $path, $bytes := $files }}
+  {{- if or (ne (base $path) "dev-loop.json") (and $.Values.observability.dashboards.includeDevLoop $.Values.observability.victoriaTraces.enabled) }}
   {{ base $path | quote }}: |-
     {{- $.Files.Get $path | nindent 4 }}
+  {{- end }}
   {{- end }}
 {{- end }}

@@ -21,6 +21,7 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.realtime.hpa.targetCPUUtilizationPercentage }}
+    {{- if .Values.realtime.hpa.customMetrics.enabled }}
     - type: Pods
       pods:
         metric:
@@ -28,6 +29,7 @@ spec:
         target:
           type: AverageValue
           averageValue: {{ .Values.realtime.hpa.targetActiveConnections | quote }}
+    {{- end }}
   behavior:
     scaleDown:
       # SSE connections are long-lived — be very conservative scaling down.

@@ -12,7 +12,7 @@
       "title": "GMV (7d, minor)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -46,7 +46,7 @@
       "title": "Orders (7d, success)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -80,7 +80,7 @@
       "title": "AOV (7d, minor)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -115,7 +115,7 @@
       "title": "Daily GMV",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -152,7 +152,7 @@
       "title": "Daily orders by outcome",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -192,7 +192,7 @@
       "title": "Per-plant order volume (top 10, 7d)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,

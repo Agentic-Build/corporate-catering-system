@@ -50,7 +50,7 @@
       "title": "Active alerts",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -120,7 +120,7 @@
       "title": "Place-order success rate (5m)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -181,7 +181,7 @@
       "title": "Place-order p95 (5m)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -240,7 +240,7 @@
       "title": "5xx server errors (5m) \u2014 needs oncall",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -306,7 +306,7 @@
       "title": "Alerts (firing + pending)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 6,
@@ -422,7 +422,7 @@
       "title": "% place attempts blocked by quota (5m)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "description": "Fraction of place-order attempts that were rejected with outcome=quota_exhausted, over the last 5 minutes. A low number is the healthy steady state (capacity is keeping up with demand). A sustained spike means supply is too tight for the load \u2014 either an item's capacity was set too low, or a flash crowd hit one vendor. Click through to Supply Health for the per-item / per-day breakdown that pinpoints which row needs adjusting. (Note: capacity=0 by itself is not a misconfig \u2014 vendors may legitimately mark an item not-offered for a given day.)",
       "gridPos": {
@@ -487,7 +487,7 @@
       "title": "\ud83d\udce6 Order API",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -550,7 +550,7 @@
       "title": "\ud83c\udf71 Supply",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -613,7 +613,7 @@
       "title": "\ud83d\udd01 Async Plane",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -683,7 +683,7 @@
       "title": "\ud83d\udee0 Infra",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 5,
@@ -758,7 +758,7 @@
       "title": "\ud83d\udd25 Top failing endpoints \u2014 route \u00d7 status (5m)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -977,7 +977,7 @@
       "title": "\ud83c\udf74 Hottest supply bottlenecks (rate of quota exhaustion)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -1100,7 +1100,7 @@
       "title": "Order placement outcome (stacked rate)",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,
@@ -1205,7 +1205,7 @@
       "title": "Latency p50/p95/p99 \u2014 createOrder",
       "datasource": {
         "type": "prometheus",
-        "uid": "victoria-metrics"
+        "uid": "VictoriaMetrics"
       },
       "gridPos": {
         "h": 8,

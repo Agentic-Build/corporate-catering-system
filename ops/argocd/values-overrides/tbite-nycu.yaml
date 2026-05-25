@@ -33,6 +33,17 @@ global:
     url: nats://tbite-nats.tbite.svc.cluster.local:4222
 
 hydra:
+  secret:
+    enableDefaultAnnotations: false
+  job:
+    serviceAccount:
+      create: false
+      annotations: {}
+  cronjob:
+    janitor:
+      serviceAccount:
+        create: false
+        annotations: {}
   hydra:
     config:
       urls:
@@ -66,8 +77,8 @@ authentikBlueprints:
 
 # Only `dbMigrate` is disabled: its initContainer pulls
 # ghcr.io/agentic-build/tbite-migrations which the CI workflow does
-# not yet build. Migrations run out-of-band via migrate/migrate +
-# `github://` source driver during bootstrap. The three other hooks
+# not yet build. Migrations run out-of-band via migrate/migrate
+# with the repo's migrations mounted during bootstrap. The three other hooks
 # use already-published images (minio/mc, cnpg/postgresql:17.2, the
 # platform image itself), so we keep them enabled and let ArgoCD
 # manage them as Helm-style PreSync / PostSync hooks.
