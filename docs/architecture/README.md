@@ -82,3 +82,14 @@ baseline accepted on 2026-05-25.
 The companion document [`compliance-matrix.md`](compliance-matrix.md)
 provides a single mapping from every acceptance criterion across the
 sixteen documents to the artifacts that satisfy it.
+
+## Companion operational documents
+
+These supplement the baseline with the per-role and runbook detail the
+acceptance criteria call for:
+
+| Document | Covers |
+| --- | --- |
+| [`worker-roles.md`](worker-roles.md) | Per-role scaling signal, idempotency, retry, and DLQ behaviour (#56, #57). |
+| [`../deployment/local-clusters.md`](../deployment/local-clusters.md) | kind / k3d / OrbStack local cluster setup (#48). |
+| [`../deployment/backup-restore.md`](../deployment/backup-restore.md) | Data-plane backup, restore, and drill procedure (#51, #54). |

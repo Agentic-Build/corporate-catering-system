@@ -132,8 +132,8 @@ layer), the single-command install works:
 
 ```bash
 helm dependency update chart/tbite-platform
-helm template tbite chart/tbite-platform -f chart/tbite-platform/values-prod.yaml
-helm install tbite chart/tbite-platform -f chart/tbite-platform/values-prod.yaml --namespace tbite --create-namespace
+helm template tbite chart/tbite-platform -f chart/tbite-platform/values.yaml
+helm install tbite chart/tbite-platform -f chart/tbite-platform/values.yaml --namespace tbite --create-namespace
 ```
 
 ArgoCD users typically express phase 1 / phase 2 as two
