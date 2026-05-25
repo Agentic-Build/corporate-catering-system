@@ -222,6 +222,9 @@ func (a *API) merchantSet(ctx context.Context, in *setMerchantPlantsInput) (*str
 	if err != nil {
 		return nil, err
 	}
+	if len(in.Body.Plants) == 0 {
+		return nil, huma.Error400BadRequest("at least one service area is required")
+	}
 	if err := a.Svc.ValidateActiveCodes(ctx, in.Body.Plants); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
 	}
@@ -280,6 +283,8 @@ func toDTOs(list []*plants.Plant) []plantDTO {
 
 func mapErr(err error) error {
 	switch {
+	case errors.Is(err, plants.ErrInvalid):
+		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, plants.ErrPlantNotFound):
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, plants.ErrDuplicateCode):

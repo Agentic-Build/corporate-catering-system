@@ -91,6 +91,9 @@ global:
 
 hooks:
   bucketBootstrap:
-    # Set bucket to public-read so browsers can fetch images directly
-    # via the Cloudflare Tunnel MinIO hostname without authentication.
-    policy: "download"
+    # The bucket itself stays private — vendor-docs/* (compliance documents)
+    # share this bucket and must not be anonymously readable.
+    policy: "private"
+    # Only the image asset prefixes are exposed for browser-direct reads via
+    # the Cloudflare Tunnel MinIO hostname.
+    publicReadPrefixes: ["brand", "menu-images"]

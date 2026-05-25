@@ -31,10 +31,10 @@ func (s *Service) Create(ctx context.Context, code, label, address string, sortO
 	code = strings.TrimSpace(code)
 	label = strings.TrimSpace(label)
 	if code == "" {
-		return nil, fmt.Errorf("%w: code is required", ErrDuplicateCode)
+		return nil, fmt.Errorf("%w: code is required", ErrInvalid)
 	}
 	if label == "" {
-		return nil, fmt.Errorf("%w: label is required", ErrPlantNotFound)
+		return nil, fmt.Errorf("%w: label is required", ErrInvalid)
 	}
 	p := &Plant{
 		Code:      code,

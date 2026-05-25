@@ -33,7 +33,9 @@ mc mb --ignore-existing "tbite-seed/${S3_BUCKET}" || true
 # Mirror brand assets into brand/ prefix.
 mc mirror --overwrite "${ASSET_SRC}" "tbite-seed/${S3_BUCKET}/brand"
 
-# Set bucket to allow anonymous downloads (public-read).
-mc anonymous set download "tbite-seed/${S3_BUCKET}" || true
+# Expose only the image asset prefixes for anonymous browser reads. The bucket
+# itself stays private so vendor-docs/* (compliance documents) are not exposed.
+mc anonymous set download "tbite-seed/${S3_BUCKET}/brand" || true
+mc anonymous set download "tbite-seed/${S3_BUCKET}/menu-images" || true
 
 echo "==> brand assets uploaded to ${S3_ENDPOINT}/${S3_BUCKET}/brand/"
