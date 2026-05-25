@@ -9,7 +9,7 @@ when erasure coding and concurrent IO matter.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "tbite.fullname" . }}-minio
+  name: {{ .Values.minioStandalone.dataPvcName | default (printf "%s-minio" (include "tbite.fullname" .)) }}
   namespace: {{ include "tbite.namespace" . }}
   labels:
     {{- include "tbite.labels" . | nindent 4 }}
@@ -26,7 +26,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: minio
+  name: {{ .Values.minioStandalone.serviceName | default "minio" }}
   namespace: {{ include "tbite.namespace" . }}
   labels:
     {{- include "tbite.labels" . | nindent 4 }}
@@ -91,12 +91,12 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "tbite.fullname" . }}-minio
+            claimName: {{ .Values.minioStandalone.dataPvcName | default (printf "%s-minio" (include "tbite.fullname" .)) }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: minio
+  name: {{ .Values.minioStandalone.serviceName | default "minio" }}
   namespace: {{ include "tbite.namespace" . }}
   labels:
     {{- include "tbite.labels" . | nindent 4 }}

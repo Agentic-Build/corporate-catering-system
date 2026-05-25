@@ -61,7 +61,7 @@ spec:
             # render). PUBLIC_API_BASE_URL above is the
             # browser-side URL.
             - name: API_BASE_URL
-              value: {{ printf "http://%s-tbite-platform-api.%s.svc.cluster.local" .Release.Name (include "tbite.namespace" .) | quote }}
+              value: {{ printf "http://%s.%s.svc.cluster.local" (include "tbite.roleFullname" (dict "ctx" . "role" "api")) (include "tbite.namespace" .) | quote }}
             - name: PUBLIC_API_BASE_URL
               value: {{ .Values.global.baseURL.api | quote }}
             - name: PUBLIC_OIDC_ISSUER_URL

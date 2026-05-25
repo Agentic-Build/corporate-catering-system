@@ -17,6 +17,9 @@
 # Authentik bootstrap password) is supplied via SOPS-encrypted
 # Secrets out-of-band — see ops/secrets/example.sops.yaml.
 
+# Name workloads tbite-<role>, not tbite-tbite-platform-<role>.
+fullnameOverride: tbite
+
 global:
   domain: nycu.ai
   baseURL:
@@ -28,7 +31,7 @@ global:
   authentik:
     baseURL: http://tbite-authentik-server.tbite.svc.cluster.local:80
   s3:
-    endpoint: http://minio.tbite.svc.cluster.local
+    endpoint: http://tbite-minio.tbite.svc.cluster.local
     publicBaseURL: https://tbite-files.nycu.ai
   nats:
     url: nats://tbite-nats.tbite.svc.cluster.local:4222
@@ -104,3 +107,14 @@ postgres:
 # public-hostname routes — configured in the Cloudflare Zero Trust
 # dashboard — therefore dial the in-cluster Service at :80 (not the
 # container's bind port).
+
+# blueprints ConfigMap is chart-created via fullname; repoint to renamed name.
+# (bootstrap Secret is out-of-band and keeps its tbite-tbite-platform- name.)
+authentik:
+  blueprints:
+    configMaps:
+      - tbite-authentik-blueprints
+
+minioStandalone:
+  serviceName: tbite-minio
+  dataPvcName: tbite-tbite-platform-minio  # pin existing volume, don't recreate
