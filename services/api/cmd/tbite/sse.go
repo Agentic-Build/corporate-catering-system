@@ -43,7 +43,8 @@ func boardSSEHandler(hub *order.BoardHub) http.HandlerFunc {
 		defer unsub()
 
 		sseOnConnect(r.Context(), "board")
-		defer sseOnDisconnect(r.Context(), "board")
+		reason := "client_closed"
+		defer func() { sseOnDisconnect(r.Context(), "board", reason) }()
 
 		hb := time.NewTicker(20 * time.Second)
 		defer hb.Stop()
@@ -53,15 +54,18 @@ func boardSSEHandler(hub *order.BoardHub) http.HandlerFunc {
 				return
 			case <-hb.C:
 				if err := writeSSE(w, order.BoardEvent{Kind: "ping"}); err != nil {
+					reason = "write_error"
 					return
 				}
 				flusher.Flush()
 			case ev, open := <-ch:
 				if !open {
+					reason = "hub_closed"
 					return
 				}
 				start := time.Now()
 				if err := writeSSE(w, ev); err != nil {
+					reason = "write_error"
 					return
 				}
 				flusher.Flush()
@@ -92,7 +96,8 @@ func menuSSEHandler(hub *order.MenuHub) http.HandlerFunc {
 		defer unsub()
 
 		sseOnConnect(r.Context(), "menu")
-		defer sseOnDisconnect(r.Context(), "menu")
+		reason := "client_closed"
+		defer func() { sseOnDisconnect(r.Context(), "menu", reason) }()
 
 		hb := time.NewTicker(20 * time.Second)
 		defer hb.Stop()
@@ -102,15 +107,18 @@ func menuSSEHandler(hub *order.MenuHub) http.HandlerFunc {
 				return
 			case <-hb.C:
 				if err := writeSSE(w, order.BoardEvent{Kind: "ping"}); err != nil {
+					reason = "write_error"
 					return
 				}
 				flusher.Flush()
 			case _, open := <-ch:
 				if !open {
+					reason = "hub_closed"
 					return
 				}
 				start := time.Now()
 				if err := writeSSE(w, order.BoardEvent{Kind: "changed"}); err != nil {
+					reason = "write_error"
 					return
 				}
 				flusher.Flush()

@@ -22,6 +22,7 @@ import (
 
 const (
 	HomeSurface          = "employee-home"
+	homeModel            = "home" // metric "model" label value; matches Grafana legends
 	defaultHomeTTL       = 30 * time.Second
 	defaultHomeKeyFormat = "home:%s:%s:%s" // user_id : plant : day_override
 )
@@ -59,24 +60,28 @@ func (h *CachedHome) Compute(ctx context.Context, userID, plant, dayOverride str
 	if err == nil {
 		v, derr := codec.Decode(raw)
 		if derr == nil {
-			h.Metrics.recordHit(ctx, HomeSurface)
+			h.Metrics.recordHit(ctx, homeModel)
 			return v, nil
 		}
 		// fall through to recompute on decode error
-		h.Metrics.recordError(ctx, HomeSurface)
+		h.Metrics.recordError(ctx, homeModel)
 	} else if err != ErrCacheMiss {
-		h.Metrics.recordError(ctx, HomeSurface)
+		h.Metrics.recordError(ctx, homeModel)
 	} else {
-		h.Metrics.recordMiss(ctx, HomeSurface)
+		h.Metrics.recordMiss(ctx, homeModel)
 	}
 
+	start := time.Now()
 	state, err := h.Inner.Compute(ctx, userID, plant, dayOverride)
+	h.Metrics.recordRecomputeLag(ctx, homeModel, time.Since(start).Seconds())
 	if err != nil {
 		return state, err
 	}
 	encoded, encErr := codec.Encode(state)
 	if encErr == nil {
-		_ = h.Cache.Set(ctx, key, encoded, ttl)
+		if err := h.Cache.Set(ctx, key, encoded, ttl); err == nil {
+			h.Metrics.recordTTL(ctx, homeModel, ttl.Seconds())
+		}
 	}
 	return state, nil
 }

@@ -132,6 +132,10 @@ func runOutboxRelay(ctx context.Context, logger *slog.Logger, cfg config.Config)
 		Sleep:  500 * time.Millisecond,
 	}
 
+	if err := opgrepo.RegisterOutboxGauges(pool); err != nil {
+		logger.Warn("register outbox gauges", "err", err)
+	}
+
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		return serveProbes(egctx, logger,
@@ -459,6 +463,7 @@ func runRealtimeGateway(ctx context.Context, logger *slog.Logger, cfg config.Con
 
 	boardHub := order.NewBoardHub()
 	menuHub := order.NewMenuHub()
+	RegisterSSESubscriberGauge(boardHub, menuHub)
 
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {

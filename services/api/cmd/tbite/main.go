@@ -45,6 +45,9 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
 	payrollhttp "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/http"
 	payrollpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/postgres"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/plants"
+	phttp "github.com/takalawang/corporate-catering-system/services/api/internal/plants/http"
+	ppgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/plants/postgres"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/db"
@@ -57,9 +60,6 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/settlement"
 	settlementhttp "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/http"
 	settlementpg "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/plants"
-	phttp "github.com/takalawang/corporate-catering-system/services/api/internal/plants/http"
-	ppgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/plants/postgres"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 	vhttp "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/http"
 	vpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/postgres"
@@ -337,6 +337,9 @@ func main() {
 
 		// 7d. Quota service + merchant handlers (vendor capacity management)
 		supplyRepo := qpgrepo.NewSupplyRepo(pool)
+		if err := qpgrepo.RegisterSupplyGauges(pool); err != nil {
+			logger.Warn("register supply gauges", "err", err)
+		}
 		quotaService := &quota.Service{
 			Supplies: supplyRepo,
 			Items:    itemRepo,
@@ -428,6 +431,9 @@ func main() {
 		// /replay returns 503 and only list/resolve work.
 		dlqRepo := dlqpgrepo.NewDLQRepo(pool)
 		dlqAPI := &dlqhttp.API{Repo: dlqRepo}
+		if err := dlqpgrepo.RegisterDLQGauges(pool); err != nil {
+			logger.Warn("register dlq gauges", "err", err)
+		}
 		if cfg.NATSURL != "" {
 			if natsClient, err := messaging.New(ctx, cfg.NATSURL); err == nil {
 				dlqAPI.JS = natsClient.JS

@@ -1,0 +1,34 @@
+{{- if .Values.crdsReady -}}
+{{- if and .Values.observability.victoriaMetrics.enabled .Values.minioStandalone.enabled }}
+{{- /*
+Scrape the standalone MinIO's Prometheus endpoint. MinIO exposes
+cluster metrics on the S3 API port at /minio/v2/metrics/cluster;
+MINIO_PROMETHEUS_AUTH_TYPE=public (see deployment-minio-standalone.yaml)
+means no bearer token is needed. This feeds the object-storage
+dashboard's upload/download/latency/throughput panels, which the API
+cannot source itself (menu images transfer client<->MinIO directly via
+presigned URLs, so only MinIO sees the bytes).
+*/}}
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: {{ include "tbite.fullname" . }}-minio
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ include "tbite.namespace" . }}
+  selector:
+    matchLabels:
+      {{- include "tbite.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: minio
+  endpoints:
+    - port: api
+      interval: 30s
+      path: /minio/v2/metrics/cluster
+      scheme: http
+{{- end }}
+{{- end -}}

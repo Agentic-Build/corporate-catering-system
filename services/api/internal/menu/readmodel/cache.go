@@ -86,9 +86,11 @@ func (r *RedisCache) Invalidate(ctx context.Context, pattern string) error {
 // safe to call from multiple roles; the OTel meter provider returns
 // shared instruments.
 type Metrics struct {
-	Hits   metric.Int64Counter
-	Misses metric.Int64Counter
-	Errors metric.Int64Counter
+	Hits         metric.Int64Counter
+	Misses       metric.Int64Counter
+	Errors       metric.Int64Counter
+	RecomputeLag metric.Float64Gauge
+	TTL          metric.Float64Histogram
 }
 
 // NewMetrics returns the shared instrument set for the read-model
@@ -102,28 +104,57 @@ func NewMetrics() Metrics {
 		metric.WithDescription("Read-model cache misses, by surface."))
 	errs, _ := meter.Int64Counter("tbite_readmodel_cache_errors_total",
 		metric.WithDescription("Read-model cache backing-store errors, by surface."))
-	return Metrics{Hits: hits, Misses: miss, Errors: errs}
+	// recompute lag is a synchronous gauge: the dashboard plots the bare
+	// series over time, so the last recompute duration per model is what
+	// we want, not a histogram of all of them.
+	lag, _ := meter.Float64Gauge("tbite_readmodel_recompute_lag_seconds",
+		metric.WithDescription("Duration of the most recent cache-miss recompute, by model."),
+		metric.WithUnit("s"))
+	// ttl histogram intentionally has NO unit: the meter has a View that
+	// caps "s"-unit histograms at 10s buckets, but TTLs are ~30s and would
+	// all overflow. Empty unit uses the default boundaries so data shows.
+	ttl, _ := meter.Float64Histogram("tbite_readmodel_ttl_seconds",
+		metric.WithDescription("Read-model cache entry TTL at Set, by model."))
+	return Metrics{Hits: hits, Misses: miss, Errors: errs, RecomputeLag: lag, TTL: ttl}
 }
 
 // recordHit / recordMiss / recordError safely emit the labelled
 // counter regardless of whether the OTel SDK has been initialised.
-func (m Metrics) recordHit(ctx context.Context, surface string) {
+func (m Metrics) recordHit(ctx context.Context, model string) {
 	if m.Hits == nil {
 		return
 	}
-	m.Hits.Add(ctx, 1, metric.WithAttributes(attribute.String("surface", surface)))
+	m.Hits.Add(ctx, 1, metric.WithAttributes(attribute.String("model", model)))
 }
-func (m Metrics) recordMiss(ctx context.Context, surface string) {
+func (m Metrics) recordMiss(ctx context.Context, model string) {
 	if m.Misses == nil {
 		return
 	}
-	m.Misses.Add(ctx, 1, metric.WithAttributes(attribute.String("surface", surface)))
+	m.Misses.Add(ctx, 1, metric.WithAttributes(attribute.String("model", model)))
 }
-func (m Metrics) recordError(ctx context.Context, surface string) {
+func (m Metrics) recordError(ctx context.Context, model string) {
 	if m.Errors == nil {
 		return
 	}
-	m.Errors.Add(ctx, 1, metric.WithAttributes(attribute.String("surface", surface)))
+	m.Errors.Add(ctx, 1, metric.WithAttributes(attribute.String("model", model)))
+}
+
+// recordRecomputeLag records the duration of a cache-miss recompute as
+// an instantaneous gauge value, labelled by model.
+func (m Metrics) recordRecomputeLag(ctx context.Context, model string, seconds float64) {
+	if m.RecomputeLag == nil {
+		return
+	}
+	m.RecomputeLag.Record(ctx, seconds, metric.WithAttributes(attribute.String("model", model)))
+}
+
+// recordTTL records the TTL (in seconds) of a cache entry at Set time,
+// labelled by model.
+func (m Metrics) recordTTL(ctx context.Context, model string, seconds float64) {
+	if m.TTL == nil {
+		return
+	}
+	m.TTL.Record(ctx, seconds, metric.WithAttributes(attribute.String("model", model)))
 }
 
 // JSONCodec marshals values as JSON. Read models use JSON because

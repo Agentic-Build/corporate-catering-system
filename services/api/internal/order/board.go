@@ -61,6 +61,17 @@ func (h *BoardHub) Subscribe(vendorID string) (<-chan BoardEvent, func()) {
 	}
 }
 
+// SubscriberCount returns the total number of board subscribers across all vendors.
+func (h *BoardHub) SubscriberCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := 0
+	for _, set := range h.subs {
+		n += len(set)
+	}
+	return n
+}
+
 // Publish delivers ev to every current subscriber of vendorID. A subscriber
 // whose buffer is full is skipped rather than blocked — the board re-fetches
 // on the next event it does receive, so a dropped ping is harmless.
@@ -104,6 +115,13 @@ func (h *MenuHub) Subscribe() (<-chan struct{}, func()) {
 			close(ch)
 		}
 	}
+}
+
+// SubscriberCount returns the number of menu subscribers.
+func (h *MenuHub) SubscriberCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.subs)
 }
 
 // Broadcast signals every subscriber. A subscriber whose buffer is already

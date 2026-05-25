@@ -16,11 +16,14 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 )
 
 type sseInstruments struct {
 	activeConnections metric.Int64UpDownCounter
 	fanoutLag         metric.Float64Histogram
+	disconnects       metric.Int64Counter
 }
 
 var (
@@ -43,6 +46,11 @@ func realtimeMetrics() sseInstruments {
 		if err == nil {
 			sseInstr.fanoutLag = lag
 		}
+		disc, err := meter.Int64Counter("tbite_sse_disconnects_total",
+			metric.WithDescription("Total SSE disconnects, split by surface and reason."))
+		if err == nil {
+			sseInstr.disconnects = disc
+		}
 		sseInited = true
 	})
 	return sseInstr
@@ -58,14 +66,40 @@ func sseOnConnect(ctx context.Context, surface string) {
 	m.activeConnections.Add(ctx, 1, metric.WithAttributes(attribute.String("surface", surface)))
 }
 
-// onDisconnect decrements the gauge. Pairs with sseOnConnect via
-// `defer`.
-func sseOnDisconnect(ctx context.Context, surface string) {
+// onDisconnect decrements the gauge and counts the disconnect by
+// surface + reason. Pairs with sseOnConnect via `defer`.
+func sseOnDisconnect(ctx context.Context, surface, reason string) {
 	m := realtimeMetrics()
-	if m.activeConnections == nil {
+	if m.activeConnections != nil {
+		m.activeConnections.Add(ctx, -1, metric.WithAttributes(attribute.String("surface", surface)))
+	}
+	if m.disconnects != nil {
+		m.disconnects.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("surface", surface),
+			attribute.String("reason", reason)))
+	}
+}
+
+// RegisterSSESubscriberGauge registers the topic-subscriber observable
+// gauge, observing live subscriber counts from the board and menu hubs.
+func RegisterSSESubscriberGauge(boardHub *order.BoardHub, menuHub *order.MenuHub) {
+	meter := otel.GetMeterProvider().Meter("tbite.realtime")
+	gauge, err := meter.Int64ObservableGauge("tbite_sse_topic_subscribers",
+		metric.WithDescription("Current number of SSE subscribers per topic on this realtime gateway pod."))
+	if err != nil {
 		return
 	}
-	m.activeConnections.Add(ctx, -1, metric.WithAttributes(attribute.String("surface", surface)))
+	_, _ = meter.RegisterCallback(func(_ context.Context, o metric.Observer) error {
+		if boardHub != nil {
+			o.ObserveInt64(gauge, int64(boardHub.SubscriberCount()),
+				metric.WithAttributes(attribute.String("topic", "board")))
+		}
+		if menuHub != nil {
+			o.ObserveInt64(gauge, int64(menuHub.SubscriberCount()),
+				metric.WithAttributes(attribute.String("topic", "menu")))
+		}
+		return nil
+	}, gauge)
 }
 
 // recordFanoutLag records the time between an event becoming
