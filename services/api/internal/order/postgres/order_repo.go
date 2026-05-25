@@ -259,7 +259,14 @@ SELECT `+orderSelectCols+`
 		if err != nil {
 			return nil, err
 		}
-		return collectOrders(rows)
+		orders, err := collectOrders(rows)
+		if err != nil {
+			return nil, err
+		}
+		if err := r.hydrateItems(ctx, orders); err != nil {
+			return nil, err
+		}
+		return orders, nil
 	}
 	args := []any{vendorID, day}
 	placeholders := make([]string, len(statuses))
@@ -276,7 +283,14 @@ SELECT ` + orderSelectCols + `
 	if err != nil {
 		return nil, err
 	}
-	return collectOrders(rows)
+	orders, err := collectOrders(rows)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.hydrateItems(ctx, orders); err != nil {
+		return nil, err
+	}
+	return orders, nil
 }
 
 // ListPickedOrNoShowInPeriod returns orders in {picked_up, no_show} whose
@@ -305,4 +319,39 @@ func collectOrders(rows pgx.Rows) ([]*order.Order, error) {
 		out = append(out, &o)
 	}
 	return out, rows.Err()
+}
+
+// hydrateItems loads order_item rows for every order in orders and attaches them
+// to o.Items, keyed by order_id, in a single query (no N+1). Callers that need
+// line items — the merchant board, prep sheet, payroll — must run this; the bare
+// "order" projection in collectOrders carries none.
+func (r *OrderRepo) hydrateItems(ctx context.Context, orders []*order.Order) error {
+	if len(orders) == 0 {
+		return nil
+	}
+	byID := make(map[string]*order.Order, len(orders))
+	ids := make([]string, 0, len(orders))
+	for _, o := range orders {
+		byID[o.ID] = o
+		ids = append(ids, o.ID)
+	}
+	rows, err := r.pool.Query(ctx, `
+SELECT id, order_id, menu_item_id, qty, unit_price_minor
+  FROM order_item
+ WHERE order_id = ANY($1)
+ ORDER BY order_id, id`, ids)
+	if err != nil {
+		return fmt.Errorf("hydrate items: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var it order.Item
+		if err := rows.Scan(&it.ID, &it.OrderID, &it.MenuItemID, &it.Qty, &it.UnitPriceMinor); err != nil {
+			return err
+		}
+		if o := byID[it.OrderID]; o != nil {
+			o.Items = append(o.Items, it)
+		}
+	}
+	return rows.Err()
 }

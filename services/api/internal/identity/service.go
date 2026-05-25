@@ -79,11 +79,19 @@ func (s *Service) StartLogin(ctx context.Context, in StartLoginInput) (*StartLog
 	return &StartLoginOutput{AuthURL: au.URL, State: state}, nil
 }
 
-func (s *Service) CompleteLogin(ctx context.Context, in CompleteLoginInput) (*CompleteLoginOutput, error) {
+func (s *Service) CompleteLogin(ctx context.Context, in CompleteLoginInput) (out *CompleteLoginOutput, err error) {
 	sp, err := s.States.Get(ctx, in.State)
 	if err != nil {
 		return nil, err
 	}
+	// Once the state is resolved we know which app the user was entering, so
+	// wrap any later failure with that context. The browser callback uses it
+	// to redirect to the app's login page instead of dumping raw JSON.
+	defer func() {
+		if err != nil {
+			err = &CallbackError{App: sp.App, Err: err}
+		}
+	}()
 	if sp.Provider != in.Provider {
 		return nil, fmt.Errorf("identity: state provider mismatch (got %s, want %s)", in.Provider, sp.Provider)
 	}
