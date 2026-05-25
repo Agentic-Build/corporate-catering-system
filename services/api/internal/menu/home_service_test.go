@@ -100,7 +100,10 @@ VALUES ($1, $2, $3, 'approved') RETURNING id`,
 		fmt.Sprintf("home-v-%d Ltd", n),
 		fmt.Sprintf("home-v-%d@test.com", n),
 	).Scan(&vid))
-	_, err := pool.Exec(context.Background(), `
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO plant (code, label) VALUES ($1, $1) ON CONFLICT DO NOTHING`, plant)
+	require.NoError(t, err)
+	_, err = pool.Exec(context.Background(), `
 INSERT INTO vendor_plant_mapping (vendor_id, plant, active) VALUES ($1, $2, true)`, vid, plant)
 	require.NoError(t, err)
 	return vid

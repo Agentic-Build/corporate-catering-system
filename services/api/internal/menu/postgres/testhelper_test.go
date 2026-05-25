@@ -101,7 +101,11 @@ RETURNING id`,
 
 func seedPlantMapping(t *testing.T, pool *pgxpool.Pool, vendorID, plant string) {
 	t.Helper()
-	_, err := pool.Exec(context.Background(), `
+	// Plant must exist in the registry first (FK added in 000018).
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO plant (code, label) VALUES ($1, $1) ON CONFLICT DO NOTHING`, plant)
+	require.NoError(t, err)
+	_, err = pool.Exec(context.Background(), `
 INSERT INTO vendor_plant_mapping (vendor_id, plant, active)
 VALUES ($1, $2, true)`, vendorID, plant)
 	require.NoError(t, err)

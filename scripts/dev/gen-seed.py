@@ -213,6 +213,25 @@ def main() -> None:
     w("  updated_at          = now();")
     w("")
 
+    # ---- plant registry ---------------------------------------------------
+    # The plant table (migration 000018) is the canonical pickup-location list
+    # vendor_plant_mapping.plant references via FK, so plants must exist before
+    # any mapping row. label/address are what the 福委會 admin maintains.
+    w("-- Plant registry: pickup locations the 福委會 admin maintains.")
+    w("INSERT INTO plant (code, label, address, sort_order) VALUES")
+    plant_rows = [
+        ("tn-a", "台南廠 A 區", "台南市新市區南科三路 1 號 A 棟 1F", 1),
+        ("tn-b", "台南廠 B 區", "台南市新市區南科三路 1 號 B 棟 1F", 2),
+        ("tn-c", "台南廠 C 區", "台南市善化區南科二路 12 號 C 棟 1F", 3),
+        ("tn-d", "台南廠 D 區", "台南市善化區南科二路 12 號 D 棟 1F", 4),
+    ]
+    w(",\n".join(
+        f"  ({sql_str(c)}, {sql_str(lbl)}, {sql_str(addr)}, {so})"
+        for c, lbl, addr, so in plant_rows
+    ))
+    w("ON CONFLICT (code) DO NOTHING;")
+    w("")
+
     # ---- vendor_plant_mapping ---------------------------------------------
     # Every vendor maps to all four Tainan plant areas so any employee sees
     # every store (good for demos).

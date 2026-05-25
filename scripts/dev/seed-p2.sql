@@ -233,6 +233,14 @@ ON CONFLICT (id) DO UPDATE SET
   price_level         = EXCLUDED.price_level,
   updated_at          = now();
 
+-- Plant registry: pickup locations the 福委會 admin maintains.
+INSERT INTO plant (code, label, address, sort_order) VALUES
+  ('tn-a', '台南廠 A 區', '台南市新市區南科三路 1 號 A 棟 1F', 1),
+  ('tn-b', '台南廠 B 區', '台南市新市區南科三路 1 號 B 棟 1F', 2),
+  ('tn-c', '台南廠 C 區', '台南市善化區南科二路 12 號 C 棟 1F', 3),
+  ('tn-d', '台南廠 D 區', '台南市善化區南科二路 12 號 D 棟 1F', 4)
+ON CONFLICT (code) DO NOTHING;
+
 -- Plant mappings: every vendor serves all four plants (tn-a..tn-d).
 INSERT INTO vendor_plant_mapping (vendor_id, plant) VALUES
   ('a1111111-1111-1111-1111-111111111111', 'tn-a'),

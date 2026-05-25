@@ -190,7 +190,10 @@ VALUES ($1, $2, '', 110, 'active', ARRAY[]::text[], ARRAY[]::text[])
 RETURNING id`, vendorID, name).Scan(&itemIDs[i]))
 	}
 
-	_, err := pool.Exec(ctx, `
+	_, err := pool.Exec(ctx,
+		`INSERT INTO plant (code, label) VALUES ($1, $1) ON CONFLICT DO NOTHING`, reorderTestPlant)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
 INSERT INTO vendor_plant_mapping (vendor_id, plant, active)
 VALUES ($1, $2, true)`, vendorID, reorderTestPlant)
 	require.NoError(t, err)

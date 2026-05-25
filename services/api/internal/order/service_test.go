@@ -117,7 +117,10 @@ INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags, 
 VALUES ($1, 'Item', '', 110, 'active', ARRAY[]::text[], ARRAY[]::text[])
 RETURNING id`, vendorID).Scan(&itemID))
 
-	_, err := pool.Exec(ctx, `
+	_, err := pool.Exec(ctx,
+		`INSERT INTO plant (code, label) VALUES ($1, $1) ON CONFLICT DO NOTHING`, testPlant)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
 INSERT INTO vendor_plant_mapping (vendor_id, plant, active)
 VALUES ($1, $2, true)`, vendorID, testPlant)
 	require.NoError(t, err)
