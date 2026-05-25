@@ -21,6 +21,7 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.api.hpa.targetCPUUtilizationPercentage }}
+    {{- if .Values.api.hpa.customMetrics.enabled }}
     - type: Pods
       pods:
         metric:
@@ -35,6 +36,7 @@ spec:
         target:
           type: AverageValue
           averageValue: {{ .Values.api.hpa.targetRPS | quote }}
+    {{- end }}
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 300

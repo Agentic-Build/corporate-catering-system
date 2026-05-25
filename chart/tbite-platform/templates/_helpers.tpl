@@ -91,11 +91,27 @@ app.kubernetes.io/component: {{ .role }}
 {{- end -}}
 
 {{/* OTel collector endpoint based on subchart release-name conventions */}}
+{{- define "tbite.otelCollectorPort" -}}
+{{- if eq .Values.otel.exporterProtocol "http/protobuf" -}}
+{{- int .Values.observability.otelCollector.httpPort -}}
+{{- else -}}
+{{- int .Values.observability.otelCollector.grpcPort -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "tbite.otelCollectorEndpoint" -}}
 {{- if .Values.observability.otelCollector.enabled -}}
-{{- printf "%s-opentelemetry-collector.%s.svc:%d" .Release.Name (include "tbite.namespace" .) (int .Values.observability.otelCollector.grpcPort) -}}
+{{- printf "%s-opentelemetry-collector.%s.svc:%s" .Release.Name (include "tbite.namespace" .) (include "tbite.otelCollectorPort" .) -}}
 {{- else -}}
-{{- printf "otel-collector:%d" (int .Values.observability.otelCollector.grpcPort) -}}
+{{- printf "otel-collector:%s" (include "tbite.otelCollectorPort" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "tbite.otelCollectorEndpointValue" -}}
+{{- if eq .Values.otel.exporterProtocol "http/protobuf" -}}
+{{- printf "http://%s" (include "tbite.otelCollectorEndpoint" .) -}}
+{{- else -}}
+{{- include "tbite.otelCollectorEndpoint" . -}}
 {{- end -}}
 {{- end -}}
 
@@ -103,7 +119,7 @@ app.kubernetes.io/component: {{ .role }}
 {{- define "tbite.otelEnv" -}}
 {{- if .Values.observability.otelCollector.enabled }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
-  value: {{ if eq .Values.otel.exporterProtocol "http/protobuf" }}{{ printf "http://%s" (include "tbite.otelCollectorEndpoint" .) | quote }}{{ else }}{{ include "tbite.otelCollectorEndpoint" . | quote }}{{ end }}
+  value: {{ include "tbite.otelCollectorEndpointValue" . | quote }}
 - name: OTEL_EXPORTER_OTLP_PROTOCOL
   value: {{ .Values.otel.exporterProtocol | quote }}
 - name: OTEL_SERVICE_NAMESPACE

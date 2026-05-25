@@ -20,7 +20,7 @@ count from backlog, not CPU.
 
 | Role | Scaling signal | KEDA scaler | Bounds |
 | --- | --- | --- | --- |
-| `outbox-relay` | unpublished outbox rows: `SELECT count(*) FROM platform.outbox WHERE published_at IS NULL` ≥ 100 | `postgresql` | 1 → 6 |
+| `outbox-relay` | unpublished outbox rows: `SELECT count(*) FROM outbox_event WHERE published_at IS NULL` ≥ 100 | `postgresql` | 1 → 6 |
 | `payroll-settler` | `PAYROLL_V1` consumer `payroll-settler` lag ≥ 500 | `nats-jetstream` | 1 → 4 |
 | `on-time-evaluator` | `ORDERS_V1` consumer `on-time-evaluator` lag ≥ 500 | `nats-jetstream` | 1 → 4 |
 
@@ -37,7 +37,7 @@ count from backlog, not CPU.
 - **Retry.** Failed rows stay claimable and are retried on the next
   cycle; the relay never drops a row.
 - **DLQ.** The relay itself has no DLQ — an unpublishable row simply
-  remains pending and visible via the `platform.outbox` backlog metric
+  remains pending and visible via the `outbox_event` backlog metric
   and the consumer-lag alerts.
 
 ### payroll-settler / on-time-evaluator (JetStream consumers)

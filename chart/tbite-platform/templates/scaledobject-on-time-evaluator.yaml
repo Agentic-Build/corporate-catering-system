@@ -21,7 +21,7 @@ spec:
   triggers:
     - type: nats-jetstream
       metadata:
-        natsServerMonitoringEndpoint: {{ printf "http://%s-nats:8222" (include "tbite.fullname" .) | quote }}
+        natsServerMonitoringEndpoint: {{ printf "%s-nats-headless.%s.svc.cluster.local:8222" .Release.Name (include "tbite.namespace" .) | quote }}
         account: "$G"
         stream: {{ $cfg.keda.stream | quote }}
         consumer: {{ $cfg.keda.consumer | quote }}

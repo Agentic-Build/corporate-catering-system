@@ -3,10 +3,10 @@ package observability
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -21,16 +21,13 @@ import (
 // callers must invoke MustInitMetrics after InitMeter so those instruments bind
 // to the real MeterProvider.
 func InitMeter(ctx context.Context, serviceName, version string) (func(context.Context) error, error) {
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	endpoint := otlpEndpointFromEnv()
 	if endpoint == "" {
 		// Default no-op MeterProvider keeps instrument calls cheap.
 		return func(context.Context) error { return nil }, nil
 	}
 
-	exporter, err := otlpmetrichttp.New(ctx,
-		otlpmetrichttp.WithEndpoint(endpoint),
-		otlpmetrichttp.WithInsecure(),
-	)
+	exporter, err := newMetricExporter(ctx, endpoint, otlpProtocolFromEnv())
 	if err != nil {
 		return nil, fmt.Errorf("otlp metric exporter: %w", err)
 	}
@@ -73,4 +70,31 @@ func InitMeter(ctx context.Context, serviceName, version string) (func(context.C
 	)
 	otel.SetMeterProvider(mp)
 	return mp.Shutdown, nil
+}
+
+func newMetricExporter(ctx context.Context, endpoint, protocol string) (metric.Exporter, error) {
+	switch protocol {
+	case otlpProtocolGRPC:
+		host, err := otlpEndpointHost(endpoint)
+		if err != nil {
+			return nil, err
+		}
+		return otlpmetricgrpc.New(ctx,
+			otlpmetricgrpc.WithEndpoint(host),
+			otlpmetricgrpc.WithInsecure(),
+		)
+	case otlpProtocolHTTP:
+		opts := []otlpmetrichttp.Option{}
+		if otlpEndpointIsURL(endpoint) {
+			opts = append(opts, otlpmetrichttp.WithEndpointURL(endpoint))
+		} else {
+			opts = append(opts,
+				otlpmetrichttp.WithEndpoint(endpoint),
+				otlpmetrichttp.WithInsecure(),
+			)
+		}
+		return otlpmetrichttp.New(ctx, opts...)
+	default:
+		return nil, fmt.Errorf("unsupported OTEL_EXPORTER_OTLP_PROTOCOL %q", protocol)
+	}
 }

@@ -34,7 +34,7 @@ entries:
       attributes:
         tbite_role: employee
         tbite_employee_id: E2E001
-        tbite_plant: tn-a
+        tbite_plant: hc-12a-1f
         tbite_department: IT
 
   - id: tbite-dev-admin

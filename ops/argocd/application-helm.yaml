@@ -1,10 +1,5 @@
-# ArgoCD Application for the umbrella Helm chart (architecture #47).
-#
-# The legacy single-node Application points at the kustomize overlay
-# (`ops/kubernetes/overlays/single-node`); this Application points at
-# the canonical chart at `chart/tbite-platform`. Both can coexist on a
-# cluster during the kustomize→Helm migration; on a per-cluster basis
-# pick exactly one.
+# ArgoCD Application for the canonical umbrella Helm chart
+# (architecture #47).
 #
 # CRD bootstrap. Several subcharts (CloudNativePG, cert-manager,
 # Traefik, MinIO Operator, KEDA, OpenTelemetry Operator,
@@ -22,7 +17,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: tbite-helm
+  name: tbite
   namespace: argocd
 spec:
   project: tbite
@@ -50,6 +45,10 @@ spec:
       parameters:
         - name: profile.size
           value: prod
+        - name: crdsReady
+          value: "true"
+        - name: postgres.operator.bundled
+          value: "true"
   destination:
     server: https://kubernetes.default.svc
     namespace: tbite
@@ -85,5 +84,46 @@ spec:
         - /spec/replicas
     - group: apps
       kind: StatefulSet
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[]?.status
       jsonPointers:
         - /spec/replicas
+        - /spec/persistentVolumeClaimRetentionPolicy
+        - /spec/revisionHistoryLimit
+        - /spec/updateStrategy
+    - kind: Secret
+      name: tbite-victoria-metrics-operator-validation
+      namespace: tbite
+      jsonPointers:
+        - /data
+        - /metadata/annotations
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: tbite-victoria-metrics-operator-admission
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+    - group: apps
+      kind: StatefulSet
+      name: tbite-nats
+      namespace: tbite
+      jsonPointers:
+        - /spec/template/metadata/annotations
+        - /spec/template/spec/dnsPolicy
+        - /spec/template/spec/restartPolicy
+        - /spec/template/spec/schedulerName
+        - /spec/template/spec/securityContext
+      jqPathExpressions:
+        - .spec.template.spec.containers[]?.imagePullPolicy
+        - .spec.template.spec.containers[]?.ports[]?.protocol
+        - .spec.template.spec.containers[]?.livenessProbe.httpGet.scheme
+        - .spec.template.spec.containers[]?.readinessProbe.httpGet.scheme
+        - .spec.template.spec.containers[]?.startupProbe.httpGet.scheme
+        - .spec.template.spec.containers[]?.terminationMessagePath
+        - .spec.template.spec.containers[]?.terminationMessagePolicy
+        - .spec.template.spec.containers[]? | select(.resources == {}) | .resources
+        - .spec.template.spec.containers[]?.env[]?.valueFrom.fieldRef.apiVersion
+        - .spec.template.spec.volumes[]?.configMap.defaultMode
+        - .spec.volumeClaimTemplates[]?.apiVersion
+        - .spec.volumeClaimTemplates[]?.kind
+        - .spec.volumeClaimTemplates[]?.spec.volumeMode
+        - .spec.volumeClaimTemplates[]?.status
