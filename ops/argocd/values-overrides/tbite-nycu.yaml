@@ -46,6 +46,18 @@ observability:
   grafana:
     ingressHost: tbite-grafana.nycu.ai
 
+# Grafana ships behind the Cloudflare tunnel, so its absolute-URL
+# generator (`server.root_url`) and CSRF check (`server.domain`)
+# need to know the public hostname — otherwise the login POST 302s
+# back to the empty default domain and the browser sees "no response".
+victoria-metrics-k8s-stack:
+  grafana:
+    grafana.ini:
+      server:
+        domain: tbite-grafana.nycu.ai
+        root_url: https://tbite-grafana.nycu.ai
+        serve_from_sub_path: false
+
 # Dev users on for the early demo; flip to false once real users land
 # from HR SCIM (architecture #61 follow-up).
 authentikBlueprints:
