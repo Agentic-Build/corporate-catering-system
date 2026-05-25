@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:24.16.0-alpine AS builder
 WORKDIR /repo
 RUN corepack enable
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
@@ -7,10 +7,11 @@ COPY packages ./packages
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @tbite/employee build
 
-FROM node:20-alpine AS runner
+FROM node:24.16.0-alpine AS runner
 WORKDIR /app
-COPY --from=builder /repo/apps/employee/build ./
-COPY --from=builder /repo/apps/employee/package.json ./
+COPY --chown=node:node --from=builder /repo/apps/employee/build ./
+COPY --chown=node:node --from=builder /repo/apps/employee/package.json ./
 ENV NODE_ENV=production
+USER node
 EXPOSE 3000
 CMD ["node", "index.js"]

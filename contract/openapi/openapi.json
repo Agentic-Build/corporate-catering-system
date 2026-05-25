@@ -5020,7 +5020,6 @@
         "parameters": [
           {
             "description": "Month to summarise, YYYY-MM",
-            "example": "2026-04",
             "explode": false,
             "in": "query",
             "name": "period",
@@ -7795,7 +7794,6 @@
         "parameters": [
           {
             "description": "Month to summarise, YYYY-MM",
-            "example": "2026-04",
             "explode": false,
             "in": "query",
             "name": "period",

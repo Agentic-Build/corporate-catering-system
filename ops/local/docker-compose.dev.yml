@@ -20,7 +20,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: tbite-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
@@ -35,7 +35,7 @@ services:
       retries: 20
 
   nats:
-    image: nats:2.10-alpine
+    image: nats:2.14.1-alpine
     container_name: tbite-nats
     restart: unless-stopped
     command: ["-js", "-sd", "/data", "-m", "8222"]
@@ -46,7 +46,7 @@ services:
       - nats-data:/data
 
   minio:
-    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    image: minio/minio:RELEASE.2025-10-15T17-29-55Z
     container_name: tbite-minio
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
@@ -81,7 +81,7 @@ services:
       retries: 30
 
   authentik-server:
-    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2026.2.0}
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2026.5.0}
     container_name: tbite-authentik-server
     restart: unless-stopped
     command: server
@@ -113,7 +113,7 @@ services:
       retries: 30
 
   authentik-worker:
-    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2026.2.0}
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2026.5.0}
     container_name: tbite-authentik-worker
     restart: unless-stopped
     command: worker
@@ -150,7 +150,7 @@ services:
       retries: 30
 
   hydra-migrate:
-    image: oryd/hydra:v2.2.0
+    image: oryd/hydra:v26.2.0
     container_name: tbite-hydra-migrate
     restart: "no"
     depends_on:
@@ -161,7 +161,7 @@ services:
     command: ["migrate", "sql", "--read-from-env", "--yes"]
 
   hydra:
-    image: oryd/hydra:v2.2.0
+    image: oryd/hydra:v26.2.0
     container_name: tbite-hydra
     restart: unless-stopped
     depends_on:
@@ -218,7 +218,7 @@ services:
   # http://localhost:3001 with anonymous Admin (dev convenience only).
   # ─────────────────────────────────────────────────────────────────────────
   vmsingle:
-    image: victoriametrics/victoria-metrics:v1.143.0
+    image: victoriametrics/victoria-metrics:v1.144.0
     container_name: tbite-vmsingle
     restart: unless-stopped
     command:
@@ -296,7 +296,7 @@ services:
     # otelcol_* metrics scraped by the prometheus receiver.
 
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.16.0
+    image: prometheuscommunity/postgres-exporter:v0.19.1
     container_name: tbite-postgres-exporter
     restart: unless-stopped
     environment:
@@ -311,7 +311,7 @@ services:
       - "9187:9187"
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.66.0
+    image: oliver006/redis_exporter:v1.84.0
     container_name: tbite-redis-exporter
     restart: unless-stopped
     command: ["--redis.addr=redis://redis:6379"]
@@ -322,7 +322,7 @@ services:
       - "9121:9121"
 
   nats-exporter:
-    image: natsio/prometheus-nats-exporter:0.16.0
+    image: natsio/prometheus-nats-exporter:0.20.0
     container_name: tbite-nats-exporter
     restart: unless-stopped
     command: ["-varz", "-jsz=all", "-connz", "-subz", "-serverz", "http://nats:8222"]
@@ -332,7 +332,7 @@ services:
       - "7777:7777"
 
   alertmanager:
-    image: prom/alertmanager:v0.28.0
+    image: prom/alertmanager:v0.32.1
     container_name: tbite-alertmanager
     restart: unless-stopped
     command:
@@ -350,7 +350,7 @@ services:
       retries: 12
 
   vmalert:
-    image: victoriametrics/vmalert:v1.143.0
+    image: victoriametrics/vmalert:v1.144.0
     container_name: tbite-vmalert
     restart: unless-stopped
     command:
