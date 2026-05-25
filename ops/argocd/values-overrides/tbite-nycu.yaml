@@ -66,6 +66,12 @@ observability:
 # need to know the public hostname — otherwise the login POST 302s
 # back to the empty default domain and the browser sees "no response".
 victoria-metrics-k8s-stack:
+  vmagent:
+    enabled: true
+  kube-state-metrics:
+    enabled: true
+  prometheus-node-exporter:
+    enabled: true
   grafana:
     grafana.ini:
       server:

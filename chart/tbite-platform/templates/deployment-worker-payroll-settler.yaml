@@ -36,8 +36,8 @@ spec:
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           args: {{ toYaml $cfg.args | nindent 12 }}
           ports:
-            - name: metrics
-              containerPort: {{ $cfg.metricsPort }}
+            - name: probe
+              containerPort: {{ $cfg.probePort }}
               protocol: TCP
           envFrom:
             - configMapRef:
@@ -46,8 +46,8 @@ spec:
             {{- include "tbite.appSecretEnv" . | nindent 12 }}
             - name: TBITE_ROLE
               value: payroll-settler
-            - name: TBITE_METRICS_PORT
-              value: {{ $cfg.metricsPort | quote }}
+            - name: PROBE_ADDR
+              value: {{ printf ":%v" $cfg.probePort | quote }}
             - name: TBITE_NATS_STREAM
               value: {{ $cfg.keda.stream | quote }}
             - name: TBITE_NATS_CONSUMER
@@ -55,9 +55,9 @@ spec:
             {{- include "tbite.dbEnv" . | nindent 12 }}
             {{- include "tbite.otelEnv" . | nindent 12 }}
           readinessProbe:
-            {{- include "tbite.tcpProbe" (dict "port" "metrics") | nindent 12 }}
+            {{- include "tbite.tcpProbe" (dict "port" "probe") | nindent 12 }}
           livenessProbe:
-            {{- include "tbite.tcpProbe" (dict "port" "metrics") | nindent 12 }}
+            {{- include "tbite.tcpProbe" (dict "port" "probe") | nindent 12 }}
           resources:
             {{- toYaml $cfg.resources | nindent 12 }}
           securityContext:

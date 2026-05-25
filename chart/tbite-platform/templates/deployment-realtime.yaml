@@ -43,9 +43,6 @@ spec:
             - name: http
               containerPort: {{ .Values.realtime.port }}
               protocol: TCP
-            - name: metrics
-              containerPort: {{ .Values.realtime.metricsPort }}
-              protocol: TCP
           envFrom:
             - configMapRef:
                 name: {{ include "tbite.fullname" . }}-app-env
@@ -57,8 +54,6 @@ spec:
               value: {{ printf ":%v" .Values.realtime.port | quote }}
             - name: TBITE_HTTP_PORT
               value: {{ .Values.realtime.port | quote }}
-            - name: TBITE_METRICS_PORT
-              value: {{ .Values.realtime.metricsPort | quote }}
             - name: TBITE_REALTIME_TOPIC_SCOPE
               value: {{ .Values.realtime.topicScope | quote }}
             - name: TBITE_REALTIME_SSE_IDLE_TIMEOUT
