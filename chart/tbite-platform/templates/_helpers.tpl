@@ -327,11 +327,9 @@ helper so each Deployment template gets identical wiring.
   value: {{ .Values.global.oidcIssuerURL | quote }}
 - name: AUTH_PROVIDER_AUTHENTIK_DISPLAY_NAME
   value: "Authentik"
+  # client_id is not secret; sourced from global.authentik.clientID
 - name: AUTH_PROVIDER_AUTHENTIK_CLIENT_ID
-  valueFrom:
-    secretKeyRef:
-      name: {{ .Values.global.oidcClientsSecretRef.name | quote }}
-      key:  "apiClientID"
+  value: {{ .Values.global.authentik.clientID | quote }}
 - name: AUTH_PROVIDER_AUTHENTIK_CLIENT_SECRET
   valueFrom:
     secretKeyRef:
