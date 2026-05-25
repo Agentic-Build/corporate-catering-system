@@ -189,8 +189,19 @@ to be created out-of-band (via SOPS, Sealed Secrets, External Secrets, etc):
 - `tbite-db` — keys: `rwUrl`, `roUrl`
 - `tbite-s3` — keys: `accessKeyID`, `secretAccessKey`
 - `tbite-nats` — key: `creds`
-- `tbite-valkey` — key: `password`
+- `tbite-valkey` — keys: `password`, `valkey-password`
 - `tbite-sops-age` — key: `pub`
 - `tbite-pg-backup-s3` — keys: `ACCESS_KEY_ID`, `ACCESS_SECRET_KEY`
-- `tbite-grafana-admin` — key: `password`
-- `tbite-minio-env` — keys: `accessKey`, `secretKey`
+- `tbite-grafana-admin` — keys: `admin-user`, `password`
+- `tbite-minio-root` — keys: `accessKey`, `secretKey`
+- `tbite-minio-env` — keys: `accessKey`, `secretKey` when using MinIO Tenant mode
+- `tbite-authentik-config` — keys: `AUTHENTIK_SECRET_KEY`,
+  `AUTHENTIK_POSTGRESQL__HOST`, `AUTHENTIK_POSTGRESQL__NAME`,
+  `AUTHENTIK_POSTGRESQL__USER`, `AUTHENTIK_POSTGRESQL__PASSWORD`,
+  `AUTHENTIK_REDIS__HOST`, `AUTHENTIK_ERROR_REPORTING__ENABLED`
+- `tbite-tbite-platform-authentik-bootstrap` — keys:
+  `AUTHENTIK_BOOTSTRAP_PASSWORD`, `AUTHENTIK_BOOTSTRAP_TOKEN`,
+  `AUTHENTIK_BOOTSTRAP_EMAIL`
+- `tbite-authentik` — key: `apiToken`
+- `tbite-hydra` — keys: `dsn`, `secretsSystem`, `secretsCookie`,
+  `postgresPassword`
