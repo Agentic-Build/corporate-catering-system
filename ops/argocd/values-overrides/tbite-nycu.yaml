@@ -68,6 +68,27 @@ observability:
 victoria-metrics-k8s-stack:
   vmagent:
     enabled: true
+  # NYCU runs on single-node k3s. The scheduler, controller-manager,
+  # and etcd are embedded in the k3s server process, so the default
+  # kube-prometheus selectors create headless Services with no
+  # endpoints. Keep the usable node/kubelet/apiserver coverage and
+  # disable only these unsupported control-plane scrape surfaces.
+  kubeEtcd:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+  kubeControllerManager:
+    enabled: false
+  defaultRules:
+    groups:
+      etcd:
+        create: false
+      kubeScheduler:
+        create: false
+      kubernetesSystemScheduler:
+        create: false
+      kubernetesSystemControllerManager:
+        create: false
   kube-state-metrics:
     enabled: true
   prometheus-node-exporter:
