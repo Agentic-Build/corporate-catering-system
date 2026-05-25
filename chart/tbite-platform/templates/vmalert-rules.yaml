@@ -34,7 +34,7 @@ spec:
             summary: "Postgres replica lag > {{ .Values.alerting.thresholds.replicaLagSeconds }}s"
         - alert: TbiteOutboxAgeHigh
           expr: |
-            max(tbite_outbox_oldest_unpublished_age_seconds) > {{ .Values.alerting.thresholds.outboxAgeSeconds }}
+            max(tbite_outbox_oldest_unpublished_seconds) > {{ .Values.alerting.thresholds.outboxAgeSeconds }}
           for: 2m
           labels:
             severity: warning
@@ -42,7 +42,7 @@ spec:
             summary: "Outbox oldest unpublished age > {{ .Values.alerting.thresholds.outboxAgeSeconds }}s"
         - alert: TbiteSseConnectionsPerPodHigh
           expr: |
-            max(tbite_realtime_active_sse_connections) > {{ .Values.alerting.thresholds.sseConnPerPod }}
+            max(tbite_sse_active_connections) > {{ .Values.alerting.thresholds.sseConnPerPod }}
           for: 5m
           labels:
             severity: info
@@ -50,7 +50,7 @@ spec:
             summary: "An SSE pod exceeds {{ .Values.alerting.thresholds.sseConnPerPod }} active connections"
         - alert: TbiteRealtimeFanoutLagHigh
           expr: |
-            max(tbite_realtime_fanout_lag_seconds) > {{ .Values.alerting.thresholds.fanoutLagSeconds }}
+            max(tbite_sse_fanout_lag_seconds) > {{ .Values.alerting.thresholds.fanoutLagSeconds }}
           for: 2m
           labels:
             severity: warning

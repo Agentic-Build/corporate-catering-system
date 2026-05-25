@@ -68,6 +68,7 @@ func (r *Relay) cycle(ctx context.Context) (int, error) {
 			continue
 		}
 		successIDs = append(successIDs, ev.ID)
+		recordPublished(ctx, ev.AggregateType)
 	}
 	// MarkPublished commits the transaction even if successIDs is empty
 	if err := r.Outbox.MarkPublished(ctx, tx, successIDs); err != nil {

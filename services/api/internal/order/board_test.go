@@ -72,6 +72,38 @@ func TestBoardHub_FullBufferDropsRatherThanBlocks(t *testing.T) {
 	_ = recv(t, ch)
 }
 
+func TestBoardHub_SubscriberCountSumsAcrossVendors(t *testing.T) {
+	hub := NewBoardHub()
+	_, ub1 := hub.Subscribe("vendor-1")
+	_, ub2 := hub.Subscribe("vendor-2")
+	_, ub3 := hub.Subscribe("vendor-2")
+
+	if got := hub.SubscriberCount(); got != 3 {
+		t.Fatalf("SubscriberCount = %d, want 3", got)
+	}
+	ub1()
+	ub2()
+	ub3()
+	if got := hub.SubscriberCount(); got != 0 {
+		t.Fatalf("SubscriberCount after unsubscribe = %d, want 0", got)
+	}
+}
+
+func TestMenuHub_SubscriberCount(t *testing.T) {
+	hub := NewMenuHub()
+	_, ua := hub.Subscribe()
+	_, ub := hub.Subscribe()
+
+	if got := hub.SubscriberCount(); got != 2 {
+		t.Fatalf("SubscriberCount = %d, want 2", got)
+	}
+	ua()
+	ub()
+	if got := hub.SubscriberCount(); got != 0 {
+		t.Fatalf("SubscriberCount after unsubscribe = %d, want 0", got)
+	}
+}
+
 func TestKindFromSubject(t *testing.T) {
 	cases := map[string]string{
 		"order.placed.v1":    "placed",

@@ -4,9 +4,34 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
+
+var (
+	dlqMessagesOnce    sync.Once
+	dlqMessagesCounter metric.Int64Counter
+)
+
+// dlqMessages returns the lazily-bound DLQ write counter, observed by Grafana
+// outbox-and-events.json. It binds on first use against the global meter
+// provider so a process that never writes the DLQ does not register it; if the
+// meter rejects the instrument it stays nil and callers no-op.
+func dlqMessages() metric.Int64Counter {
+	dlqMessagesOnce.Do(func() {
+		meter := otel.GetMeterProvider().Meter("tbite.api")
+		c, err := meter.Int64Counter("tbite_dlq_messages_total",
+			metric.WithDescription("Messages written to the dead-letter queue, by source_stream."))
+		if err == nil {
+			dlqMessagesCounter = c
+		}
+	})
+	return dlqMessagesCounter
+}
 
 // WriteDLQ records an irrecoverable message failure to dlq_message.
 //
@@ -39,6 +64,9 @@ INSERT INTO dlq_message (source_stream, source_subject, source_consumer, payload
 VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)`,
 		stream, subject, consumer, p, h, lastError); err != nil {
 		return fmt.Errorf("write dlq: %w", err)
+	}
+	if c := dlqMessages(); c != nil {
+		c.Add(ctx, 1, metric.WithAttributes(attribute.String("source_stream", stream)))
 	}
 	return nil
 }
