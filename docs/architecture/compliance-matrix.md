@@ -20,7 +20,7 @@ as follows:
 | --- | --- | --- | --- |
 | Each sub-issue records a concrete architecture decision with context, rationale, and acceptance criteria. | #47 | Met | The fifteen subordinate documents in this directory each carry Status, Context, Decision, Rationale, Design Implications, Acceptance Criteria, Compliance Evidence, Scope Boundary, and References sections. |
 | The final baseline has no managed-cloud-only dependency. | #47 | Met | `chart/tbite-platform/` declares self-hosted dependencies in `Chart.yaml`; `docs/deployment/airgapped.md` documents air-gapped installation. |
-| Development and production use the same architecture and chart, with size and credentials supplied through values. | #47 | Met | `chart/tbite-platform/values-dev.yaml` and `chart/tbite-platform/values-prod.yaml` share schema with `chart/tbite-platform/values.schema.json`. |
+| Development and production use the same architecture and chart, with size and credentials supplied through values. | #47 | Met | `chart/tbite-platform/values-dev.yaml` and `chart/tbite-platform/values-prod-ha.yaml` share schema with `chart/tbite-platform/values.schema.json`. |
 | The issue set remains compatible with ArgoCD without deciding ArgoCD ownership or topology. | #47 | Expressed | Scope Boundaries of [`adr-0002`](adr-0002-helm-umbrella-chart.md) and [`arch-0007`](arch-0007-cloud-native-readiness-and-autoscaling.md) preserve GitOps compatibility without prescribing ArgoCD topology. |
 | GitHub native sub-issues under this issue represent the tracked decisions. | #47 | Met | Issues #48–#62 are tracked as sub-issues of #47; each is canonicalized in this directory. |
 
@@ -29,9 +29,9 @@ as follows:
 | AC item | Source issue | Status | Evidence |
 | --- | --- | --- | --- |
 | Dev, staging, and production all deploy through the same chart family. | #48 | Met | `chart/tbite-platform/`. |
-| Runtime differences are confined to values: replicas, resources, storage class, storage size, domains, certificates, and secrets. | #48 | Met | `chart/tbite-platform/values.schema.json`, `chart/tbite-platform/values-dev.yaml`, `chart/tbite-platform/values-prod.yaml`. |
+| Runtime differences are confined to values: replicas, resources, storage class, storage size, domains, certificates, and secrets. | #48 | Met | `chart/tbite-platform/values.schema.json`, `chart/tbite-platform/values-dev.yaml`, `chart/tbite-platform/values-prod-ha.yaml`. |
 | docker-compose and single-node manifests are not production behavior models. | #48 | Expressed | The chart is the only packaging artifact governed by this baseline. |
-| Local instructions cover kind, k3d, and OrbStack Kubernetes. | #48 | Follow-up | Local cluster instructions to be added under `docs/deployment/` in a subsequent change. |
+| Local instructions cover kind, k3d, and OrbStack Kubernetes. | #48 | Met | [`docs/deployment/local-clusters.md`](../deployment/local-clusters.md). |
 | The baseline uses standard Kubernetes APIs unless a provider-specific integration is explicitly guarded behind values. | #48 | Met | Chart templates use core Kubernetes APIs, Gateway API, and operators declared in [`adr-0004`](adr-0004-self-hosted-ha-data-plane.md). |
 
 ## #49 — ADR Helm umbrella chart
@@ -39,7 +39,7 @@ as follows:
 | AC item | Source issue | Status | Evidence |
 | --- | --- | --- | --- |
 | One chart family can install the app stack and canonical self-host dependencies. | #49 | Met | `chart/tbite-platform/` with `chart/tbite-platform/Chart.yaml` dependency declarations. |
-| The same chart supports local, staging, and production values. | #49 | Met | `chart/tbite-platform/values.yaml`, `chart/tbite-platform/values-dev.yaml`, `chart/tbite-platform/values-prod.yaml`. |
+| The same chart supports local, staging, and production values. | #49 | Met | `chart/tbite-platform/values.yaml`, `chart/tbite-platform/values-dev.yaml`, `chart/tbite-platform/values-prod-ha.yaml`. |
 | Third-party chart versions are pinned. | #49 | Met | `chart/tbite-platform/Chart.yaml`. |
 | Configuration required for production is validated by schema. | #49 | Met | `chart/tbite-platform/values.schema.json`. |
 | Kustomize use is limited to site-specific patching or post-render customization. | #49 | Expressed | Chart is the sole release artifact; no Kustomize overlay is part of the production contract. |
@@ -58,10 +58,10 @@ as follows:
 
 | AC item | Source issue | Status | Evidence |
 | --- | --- | --- | --- |
-| Production values define HA topology, storage classes, PDBs, resource requests, and backup hooks for each stateful component. | #51 | Met | `chart/tbite-platform/values-prod.yaml`, `chart/tbite-platform/templates/cnpg-cluster.yaml`, `chart/tbite-platform/templates/cnpg-pooler.yaml`, `chart/tbite-platform/templates/cnpg-backup-schedule.yaml`. |
-| Development values use the same service contracts with smaller topology. | #51 | Met | `chart/tbite-platform/values-dev.yaml` shares schema with `chart/tbite-platform/values-prod.yaml`. |
+| Production values define HA topology, storage classes, PDBs, resource requests, and backup hooks for each stateful component. | #51 | Met | `chart/tbite-platform/values-prod-ha.yaml`, `chart/tbite-platform/templates/cnpg-cluster.yaml`, `chart/tbite-platform/templates/cnpg-pooler.yaml`, `chart/tbite-platform/templates/cnpg-backup-schedule.yaml`. |
+| Development values use the same service contracts with smaller topology. | #51 | Met | `chart/tbite-platform/values-dev.yaml` shares schema with `chart/tbite-platform/values-prod-ha.yaml`. |
 | Managed replacements can be supplied through BYO values without app-code changes. | #51 | Met | BYO endpoints exposed via `chart/tbite-platform/values.yaml` validated by `chart/tbite-platform/values.schema.json`. |
-| Each data-plane component has dashboards, alerts, and restore documentation. | #51 | Follow-up | Alerts in `chart/tbite-platform/templates/vmalert-rules.yaml`; restore documentation under `docs/deployment/` to be added. |
+| Each data-plane component has dashboards, alerts, and restore documentation. | #51 | Met | Alerts in `chart/tbite-platform/templates/vmalert-rules.yaml`; restore documentation in [`docs/deployment/backup-restore.md`](../deployment/backup-restore.md). |
 
 ## #52 — ADR Victoria observability stack
 
@@ -77,8 +77,8 @@ as follows:
 | AC item | Source issue | Status | Evidence |
 | --- | --- | --- | --- |
 | Install and upgrade documentation covers image mirroring, chart vendoring, and secret decryption. | #53 | Met | `docs/deployment/airgapped.md`, `docs/deployment/secrets.md`. |
-| Production values never place secret material in ConfigMaps or unencrypted values files. | #53 | Met | `chart/tbite-platform/values-prod.yaml`, `.sops.yaml`, `ops/secrets/example.sops.yaml`. |
-| The same Kubernetes Secret contract supports local and production deployments. | #53 | Met | `chart/tbite-platform/values-dev.yaml` and `chart/tbite-platform/values-prod.yaml` consume Secrets through identical chart keys. |
+| Production values never place secret material in ConfigMaps or unencrypted values files. | #53 | Met | `chart/tbite-platform/values-prod-ha.yaml`, `.sops.yaml`, `ops/secrets/example.sops.yaml`. |
+| The same Kubernetes Secret contract supports local and production deployments. | #53 | Met | `chart/tbite-platform/values-dev.yaml` and `chart/tbite-platform/values-prod-ha.yaml` consume Secrets through identical chart keys. |
 | Optional Vault or External Secrets integrations can be added without changing the canonical SOPS path. | #53 | Follow-up | Chart consumes Secret resources by name; a reference External Secrets integration may be added later. |
 
 ## #54 — ADR Postgres connection and backup
@@ -88,7 +88,7 @@ as follows:
 | Application code no longer assumes only DATABASE_RW_URL. | #54 | Met | `services/api/internal/config/config.go`, `services/api/internal/platform/db/pgx.go`. |
 | Read-heavy paths can route to read replicas where their consistency model permits it. | #54 | Met | `services/api/internal/menu/readmodel/` consumes `DATABASE_RO_URL`. |
 | HPA/KEDA limits account for database connection budget. | #54 | Met | `chart/tbite-platform/templates/hpa-*.yaml`, `chart/tbite-platform/templates/scaledobject-*.yaml`. |
-| Backup and restore drills are documented for production values. | #54 | Follow-up | `chart/tbite-platform/templates/cnpg-backup-schedule.yaml` declares schedules; drill documentation under `docs/deployment/` to be added. |
+| Backup and restore drills are documented for production values. | #54 | Met | `chart/tbite-platform/templates/cnpg-backup-schedule.yaml` declares schedules; drill procedure in [`docs/deployment/backup-restore.md`](../deployment/backup-restore.md). |
 | Dashboards expose pool saturation, primary load, replica lag, query latency, and deadlocks. | #54 | Met | `chart/tbite-platform/templates/vmalert-rules.yaml`. |
 
 ## #55 — ADR single-enterprise plant-aware scaling
@@ -105,7 +105,7 @@ as follows:
 | AC item | Source issue | Status | Evidence |
 | --- | --- | --- | --- |
 | Each role has its own deployment, health checks, metrics, resource requests, and scaling rule. | #56 | Met | `chart/tbite-platform/templates/deployment-worker-*.yaml`, `chart/tbite-platform/templates/deployment-scheduler-*.yaml`, `services/api/internal/httpserver/health.go`. |
-| Each role documents idempotency, retry, and DLQ behavior. | #56 | Follow-up | Per-role documentation under `docs/` to be added as role implementations mature. |
+| Each role documents idempotency, retry, and DLQ behavior. | #56 | Met | [`docs/architecture/worker-roles.md`](worker-roles.md). |
 | Horizontally scalable roles are separated from singleton or lease-owned roles. | #56 | Met | KEDA `ScaledObject` resources at `chart/tbite-platform/templates/scaledobject-*.yaml`; singleton roles run with `replicas: 1` and lease election in `services/api/cmd/tbite/main.go`. |
 | A slow or failing background task cannot stall unrelated async work. | #56 | Expressed | Roles are independent Deployments with independent failure domains. |
 | KEDA or custom metrics can scale queue-backed roles using backlog or lag signals. | #56 | Met | `chart/tbite-platform/templates/scaledobject-*.yaml`. |
@@ -115,7 +115,7 @@ as follows:
 | AC item | Source issue | Status | Evidence |
 | --- | --- | --- | --- |
 | Outbox relay can scale horizontally without duplicate side effects. | #57 | Met | Outbox relay deployment in `chart/tbite-platform/templates/deployment-worker-*.yaml`; duplicate suppression via outbox row claim semantics and JetStream message IDs. |
-| Event handlers are idempotent through event IDs, aggregate versions, unique keys, dedupe tables, or advisory locks. | #57 | Follow-up | Per-handler idempotency documentation to be added under `docs/` as handlers mature. |
+| Event handlers are idempotent through event IDs, aggregate versions, unique keys, dedupe tables, or advisory locks. | #57 | Met | Per-role idempotency/retry/DLQ documented in [`docs/architecture/worker-roles.md`](worker-roles.md). |
 | Consumer lag and DLQ counts are observable and alertable. | #57 | Met | `chart/tbite-platform/templates/vmalert-rules.yaml`. |
 | Stream provisioning is explicit and repeatable. | #57 | Met | `chart/tbite-platform/templates/job-provision-streams.yaml`. |
 | Broker outage does not make ordinary order placement publish directly from request handlers. | #57 | Expressed | API handlers write to the transactional outbox only; the outbox relay performs JetStream publication asynchronously. |
@@ -156,10 +156,10 @@ as follows:
 | AC item | Source issue | Status | Evidence |
 | --- | --- | --- | --- |
 | MCP clients requiring DCR can complete registration and OAuth flows. | #61 | Met | Hydra deployment via the chart; HTTPRoutes in `chart/tbite-platform/templates/httproute-*.yaml`. |
-| Normal app auth remains compatible with generic OIDC provider contracts. | #61 | Follow-up | Generic OIDC consumption to be confirmed in code as auth implementation matures. |
-| Dev and production use the same auth topology, scaled down where appropriate. | #61 | Met | `chart/tbite-platform/values-dev.yaml`, `chart/tbite-platform/values-prod.yaml`. |
+| Normal app auth remains compatible with generic OIDC provider contracts. | #61 | Met | `services/api/internal/identity/oidc/` provides a generic `oidc.Provider` (coreos/go-oidc); the login service consumes generic claims/userinfo. |
+| Dev and production use the same auth topology, scaled down where appropriate. | #61 | Met | `chart/tbite-platform/values-dev.yaml`, `chart/tbite-platform/values-prod-ha.yaml`. |
 | Auth-related readiness and observability cover both providers. | #61 | Met | `services/api/internal/httpserver/health.go`; metrics via `chart/tbite-platform/templates/otelcollector.yaml`. |
-| Provider-specific code is isolated from core business workflows. | #61 | Follow-up | Provider-specific API usage to be confined to provisioning surfaces as auth implementation matures. |
+| Provider-specific code is isolated from core business workflows. | #61 | Met | Authentik/Hydra clients live in `services/api/internal/identity/{authentik,hydra}/` and are used only for provisioning; order/menu/payroll/compliance consume generic OIDC. |
 
 ## #62 — Architecture cloud-native readiness and autoscaling
 
