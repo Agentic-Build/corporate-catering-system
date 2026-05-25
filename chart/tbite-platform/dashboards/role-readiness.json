@@ -79,8 +79,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (role) (rate(http_server_request_duration_seconds_count{http_route=\"/readyz\",http_response_status_code=\"200\"}[5m])) / sum by (role) (rate(http_server_request_duration_seconds_count{http_route=\"/readyz\"}[5m]))",
-          "legendFormat": "{{role}}",
+          "expr": "sum by (service_name) (rate(http_server_request_duration_seconds_count{http_route=\"/readyz\",http_response_status_code=\"200\"}[5m])) / sum by (service_name) (rate(http_server_request_duration_seconds_count{http_route=\"/readyz\"}[5m]))",
+          "legendFormat": "{{service_name}}",
           "refId": "A"
         }
       ]

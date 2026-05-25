@@ -926,6 +926,8 @@ opentelemetry-collector:
       debug: {}
       prometheusremotewrite:
         endpoint: http://vmsingle-{{ .Release.Name }}-victoria-metrics-k8s-stack.{{ .Release.Namespace }}.svc.cluster.local:8428/api/v1/write
+        resource_to_telemetry_conversion:
+          enabled: true
     service:
       pipelines:
         metrics:

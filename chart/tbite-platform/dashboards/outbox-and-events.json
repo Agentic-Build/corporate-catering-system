@@ -146,7 +146,7 @@
       },
       "targets": [
         {
-          "expr": "jetstream_consumer_num_pending{consumer_name=~\"outbox-relay.*|payroll-settler.*|on-time-evaluator.*\"}",
+          "expr": "nats_consumer_num_pending{consumer_name=~\"outbox-relay.*|payroll-settler.*|on-time-evaluator.*\"}",
           "legendFormat": "{{stream_name}}/{{consumer_name}}",
           "refId": "A"
         }
@@ -169,7 +169,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (consumer_name) (rate(jetstream_consumer_delivered_consumer_seq[1m]))",
+          "expr": "sum by (consumer_name) (rate(nats_consumer_delivered_consumer_seq[1m]))",
           "legendFormat": "{{consumer_name}}",
           "refId": "A"
         }

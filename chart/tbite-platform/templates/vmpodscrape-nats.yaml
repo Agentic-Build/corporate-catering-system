@@ -1,0 +1,26 @@
+{{- if .Values.crdsReady -}}
+{{- if and .Values.observability.victoriaMetrics.enabled .Values.nats.enabled .Values.nats.promExporter.enabled }}
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: {{ include "tbite.fullname" . }}-nats
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ include "tbite.namespace" . }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: nats
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: nats
+  podMetricsEndpoints:
+    - port: prom-metrics
+      interval: 30s
+      path: /metrics
+      scheme: http
+{{- end }}
+{{- end -}}

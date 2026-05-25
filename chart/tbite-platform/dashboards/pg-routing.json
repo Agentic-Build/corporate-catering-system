@@ -37,35 +37,34 @@
     }
   ],
   "annotations": { "list": [] },
-  "description": "Postgres RW/RO routing health. Tracks pool saturation per role, replica lag, deadlock rate, and otelpgx query latency p99.",
+  "description": "Postgres health. Tracks CNPG backend pressure, replica lag, deadlock rate, and otelpgx query latency p99.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
   "panels": [
     {
       "type": "row",
-      "title": "Pool saturation per role",
+      "title": "Backend pressure",
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "collapsed": false
     },
     {
       "type": "timeseries",
-      "title": "pgxpool utilization (in_use / max) by role",
+      "title": "Postgres backends by state",
       "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 8, "w": 16, "x": 0, "y": 1 },
       "id": 1,
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
+          "unit": "short",
           "min": 0,
-          "max": 1,
           "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green" },
-              { "color": "yellow", "value": 0.8 },
-              { "color": "red", "value": 0.95 }
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 100 }
             ]
           }
         }
@@ -75,15 +74,15 @@
       },
       "targets": [
         {
-          "expr": "pg_pool_in_use / pg_pool_max",
-          "legendFormat": "{{role}}",
+          "expr": "sum by (state) (cnpg_backends_total{datname=\"tbite\"})",
+          "legendFormat": "{{state}}",
           "refId": "A"
         }
       ]
     },
     {
       "type": "stat",
-      "title": "Worst-role utilization (now)",
+      "title": "Active backend share",
       "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
       "id": 2,
@@ -106,7 +105,7 @@
       },
       "targets": [
         {
-          "expr": "max(pg_pool_in_use / pg_pool_max)",
+          "expr": "sum(cnpg_backends_total{datname=\"tbite\",state=\"active\"}) / clamp_min(sum(cnpg_backends_total{datname=\"tbite\"}), 1)",
           "refId": "A"
         }
       ]
@@ -142,8 +141,8 @@
       },
       "targets": [
         {
-          "expr": "pg_replication_lag_seconds",
-          "legendFormat": "{{instance}}",
+          "expr": "cnpg_pg_replication_lag",
+          "legendFormat": "{{pod}}",
           "refId": "A"
         }
       ]
@@ -165,7 +164,7 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_deadlocks[5m])",
+          "expr": "rate(cnpg_pg_stat_database_deadlocks{datname=\"tbite\"}[5m])",
           "legendFormat": "{{datname}}",
           "refId": "A"
         }
@@ -194,8 +193,8 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (le, role) (rate(db_client_operation_duration_seconds_bucket[5m])))",
-          "legendFormat": "p99 {{role}}",
+          "expr": "histogram_quantile(0.99, sum by (le, service_name, pgx_operation_type) (rate(db_client_operation_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99 {{service_name}} {{pgx_operation_type}}",
           "refId": "A"
         }
       ]

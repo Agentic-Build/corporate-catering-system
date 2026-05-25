@@ -165,17 +165,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(minio_s3_ttfb_seconds_distribution[5m])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(minio_s3_requests_ttfb_seconds_distribution[5m])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(minio_s3_ttfb_seconds_distribution[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(minio_s3_requests_ttfb_seconds_distribution[5m])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(minio_s3_ttfb_seconds_distribution[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(minio_s3_requests_ttfb_seconds_distribution[5m])))",
           "legendFormat": "p99",
           "refId": "C"
         }

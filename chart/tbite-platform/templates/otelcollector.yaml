@@ -43,7 +43,9 @@ spec:
         tls:
           insecure: true
       prometheusremotewrite:
-        endpoint: http://vmsingle.{{ include "tbite.namespace" . }}.svc:8429/api/v1/write
+        endpoint: http://vmsingle-{{ .Release.Name }}-victoria-metrics-k8s-stack.{{ include "tbite.namespace" . }}.svc.cluster.local:8428/api/v1/write
+        resource_to_telemetry_conversion:
+          enabled: true
       otlphttp/logs:
         endpoint: http://vlogs.{{ include "tbite.namespace" . }}.svc:9428/insert/opentelemetry/v1/logs
     service:

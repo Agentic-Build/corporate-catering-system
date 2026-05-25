@@ -109,17 +109,17 @@
           "refId": "D"
         },
         {
-          "expr": "up{job=~\".*postgres-exporter\"}",
+          "expr": "clamp_max(count(cnpg_collector_up == 1), 1) or on() vector(0)",
           "legendFormat": "Postgres",
           "refId": "E"
         },
         {
-          "expr": "up{job=~\".*redis-exporter\"}",
+          "expr": "clamp_max(count(up{job=~\".*valkey.*\"} == 1), 1) or on() vector(0)",
           "legendFormat": "Redis",
           "refId": "F"
         },
         {
-          "expr": "clamp_max(count(jetstream_stream_total_messages), 1) or on() vector(0)",
+          "expr": "clamp_max(count(nats_server_jetstream_disabled == 0), 1) or on() vector(0)",
           "legendFormat": "NATS broker",
           "refId": "G"
         }
@@ -291,17 +291,17 @@
       },
       "targets": [
         {
-          "expr": "sum(pg_stat_activity_count{state=\"active\"})",
+          "expr": "sum(cnpg_backends_total{datname=\"tbite\",state=\"active\"})",
           "legendFormat": "active",
           "refId": "A"
         },
         {
-          "expr": "sum(pg_stat_activity_count{state=\"idle\"})",
+          "expr": "sum(cnpg_backends_total{datname=\"tbite\",state=\"idle\"})",
           "legendFormat": "idle",
           "refId": "B"
         },
         {
-          "expr": "sum(pg_stat_activity_count{state=\"idle in transaction\"})",
+          "expr": "sum(cnpg_backends_total{datname=\"tbite\",state=\"idle in transaction\"})",
           "legendFormat": "idle in tx",
           "refId": "C"
         }
@@ -407,7 +407,7 @@
           "refId": "B"
         },
         {
-          "expr": "sum by (consumer_name) (jetstream_consumer_num_pending{consumer_name=~\"on-time-evaluator|payroll-settler|outbox-relay.*\"})",
+          "expr": "sum by (consumer_name) (nats_consumer_num_pending{consumer_name=~\"on-time-evaluator|payroll-settler|outbox-relay.*\"})",
           "legendFormat": "consumer:{{consumer_name}}",
           "refId": "C"
         }

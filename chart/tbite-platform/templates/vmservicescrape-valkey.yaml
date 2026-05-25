@@ -1,0 +1,26 @@
+{{- if .Values.crdsReady -}}
+{{- if and .Values.observability.victoriaMetrics.enabled .Values.valkey.enabled .Values.valkey.metrics.enabled }}
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: {{ include "tbite.fullname" . }}-valkey
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ include "tbite.namespace" . }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: metrics
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: valkey
+  endpoints:
+    - port: http-metrics
+      interval: 30s
+      path: /metrics
+      scheme: http
+{{- end }}
+{{- end -}}

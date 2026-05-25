@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Async plane health \u2014 NATS JetStream throughput, consumer lag, DLQ depth, outbox lag. DLQ + outbox metrics are emitted by postgres-exporter via ops/observability/postgres-exporter/queries.yaml.",
+  "description": "Async plane health \u2014 NATS JetStream throughput, consumer lag, DLQ depth, outbox lag. NATS metrics come from the NATS prometheus exporter; DLQ + outbox metrics are emitted by the API via OpenTelemetry.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
@@ -53,12 +53,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (stream_name) (rate(jetstream_stream_total_messages[1m]))",
+          "expr": "sum by (stream_name) (rate(nats_stream_last_seq[1m]))",
           "legendFormat": "in {{stream_name}}",
           "refId": "A"
         },
         {
-          "expr": "sum by (stream_name) (rate(jetstream_stream_first_seq[1m]))",
+          "expr": "sum by (stream_name) (rate(nats_stream_first_seq[1m]))",
           "legendFormat": "consumed {{stream_name}}",
           "refId": "B"
         }
@@ -114,7 +114,7 @@
       },
       "targets": [
         {
-          "expr": "topk(10, jetstream_consumer_num_pending{consumer_name=~\"on-time-evaluator|payroll-settler|outbox-relay.*\"})",
+          "expr": "topk(10, nats_consumer_num_pending{consumer_name=~\"on-time-evaluator|payroll-settler|outbox-relay.*\"})",
           "legendFormat": "{{stream_name}}/{{consumer_name}}",
           "refId": "A"
         }
@@ -123,7 +123,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Consumer redeliveries (rate)",
+      "title": "Consumer redeliveries",
       "datasource": {
         "type": "prometheus",
         "uid": "VictoriaMetrics"
@@ -136,7 +136,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
+          "unit": "short",
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -155,7 +155,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (stream_name, consumer_name) (rate(jetstream_consumer_num_redelivered[5m]))",
+          "expr": "sum by (stream_name, consumer_name) (nats_consumer_num_redelivered)",
           "legendFormat": "{{stream_name}}/{{consumer_name}}",
           "refId": "A"
         }
@@ -195,7 +195,7 @@
       },
       "targets": [
         {
-          "expr": "jetstream_stream_total_bytes",
+          "expr": "nats_stream_total_bytes",
           "legendFormat": "{{stream_name}}",
           "refId": "A"
         }
@@ -489,12 +489,12 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_xact_commit_total{datname=\"tbite\"}[1m])",
+          "expr": "rate(cnpg_pg_stat_database_xact_commit{datname=\"tbite\"}[1m])",
           "legendFormat": "commits/s",
           "refId": "A"
         },
         {
-          "expr": "rate(pg_stat_database_xact_rollback_total{datname=\"tbite\"}[1m])",
+          "expr": "rate(cnpg_pg_stat_database_xact_rollback{datname=\"tbite\"}[1m])",
           "legendFormat": "rollbacks/s",
           "refId": "B"
         }
