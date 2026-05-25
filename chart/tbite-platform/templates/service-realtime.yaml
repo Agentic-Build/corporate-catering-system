@@ -23,8 +23,4 @@ spec:
       port: 80
       targetPort: http
       protocol: TCP
-    - name: metrics
-      port: {{ .Values.realtime.metricsPort }}
-      targetPort: metrics
-      protocol: TCP
 {{- end }}

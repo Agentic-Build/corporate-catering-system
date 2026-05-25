@@ -115,7 +115,6 @@ api:
   image: {}
   args: ["--role=api"]
   port: 8080
-  metricsPort: 2112
   resources:
     requests: { cpu: 200m, memory: 256Mi }
     limits:   { cpu: 1000m, memory: 768Mi }
@@ -147,7 +146,6 @@ realtime:
   replicaCount: 2
   args: ["--role=realtime-gateway"]
   port: 8081
-  metricsPort: 2112
   sseIdleTimeout: 1h
   topicScope: "plant_date"
   terminationGracePeriodSeconds: 90
@@ -230,7 +228,7 @@ workers:
     enabled: true
     replicaCount: 1
     args: ["--role=outbox-relay"]
-    metricsPort: 2112
+    probePort: 2112
     resources:
       requests: { cpu: 100m, memory: 128Mi }
       limits:   { cpu: 500m, memory: 384Mi }
@@ -250,7 +248,7 @@ workers:
     enabled: true
     replicaCount: 1
     args: ["--role=payroll-settler"]
-    metricsPort: 2112
+    probePort: 2112
     resources:
       requests: { cpu: 100m, memory: 128Mi }
       limits:   { cpu: 500m, memory: 384Mi }
@@ -267,7 +265,7 @@ workers:
     enabled: true
     replicaCount: 1
     args: ["--role=on-time-evaluator"]
-    metricsPort: 2112
+    probePort: 2112
     resources:
       requests: { cpu: 100m, memory: 128Mi }
       limits:   { cpu: 500m, memory: 384Mi }
@@ -286,7 +284,7 @@ scheduler:
     enabled: true
     replicaCount: 1
     args: ["--role=cutoff-sweeper"]
-    metricsPort: 2112
+    probePort: 2112
     leaseName: tbite-cutoff-sweeper
     resources:
       requests: { cpu: 50m, memory: 64Mi }
@@ -295,7 +293,7 @@ scheduler:
     enabled: true
     replicaCount: 1
     args: ["--role=no-show-sweeper"]
-    metricsPort: 2112
+    probePort: 2112
     leaseName: tbite-no-show-sweeper
     resources:
       requests: { cpu: 50m, memory: 64Mi }
@@ -304,7 +302,7 @@ scheduler:
     enabled: true
     replicaCount: 1
     args: ["--role=document-expiry-scanner"]
-    metricsPort: 2112
+    probePort: 2112
     leaseName: tbite-doc-expiry-scanner
     resources:
       requests: { cpu: 50m, memory: 64Mi }
@@ -313,7 +311,7 @@ scheduler:
     enabled: true
     replicaCount: 1
     args: ["--role=feedback-scanner"]
-    metricsPort: 2112
+    probePort: 2112
     leaseName: tbite-feedback-scanner
     resources:
       requests: { cpu: 50m, memory: 64Mi }
@@ -923,6 +921,16 @@ opentelemetry-collector:
       enabled: true
       containerPort: 4318
       servicePort: 4318
+  config:
+    exporters:
+      debug: {}
+      prometheusremotewrite:
+        endpoint: http://vmsingle-{{ .Release.Name }}-victoria-metrics-k8s-stack.{{ .Release.Namespace }}.svc.cluster.local:8428/api/v1/write
+    service:
+      pipelines:
+        metrics:
+          exporters:
+            - prometheusremotewrite
   resources:
     requests: { cpu: 100m, memory: 192Mi }
     limits:   { cpu: 500m, memory: 384Mi }
