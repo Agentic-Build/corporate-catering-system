@@ -47,6 +47,9 @@ global:
     baseURL: "http://tbite-authentik-server.tbite.svc.cluster.local:9000"
     vendorOperatorGroup: "tbite:role:vendor_operator"
     providerSlugs: "authentik"
+    # API OAuth2 client_id. Must match the blueprint's provider client_id.
+    # Lives here (not in the SOPS secret) so it cannot drift out-of-band.
+    clientID: "tbite"
     apiTokenSecretRef:
       name: tbite-authentik
       key: apiToken
