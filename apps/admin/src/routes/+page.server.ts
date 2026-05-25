@@ -2,19 +2,18 @@ import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
 
-const KNOWN_PLANTS = ["tn-a", "tn-b", "tn-c", "tn-d"];
-
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
   if (locals.user.role !== "welfare_admin") throw redirect(303, "/login");
 
   const client = apiFor(locals.apiToken);
 
-  // Parallel load: vendors + anomalies + payroll batches.
-  const [vendorsRes, anomaliesRes, batchesRes] = await Promise.allSettled([
+  // Parallel load: vendors + anomalies + payroll batches + plants.
+  const [vendorsRes, anomaliesRes, batchesRes, plantsRes] = await Promise.allSettled([
     client.GET("/api/admin/vendors", { params: { query: {} } }),
     client.GET("/api/admin/anomalies", { params: { query: {} } }),
     client.GET("/api/admin/payroll/batches", { params: { query: {} } }),
+    client.GET("/api/admin/plants"),
   ]);
 
   const vendors: any[] =
@@ -23,6 +22,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     anomaliesRes.status === "fulfilled" ? ((anomaliesRes.value.data as any)?.items ?? []) : [];
   const batches: any[] =
     batchesRes.status === "fulfilled" ? ((batchesRes.value.data as any)?.items ?? []) : [];
+  const knownPlants: { code: string; label: string; active: boolean }[] =
+    plantsRes.status === "fulfilled" ? ((plantsRes.value.data as any)?.items ?? []) : [];
 
   // Latest payroll batch (most recent period_start) + its entries.
   const latestBatch =
@@ -70,7 +71,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   return {
     user: locals.user,
-    knownPlants: KNOWN_PLANTS,
+    knownPlants,
     pendingVendors,
     counts: {
       pending: pendingVendors.length,
@@ -89,7 +90,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  // Approve a pending vendor — defaults to all known plants when none chosen.
+  // Approve a pending vendor with selected plants (or empty list).
   approveVendor: async ({ request, locals }) => {
     const fd = await request.formData();
     const id = String(fd.get("id") ?? "");
@@ -98,7 +99,7 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendors/{id}/approve", {
       params: { path: { id } },
-      body: { plants: plants.length > 0 ? plants : KNOWN_PLANTS } as any,
+      body: { plants } as any,
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { ok: true, approved: id };

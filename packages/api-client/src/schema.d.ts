@@ -295,6 +295,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/plants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all plants (admin) */
+        get: operations["listPlantsAdmin"];
+        put?: never;
+        /** Create a plant */
+        post: operations["createPlant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/plants/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update a plant */
+        put: operations["updatePlant"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/vendor-settlements": {
         parameters: {
             query?: never;
@@ -1069,6 +1104,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/plants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get own vendor's plant mappings */
+        get: operations["getMerchantPlants"];
+        /** Set own vendor's plant assignments */
+        put: operations["setMerchantPlants"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/prep-sheet": {
         parameters: {
             query?: never;
@@ -1200,6 +1253,23 @@ export interface paths {
         put?: never;
         /** Mark a supply temporarily sold out (or back in stock) */
         post: operations["setMerchantSupplySoldOut"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List active plants */
+        get: operations["listPlants"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1516,6 +1586,28 @@ export interface components {
              */
             readonly $schema?: string;
             operator: components["schemas"]["OperatorDTO"];
+        };
+        CreatePlantInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreatePlantInputBody.json
+             */
+            readonly $schema?: string;
+            address: string;
+            code: string;
+            label: string;
+            /** Format: int64 */
+            sort_order: number;
+        };
+        CreatePlantOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreatePlantOutputBody.json
+             */
+            readonly $schema?: string;
+            plant: components["schemas"]["PlantDTO"];
         };
         CreateVendorInputBody: {
             /**
@@ -1929,6 +2021,15 @@ export interface components {
             readonly $schema?: string;
             items: components["schemas"]["MessageDTO"][] | null;
         };
+        ListPlantsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListPlantsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["PlantDTO"][] | null;
+        };
         ListSettlementsOutputBody: {
             /**
              * Format: uri
@@ -2171,6 +2272,14 @@ export interface components {
              */
             readonly $schema?: string;
             order: components["schemas"]["OrderDTO"];
+        };
+        PlantDTO: {
+            active: boolean;
+            address: string;
+            code: string;
+            label: string;
+            /** Format: int64 */
+            sort_order: number;
         };
         PlantMappingDTO: {
             plant: string;
@@ -2416,6 +2525,15 @@ export interface components {
             eta_label: string;
             pickup_window: string;
         };
+        SetMerchantPlantsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SetMerchantPlantsInputBody.json
+             */
+            readonly $schema?: string;
+            plants: string[] | null;
+        };
         SetPlantWindowInputBody: {
             /**
              * Format: uri
@@ -2560,6 +2678,28 @@ export interface components {
             cutoff_hour: number;
             /** Format: int64 */
             preorder_window_days: number;
+        };
+        UpdatePlantInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdatePlantInputBody.json
+             */
+            readonly $schema?: string;
+            active: boolean;
+            address: string;
+            label: string;
+            /** Format: int64 */
+            sort_order: number;
+        };
+        UpdatePlantOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdatePlantOutputBody.json
+             */
+            readonly $schema?: string;
+            plant: components["schemas"]["PlantDTO"];
         };
         UploadDocumentInputBody: {
             /**
@@ -3218,6 +3358,103 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listPlantsAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPlantsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    createPlant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePlantInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatePlantOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    updatePlant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePlantInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdatePlantOutputBody"];
+                };
             };
             /** @description Error */
             default: {
@@ -4972,6 +5209,66 @@ export interface operations {
             };
         };
     };
+    getMerchantPlants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPlantsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    setMerchantPlants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetMerchantPlantsInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     merchantPrepSheet: {
         parameters: {
             query?: {
@@ -5252,6 +5549,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SupplyOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    listPlants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPlantsOutputBody"];
                 };
             };
             /** @description Error */

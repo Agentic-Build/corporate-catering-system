@@ -15,6 +15,7 @@
     { href: "/orders", label: "備餐看板", icon: "doc" },
     { href: "/labels", label: "餐點貼紙", icon: "qr" },
     { href: "/menus", label: "菜單管理", icon: "tag" },
+    { href: "/service-areas", label: "服務廠區", icon: "check" },
     { href: "/complaints", label: "客訴收件匣", icon: "bell" },
     { href: "/reconciliation", label: "對帳", icon: "wallet" },
     { href: "/compliance", label: "合規自查", icon: "check" },

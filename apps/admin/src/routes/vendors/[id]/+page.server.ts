@@ -2,20 +2,22 @@ import { redirect, fail, error } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
 
-const KNOWN_PLANTS = ["tn-a", "tn-b", "tn-c", "tn-d"];
-
 export const load: PageServerLoad = async ({ locals, params, url }) => {
   if (!locals.user || locals.user.role !== "welfare_admin") throw redirect(303, "/login");
   const client = apiFor(locals.apiToken);
-  const r = await client.GET("/api/admin/vendors", { params: { query: {} } });
-  const all = (r.data as any)?.items ?? [];
+  const [vendorsRes, operatorsRes, plantsRes] = await Promise.allSettled([
+    client.GET("/api/admin/vendors", { params: { query: {} } }),
+    client.GET("/api/admin/vendors/{id}/operators", { params: { path: { id: params.id } } }),
+    client.GET("/api/admin/plants"),
+  ]);
+  const all = vendorsRes.status === "fulfilled" ? ((vendorsRes.value.data as any)?.items ?? []) : [];
   const vendor = all.find((v: any) => v.id === params.id);
   if (!vendor) throw error(404, "vendor not found");
-  const operatorsResp = await client.GET("/api/admin/vendors/{id}/operators", {
-    params: { path: { id: params.id } },
-  });
-  const operators = (operatorsResp.data as any)?.items ?? [];
-  return { user: locals.user, vendor, operators, knownPlants: KNOWN_PLANTS };
+  const operators =
+    operatorsRes.status === "fulfilled" ? ((operatorsRes.value.data as any)?.items ?? []) : [];
+  const knownPlants: { code: string; label: string; active: boolean }[] =
+    plantsRes.status === "fulfilled" ? ((plantsRes.value.data as any)?.items ?? []) : [];
+  return { user: locals.user, vendor, operators, knownPlants };
 };
 
 export const actions: Actions = {
