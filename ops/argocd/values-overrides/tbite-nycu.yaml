@@ -29,6 +29,7 @@ global:
     baseURL: http://tbite-authentik-server.tbite.svc.cluster.local:80
   s3:
     endpoint: http://minio.tbite.svc.cluster.local
+    publicBaseURL: https://tbite-files.nycu.ai
   nats:
     url: nats://tbite-nats.tbite.svc.cluster.local:4222
 
