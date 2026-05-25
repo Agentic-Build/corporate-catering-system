@@ -1,8 +1,25 @@
 <script lang="ts">
-  import { PageHeader, Card, Button } from "@tbite/ui";
+  import { PageHeader, Card, Button, Modal } from "@tbite/ui";
   let { data, form } = $props();
 
   const selectedCodes = $derived(new Set<string>(data.myPlantCodes));
+  let confirmOpen = $state(false);
+  let confirmed = false;
+  let formEl: HTMLFormElement;
+
+  function onsubmit(e: SubmitEvent) {
+    const anySelected = formEl.querySelector('input[name="plants"]:checked') !== null;
+    if (!anySelected && !confirmed) {
+      e.preventDefault();
+      confirmOpen = true;
+    }
+  }
+
+  function confirmClear() {
+    confirmed = true;
+    confirmOpen = false;
+    formEl.requestSubmit();
+  }
 </script>
 
 <PageHeader
@@ -22,7 +39,7 @@
 
 <div class="max-w-2xl">
   <Card>
-    <form method="POST" action="?/save" class="space-y-4">
+    <form method="POST" action="?/save" class="space-y-4" bind:this={formEl} {onsubmit}>
       <fieldset>
         <legend class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
           可服務廠區（複選）
@@ -56,3 +73,13 @@
     </form>
   </Card>
 </div>
+
+<Modal open={confirmOpen} onClose={() => (confirmOpen = false)} title="暫停所有供餐服務？">
+  <p class="text-sm text-tb-slate-600">
+    您尚未選擇任何廠區。儲存後將清空本商家的服務廠區，暫停所有供餐服務。
+  </p>
+  {#snippet footer()}
+    <Button variant="secondary" size="md" onclick={() => (confirmOpen = false)}>取消</Button>
+    <Button variant="danger" size="md" onclick={confirmClear}>確認暫停</Button>
+  {/snippet}
+</Modal>
