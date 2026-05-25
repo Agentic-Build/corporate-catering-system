@@ -6,13 +6,6 @@ import { API_BASE_URL } from "$lib/server/env";
 type MenuQuery = NonNullable<operations["listEmployeeMenu"]["parameters"]["query"]>;
 type MenuSort = NonNullable<MenuQuery["sort"]>;
 
-const PLANTS = [
-  { id: "tn-a", label: "台南廠 A 區" },
-  { id: "tn-b", label: "台南廠 B 區" },
-  { id: "tn-c", label: "台南廠 C 區" },
-  { id: "tn-d", label: "台南廠 D 區" },
-];
-
 function buildDays(today: Date, selectedISO?: string) {
   const wk = ["日", "一", "二", "三", "四", "五", "六"];
   const labels = ["今天", "明天"];
@@ -39,12 +32,13 @@ function buildDays(today: Date, selectedISO?: string) {
 // these is set; otherwise the home payload's day_menu is used as-is.
 const MENU_SORTS = new Set(["name", "price_asc", "price_desc", "remain"]);
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, parent }) => {
   if (!locals.user) {
     throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname + url.search));
   }
 
-  const selectedPlant = url.searchParams.get("plant") ?? locals.user.plant ?? PLANTS[0].id;
+  const { plants } = await parent();
+  const selectedPlant = url.searchParams.get("plant") ?? locals.user.plant ?? plants[0]?.id ?? "";
   const dayOverride = url.searchParams.get("day") ?? undefined;
 
   // ── F3 menu filter — parsed from the URL query ──
@@ -162,7 +156,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   return {
     user: locals.user,
-    plants: PLANTS,
+    plants,
     days,
     selectedPlant,
     selectedDay: home.target_day,

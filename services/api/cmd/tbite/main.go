@@ -57,6 +57,9 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/settlement"
 	settlementhttp "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/http"
 	settlementpg "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/postgres"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/plants"
+	phttp "github.com/takalawang/corporate-catering-system/services/api/internal/plants/http"
+	ppgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/plants/postgres"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 	vhttp "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/http"
 	vpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/postgres"
@@ -314,6 +317,10 @@ func main() {
 			Sessions:    sessStore,
 		}
 		vendorAPI := &vhttp.API{Svc: vendorService}
+
+		// 7b-bis. Plant registry service + endpoints.
+		plantRegistrySvc := &plants.Service{Repo: ppgrepo.NewPlantRepo(pool)}
+		plantAPI := &phttp.API{Svc: plantRegistrySvc, VendorSvc: vendorService}
 
 		// 7c. Menu service + merchant/employee handlers
 		itemRepo := mpgrepo.NewItemRepo(pool)
@@ -620,6 +627,7 @@ func main() {
 			}
 		}, mcpSrv, mcpOpts,
 			vendorAPI.Register,
+			plantAPI.Register,
 			menuAPI.Register,
 			menuAPI.RegisterPresigned,
 			quotaAPI.Register,

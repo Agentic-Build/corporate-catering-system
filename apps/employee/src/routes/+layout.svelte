@@ -11,14 +11,14 @@
   import CartDrawer from "$lib/components/CartDrawer.svelte";
   import FloatingCartBar from "$lib/components/FloatingCartBar.svelte";
   import { cart } from "$lib/cart.svelte";
-  import { PLANTS, buildDays } from "$lib/plants";
+  import { buildDays } from "$lib/plants";
 
   let { data, children } = $props();
 
   // ── plant / day — driven by URL search params, user.plant as fallback ──
   const today = new Date().toISOString().slice(0, 10);
   const selectedPlant = $derived(
-    $page.url.searchParams.get("plant") ?? data.user?.plant ?? PLANTS[0].id,
+    $page.url.searchParams.get("plant") ?? data.user?.plant ?? data.plants[0]?.id ?? "",
   );
   const selectedDay = $derived($page.url.searchParams.get("day") ?? today);
   const days = $derived(buildDays(new Date(), selectedDay));
@@ -69,7 +69,7 @@
         <TBiteLogo />
         <div class="ml-2 hidden md:block">
           <LocationBar
-            plants={PLANTS}
+            plants={data.plants}
             {selectedPlant}
             onPlantChange={(id) => setParam("plant", id)}
             {days}
@@ -116,7 +116,7 @@
       <div class="border-t border-tb-slate-100 md:hidden">
         <div class="mx-auto max-w-[1400px] px-4 py-2">
           <LocationBar
-            plants={PLANTS}
+            plants={data.plants}
             {selectedPlant}
             onPlantChange={(id) => setParam("plant", id)}
             {days}

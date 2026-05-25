@@ -4,13 +4,10 @@
   const v = $derived(data.vendor);
   const currentPlants = $derived(new Set<string>(v.plants ?? []));
 
-  const plantLabel: Record<string, string> = {
-    "tn-a": "台南廠 A 區",
-    "tn-b": "台南廠 B 區",
-    "tn-c": "台南廠 C 區",
-    "tn-d": "台南廠 D 區",
-  };
-  const labelFor = (id: string) => plantLabel[id] ?? id;
+  const plantLabelMap = $derived(
+    Object.fromEntries(data.knownPlants.map((p: { code: string; label: string }) => [p.code, p.label])),
+  );
+  const labelFor = (id: string) => plantLabelMap[id] ?? id;
 
   const statusTone = {
     approved: "success",
@@ -69,12 +66,12 @@
             服務廠區
           </legend>
           <div class="mt-2 flex flex-wrap gap-2">
-            {#each data.knownPlants as p}
+            {#each data.knownPlants as p (p.code)}
               <label
                 class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-tb-slate-300 px-3 py-1 text-xs font-semibold text-tb-slate-700 hover:border-tb-slate-500"
               >
-                <input type="checkbox" name="plants" value={p} checked={currentPlants.has(p)} />
-                {labelFor(p)}
+                <input type="checkbox" name="plants" value={p.code} checked={currentPlants.has(p.code)} />
+                {p.label}
               </label>
             {/each}
           </div>

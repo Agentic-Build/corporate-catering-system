@@ -17,6 +17,7 @@ import (
 	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
 	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
 	payrollhttp "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/http"
+	phttp "github.com/takalawang/corporate-catering-system/services/api/internal/plants/http"
 	qhttp "github.com/takalawang/corporate-catering-system/services/api/internal/quota/http"
 	settlementhttp "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/http"
 	vhttp "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/http"
@@ -31,6 +32,7 @@ func main() {
 	// Register all routes; handlers must not be invoked during registration.
 	(&idhttp.API{}).Register(api)
 	(&vhttp.API{}).Register(api)
+	(&phttp.API{}).Register(api)
 	(&mhttp.API{}).Register(api)
 	(&qhttp.API{}).Register(api)
 	(&ohttp.API{}).Register(api)
