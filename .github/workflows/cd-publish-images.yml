@@ -54,12 +54,10 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
-          # Multi-arch on push so Apple Silicon kind/k3d/OrbStack
-          # local clusters (architecture #47 first-class targets)
-          # can pull the image without operators rebuilding. PRs
-          # build linux/amd64 only because docker/build-push-action's
-          # `load: true` does not accept a platforms list.
-          platforms: ${{ github.event_name == 'push' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          # Main deploys target the t-bite x86_64 cluster, so keep the
+          # publish path single-arch and fast. Tags still publish a
+          # multi-arch manifest for portable release images.
+          platforms: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           push: ${{ github.event_name == 'push' }}
           load: ${{ github.event_name != 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
