@@ -10,7 +10,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var ErrStateNotFound = errors.New("oidc: state not found or expired")
+var (
+	ErrStateNotFound = errors.New("oidc: state not found or expired")
+	ErrStateConsumed = errors.New("oidc: state already consumed")
+)
 
 type StatePayload struct {
 	App          string `json:"app"`
@@ -40,17 +43,32 @@ func (s *RedisStateStore) Put(ctx context.Context, state string, p *StatePayload
 	if err != nil {
 		return fmt.Errorf("marshal state: %w", err)
 	}
-	return s.rdb.Set(ctx, "oidc:"+state, raw, s.ttl).Err()
+	return s.rdb.Set(ctx, stateKey(state), raw, s.ttl).Err()
 }
 
 func (s *RedisStateStore) Get(ctx context.Context, state string) (*StatePayload, error) {
-	raw, err := s.rdb.Get(ctx, "oidc:"+state).Bytes()
+	raw, err := s.rdb.Get(ctx, stateKey(state)).Bytes()
 	if errors.Is(err, redis.Nil) {
-		return nil, ErrStateNotFound
+		consumedRaw, consumedErr := s.rdb.Get(ctx, consumedStateKey(state)).Bytes()
+		if errors.Is(consumedErr, redis.Nil) {
+			return nil, ErrStateNotFound
+		}
+		if consumedErr != nil {
+			return nil, fmt.Errorf("redis get consumed state: %w", consumedErr)
+		}
+		p, decodeErr := decodeStatePayload(consumedRaw)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		return p, ErrStateConsumed
 	}
 	if err != nil {
 		return nil, fmt.Errorf("redis get: %w", err)
 	}
+	return decodeStatePayload(raw)
+}
+
+func decodeStatePayload(raw []byte) (*StatePayload, error) {
 	var p StatePayload
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, fmt.Errorf("decode state: %w", err)
@@ -59,5 +77,22 @@ func (s *RedisStateStore) Get(ctx context.Context, state string) (*StatePayload,
 }
 
 func (s *RedisStateStore) Consume(ctx context.Context, state string) error {
-	return s.rdb.Del(ctx, "oidc:"+state).Err()
+	raw, err := s.rdb.Get(ctx, stateKey(state)).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("redis get state for consume: %w", err)
+	}
+	pipe := s.rdb.TxPipeline()
+	pipe.Set(ctx, consumedStateKey(state), raw, s.ttl)
+	pipe.Del(ctx, stateKey(state))
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("redis consume state: %w", err)
+	}
+	return nil
 }
+
+func stateKey(state string) string         { return "oidc:" + state }
+func consumedStateKey(state string) string { return "oidc-consumed:" + state }

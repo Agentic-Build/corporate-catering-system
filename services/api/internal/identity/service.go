@@ -82,6 +82,9 @@ func (s *Service) StartLogin(ctx context.Context, in StartLoginInput) (*StartLog
 func (s *Service) CompleteLogin(ctx context.Context, in CompleteLoginInput) (out *CompleteLoginOutput, err error) {
 	sp, err := s.States.Get(ctx, in.State)
 	if err != nil {
+		if errors.Is(err, oidc.ErrStateConsumed) && sp != nil {
+			return nil, &CallbackError{App: sp.App, Err: err}
+		}
 		return nil, err
 	}
 	// Once the state is resolved we know which app the user was entering, so
