@@ -5,7 +5,9 @@
   const currentPlants = $derived(new Set<string>(v.plants ?? []));
 
   const plantLabelMap = $derived(
-    Object.fromEntries(data.knownPlants.map((p: { code: string; label: string }) => [p.code, p.label])),
+    Object.fromEntries(
+      data.knownPlants.map((p: { code: string; label: string }) => [p.code, p.label]),
+    ),
   );
   const labelFor = (id: string) => plantLabelMap[id] ?? id;
 
@@ -70,7 +72,12 @@
               <label
                 class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-tb-slate-300 px-3 py-1 text-xs font-semibold text-tb-slate-700 hover:border-tb-slate-500"
               >
-                <input type="checkbox" name="plants" value={p.code} checked={currentPlants.has(p.code)} />
+                <input
+                  type="checkbox"
+                  name="plants"
+                  value={p.code}
+                  checked={currentPlants.has(p.code)}
+                />
                 {p.label}
               </label>
             {/each}
@@ -136,7 +143,12 @@
             <label
               class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-tb-slate-300 px-3 py-1 text-xs font-semibold text-tb-slate-700 hover:border-tb-slate-500"
             >
-              <input type="checkbox" name="plants" value={p.code} checked={currentPlants.has(p.code)} />
+              <input
+                type="checkbox"
+                name="plants"
+                value={p.code}
+                checked={currentPlants.has(p.code)}
+              />
               {p.label}
             </label>
           {:else}

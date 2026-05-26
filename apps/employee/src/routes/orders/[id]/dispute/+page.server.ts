@@ -34,8 +34,7 @@ export const actions: Actions = {
       // entry-less dispute on the backend, so 404 here means the order genuinely
       // doesn't exist.
       const err = r.error as { status?: number; detail?: string };
-      const message =
-        err.status === 404 ? "找不到訂單。" : "送出申訴失敗，請稍後再試。";
+      const message = err.status === 404 ? "找不到訂單。" : "送出申訴失敗，請稍後再試。";
       return fail(err.status ?? 400, { error: message });
     }
     throw redirect(303, "/disputes");

@@ -10,7 +10,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     client.GET("/api/admin/vendors/{id}/operators", { params: { path: { id: params.id } } }),
     client.GET("/api/admin/plants"),
   ]);
-  const all = vendorsRes.status === "fulfilled" ? ((vendorsRes.value.data as any)?.items ?? []) : [];
+  const all =
+    vendorsRes.status === "fulfilled" ? ((vendorsRes.value.data as any)?.items ?? []) : [];
   const vendor = all.find((v: any) => v.id === params.id);
   if (!vendor) throw error(404, "vendor not found");
   const operators =
