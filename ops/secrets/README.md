@@ -74,8 +74,8 @@ Rotate the cleartext value (e.g. a leaked DB password):
 
 ## What does NOT live here
 
-- Plaintext dev credentials for `make dev` — those are in `.env.example` and
-  `ops/local/`.
+- Plaintext local throwaway credentials for development tools — those belong
+  in a developer's shell or `.env.local`, never in `ops/secrets/`.
 - The single-node demo bootstrap (`ops/kubernetes/overlays/single-node/secrets-bootstrap.yaml`)
   — that file is *intentionally* plaintext and labelled as throwaway; replace
   it with a real `ops/secrets/single-node/app.sops.yaml` before exposing the

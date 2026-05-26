@@ -7,7 +7,7 @@ func TestFromEnvLoadsAuthProviderRegistry(t *testing.T) {
 	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
 	t.Setenv("AUTH_PROVIDER_SLUGS", "authentik, keycloak")
 	t.Setenv("AUTH_PROVIDER_AUTHENTIK_DISPLAY_NAME", "Authentik")
-	t.Setenv("AUTH_PROVIDER_AUTHENTIK_ISSUER_URL", "http://localhost:9002/application/o/tbite/")
+	t.Setenv("AUTH_PROVIDER_AUTHENTIK_ISSUER_URL", "http://auth.tbite.local/application/o/tbite/")
 	t.Setenv("AUTH_PROVIDER_AUTHENTIK_CLIENT_ID", "tbite")
 	t.Setenv("AUTH_PROVIDER_AUTHENTIK_CLIENT_SECRET", "secret")
 	t.Setenv("AUTH_PROVIDER_AUTHENTIK_SCOPES", "openid email tbite")
@@ -25,7 +25,7 @@ func TestFromEnvLoadsAuthProviderRegistry(t *testing.T) {
 		t.Fatalf("AuthProviders len = %d, want 2", len(cfg.AuthProviders))
 	}
 	if got := cfg.AuthProviders[0]; got.Slug != "authentik" || got.DisplayName != "Authentik" ||
-		got.IssuerURL != "http://localhost:9002/application/o/tbite/" ||
+		got.IssuerURL != "http://auth.tbite.local/application/o/tbite/" ||
 		got.ClientID != "tbite" || got.ClientSecret != "secret" {
 		t.Fatalf("unexpected authentik config: %#v", got)
 	}

@@ -1,5 +1,4 @@
 SHELL := /usr/bin/env bash
-DEV_COMPOSE := docker compose -f ops/local/docker-compose.dev.yml
 KUBECTL ?= kubectl
 HELM    ?= helm
 
@@ -7,6 +6,7 @@ HELM    ?= helm
 CHART_DIR ?= chart/tbite-platform
 CHART_RELEASE ?= tbite
 CHART_NAMESPACE ?= tbite
+CHART_DEV_VALUES ?= $(CHART_DIR)/values-dev.yaml
 # Default is the single-enterprise prod sizing (ADR-0008, fits
 # 16 cores / 32 GiB). Override to values-dev.yaml for laptop kind
 # clusters or stack values-prod-ha.yaml on top for multi-AZ HA.
@@ -26,17 +26,23 @@ CHART_VALUES ?= $(CHART_DIR)/values.yaml
 help:
 	@awk -F':.*##' '/^[a-zA-Z0-9_-]+:.*##/ {printf "  \033[36m%-20s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
 
-dev: ## Start deps + migrate + seed + run Go API + 3 SvelteKit dev servers
-	@scripts/dev/dev-app.sh
+dev: ## Install/upgrade the local Kubernetes dev chart in the current kubectl context
+	@$(HELM) dependency build $(CHART_DIR)
+	@$(HELM) upgrade --install $(CHART_RELEASE) $(CHART_DIR) \
+		-f $(CHART_DEV_VALUES) \
+		--namespace $(CHART_NAMESPACE) \
+		--create-namespace
 
-dev-down: ## Stop deps (volumes persisted)
-	@$(DEV_COMPOSE) down
+dev-down: ## Uninstall the local Kubernetes dev release
+	@$(HELM) uninstall $(CHART_RELEASE) --namespace $(CHART_NAMESPACE)
 
-dev-reset: ## Stop deps and wipe volumes (destructive)
-	@$(DEV_COMPOSE) down -v
+dev-reset: ## Delete the local Kubernetes dev namespace (destructive)
+	@$(KUBECTL) delete namespace $(CHART_NAMESPACE)
 
-dev-logs: ## Tail deps logs (svc=postgres|redis|nats|minio for one)
-	@$(DEV_COMPOSE) logs -f $(svc)
+dev-logs: ## Tail local Kubernetes logs (component=api|realtime|web-employee|...)
+	@selector="app.kubernetes.io/instance=$(CHART_RELEASE)"; \
+	if [ -n "$(component)" ]; then selector="$$selector,app.kubernetes.io/component=$(component)"; fi; \
+	$(KUBECTL) -n $(CHART_NAMESPACE) logs -f -l "$$selector" --all-containers=true --max-log-requests=20
 
 migrate-up: ## Apply pending migrations
 	@scripts/db/migrate.sh up
@@ -47,10 +53,10 @@ migrate-down: ## Revert last migration
 migrate-new: ## Create new migration (name=xxx)
 	@scripts/db/migrate.sh create -ext sql -dir /migrations -seq $(name)
 
-seed: ## Seed/refresh the dev DB with demo data (idempotent)
+seed: ## Seed/refresh DATABASE_URL with demo data (requires psql + S3 env)
 	@scripts/db/seed.sh
 
-seed-tsmc: ## Seed/refresh the local DB with the 50k-person TSMC demo scenario
+seed-tsmc: ## Seed/refresh DATABASE_URL with the 50k-person TSMC demo scenario
 	@scripts/db/seed-tsmc.sh
 
 contract-sync: ## Generate OpenAPI from Go and regenerate TS client
@@ -63,8 +69,8 @@ test-go: ## Go tests
 test-web: ## Frontend checks
 	@pnpm -r check && pnpm -r lint
 
-test-e2e: ## Playwright e2e against $$E2E_BASE_URL (default localhost:5173)
-	@E2E_BASE_URL=$${E2E_BASE_URL:-http://localhost:5173} \
+test-e2e: ## Playwright e2e against $$E2E_BASE_URL (default app.tbite.local)
+	@E2E_BASE_URL=$${E2E_BASE_URL:-http://app.tbite.local} \
 	 pnpm exec playwright test --config=tests/e2e/playwright.config.ts
 
 build: ## Build everything (web bundles + Go binary)

@@ -20,7 +20,7 @@ import (
 //
 // Storage backs the presigned URL endpoints in presign.go and the direct
 // multipart upload endpoint in upload.go.
-// StoragePublicBaseURL is the public MinIO base (e.g. http://localhost:9000)
+// StoragePublicBaseURL is the public MinIO base (e.g. http://minio.tbite.local)
 // used to build full public URLs returned from uploads.
 type API struct {
 	Svc                  *menu.Service

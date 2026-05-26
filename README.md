@@ -34,47 +34,52 @@ employee/merchant/admin       api / realtime-gateway / outbox-relay /
 
 ## Local development
 
-Pre-reqs: Node 20.11+, pnpm 9, Go 1.23, Docker.
+Pre-reqs: Node 20.11+, pnpm 9, Go 1.23, `kubectl`, `helm`, and a
+local Kubernetes runtime such as kind, k3d, or OrbStack.
 
 ```bash
 pnpm install
 go mod download
+kubectl config current-context   # confirm the local cluster context
 make dev
 ```
 
-`make dev` starts Postgres / Redis / NATS / MinIO / Authentik via `docker compose`, applies migrations, seeds p2 fixtures, then runs the Go API and the three SvelteKit dev servers on the host. Ctrl-C stops the host processes; deps stay up.
+`make dev` installs or upgrades the Helm umbrella chart with
+`chart/tbite-platform/values-dev.yaml` in the current Kubernetes context.
+Fresh clusters and host mappings are covered in
+[`docs/deployment/local-clusters.md`](docs/deployment/local-clusters.md).
+Docker Compose is not a supported runtime path.
 
 URLs:
 
-- http://localhost:5173 — 員工
-- http://localhost:5174 — 商家
-- http://localhost:5175 — 福委會
-- http://localhost:8080/healthz — Go API
-- http://localhost:8080/docs — API reference (Stoplight Elements, served by huma)
-- http://localhost:8080/openapi.yaml — machine-readable OpenAPI 3.1 spec
-- http://localhost:9002 — Authentik (`akadmin` / `tbite-dev-admin`)
-- http://localhost:9001 — MinIO console (`tbite` / `tbite-dev-secret`)
+- http://app.tbite.local — 員工
+- http://merchant.tbite.local — 商家
+- http://admin.tbite.local — 福委會
+- http://api.tbite.local/healthz — Go API
+- http://api.tbite.local/docs — API reference (Stoplight Elements, served by huma)
+- http://api.tbite.local/openapi.yaml — machine-readable OpenAPI 3.1 spec
+- http://minio.tbite.local — MinIO console, when enabled by chart values
+- http://grafana.tbite.local — Grafana, when enabled by chart values
 
-Seeded Authentik identities (`tbite-dev-pass`):
-
-- Employee: `e2e-employee@tbite.test`
-- Admin (福委會): `e2e-admin@tbite.test`
-- Merchant: `e2e-merchant@tbite.test`
-
-Stop / reset deps:
+Seed data is applied against an explicit database URL:
 
 ```bash
-make dev-down      # stop deps; volumes persisted
-make dev-reset     # stop deps and wipe volumes
-make dev-logs svc=postgres
+export DATABASE_URL='postgres://...'
+export S3_ENDPOINT='http://minio.tbite.local'
+export S3_ACCESS_KEY_ID='...'
+export S3_SECRET_ACCESS_KEY='...'
+export S3_BUCKET='tbite-dev'
+export S3_PUBLIC_BASE_URL='http://minio.tbite.local'
+make seed
 ```
 
-> **Upgrading Postgres across major versions** (e.g. the 16 → 18 bump): Postgres
-> will not start on a data directory written by an older major and exits with
-> "database files are incompatible with server". Major upgrades have no
-> in-place path for the dev stack — run `make dev-reset` to wipe the volumes,
-> then `make dev` to re-init on the new version (migrations + seed re-run
-> automatically; the Authentik blueprint re-applies its dev users).
+Release lifecycle:
+
+```bash
+make dev-down                  # uninstall Helm release
+make dev-reset                 # delete namespace and volumes
+make dev-logs component=api
+```
 
 ## Production deployment
 
@@ -115,7 +120,7 @@ Application you want on a cluster that already runs ArgoCD.
 | Area | Entry point |
 | --- | --- |
 | Migrations | `make migrate-up` (golang-migrate), SQL in `migrations/` |
-| Load testing | `ops/load/run-loadtest.sh` (k6 lunch-peak, 3 scenarios) |
+| Load testing | `ops/load/run-loadtest.sh` against an already deployed chart (`API_BASE_URL` + `K6_*` env) |
 | Load-gate CI | `.github/workflows/ci-load-gate.yml` (nightly + manual_dispatch) |
 | Security scan | `scripts/security-scan.sh` (trivy + kubesec) |
 | SQL-injection guard | `scripts/security/check-sql-strings.sh` (runs in `ci-lint-test`) |
@@ -132,7 +137,6 @@ apps/{employee,merchant,admin}/      SvelteKit frontends
 packages/{ui,tokens,api-client,web-auth}/   shared
 services/api/                        Go modular monolith (12 roles via --role=<name>)
 migrations/                          golang-migrate SQL
-ops/local/                           docker-compose dev stack
 chart/tbite-platform/                Helm umbrella chart (canonical deployment)
 ops/argocd/                          ArgoCD AppProject + Application
 ops/{load,chaos,demo,security}/      runbooks + scripts
@@ -146,10 +150,10 @@ docs/                                deployment runbooks, MCP, branding, plans
 
 | Target | Description |
 | --- | --- |
-| `make dev` | One-stop dev — compose deps + migrate + seed + host processes |
-| `make dev-down` / `make dev-reset` | Stop deps (keep / wipe volumes) |
+| `make dev` | Install/upgrade the local Kubernetes dev chart |
+| `make dev-down` / `make dev-reset` | Uninstall release / delete namespace |
 | `make migrate-up` / `migrate-down` / `migrate-new name=xxx` | Schema |
-| `make seed-tsmc` | Seed local DB with the 50k-person TSMC demo |
+| `make seed-tsmc` | Seed `DATABASE_URL` with the 50k-person TSMC demo |
 | `make contract-sync` | Regenerate OpenAPI + TS client from Go |
 | `make test-go` / `make test-web` / `make test-e2e` | Tests |
 | `make chart-deps` / `chart-lint` / `chart-render` / `chart-install` / `chart-upgrade` / `chart-uninstall` | Helm umbrella chart lifecycle |
