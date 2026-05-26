@@ -1,7 +1,6 @@
 <script lang="ts">
   import { PageHeader, Button, Icon, EmptyState } from "@tbite/ui";
   import { buildPickupQR } from "@tbite/pickup";
-  import { onMount } from "svelte";
 
   let { data } = $props();
 
@@ -21,15 +20,19 @@
   // Keyed by order id so each label renders its own sticker QR.
   let qrByOrder = $state<Record<string, string>>({});
 
-  onMount(() => {
+  // 用 $effect 而非 onMount：日期分頁靠 query 導航不會重新 mount，
+  // 但 orders ($derived) 會反應式更新；讀取 orders 讓本 effect 訂閱其變更並重算 QR。
+  $effect(() => {
+    // 同步讀取 orders 才能讓 effect 訂閱其變更（await 後讀取不會被追蹤）。
+    const currentOrders = orders;
     let cancelled = false;
     (async () => {
       // qrcode is CommonJS and breaks SvelteKit/Vite SSR, so import it lazily
-      // here — onMount only runs in the browser, keeping it out of the SSR graph.
+      // here — $effect only runs in the browser, keeping it out of the SSR graph.
       const mod = await import("qrcode");
       const QRCode = (mod as unknown as { default?: typeof mod }).default ?? mod;
       const next: Record<string, string> = {};
-      for (const o of orders) {
+      for (const o of currentOrders) {
         next[o.id] = await QRCode.toDataURL(buildPickupQR(o.id), {
           width: 200,
           margin: 1,
