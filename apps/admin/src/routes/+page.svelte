@@ -24,7 +24,7 @@
 
   const summary = $derived(
     `${data.counts.pending} 件審核待處理 · ${data.counts.anomalies7d} 則告警` +
-      (batch ? ` · 本月薪資代扣 ${ntd(netTotal)}` : ""),
+      (batch ? ` · 本月月結 ${ntd(netTotal)}` : ""),
   );
 </script>
 
@@ -92,7 +92,7 @@
 <AlertList anomalies={data.anomalies} />
 
 <Card
-  title="本月薪資代扣預覽"
+  title="本月月結預覽"
   description={batch
     ? `${batch.period_start} — ${batch.period_end} · ${entries.length} 筆 · 退款 ${ntd(data.payroll.refunded)}`
     : "尚無月結批次"}
@@ -117,7 +117,7 @@
     <p
       class="rounded-xl border border-dashed border-tb-slate-300 bg-tb-slate-50/60 px-4 py-6 text-center text-sm text-tb-slate-500"
     >
-      {batch ? "本批次尚無代扣明細" : "尚未建立月結批次"}
+      {batch ? "本批次尚無月結明細" : "尚未建立月結批次"}
     </p>
   {:else}
     <!-- Mobile: card list. -->
@@ -156,7 +156,7 @@
           <tr>
             <th class="px-4 py-2.5">員工</th>
             <th class="px-4 py-2.5 text-right">訂單數</th>
-            <th class="px-4 py-2.5 text-right">代扣金額</th>
+            <th class="px-4 py-2.5 text-right">月結金額</th>
             <th class="px-4 py-2.5 text-right">退款</th>
             <th class="px-4 py-2.5">狀態</th>
           </tr>

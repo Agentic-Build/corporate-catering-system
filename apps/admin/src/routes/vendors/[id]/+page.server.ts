@@ -32,6 +32,19 @@ export const actions: Actions = {
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
   },
+  update: async ({ request, params, locals }) => {
+    const fd = await request.formData();
+    const contactEmail = String(fd.get("contact_email") ?? "").trim();
+    const plants = fd.getAll("plants").map(String);
+    if (!contactEmail) return fail(400, { error: "請填寫聯絡 email" });
+    const client = apiFor(locals.apiToken);
+    const r = await client.PATCH("/api/admin/vendors/{id}", {
+      params: { path: { id: params.id } },
+      body: { contact_email: contactEmail, plants } as any,
+    });
+    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    throw redirect(303, `/vendors/${params.id}`);
+  },
   setPlantWindow: async ({ request, params, locals }) => {
     const fd = await request.formData();
     const plant = String(fd.get("plant") ?? "");

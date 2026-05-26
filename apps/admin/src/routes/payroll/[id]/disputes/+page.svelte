@@ -32,9 +32,9 @@
 </a>
 
 <PageHeader
-  eyebrow="薪資代扣"
+  eyebrow="月結"
   title="爭議處理"
-  subtitle="員工對代扣金額提出的爭議 · 同意退款或駁回後寫入稽核日誌"
+  subtitle="員工對月結金額提出的爭議 · 同意退款或駁回後寫入稽核日誌"
 />
 
 <div class="flex flex-wrap items-center gap-1 rounded-full bg-tb-slate-100 p-1">

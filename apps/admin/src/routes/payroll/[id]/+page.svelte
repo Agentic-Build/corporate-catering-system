@@ -67,7 +67,7 @@
 </a>
 
 <PageHeader
-  eyebrow="薪資代扣"
+  eyebrow="月結"
   title="{b.period_start} — {b.period_end}"
   subtitle="月結批次明細 · 鎖定後由 settler worker 產生 HR CSV"
 >
@@ -88,8 +88,8 @@
 {/if}
 
 <section class="grid gap-3 sm:grid-cols-4">
-  <StatCard label="代扣筆數" value={entries.length} delta="筆" deltaTone="info" />
-  <StatCard label="代扣總額" value={ntd(totals.amount)} />
+  <StatCard label="月結筆數" value={entries.length} delta="筆" deltaTone="info" />
+  <StatCard label="月結總額" value={ntd(totals.amount)} />
   <StatCard label="退款金額" value={ntd(totals.refunded)} delta="退款" deltaTone="warning" />
   <StatCard label="淨額" value={ntd(totals.net)} delta="HR 匯款" deltaTone="success" />
 </section>
@@ -184,7 +184,7 @@
           required
           class="rounded-tb-lg border border-tb-slate-300 px-3 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
         >
-          <option value="" disabled selected>選擇代扣明細</option>
+          <option value="" disabled selected>選擇月結明細</option>
           {#each entries as e (e.id)}
             <option value={e.id}>
               員工 {e.user_id.slice(0, 8)} · {ntd(Number(e.amount_minor))}
@@ -207,10 +207,10 @@
   <p
     class="rounded-tb-2xl border border-dashed border-tb-slate-300 bg-tb-slate-50/60 p-8 text-center text-sm text-tb-slate-500"
   >
-    本批次尚無代扣明細
+    本批次尚無月結明細
   </p>
 {:else}
-  <Card title="代扣明細" description="{entries.length} 筆 · 金額為新台幣">
+  <Card title="月結明細" description="{entries.length} 筆 · 金額為新台幣">
     <div class="overflow-x-auto rounded-xl border border-tb-slate-200">
       <table class="w-full min-w-[36rem] text-sm">
         <thead
@@ -219,7 +219,7 @@
           <tr>
             <th class="px-4 py-2.5">員工</th>
             <th class="px-4 py-2.5 text-right">訂單數</th>
-            <th class="px-4 py-2.5 text-right">代扣金額</th>
+            <th class="px-4 py-2.5 text-right">月結金額</th>
             <th class="px-4 py-2.5 text-right">退款</th>
             <th class="px-4 py-2.5 text-right">淨額</th>
           </tr>
