@@ -35,6 +35,7 @@ type API struct {
 type orderItemDTO struct {
 	ID             string `json:"id"`
 	MenuItemID     string `json:"menu_item_id"`
+	Name           string `json:"name"`
 	Qty            int    `json:"qty"`
 	UnitPriceMinor int64  `json:"unit_price_minor"`
 }
@@ -77,6 +78,7 @@ func toDTO(o *order.Order) orderDTO {
 		d.Items = append(d.Items, orderItemDTO{
 			ID:             it.ID,
 			MenuItemID:     it.MenuItemID,
+			Name:           it.Name,
 			Qty:            it.Qty,
 			UnitPriceMinor: it.UnitPriceMinor,
 		})
@@ -187,6 +189,7 @@ func toMerchantDTO(o *order.Order) merchantOrderDTO {
 		d.Items = append(d.Items, orderItemDTO{
 			ID:             it.ID,
 			MenuItemID:     it.MenuItemID,
+			Name:           it.Name,
 			Qty:            it.Qty,
 			UnitPriceMinor: it.UnitPriceMinor,
 		})

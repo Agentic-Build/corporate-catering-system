@@ -40,6 +40,7 @@ type Item struct {
 	ID             string
 	OrderID        string
 	MenuItemID     string
+	Name           string // menu item display name, populated on read via JOIN; empty if menu item was deleted
 	Qty            int
 	UnitPriceMinor int64
 }

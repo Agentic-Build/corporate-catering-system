@@ -10,6 +10,7 @@ import (
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
 )
 
@@ -44,15 +45,15 @@ type entryDTO struct {
 
 type disputeDTO struct {
 	ID          string  `json:"id"`
-	EntryID      string  `json:"entry_id"`
-	OrderID      string  `json:"order_id"`
-	OpenedBy     string  `json:"opened_by"`
-	Reason       string  `json:"reason"`
-	Status       string  `json:"status"`
-	Resolution   string  `json:"resolution"`
-	ResolvedBy   *string `json:"resolved_by,omitempty"`
-	ResolvedAt   *string `json:"resolved_at,omitempty"`
-	RefundMinor  int64   `json:"refund_minor"`
+	EntryID     *string `json:"entry_id,omitempty"`
+	OrderID     string  `json:"order_id"`
+	OpenedBy    string  `json:"opened_by"`
+	Reason      string  `json:"reason"`
+	Status      string  `json:"status"`
+	Resolution  string  `json:"resolution"`
+	ResolvedBy  *string `json:"resolved_by,omitempty"`
+	ResolvedAt  *string `json:"resolved_at,omitempty"`
+	RefundMinor int64   `json:"refund_minor"`
 }
 
 func toBatchDTO(b *payroll.Batch) batchDTO {
@@ -698,7 +699,8 @@ func mapErr(err error) error {
 	case errors.Is(err, payroll.ErrBatchNotFound),
 		errors.Is(err, payroll.ErrEntryNotFound),
 		errors.Is(err, payroll.ErrDisputeNotFound),
-		errors.Is(err, payroll.ErrExceptionNotFound):
+		errors.Is(err, payroll.ErrExceptionNotFound),
+		errors.Is(err, order.ErrOrderNotFound):
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, payroll.ErrForbidden):
 		return huma.Error403Forbidden(err.Error())

@@ -199,8 +199,9 @@ func (s *Service) OpenDispute(ctx context.Context, in OpenDisputeInput) (*Disput
 	if !matched {
 		return nil, fmt.Errorf("payroll: order %s is not part of entry %s", in.OrderID, in.EntryID)
 	}
+	entryID := in.EntryID
 	d := &Dispute{
-		EntryID:  in.EntryID,
+		EntryID:  &entryID,
 		OrderID:  in.OrderID,
 		OpenedBy: in.OpenedBy,
 		Reason:   in.Reason,
@@ -216,17 +217,43 @@ func (s *Service) OpenDispute(ctx context.Context, in OpenDisputeInput) (*Disput
 // to know the entry_id — we look it up from the order. This keeps the public
 // API surface (POST /api/employee/disputes) minimal at the cost of one extra
 // indexable query per submission.
+//
+// When the order hasn't been settled into a payroll entry yet (current period),
+// FindByOrderForUser returns ErrEntryNotFound; in that case we still open the
+// dispute against the order alone (entry_id NULL). The entry link is established
+// later at resolution time once the order rolls into a batch.
 func (s *Service) OpenDisputeByOrder(ctx context.Context, orderID, openedBy, reason string) (*Dispute, error) {
 	entryID, err := s.Entries.FindByOrderForUser(ctx, openedBy, orderID)
+	if err == nil {
+		return s.OpenDispute(ctx, OpenDisputeInput{
+			EntryID:  entryID,
+			OrderID:  orderID,
+			OpenedBy: openedBy,
+			Reason:   reason,
+		})
+	}
+	if !errors.Is(err, ErrEntryNotFound) {
+		return nil, err
+	}
+	// No payroll entry yet: open an entry-less dispute against the order, after
+	// verifying the order exists and belongs to the requester.
+	o, err := s.Orders.GetByID(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}
-	return s.OpenDispute(ctx, OpenDisputeInput{
-		EntryID:  entryID,
+	if o.UserID != openedBy {
+		return nil, ErrForbidden
+	}
+	d := &Dispute{
 		OrderID:  orderID,
 		OpenedBy: openedBy,
 		Reason:   reason,
-	})
+		Status:   DisputeStatusOpen,
+	}
+	if err := s.Disputes.Create(ctx, d); err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // ResolveDisputeInput captures the resolution path: refund or reject.
@@ -269,8 +296,13 @@ func (s *Service) ResolveDispute(ctx context.Context, in ResolveDisputeInput) er
 			if in.RefundMinor > o.TotalPriceMinor {
 				return ErrRefundExceedsOrder
 			}
-			if err := s.Entries.IncrementRefundedTx(ctx, tx, d.EntryID, in.RefundMinor); err != nil {
-				return err
+			// Entry-less disputes (current-period orders) have no payroll entry to
+			// bump; the refund is realised purely via the order → refunded transition
+			// below, and the order never rolls into a future batch.
+			if d.EntryID != nil {
+				if err := s.Entries.IncrementRefundedTx(ctx, tx, *d.EntryID, in.RefundMinor); err != nil {
+					return err
+				}
 			}
 			if o.Status == order.StatusPickedUp || o.Status == order.StatusNoShow {
 				if err := s.OrderTx.UpdateStatusTx(ctx, tx, d.OrderID, o.Status, order.StatusRefunded); err != nil {

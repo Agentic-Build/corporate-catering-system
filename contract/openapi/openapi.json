@@ -858,7 +858,6 @@
         },
         "required": [
           "id",
-          "entry_id",
           "order_id",
           "opened_by",
           "reason",
@@ -2621,6 +2620,9 @@
           "menu_item_id": {
             "type": "string"
           },
+          "name": {
+            "type": "string"
+          },
           "qty": {
             "format": "int64",
             "type": "integer"
@@ -2633,6 +2635,7 @@
         "required": [
           "id",
           "menu_item_id",
+          "name",
           "qty",
           "unit_price_minor"
         ],
@@ -4087,6 +4090,54 @@
         },
         "required": [
           "plant"
+        ],
+        "type": "object"
+      },
+      "UpdateVendorInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/UpdateVendorInputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "contact_email": {
+            "description": "New contact email; omit to leave unchanged",
+            "format": "email",
+            "type": "string"
+          },
+          "plants": {
+            "description": "Full plant set; omit to leave unchanged",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateVendorOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/UpdateVendorOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "vendor": {
+            "$ref": "#/components/schemas/VendorDTO"
+          }
+        },
+        "required": [
+          "vendor"
         ],
         "type": "object"
       },
@@ -5635,6 +5686,64 @@
           }
         ],
         "summary": "Create a pending vendor",
+        "tags": [
+          "admin",
+          "vendor"
+        ]
+      }
+    },
+    "/api/admin/vendors/{id}": {
+      "patch": {
+        "operationId": "updateVendor",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVendorInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateVendorOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a vendor's contact email and/or plants (admin)",
         "tags": [
           "admin",
           "vendor"

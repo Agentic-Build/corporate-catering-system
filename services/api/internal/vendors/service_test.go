@@ -26,6 +26,8 @@ func newFakeVendorRepo() *fakeVendorRepo {
 	return &fakeVendorRepo{byID: map[string]*vendor.Vendor{}, byEmail: map[string]*vendor.Vendor{}}
 }
 
+func strPtr(s string) *string { return &s }
+
 func (r *fakeVendorRepo) Create(_ context.Context, v *vendor.Vendor) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -81,6 +83,19 @@ func (r *fakeVendorRepo) UpdateSettings(_ context.Context, id string, cutoffHour
 	}
 	v.CutoffHour = cutoffHour
 	v.PreorderWindowDays = preorderWindowDays
+	return nil
+}
+
+func (r *fakeVendorRepo) UpdateContactEmail(_ context.Context, id, email string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	v, ok := r.byID[id]
+	if !ok {
+		return vendor.ErrVendorNotFound
+	}
+	delete(r.byEmail, v.ContactEmail)
+	v.ContactEmail = email
+	r.byEmail[email] = v
 	return nil
 }
 
@@ -492,6 +507,43 @@ func TestService_UpdateSettings(t *testing.T) {
 	assert.ErrorIs(t, err, vendor.ErrInvalidSettings)
 	_, err = svc.UpdateSettings(ctx, v.ID, 12, 0)
 	assert.ErrorIs(t, err, vendor.ErrInvalidSettings)
+}
+
+func TestService_UpdateProfile_Email(t *testing.T) {
+	svc, vr, _, _, _ := newSvc()
+	ctx := context.Background()
+	v, err := svc.CreatePending(ctx, "稻禾", "稻禾股份", "old@test.com")
+	require.NoError(t, err)
+
+	updated, err := svc.UpdateProfile(ctx, v.ID, "admin-1", strPtr("New@Test.com"), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "new@test.com", updated.ContactEmail) // normalized to lowercase
+	got, _ := vr.GetByID(ctx, v.ID)
+	assert.Equal(t, "new@test.com", got.ContactEmail)
+
+	// Invalid email rejected.
+	_, err = svc.UpdateProfile(ctx, v.ID, "admin-1", strPtr("not-an-email"), nil)
+	assert.ErrorIs(t, err, vendor.ErrInvalidSettings)
+}
+
+func TestService_UpdateProfile_Plants(t *testing.T) {
+	svc, _, pr, _, _ := newSvc()
+	ctx := context.Background()
+	v, err := svc.CreatePending(ctx, "稻禾", "稻禾股份", "plants@test.com")
+	require.NoError(t, err)
+	require.NoError(t, svc.Approve(ctx, v.ID, "admin-1", []string{"F12B-3F", "F15-2F"}))
+
+	// Replace the plant set.
+	updated, err := svc.UpdateProfile(ctx, v.ID, "admin-1", nil, &[]string{"F18-1F"})
+	require.NoError(t, err)
+	assert.Equal(t, "plants@test.com", updated.ContactEmail) // email untouched
+	assert.Equal(t, []string{"F18-1F"}, pr.byVendor[v.ID])
+}
+
+func TestService_UpdateProfile_UnknownVendor(t *testing.T) {
+	svc, _, _, _, _ := newSvc()
+	_, err := svc.UpdateProfile(context.Background(), "00000000-0000-0000-0000-000000000000", "admin-1", strPtr("x@y.com"), nil)
+	assert.ErrorIs(t, err, vendor.ErrVendorNotFound)
 }
 
 func TestService_SetPlantWindow(t *testing.T) {
