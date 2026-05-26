@@ -16,6 +16,7 @@ CHART_VALUES ?= $(CHART_DIR)/values.yaml
         dev dev-down dev-reset dev-logs \
         migrate-up migrate-down migrate-new seed seed-tsmc \
         contract-sync test-go test-web test-e2e \
+        lunch-flow lunch-flow-cluster \
         build clean \
         sops-encrypt sops-decrypt sops-edit \
         chart-deps chart-lint chart-render chart-install chart-upgrade chart-uninstall \
@@ -88,6 +89,20 @@ stress-modify-storm: ## High contention on a small pool of orders — 5xx race c
 
 stress-auth-flood: ## 1500 garbage-token requests against /api/employee/orders — exercises Auth dashboard + AuthFailureSurge alert
 	@for i in $$(seq 1 1500); do curl -fsS -o /dev/null -H "Authorization: Bearer bogus-$$RANDOM" "http://localhost:8080/api/employee/orders" 2>/dev/null; done; echo "auth-flood done"
+
+lunch-flow: ## Provision and run the 50k Gaussian lunch prepare/pickup flow (mode=all|setup|prepare|pickup|cleanup)
+	@go run ./services/api/cmd/lunch-flow \
+		--mode=$${mode:-all} \
+		--run-id=$${run_id:-} \
+		--cleanup=$${cleanup:-keep} \
+		--replace=$${replace:-false} \
+		--employees=$${employees:-50000} \
+		--merchants=$${merchants:-100} \
+		--pickup-points=$${pickup_points:-100} \
+		--stage2-rps=$${stage2_rps:-100}
+
+lunch-flow-cluster: ## Build and run lunch-flow as an in-cluster Kubernetes Job
+	@scripts/perf/lunch-flow-cluster.sh
 
 chart-deps: ## Resolve and download Helm subchart dependencies (offline-friendly after first run)
 	@$(HELM) dependency update $(CHART_DIR)

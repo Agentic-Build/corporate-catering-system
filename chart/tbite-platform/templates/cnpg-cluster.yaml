@@ -12,6 +12,7 @@ metadata:
 spec:
   instances: {{ $c.instances }}
   imageName: {{ $c.imageName | quote }}
+  enableSuperuserAccess: {{ $c.enableSuperuserAccess | default true }}
   primaryUpdateStrategy: unsupervised
   storage:
     size: {{ $c.storage.size }}

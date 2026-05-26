@@ -383,6 +383,10 @@ postgres:
     name: tbite-pg
     instances: 2
     imageName: ghcr.io/cloudnative-pg/postgresql:18.4
+    # Required by the chart-owned identity DB bootstrap Job, which
+    # creates the authentik and hydra databases/roles in the main CNPG
+    # cluster before those subcharts can start cleanly.
+    enableSuperuserAccess: true
     storage:
       size: 50Gi
       storageClass: ""
@@ -845,6 +849,14 @@ observability:
     useOperatorCR: false
 
 victoria-metrics-k8s-stack:
+  defaultDatasources:
+    victoriametrics:
+      datasources:
+        - name: VictoriaMetrics
+          type: prometheus
+          access: proxy
+          uid: VictoriaMetrics
+          isDefault: true
   vmsingle:
     spec:
       retentionPeriod: "30d"
@@ -870,6 +882,12 @@ victoria-metrics-k8s-stack:
         limits:   { cpu: 500m, memory: 256Mi }
   grafana:
     enabled: true
+    grafana.ini:
+      analytics:
+        check_for_updates: false
+      plugins:
+        preinstall_disabled: true
+        disable_plugins: grafana-lokiexplore-app,grafana-pyroscope-app,grafana-exploretraces-app,grafana-metricsdrilldown-app
     admin:
       existingSecret: tbite-grafana-admin
       userKey: admin-user
@@ -879,6 +897,11 @@ victoria-metrics-k8s-stack:
     resources:
       requests: { cpu: 100m, memory: 128Mi }
       limits:   { cpu: 500m, memory: 384Mi }
+    readinessProbe:
+      timeoutSeconds: 10
+      failureThreshold: 6
+    livenessProbe:
+      timeoutSeconds: 30
   kube-state-metrics:
     enabled: false
   prometheus-node-exporter:
