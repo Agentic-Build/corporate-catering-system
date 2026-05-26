@@ -472,6 +472,50 @@ func TestService_ResolveDispute_Reject(t *testing.T) {
 	assert.Equal(t, string(order.StatusPickedUp), orderStatus, "reject must not transition order")
 }
 
+func TestService_ResolveDispute_RefundExceedsOrder_Rejected(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	start, end := aprilPeriod()
+	vendor := seedVendor(t, pool)
+	user := seedEmployeeUser(t, pool)
+	admin := seedAdminUser(t, pool)
+	orderID := seedPickedUpOrder(t, pool, user, vendor, start.AddDate(0, 0, 4), 15000)
+
+	batch, err := svc.BuildDraft(ctx, payroll.BuildDraftInput{PeriodStart: start, PeriodEnd: end})
+	require.NoError(t, err)
+	entries, err := svc.ListBatchEntries(ctx, batch.ID)
+	require.NoError(t, err)
+	entryID := entries[0].ID
+
+	d, err := svc.OpenDispute(ctx, payroll.OpenDisputeInput{
+		EntryID: entryID, OrderID: orderID, OpenedBy: user, Reason: "overclaim",
+	})
+	require.NoError(t, err)
+
+	// Refund 20000 exceeds the 15000 order total — must be rejected so the
+	// HR-bound net deduction can never go negative.
+	err = svc.ResolveDispute(ctx, payroll.ResolveDisputeInput{
+		DisputeID:   d.ID,
+		ResolvedBy:  admin,
+		Status:      payroll.DisputeStatusResolvedRefund,
+		Resolution:  "typo'd amount",
+		RefundMinor: 20000,
+	})
+	assert.ErrorIs(t, err, payroll.ErrRefundExceedsOrder)
+
+	// Nothing mutated: dispute still open, entry refund untouched.
+	var status string
+	var refunded int64
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT status::text FROM payroll_dispute WHERE id=$1`, d.ID).Scan(&status))
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT refunded_minor FROM payroll_entry WHERE id=$1`, entryID).Scan(&refunded))
+	assert.Equal(t, string(payroll.DisputeStatusOpen), status)
+	assert.Equal(t, int64(0), refunded)
+}
+
 // ---------- Exception list tests ----------
 
 func TestService_Exceptions_DetectFlagResolve(t *testing.T) {

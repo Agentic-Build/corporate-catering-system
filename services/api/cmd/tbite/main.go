@@ -315,6 +315,7 @@ func main() {
 			Provisioner: authentikProvisioner,
 			Users:       userRepo,
 			Sessions:    sessStore,
+			Audit:       opgrepo.NewAuditRepo(pool),
 		}
 		vendorAPI := &vhttp.API{Svc: vendorService}
 
@@ -738,6 +739,7 @@ func main() {
 			Provisioner: authentikProvisioner,
 			Users:       userRepo,
 			Sessions:    sessStore,
+			Audit:       opgrepo.NewAuditRepo(pool),
 		}
 		menuService := &menu.Service{
 			Categories: mpgrepo.NewCategoryRepo(pool),

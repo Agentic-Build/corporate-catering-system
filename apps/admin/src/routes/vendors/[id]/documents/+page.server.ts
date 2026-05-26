@@ -35,7 +35,8 @@ export const actions: Actions = {
       return fail(400, { error: "filename / kind / content required" });
     }
     const body: Record<string, unknown> = { filename, kind, content_base64 };
-    if (expires_at) body.expires_at = new Date(expires_at).toISOString();
+    // Backend wants a bare YYYY-MM-DD; an ISO datetime is rejected with 400.
+    if (expires_at) body.expires_at = expires_at;
 
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendors/{vendor_id}/documents", {

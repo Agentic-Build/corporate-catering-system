@@ -218,7 +218,14 @@ SELECT `+orderSelectCols+`
 	if err != nil {
 		return nil, err
 	}
-	return collectOrders(rows)
+	orders, err := collectOrders(rows)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.hydrateItems(ctx, orders); err != nil {
+		return nil, err
+	}
+	return orders, nil
 }
 
 func (r *OrderRepo) ListPlacedDueForCutoff(ctx context.Context, before time.Time) ([]*order.Order, error) {

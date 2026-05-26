@@ -340,7 +340,18 @@ func (a *API) listItems(ctx context.Context, in *listItemsInput) (*listItemsOutp
 	var resp listItemsOutput
 	resp.Body.Items = make([]merchantItemDTO, 0, len(rows))
 	for _, row := range rows {
-		resp.Body.Items = append(resp.Body.Items, toMerchantItemDTO(row))
+		dto := toMerchantItemDTO(row)
+		// Hydrate images so the edit form round-trips them instead of wiping.
+		imgs, err := a.Svc.ListImagesByItem(ctx, row.Item.ID)
+		if err != nil {
+			return nil, mapErr(err)
+		}
+		uris := make([]string, 0, len(imgs))
+		for _, im := range imgs {
+			uris = append(uris, im.BlobURI)
+		}
+		dto.Images = uris
+		resp.Body.Items = append(resp.Body.Items, dto)
 	}
 	return &resp, nil
 }

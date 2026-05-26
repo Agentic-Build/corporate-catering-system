@@ -385,10 +385,11 @@ func (a *API) approve(ctx context.Context, in *approveInput) (*struct{}, error) 
 }
 
 func (a *API) suspend(ctx context.Context, in *vendorIDInput) (*struct{}, error) {
-	if _, err := a.requireAdmin(ctx); err != nil {
+	user, err := a.requireAdmin(ctx)
+	if err != nil {
 		return nil, err
 	}
-	if err := a.Svc.Suspend(ctx, in.ID); err != nil {
+	if err := a.Svc.Suspend(ctx, in.ID, user.ID); err != nil {
 		return nil, mapErr(err)
 	}
 	return &struct{}{}, nil

@@ -1,10 +1,34 @@
 package compliance
 
 import (
+	"errors"
 	"sort"
 	"testing"
 	"time"
 )
+
+func TestSanitizeDocFilename(t *testing.T) {
+	ok := map[string]string{
+		"contract.pdf":            "contract.pdf",
+		"my report (2026).pdf":    "my report (2026).pdf",
+		"../../payroll/batch.csv": "batch.csv",
+		"a/b/c.png":               "c.png",
+	}
+	for in, want := range ok {
+		got, err := sanitizeDocFilename(in)
+		if err != nil {
+			t.Fatalf("sanitizeDocFilename(%q) unexpected error: %v", in, err)
+		}
+		if got != want {
+			t.Fatalf("sanitizeDocFilename(%q) = %q, want %q", in, got, want)
+		}
+	}
+	for _, in := range []string{"", "   ", "..", ".", "/", "../"} {
+		if _, err := sanitizeDocFilename(in); !errors.Is(err, ErrInvalidFilename) {
+			t.Fatalf("sanitizeDocFilename(%q) should return ErrInvalidFilename, got %v", in, err)
+		}
+	}
+}
 
 // day returns midnight UTC for the given offset (in days) from base.
 func day(base time.Time, offsetDays int) time.Time {

@@ -101,9 +101,10 @@ UPDATE meal_supply
  WHERE menu_item_id = $1
    AND supply_date  = $2
    AND remain >= $3
+   AND sold_out = false
 RETURNING remain`, itemID, date, n).Scan(&newRemain)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Either supply doesn't exist OR remain < n. Disambiguate.
+		// Either supply doesn't exist, remain < n, or it's flagged sold out.
 		var exists bool
 		if err2 := r.pool.QueryRow(ctx, `
 SELECT EXISTS (SELECT 1 FROM meal_supply WHERE menu_item_id=$1 AND supply_date=$2)`,
@@ -150,6 +151,7 @@ UPDATE meal_supply
  WHERE menu_item_id = $1
    AND supply_date  = $2
    AND remain >= $3
+   AND sold_out = false
 RETURNING remain`, itemID, date, n).Scan(&newRemain)
 	if errors.Is(err, pgx.ErrNoRows) {
 		var exists bool

@@ -702,7 +702,8 @@ func mapErr(err error) error {
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, payroll.ErrForbidden):
 		return huma.Error403Forbidden(err.Error())
-	case errors.Is(err, payroll.ErrInvalidException):
+	case errors.Is(err, payroll.ErrInvalidException),
+		errors.Is(err, payroll.ErrRefundExceedsOrder):
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, payroll.ErrBatchLocked),
 		errors.Is(err, payroll.ErrBatchPeriodExists),

@@ -274,6 +274,38 @@ func (p *fakeProvisioner) ReinstateVendorOperator(_ context.Context, _ string, e
 	return nil
 }
 
+type auditEntry struct {
+	actorID, action, targetKind, targetID string
+}
+
+type fakeAuditWriter struct {
+	mu      sync.Mutex
+	entries []auditEntry
+}
+
+func (w *fakeAuditWriter) Write(_ context.Context, actorID, _ *string, action, targetKind, targetID string, _ map[string]any, _ string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	id := ""
+	if actorID != nil {
+		id = *actorID
+	}
+	w.entries = append(w.entries, auditEntry{actorID: id, action: action, targetKind: targetKind, targetID: targetID})
+	return nil
+}
+
+func (w *fakeAuditWriter) byAction(action string) []auditEntry {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var out []auditEntry
+	for _, e := range w.entries {
+		if e.action == action {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 func newSvc() (*vendor.Service, *fakeVendorRepo, *fakePlantRepo, *fakeOperatorRepo, *fakeProvisioner) {
 	vr := newFakeVendorRepo()
 	pr := newFakePlantRepo()
@@ -284,6 +316,7 @@ func newSvc() (*vendor.Service, *fakeVendorRepo, *fakePlantRepo, *fakeOperatorRe
 		Plants:      pr,
 		Operators:   or,
 		Provisioner: prov,
+		Audit:       &fakeAuditWriter{},
 	}
 	return svc, vr, pr, or, prov
 }
@@ -334,6 +367,29 @@ func TestService_CreateOperator_ProvisioningFailureLeavesNoLocalOperator(t *test
 	assert.Empty(t, ops.byID)
 }
 
+func TestService_Lifecycle_WritesAudit(t *testing.T) {
+	svc, _, _, _, _ := newSvc()
+	ctx := context.Background()
+	aw := svc.Audit.(*fakeAuditWriter)
+
+	v, _ := svc.CreatePending(ctx, "A", "A Ltd", "a@x.com")
+	require.NoError(t, svc.Approve(ctx, v.ID, "admin-1", []string{"F12B-3F"}))
+	require.NoError(t, svc.Suspend(ctx, v.ID, "admin-2"))
+	require.NoError(t, svc.Reinstate(ctx, v.ID, "admin-3"))
+
+	for action, actor := range map[string]string{
+		"vendor.approve":   "admin-1",
+		"vendor.suspend":   "admin-2",
+		"vendor.reinstate": "admin-3",
+	} {
+		es := aw.byAction(action)
+		require.Len(t, es, 1, "expected one %s audit entry", action)
+		assert.Equal(t, "vendor", es[0].targetKind)
+		assert.Equal(t, v.ID, es[0].targetID)
+		assert.Equal(t, actor, es[0].actorID)
+	}
+}
+
 func TestService_SuspendVendor_DisablesActiveOperators(t *testing.T) {
 	svc, _, _, _, prov := newSvc()
 	v, _ := svc.CreatePending(context.Background(), "A", "A Ltd", "a@x.com")
@@ -341,7 +397,7 @@ func TestService_SuspendVendor_DisablesActiveOperators(t *testing.T) {
 	op, err := svc.CreateOperator(context.Background(), v.ID, "owner@vendor.tw", "Owner")
 	require.NoError(t, err)
 
-	require.NoError(t, svc.Suspend(context.Background(), v.ID))
+	require.NoError(t, svc.Suspend(context.Background(), v.ID, "admin"))
 	assert.Equal(t, []string{*op.ExternalSubject}, prov.suspended)
 	got, err := svc.ListOperators(context.Background(), v.ID)
 	require.NoError(t, err)
@@ -355,7 +411,7 @@ func TestService_ReinstateVendor_RestoresVendorSuspendedOperators(t *testing.T) 
 	require.NoError(t, svc.Approve(context.Background(), v.ID, "admin", nil))
 	op, err := svc.CreateOperator(context.Background(), v.ID, "owner@vendor.tw", "Owner")
 	require.NoError(t, err)
-	require.NoError(t, svc.Suspend(context.Background(), v.ID))
+	require.NoError(t, svc.Suspend(context.Background(), v.ID, "admin"))
 
 	require.NoError(t, svc.Reinstate(context.Background(), v.ID, "admin"))
 	assert.Equal(t, []string{*op.ExternalSubject}, prov.reinstated)

@@ -2124,6 +2124,49 @@ components:
                 - items
                 - orders
             type: object
+        PresignedUploadInputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/PresignedUploadInputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                content_type:
+                    description: image/jpeg, image/png, or image/webp
+                    type: string
+                size:
+                    description: size of the upload in bytes; must be > 0 and <= 2MB
+                    format: int64
+                    type: integer
+            required:
+                - content_type
+                - size
+            type: object
+        PresignedUploadOutputBody:
+            additionalProperties: false
+            properties:
+                $schema:
+                    description: A URL to the JSON Schema for this object.
+                    examples:
+                        - https://example.com/schemas/PresignedUploadOutputBody.json
+                    format: uri
+                    readOnly: true
+                    type: string
+                expires_in:
+                    format: int64
+                    type: integer
+                key:
+                    type: string
+                url:
+                    type: string
+            required:
+                - url
+                - key
+                - expires_in
+            type: object
         ProviderDTO:
             additionalProperties: false
             properties:
@@ -4961,6 +5004,34 @@ paths:
             tags:
                 - employee
                 - menu
+    /api/menu/uploads/presigned:
+        get:
+            operationId: presignedMenuImageDownload
+            parameters:
+                - explode: false
+                  in: query
+                  name: key
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PresignedUploadOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Issue a presigned GET URL for a stored menu-item image
+            tags:
+                - menu
     /api/merchant/categories:
         get:
             operationId: listMerchantCategories
@@ -5726,6 +5797,34 @@ paths:
             tags:
                 - merchant
                 - quota
+    /api/merchant/uploads/presigned:
+        post:
+            operationId: presignedMenuImageUpload
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PresignedUploadInputBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PresignedUploadOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Issue a presigned PUT URL for a menu-item image upload
+            tags:
+                - merchant
+                - menu
     /api/plants:
         get:
             operationId: listPlants

@@ -30,7 +30,7 @@ type fakeSuspender struct {
 	err       error
 }
 
-func (f *fakeSuspender) Suspend(_ context.Context, vendorID string) error {
+func (f *fakeSuspender) Suspend(_ context.Context, vendorID, _ string) error {
 	if f.err != nil {
 		return f.err
 	}

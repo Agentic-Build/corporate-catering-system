@@ -262,11 +262,14 @@ func (s *Service) ResolveDispute(ctx context.Context, in ResolveDisputeInput) er
 			if in.RefundMinor < 0 {
 				return fmt.Errorf("payroll: refund_minor must be >= 0")
 			}
-			if err := s.Entries.IncrementRefundedTx(ctx, tx, d.EntryID, in.RefundMinor); err != nil {
-				return err
-			}
 			o, err := s.Orders.GetByID(ctx, d.OrderID)
 			if err != nil {
+				return err
+			}
+			if in.RefundMinor > o.TotalPriceMinor {
+				return ErrRefundExceedsOrder
+			}
+			if err := s.Entries.IncrementRefundedTx(ctx, tx, d.EntryID, in.RefundMinor); err != nil {
 				return err
 			}
 			if o.Status == order.StatusPickedUp || o.Status == order.StatusNoShow {

@@ -92,6 +92,31 @@ func TestValidateImageUpload_TooLarge(t *testing.T) {
 	}
 }
 
+// --- validateMenuImageKey (presigned download guard) ------------------------
+
+func TestValidateMenuImageKey_Allowed(t *testing.T) {
+	for _, k := range []string{"menu-images/v1/abc.jpg", "menu-images/x/y.png"} {
+		if err := validateMenuImageKey(k); err != nil {
+			t.Fatalf("key %q should be allowed: %v", k, err)
+		}
+	}
+}
+
+func TestValidateMenuImageKey_Rejected(t *testing.T) {
+	// Keys outside menu-images/ (shared bucket holds payroll/vendor docs) and traversal must be rejected.
+	for _, k := range []string{
+		"payroll/batch-1.csv",
+		"vendor-docs/v1/contract.pdf",
+		"menu-images/../payroll/batch-1.csv",
+		"menu-imagesX/abc.jpg",
+		"",
+	} {
+		if err := validateMenuImageKey(k); err == nil {
+			t.Fatalf("key %q should be rejected", k)
+		}
+	}
+}
+
 // --- HandleDirectUpload -----------------------------------------------------
 
 // stubStorage records what was put and returns the s3:// URI.

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -19,7 +21,7 @@ import (
 // VendorSuspender lets anomaly governance suspend a vendor. *vendor.Service
 // satisfies it; kept narrow to avoid pulling the whole vendor service in.
 type VendorSuspender interface {
-	Suspend(ctx context.Context, vendorID string) error
+	Suspend(ctx context.Context, vendorID, adminUserID string) error
 }
 
 // Clock lets tests pin "now".
@@ -104,6 +106,22 @@ type UploadInput struct {
 // When in.Supersedes is set the upload is a resupply: the referenced document
 // must belong to the same vendor and already be reviewed (validateResupplyTarget),
 // and the new row links back to it via vendor_document.supersedes.
+const maxDocumentBytes int64 = 10 << 20
+
+// sanitizeDocFilename strips path components so a filename like
+// "../../payroll/x.csv" can't escape the vendor-docs/{vendor}/ key prefix.
+func sanitizeDocFilename(name string) (string, error) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "", ErrInvalidFilename
+	}
+	base := path.Base(trimmed)
+	if base == "." || base == ".." || base == "/" {
+		return "", ErrInvalidFilename
+	}
+	return base, nil
+}
+
 func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document, error) {
 	if in.Supersedes != nil {
 		target, err := s.Docs.GetByID(ctx, *in.Supersedes)
@@ -114,11 +132,18 @@ func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document
 			return nil, err
 		}
 	}
-	buf, err := io.ReadAll(in.Body)
+	filename, err := sanitizeDocFilename(in.Filename)
+	if err != nil {
+		return nil, err
+	}
+	buf, err := io.ReadAll(io.LimitReader(in.Body, maxDocumentBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read upload: %w", err)
 	}
-	key := fmt.Sprintf("vendor-docs/%s/%d-%s", in.VendorID, s.Clock.Now().UnixNano(), in.Filename)
+	if int64(len(buf)) > maxDocumentBytes {
+		return nil, ErrFileTooLarge
+	}
+	key := fmt.Sprintf("vendor-docs/%s/%d-%s", in.VendorID, s.Clock.Now().UnixNano(), filename)
 	uri, err := s.Storage.PutObject(ctx, key, bytes.NewReader(buf), "application/octet-stream")
 	if err != nil {
 		return nil, fmt.Errorf("upload: %w", err)
@@ -128,7 +153,7 @@ func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document
 		VendorID:   in.VendorID,
 		Kind:       in.Kind,
 		BlobURI:    uri,
-		Filename:   in.Filename,
+		Filename:   filename,
 		UploadedBy: &uploadedBy,
 		ExpiresAt:  in.ExpiresAt,
 		Status:     DocStatusPending,
@@ -146,7 +171,7 @@ func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document
 		payload := map[string]any{
 			"vendor_id":  in.VendorID,
 			"kind":       string(in.Kind),
-			"filename":   in.Filename,
+			"filename":   filename,
 			"uri":        uri,
 			"size_bytes": len(buf),
 		}
@@ -243,7 +268,7 @@ func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes, action strin
 	if action == ActionSuspend && a.TargetKind == "vendor" && s.VendorGov != nil {
 		// An already-suspended/terminated vendor surfaces ErrInvalidStatus —
 		// the goal (vendor not operating) is already met, so treat as success.
-		if err := s.VendorGov.Suspend(ctx, a.TargetID); err != nil && !errors.Is(err, vendor.ErrInvalidStatus) {
+		if err := s.VendorGov.Suspend(ctx, a.TargetID, by); err != nil && !errors.Is(err, vendor.ErrInvalidStatus) {
 			return err
 		}
 	}

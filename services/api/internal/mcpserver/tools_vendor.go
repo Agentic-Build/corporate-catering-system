@@ -81,7 +81,7 @@ func registerVendorTools(s *server.MCPServer, deps Deps) {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			reason := req.GetString("reason", "")
-			if err := deps.Vendor.Suspend(ctx, vendorID); err != nil {
+			if err := deps.Vendor.Suspend(ctx, vendorID, u.ID); err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			payload := map[string]any{}

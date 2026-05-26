@@ -337,6 +337,25 @@ func TestService_CopyItem_CreatesIndependentDraft(t *testing.T) {
 	assert.Equal(t, []string{"hot"}, copied.Badges)
 }
 
+func TestService_CopyItem_CopiesImages(t *testing.T) {
+	svc, _, _, gr := newSvc()
+	ctx := context.Background()
+	src, err := svc.CreateItem(ctx, menu.CreateItemInput{
+		VendorID: "v1", Name: "雞腿便當", PriceMinor: 11000,
+		Images: []string{"s3://b/a.jpg", "s3://b/b.jpg"},
+	})
+	require.NoError(t, err)
+
+	copied, err := svc.CopyItem(ctx, src.ID, "v1")
+	require.NoError(t, err)
+
+	imgs, err := gr.ListByItem(ctx, copied.ID)
+	require.NoError(t, err)
+	require.Len(t, imgs, 2, "copy must carry the source item's images")
+	assert.Equal(t, "s3://b/a.jpg", imgs[0].BlobURI)
+	assert.Equal(t, "s3://b/b.jpg", imgs[1].BlobURI)
+}
+
 func TestService_CopyItem_WrongVendorIsForbidden(t *testing.T) {
 	svc, _, _, _ := newSvc()
 	src, err := svc.CreateItem(context.Background(), menu.CreateItemInput{

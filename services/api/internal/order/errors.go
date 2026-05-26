@@ -8,14 +8,15 @@ import (
 )
 
 var (
-	ErrOrderNotFound       = errors.New("order: not found")
-	ErrInvalidTransition   = errors.New("order: invalid state transition")
-	ErrCutoffPassed        = errors.New("order: cutoff time has passed")
-	ErrEmptyOrder          = errors.New("order: must contain at least one item")
-	ErrMultiVendor         = errors.New("order: items must be from the same vendor")
-	ErrPlantMismatch       = errors.New("order: plant does not match user")
-	ErrVendorPlantMismatch = errors.New("order: vendor does not serve this plant")
-	ErrForbidden           = errors.New("order: forbidden")
+	ErrOrderNotFound         = errors.New("order: not found")
+	ErrInvalidTransition     = errors.New("order: invalid state transition")
+	ErrCutoffPassed          = errors.New("order: cutoff time has passed")
+	ErrOutsidePreorderWindow = errors.New("order: supply date is beyond the vendor's preorder window")
+	ErrEmptyOrder            = errors.New("order: must contain at least one item")
+	ErrMultiVendor           = errors.New("order: items must be from the same vendor")
+	ErrPlantMismatch         = errors.New("order: plant does not match user")
+	ErrVendorPlantMismatch   = errors.New("order: vendor does not serve this plant")
+	ErrForbidden             = errors.New("order: forbidden")
 	// ErrConcurrentModification is returned when a Postgres deadlock (40P01)
 	// or serialization failure (40001) aborts the order transaction. Both are
 	// retryable from the caller's perspective and map to HTTP 409, not 500.
