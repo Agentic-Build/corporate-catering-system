@@ -8,7 +8,6 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
@@ -29,6 +28,14 @@ type AuditTx interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
 
+// txBeginner is the transaction-starting surface of *pgxpool.Pool. auditAfter
+// depends on this interface (not the concrete pool) so tests can inject a fake
+// that hands the write closure a no-op pgx.Tx; *pgxpool.Pool satisfies it so
+// cmd wiring is unchanged.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
 // Deps carries the underlying services the MCP layer reuses. MCP tools call
 // these Services directly so business rules stay identical to the HTTP path.
 //
@@ -36,7 +43,7 @@ type AuditTx interface {
 // with request_id="mcp:<tool>". They're optional: when nil, audit is skipped
 // (the business operation itself already succeeded).
 type Deps struct {
-	Pool       *pgxpool.Pool
+	Pool       txBeginner
 	Audit      AuditTx
 	Order      *order.Service
 	Vendor     *vendor.Service

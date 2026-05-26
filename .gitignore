@@ -56,6 +56,7 @@ temp/
 
 # Coverage & test
 coverage/
+coverage.html
 *.lcov
 .nyc_output/
 

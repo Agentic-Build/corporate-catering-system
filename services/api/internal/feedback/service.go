@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -27,10 +26,17 @@ const (
 // Clock lets tests pin "now".
 type Clock interface{ Now() time.Time }
 
+// txBeginner is the transaction-starting surface of *pgxpool.Pool. The service
+// depends on this interface (not the concrete pool) so tests can inject a fake
+// that hands the write closure a no-op pgx.Tx; the repo fakes ignore the tx.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
 // Service orchestrates meal ratings and the complaint workflow. Every write
 // pairs the domain mutation with an audit_event row inside one transaction.
 type Service struct {
-	Pool       *pgxpool.Pool
+	Pool       txBeginner
 	Ratings    RatingRepository
 	Complaints ComplaintRepository
 	Orders     OrderReader

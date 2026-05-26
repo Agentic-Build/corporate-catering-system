@@ -4,8 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
 )
+
+// rowQuerier is the read surface QueryCurrentLines needs; *pgxpool.Pool and
+// Service.Pool (txBeginner) both satisfy it.
+type rowQuerier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
 
 // currentLinesQuery returns one row per chargeable order in the employee's
 // in-progress payroll period. See Service.ListCurrentLines for the definition
@@ -53,7 +59,7 @@ SELECT o.id,
 // the single canonical implementation: Service.ListCurrentLines uses it as the
 // default, and postgres.CurrentLinesRepo delegates to it so tests exercise the
 // exact production query.
-func QueryCurrentLines(ctx context.Context, pool *pgxpool.Pool, userID string) ([]CurrentPayrollLine, error) {
+func QueryCurrentLines(ctx context.Context, pool rowQuerier, userID string) ([]CurrentPayrollLine, error) {
 	rows, err := pool.Query(ctx, currentLinesQuery, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query current lines: %w", err)
