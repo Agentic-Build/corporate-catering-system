@@ -88,3 +88,30 @@ func TestSessionStore_RevokeAllForUser(t *testing.T) {
 	assert.ErrorIs(t, e1, identity.ErrSessionNotFound)
 	assert.ErrorIs(t, e2, identity.ErrSessionNotFound)
 }
+
+func TestSessionStore_AuthHandoff_SingleUse(t *testing.T) {
+	rdb, cleanup := setupRedis(t)
+	defer cleanup()
+	s := idredis.NewSessionStore(rdb, time.Hour)
+	ctx := context.Background()
+
+	code, err := s.IssueCode(ctx, "tb_the-session-token")
+	require.NoError(t, err)
+	require.NotEmpty(t, code)
+
+	tok, err := s.RedeemCode(ctx, code)
+	require.NoError(t, err)
+	assert.Equal(t, "tb_the-session-token", tok)
+
+	// Single use: a second redeem fails.
+	_, err = s.RedeemCode(ctx, code)
+	assert.ErrorIs(t, err, identity.ErrHandoffNotFound)
+}
+
+func TestSessionStore_AuthHandoff_UnknownCode(t *testing.T) {
+	rdb, cleanup := setupRedis(t)
+	defer cleanup()
+	s := idredis.NewSessionStore(rdb, time.Hour)
+	_, err := s.RedeemCode(context.Background(), "nope")
+	assert.ErrorIs(t, err, identity.ErrHandoffNotFound)
+}

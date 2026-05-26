@@ -23,6 +23,10 @@ import (
 type AccessTokenVerifier struct {
 	verifier *gooidc.IDTokenVerifier
 	issuer   string
+	// expectedAudience is this resource server's identifier (the MCP URL).
+	// When set, a token carrying an audience must include it. Empty disables
+	// the check.
+	expectedAudience string
 }
 
 // NewAccessTokenVerifier resolves Hydra's discovery document at boot and
@@ -38,7 +42,10 @@ type AccessTokenVerifier struct {
 //     go-oidc's mechanism for that exact mismatch.
 //
 // When publicIssuer is empty we fall back to single-URL mode (no proxy).
-func NewAccessTokenVerifier(ctx context.Context, reachableURL, publicIssuer string) (*AccessTokenVerifier, error) {
+//   - expectedAudience is this resource server's identifier (the MCP URL).
+//     When non-empty, a token that carries an audience must include it; see
+//     audienceAllowed for the exact (DCR-safe) semantics.
+func NewAccessTokenVerifier(ctx context.Context, reachableURL, publicIssuer, expectedAudience string) (*AccessTokenVerifier, error) {
 	if reachableURL == "" {
 		return nil, errors.New("hydra: reachable URL is required")
 	}
@@ -57,7 +64,8 @@ func NewAccessTokenVerifier(ctx context.Context, reachableURL, publicIssuer stri
 		verifier: provider.Verifier(&gooidc.Config{
 			SkipClientIDCheck: true,
 		}),
-		issuer: iss,
+		issuer:           iss,
+		expectedAudience: expectedAudience,
 	}, nil
 }
 
@@ -161,6 +169,9 @@ func (v *AccessTokenVerifier) Verify(ctx context.Context, raw string) (*AccessTo
 	if claims.Subject == "" {
 		return nil, errors.New("hydra token has no subject claim")
 	}
+	if !audienceAllowed(claims.Audience, v.expectedAudience) {
+		return nil, errors.New("hydra token audience not accepted")
+	}
 	return claims, nil
 }
 
@@ -169,4 +180,21 @@ func pick(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// audienceAllowed implements "validate the audience when present". A token
+// with no aud is accepted (our single-tenant Hydra mints tokens without one,
+// and DCR clients don't request our resource), but a token explicitly scoped
+// to a different resource is rejected — closing the cross-resource token
+// confusion path (RFC 9068) without breaking the common DCR case.
+func audienceAllowed(tokenAud []string, expected string) bool {
+	if expected == "" || len(tokenAud) == 0 {
+		return true
+	}
+	for _, a := range tokenAud {
+		if a == expected {
+			return true
+		}
+	}
+	return false
 }

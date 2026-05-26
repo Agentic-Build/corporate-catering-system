@@ -222,6 +222,7 @@ func main() {
 			Svc:      svc,
 			Sessions: sessStore,
 			Users:    userRepo,
+			Handoff:  sessStore,
 			AppURLs: idhttp.AppBaseURLs{
 				"employee": cfg.AppBaseURLEmployee,
 				"merchant": cfg.AppBaseURLMerchant,
@@ -246,7 +247,8 @@ func main() {
 			// discovery doc at boot — that's the Hydra container's
 			// directly-reachable URL.
 			publicIssuer := strings.TrimRight(cfg.OIDCCallbackBaseURL, "/") + "/"
-			tokVerifier, err := hydra.NewAccessTokenVerifier(ctx, cfg.HydraPublicURL, publicIssuer)
+			mcpResource := strings.TrimRight(cfg.OIDCCallbackBaseURL, "/") + "/mcp"
+			tokVerifier, err := hydra.NewAccessTokenVerifier(ctx, cfg.HydraPublicURL, publicIssuer, mcpResource)
 			if err != nil {
 				logger.Error("hydra access token verifier", "err", err)
 				os.Exit(1)

@@ -1378,6 +1378,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange a single-use login code for a session token */
+        post: operations["exchangeAuthSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -1835,6 +1852,25 @@ export interface components {
              */
             readonly $schema?: string;
             exception: components["schemas"]["ExceptionDTO"];
+        };
+        ExchangeSessionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ExchangeSessionInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Single-use login code from the callback redirect */
+            code: string;
+        };
+        ExchangeSessionOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ExchangeSessionOutputBody.json
+             */
+            readonly $schema?: string;
+            token: string;
         };
         FavoriteChipDTO: {
             available_today: boolean;
@@ -5822,6 +5858,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProvidersOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    exchangeAuthSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExchangeSessionInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExchangeSessionOutputBody"];
                 };
             };
             /** @description Error */

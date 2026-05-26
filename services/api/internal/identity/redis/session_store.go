@@ -122,5 +122,35 @@ func (s *SessionStore) RevokeAllForUser(ctx context.Context, userID string) erro
 	return s.rdb.Del(ctx, userKey(userID)).Err()
 }
 
-func key(token string) string     { return "sess:" + token }
+func key(token string) string      { return "sess:" + token }
 func userKey(userID string) string { return "sess-user:" + userID }
+func handoffKey(code string) string { return "handoff:" + code }
+
+// handoffTTL bounds how long the login-redirect code is valid; the app server
+// redeems it within one redirect, so a short window is plenty.
+const handoffTTL = 2 * time.Minute
+
+// IssueCode mints a single-use code mapping to token, valid for handoffTTL.
+func (s *SessionStore) IssueCode(ctx context.Context, token string) (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("rand: %w", err)
+	}
+	code := base64.RawURLEncoding.EncodeToString(b)
+	if err := s.rdb.Set(ctx, handoffKey(code), token, handoffTTL).Err(); err != nil {
+		return "", fmt.Errorf("redis set handoff: %w", err)
+	}
+	return code, nil
+}
+
+// RedeemCode atomically returns and deletes the token for code (single use).
+func (s *SessionStore) RedeemCode(ctx context.Context, code string) (string, error) {
+	token, err := s.rdb.GetDel(ctx, handoffKey(code)).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", identity.ErrHandoffNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("redis getdel handoff: %w", err)
+	}
+	return token, nil
+}

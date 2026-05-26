@@ -159,15 +159,17 @@ func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document
 		Status:     DocStatusPending,
 		Supersedes: in.Supersedes,
 	}
-	if err := s.Docs.Create(ctx, d); err != nil {
-		return nil, err
-	}
-
 	role := in.ActorRole
 	if role == "" {
 		role = "welfare_admin"
 	}
+	// Row insert + audit in one tx so a failed audit can't leave an orphan
+	// document row. (The S3 object is written above and is outside the tx;
+	// orphan blobs are handled by storage reconciliation, not this path.)
 	auditErr := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := s.Docs.CreateTx(ctx, tx, d); err != nil {
+			return err
+		}
 		payload := map[string]any{
 			"vendor_id":  in.VendorID,
 			"kind":       string(in.Kind),
@@ -193,7 +195,7 @@ func (s *Service) ReviewDocument(ctx context.Context, docID, reviewerID string, 
 		return ErrInvalidStatus
 	}
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		if err := s.Docs.UpdateStatus(ctx, docID, status, &reviewerID, notes); err != nil {
+		if err := s.Docs.UpdateStatusTx(ctx, tx, docID, status, &reviewerID, notes); err != nil {
 			return err
 		}
 		role := "welfare_admin"
@@ -247,11 +249,11 @@ func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes, action strin
 	if err != nil {
 		return err
 	}
-	if err := s.Anomaly.Triage(ctx, id, by, notes); err != nil {
-		return err
-	}
 	role := "welfare_admin"
 	auditErr := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := s.Anomaly.TriageTx(ctx, tx, id, by, notes); err != nil {
+			return err
+		}
 		payload := map[string]any{"anomaly_id": id, "notes": notes, "action": action}
 		if werr := s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.triage", "anomaly_alert", id, payload, ""); werr != nil {
 			return werr
@@ -277,10 +279,10 @@ func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes, action strin
 
 // CloseAnomaly closes an open/triaged anomaly + writes an audit row.
 func (s *Service) CloseAnomaly(ctx context.Context, id, by, notes string) error {
-	if err := s.Anomaly.Close(ctx, id, by, notes); err != nil {
-		return err
-	}
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := s.Anomaly.CloseTx(ctx, tx, id, by, notes); err != nil {
+			return err
+		}
 		role := "welfare_admin"
 		payload := map[string]any{"anomaly_id": id, "notes": notes}
 		return s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.close", "anomaly_alert", id, payload, "")

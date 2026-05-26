@@ -2,6 +2,7 @@ package compliance_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,6 +24,14 @@ import (
 	opg "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
 	vendorpkg "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
+
+// failingAudit always errors, used to assert state changes roll back when the
+// audit write inside the same transaction fails.
+type failingAudit struct{}
+
+func (failingAudit) WriteTx(_ context.Context, _ pgx.Tx, _, _ *string, _, _, _ string, _ map[string]any, _ string) error {
+	return errors.New("audit boom")
+}
 
 // fakeSuspender records vendor ids it was asked to suspend and can be set to
 // return an error (e.g. simulating an already-suspended vendor).
@@ -103,6 +113,26 @@ func newGovService(pool *pgxpool.Pool, gov compliance.VendorSuspender) *complian
 		Audit:     opg.NewAuditRepo(pool),
 		VendorGov: gov,
 	}
+}
+
+func TestTriageAnomaly_RollsBackWhenAuditFails(t *testing.T) {
+	pool, cleanup := setupGov(t)
+	defer cleanup()
+	ctx := context.Background()
+	_, anomalyID := seedAnomalyForVendor(t, pool)
+	admin := seedAdmin(t, pool)
+	svc := &compliance.Service{
+		Pool:    pool,
+		Anomaly: cpg.NewAnomalyRepo(pool),
+		Audit:   failingAudit{},
+	}
+
+	err := svc.TriageAnomaly(ctx, anomalyID, admin, "looking", compliance.ActionNone)
+	require.Error(t, err)
+
+	a, err := cpg.NewAnomalyRepo(pool).GetByID(ctx, anomalyID)
+	require.NoError(t, err)
+	assert.Equal(t, compliance.AnomalyOpen, a.Status, "triage must roll back when the audit write fails")
 }
 
 func TestTriageAnomaly_InvalidAction(t *testing.T) {
