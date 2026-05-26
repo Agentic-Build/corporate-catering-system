@@ -33,12 +33,8 @@
         />
       </label>
       <label class="block text-sm font-semibold text-tb-slate-800">
-        標籤（逗號分隔）
-        <input name="tags" placeholder="hot, healthy" class={fieldClass} />
-      </label>
-      <label class="block text-sm font-semibold text-tb-slate-800">
-        徽章（逗號分隔）
-        <input name="badges" placeholder="可薪資代扣, 低於 500 kcal" class={fieldClass} />
+        標籤（空格分隔）
+        <input name="tags" placeholder="招牌 低卡" class={fieldClass} />
       </label>
       <div class="block text-sm font-semibold text-tb-slate-800">
         餐點圖片

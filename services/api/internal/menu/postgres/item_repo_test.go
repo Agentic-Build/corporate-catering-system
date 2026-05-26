@@ -25,7 +25,6 @@ func TestItemRepo_CreateGetUpdate(t *testing.T) {
 		Description: "招牌雞腿",
 		PriceMinor:  12000,
 		Tags:        []string{"招牌", "雞肉"},
-		Badges:      []string{"熱門"},
 		Status:      menu.ItemStatusDraft,
 	}
 	require.NoError(t, repo.Create(ctx, item))
@@ -37,7 +36,6 @@ func TestItemRepo_CreateGetUpdate(t *testing.T) {
 	assert.Equal(t, "雞腿便當", got.Name)
 	assert.Equal(t, int64(12000), got.PriceMinor)
 	assert.Equal(t, []string{"招牌", "雞肉"}, got.Tags)
-	assert.Equal(t, []string{"熱門"}, got.Badges)
 	assert.Equal(t, menu.ItemStatusDraft, got.Status)
 
 	// Update

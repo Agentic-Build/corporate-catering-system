@@ -129,8 +129,8 @@ func seedMenuItem(t *testing.T, pool *pgxpool.Pool, vendorID string, priceMinor 
 	n := itemSeedCounter.Add(1)
 	var id string
 	err := pool.QueryRow(context.Background(), `
-INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags, badges)
-VALUES ($1, $2, '', $3, 'active', '{}', '{}') RETURNING id`,
+INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags)
+VALUES ($1, $2, '', $3, 'active', '{}') RETURNING id`,
 		vendorID, fmt.Sprintf("settlement-repo-item-%d", n), priceMinor,
 	).Scan(&id)
 	require.NoError(t, err)

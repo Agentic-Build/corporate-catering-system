@@ -548,15 +548,6 @@
             "readOnly": true,
             "type": "string"
           },
-          "badges": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "category_id": {
             "type": "string"
           },
@@ -596,8 +587,7 @@
           "name",
           "description",
           "price_minor",
-          "tags",
-          "badges"
+          "tags"
         ],
         "type": "object"
       },
@@ -1005,15 +995,6 @@
       "EmployeeMenuItemDTO": {
         "additionalProperties": false,
         "properties": {
-          "badges": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "capacity": {
             "format": "int64",
             "type": "integer"
@@ -1077,7 +1058,6 @@
           "description",
           "price_minor",
           "tags",
-          "badges",
           "remain",
           "capacity",
           "pickup_window",
@@ -1502,15 +1482,6 @@
       "ItemDTO": {
         "additionalProperties": false,
         "properties": {
-          "badges": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "category_id": {
             "type": "string"
           },
@@ -1559,7 +1530,6 @@
           "description",
           "price_minor",
           "tags",
-          "badges",
           "status"
         ],
         "type": "object"
@@ -2253,15 +2223,6 @@
       "MerchantItemDTO": {
         "additionalProperties": false,
         "properties": {
-          "badges": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "category_id": {
             "type": "string"
           },
@@ -2322,7 +2283,6 @@
           "description",
           "price_minor",
           "tags",
-          "badges",
           "status",
           "last_used",
           "total_sold"
@@ -4000,15 +3960,6 @@
             "readOnly": true,
             "type": "string"
           },
-          "badges": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "category_id": {
             "type": "string"
           },
@@ -4048,8 +3999,7 @@
           "name",
           "description",
           "price_minor",
-          "tags",
-          "badges"
+          "tags"
         ],
         "type": "object"
       },

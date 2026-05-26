@@ -85,7 +85,6 @@
     remain: number;
     capacity: number;
     pickup_window: string;
-    badges: string[] | null;
     tags: string[] | null;
     images?: string[] | null;
     sold_out: boolean;
@@ -460,7 +459,7 @@
           remain={c.menu.remain}
           capacity={c.menu.capacity}
           pickupWindow={c.menu.pickup_window}
-          badges={[c.reason, ...(c.menu.badges ?? [])]}
+          badges={[c.reason]}
           image={(c.menu.images ?? [])[0]}
           qty={cart.qty(c.menu.id)}
           soldOut={c.menu.sold_out}
@@ -514,7 +513,6 @@
           remain={c.menu.remain}
           capacity={c.menu.capacity}
           pickupWindow={c.menu.pickup_window}
-          badges={c.menu.badges ?? []}
           image={(c.menu.images ?? [])[0]}
           qty={cart.qty(c.menu.id)}
           soldOut={c.menu.sold_out}
@@ -600,7 +598,6 @@
                   remain={item.remain}
                   capacity={item.capacity}
                   pickupWindow={item.pickup_window}
-                  badges={item.badges ?? []}
                   image={(item.images ?? [])[0]}
                   qty={cart.qty(item.id)}
                   soldOut={item.sold_out}
@@ -624,7 +621,6 @@
             remain={item.remain}
             capacity={item.capacity}
             pickupWindow={item.pickup_window}
-            badges={item.badges ?? []}
             image={(item.images ?? [])[0]}
             qty={cart.qty(item.id)}
             soldOut={item.sold_out}

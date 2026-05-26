@@ -19,7 +19,7 @@ func TestImageRepo_AddAndList(t *testing.T) {
 	imgRepo := postgres.NewImageRepo(pool)
 	ctx := context.Background()
 
-	item := &menu.Item{VendorID: vendorID, Name: "X", PriceMinor: 100, Status: menu.ItemStatusActive, Tags: []string{}, Badges: []string{}}
+	item := &menu.Item{VendorID: vendorID, Name: "X", PriceMinor: 100, Status: menu.ItemStatusActive, Tags: []string{}}
 	require.NoError(t, itemRepo.Create(ctx, item))
 
 	require.NoError(t, imgRepo.Add(ctx, &menu.Image{ItemID: item.ID, BlobURI: "s3://b/1.jpg", Alt: "a", SortOrder: 0}))
@@ -40,7 +40,7 @@ func TestImageRepo_ReplaceForItem(t *testing.T) {
 	imgRepo := postgres.NewImageRepo(pool)
 	ctx := context.Background()
 
-	item := &menu.Item{VendorID: vendorID, Name: "X", PriceMinor: 100, Status: menu.ItemStatusActive, Tags: []string{}, Badges: []string{}}
+	item := &menu.Item{VendorID: vendorID, Name: "X", PriceMinor: 100, Status: menu.ItemStatusActive, Tags: []string{}}
 	require.NoError(t, itemRepo.Create(ctx, item))
 
 	// Seed two images, then replace with a different set.
@@ -68,7 +68,7 @@ func TestImageRepo_ReplaceForItem_EmptyClearsAll(t *testing.T) {
 	imgRepo := postgres.NewImageRepo(pool)
 	ctx := context.Background()
 
-	item := &menu.Item{VendorID: vendorID, Name: "X", PriceMinor: 100, Status: menu.ItemStatusActive, Tags: []string{}, Badges: []string{}}
+	item := &menu.Item{VendorID: vendorID, Name: "X", PriceMinor: 100, Status: menu.ItemStatusActive, Tags: []string{}}
 	require.NoError(t, itemRepo.Create(ctx, item))
 	require.NoError(t, imgRepo.Add(ctx, &menu.Image{ItemID: item.ID, BlobURI: "s3://b/1.jpg", SortOrder: 0}))
 
@@ -87,7 +87,7 @@ func TestImageRepo_Remove(t *testing.T) {
 	imgRepo := postgres.NewImageRepo(pool)
 	ctx := context.Background()
 
-	item := &menu.Item{VendorID: vendorID, Name: "X", PriceMinor: 100, Status: menu.ItemStatusActive, Tags: []string{}, Badges: []string{}}
+	item := &menu.Item{VendorID: vendorID, Name: "X", PriceMinor: 100, Status: menu.ItemStatusActive, Tags: []string{}}
 	require.NoError(t, itemRepo.Create(ctx, item))
 
 	img := &menu.Image{ItemID: item.ID, BlobURI: "s3://b/1.jpg", Alt: "a", SortOrder: 0}

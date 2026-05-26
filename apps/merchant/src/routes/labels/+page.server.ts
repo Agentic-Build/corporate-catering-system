@@ -14,6 +14,18 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     if (r.data) items = (r.data as any).items ?? [];
   } catch {}
 
+  // Load menu items for name lookup on stickers
+  let menuItems: any[] = [];
+  try {
+    const r = await client.GET("/api/merchant/menu-items", {
+      params: { query: { include_archived: true } as any },
+    });
+    if (r.data) menuItems = (r.data as any).items ?? [];
+  } catch {}
+  const itemsById: Record<string, { name: string }> = Object.fromEntries(
+    menuItems.map((i: any) => [i.id, { name: i.name }]),
+  );
+
   // 7-day picker (today + next 6) — mirrors the prep board.
   const today = new Date();
   const days: { id: string; label: string }[] = [];
@@ -25,5 +37,5 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     days.push({ id, label });
   }
 
-  return { user: locals.user, date, days, orders: items, totalCount: items.length };
+  return { user: locals.user, date, days, orders: items, totalCount: items.length, itemsById };
 };

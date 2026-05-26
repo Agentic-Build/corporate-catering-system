@@ -226,7 +226,6 @@ func (a *HomeAPI) getHome(ctx context.Context, in *homeInput) (*homeOutput, erro
 			Description:  it.Description,
 			PriceMinor:   it.PriceMinor,
 			Tags:         it.Tags,
-			Badges:       it.Badges,
 			Images:       it.Images,
 			Remain:       it.Remain,
 			Capacity:     it.Capacity,

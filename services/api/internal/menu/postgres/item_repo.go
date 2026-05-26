@@ -21,17 +21,14 @@ func (r *ItemRepo) Create(ctx context.Context, i *menu.Item) error {
 	if i.Tags == nil {
 		i.Tags = []string{}
 	}
-	if i.Badges == nil {
-		i.Badges = []string{}
-	}
 	if i.Status == "" {
 		i.Status = menu.ItemStatusDraft
 	}
 	return r.pool.QueryRow(ctx, `
-INSERT INTO menu_item (vendor_id, category_id, name, description, price_minor, tags, badges, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO menu_item (vendor_id, category_id, name, description, price_minor, tags, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, created_at, updated_at`,
-		i.VendorID, i.CategoryID, i.Name, i.Description, i.PriceMinor, i.Tags, i.Badges, string(i.Status),
+		i.VendorID, i.CategoryID, i.Name, i.Description, i.PriceMinor, i.Tags, string(i.Status),
 	).Scan(&i.ID, &i.CreatedAt, &i.UpdatedAt)
 }
 
@@ -39,14 +36,11 @@ func (r *ItemRepo) Update(ctx context.Context, i *menu.Item) error {
 	if i.Tags == nil {
 		i.Tags = []string{}
 	}
-	if i.Badges == nil {
-		i.Badges = []string{}
-	}
 	_, err := r.pool.Exec(ctx, `
 UPDATE menu_item
-   SET category_id=$2, name=$3, description=$4, price_minor=$5, tags=$6, badges=$7, updated_at=now()
+   SET category_id=$2, name=$3, description=$4, price_minor=$5, tags=$6, updated_at=now()
  WHERE id=$1`,
-		i.ID, i.CategoryID, i.Name, i.Description, i.PriceMinor, i.Tags, i.Badges)
+		i.ID, i.CategoryID, i.Name, i.Description, i.PriceMinor, i.Tags)
 	return err
 }
 
@@ -67,10 +61,10 @@ func (r *ItemRepo) GetByID(ctx context.Context, id string) (*menu.Item, error) {
 	var i menu.Item
 	var status string
 	err := r.pool.QueryRow(ctx, `
-SELECT id, vendor_id, category_id, name, description, price_minor, tags, badges, status, archived_at, created_at, updated_at
+SELECT id, vendor_id, category_id, name, description, price_minor, tags, status, archived_at, created_at, updated_at
   FROM menu_item WHERE id=$1`, id).
 		Scan(&i.ID, &i.VendorID, &i.CategoryID, &i.Name, &i.Description, &i.PriceMinor,
-			&i.Tags, &i.Badges, &status, &i.ArchivedAt, &i.CreatedAt, &i.UpdatedAt)
+			&i.Tags, &status, &i.ArchivedAt, &i.CreatedAt, &i.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, menu.ErrItemNotFound
 	}
@@ -93,7 +87,7 @@ func (r *ItemRepo) ListByVendor(ctx context.Context, vendorID string, includeArc
 	}
 	q := `
 SELECT mi.id, mi.vendor_id, mi.category_id, mi.name, mi.description, mi.price_minor,
-       mi.tags, mi.badges, mi.status, mi.archived_at, mi.created_at, mi.updated_at,
+       mi.tags, mi.status, mi.archived_at, mi.created_at, mi.updated_at,
        (SELECT max(ms.supply_date) FROM meal_supply ms
          WHERE ms.menu_item_id = mi.id) AS last_used,
        COALESCE((SELECT sum(oi.qty) FROM order_item oi
@@ -110,7 +104,7 @@ SELECT mi.id, mi.vendor_id, mi.category_id, mi.name, mi.description, mi.price_mi
 		var row menu.MerchantItemRow
 		var status string
 		if err := rows.Scan(&row.Item.ID, &row.Item.VendorID, &row.Item.CategoryID, &row.Item.Name,
-			&row.Item.Description, &row.Item.PriceMinor, &row.Item.Tags, &row.Item.Badges, &status,
+			&row.Item.Description, &row.Item.PriceMinor, &row.Item.Tags, &status,
 			&row.Item.ArchivedAt, &row.Item.CreatedAt, &row.Item.UpdatedAt,
 			&row.LastUsed, &row.TotalSold); err != nil {
 			return nil, err
@@ -172,7 +166,7 @@ func (r *ItemRepo) ListActiveByPlant(ctx context.Context, f menu.EmployeeMenuFil
 	q := `
 SELECT
     mi.id, mi.vendor_id, mi.category_id, mi.name, mi.description, mi.price_minor,
-    mi.tags, mi.badges, mi.status, mi.archived_at, mi.created_at, mi.updated_at,
+    mi.tags, mi.status, mi.archived_at, mi.created_at, mi.updated_at,
     v.display_name,
     ms.supply_date, ms.capacity, ms.remain, ms.sold_out, ms.pickup_window, ms.eta_label, ms.cutoff_at
 FROM menu_item mi
@@ -192,7 +186,7 @@ WHERE ` + strings.Join(where, " AND ") + `
 		var status string
 		if err := rows.Scan(
 			&row.Item.ID, &row.Item.VendorID, &row.Item.CategoryID, &row.Item.Name, &row.Item.Description, &row.Item.PriceMinor,
-			&row.Item.Tags, &row.Item.Badges, &status, &row.Item.ArchivedAt, &row.Item.CreatedAt, &row.Item.UpdatedAt,
+			&row.Item.Tags, &status, &row.Item.ArchivedAt, &row.Item.CreatedAt, &row.Item.UpdatedAt,
 			&row.VendorName,
 			&row.SupplyDate, &row.Capacity, &row.Remain, &row.SoldOut, &row.PickupWindow, &row.ETALabel, &row.CutoffAt,
 		); err != nil {

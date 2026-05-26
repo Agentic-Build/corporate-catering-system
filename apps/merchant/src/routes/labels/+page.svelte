@@ -5,10 +5,15 @@
 
   let { data } = $props();
 
+  interface OrderItem {
+    menu_item_id: string;
+    qty: number;
+  }
   interface MerchantOrder {
     id: string;
     plant: string;
     status: string;
+    items: OrderItem[];
   }
   const orders = $derived((data.orders ?? []) as MerchantOrder[]);
 
@@ -80,6 +85,13 @@
           <span>{o.plant}</span>
           <span class="font-jetbrains-mono">{data.date}</span>
         </div>
+        {#if o.items?.length}
+          <ul class="label-items">
+            {#each o.items as item (item.menu_item_id)}
+              <li>{data.itemsById[item.menu_item_id]?.name ?? "未知餐點"} ×{item.qty}</li>
+            {/each}
+          </ul>
+        {/if}
       </div>
     {/each}
   </div>
@@ -124,6 +136,17 @@
     justify-content: space-between;
     font-size: 0.7rem;
     color: #475569;
+  }
+  .label-items {
+    width: 100%;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.65rem;
+    color: #334155;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 0.25rem;
+    line-height: 1.5;
   }
 
   @media print {
