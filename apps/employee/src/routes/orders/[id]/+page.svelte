@@ -66,7 +66,8 @@
 
   // ── rating form local state ──
   let starValue = $state(0);
-  const submittedRating = $derived(form?.rating);
+  // Show a freshly-submitted rating, or the one loaded on revisit.
+  const submittedRating = $derived(form?.rating ?? data.rating);
 
   // ── modify (edit order items) state ──
   let editing = $state(false);

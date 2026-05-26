@@ -110,6 +110,10 @@ type ratingOutput struct {
 	}
 }
 
+type getRatingInput struct {
+	ID string `path:"id" format:"uuid"`
+}
+
 type fileComplaintInput struct {
 	ID   string `path:"id" format:"uuid"`
 	Body struct {
@@ -165,6 +169,15 @@ func (a *API) Register(api huma.API) {
 		Security:      []map[string][]string{{"bearer": {}}},
 		DefaultStatus: http.StatusCreated,
 	}, a.rateOrder)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "getMyRating",
+		Method:      http.MethodGet,
+		Path:        "/api/employee/orders/{id}/rating",
+		Summary:     "Get my meal rating for an order",
+		Tags:        []string{"employee", "feedback"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.getMyRating)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "fileComplaint",
@@ -298,6 +311,24 @@ func (a *API) rateOrder(ctx context.Context, in *rateOrderInput) (*ratingOutput,
 	})
 	if err != nil {
 		return nil, mapErr(err)
+	}
+	var resp ratingOutput
+	resp.Body.Rating = toRatingDTO(r)
+	return &resp, nil
+}
+
+func (a *API) getMyRating(ctx context.Context, in *getRatingInput) (*ratingOutput, error) {
+	u, err := a.requireEmployee(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r, err := a.Svc.GetRating(ctx, in.ID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	// Don't leak another employee's rating: treat as not-found.
+	if r.UserID != u.ID {
+		return nil, huma.Error404NotFound(feedback.ErrRatingNotFound.Error())
 	}
 	var resp ratingOutput
 	resp.Body.Rating = toRatingDTO(r)

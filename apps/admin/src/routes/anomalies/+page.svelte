@@ -129,7 +129,7 @@
           </p>
           {#if a.payload}
             <pre
-              class="mt-2 overflow-x-auto rounded-lg bg-tb-slate-50 p-2 font-jetbrains-mono text-xs text-tb-slate-700">{preview(
+              class="mt-2 min-w-0 overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-tb-slate-50 p-2 font-jetbrains-mono text-xs text-tb-slate-700">{preview(
                 a.payload,
               )}</pre>
           {/if}

@@ -4840,6 +4840,34 @@ paths:
                 - employee
                 - order
     /api/employee/orders/{id}/rating:
+        get:
+            operationId: getMyRating
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RatingOutputBody'
+                    description: OK
+                default:
+                    content:
+                        application/problem+json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorModel'
+                    description: Error
+            security:
+                - bearer: []
+            summary: Get my meal rating for an order
+            tags:
+                - employee
+                - feedback
         post:
             operationId: rateOrder
             parameters:
