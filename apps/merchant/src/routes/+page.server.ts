@@ -37,9 +37,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     });
     if (r.data) items = (r.data as any).items ?? [];
   } catch {}
-  const itemById: Record<string, any> = Object.fromEntries(items.map((i) => [i.id, i]));
-
-  // Today's orders, grouped by plant for the prep aggregation cards.
+  // Today's orders — used for KPI stats only.
   let todayOrders: any[] = [];
   try {
     const r = await client.GET("/api/merchant/orders", {
@@ -47,24 +45,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     });
     if (r.data) todayOrders = (r.data as any).items ?? [];
   } catch {}
-
-  const plantMap: Record<string, { qty: Record<string, number>; orderCount: number }> = {};
-  for (const o of todayOrders) {
-    const p = (plantMap[o.plant] ??= { qty: {}, orderCount: 0 });
-    p.orderCount += 1;
-    for (const li of o.items ?? []) {
-      p.qty[li.menu_item_id] = (p.qty[li.menu_item_id] ?? 0) + li.qty;
-    }
-  }
-  const plants = Object.entries(plantMap)
-    .map(([plant, agg]) => {
-      const lineItems = Object.entries(agg.qty)
-        .map(([id, qty]) => ({ name: itemById[id]?.name ?? "未知餐點", qty }))
-        .sort((a, b) => b.qty - a.qty);
-      const total = lineItems.reduce((s, x) => s + x.qty, 0);
-      return { plant, total, items: lineItems, orderCount: agg.orderCount };
-    })
-    .sort((a, b) => b.total - a.total);
 
   // 7-day supply, fetched in parallel — one request per day.
   const supplyResults = await Promise.all(
@@ -100,7 +80,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     user: locals.user,
     today,
     days,
-    plants,
     items,
     supplyByDate,
     stats: { totalCapacity, totalSold, todayOrderCount, pickedUp, pendingPrep, revenue },

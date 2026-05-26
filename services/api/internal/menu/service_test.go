@@ -228,21 +228,19 @@ func newSvc() (*menu.Service, *fakeCategoryRepo, *fakeItemRepo, *fakeImageRepo) 
 
 // ----- Tests -----
 
-func TestService_CreateItem_DefaultsToDraftAndNormalizesSlices(t *testing.T) {
+func TestService_CreateItem_DefaultsToActiveAndNormalizesSlices(t *testing.T) {
 	svc, _, _, _ := newSvc()
 	got, err := svc.CreateItem(context.Background(), menu.CreateItemInput{
 		VendorID:   "v1",
 		Name:       "雞腿便當",
 		PriceMinor: 11000,
-		// Tags/Badges left nil
+		// Tags left nil
 	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, got.ID)
-	assert.Equal(t, menu.ItemStatusDraft, got.Status)
+	assert.Equal(t, menu.ItemStatusActive, got.Status)
 	assert.NotNil(t, got.Tags)
 	assert.Equal(t, []string{}, got.Tags)
-	assert.NotNil(t, got.Badges)
-	assert.Equal(t, []string{}, got.Badges)
 }
 
 func TestService_CreateItem_PersistsImages(t *testing.T) {
@@ -321,20 +319,18 @@ func TestService_CopyItem_CreatesIndependentDraft(t *testing.T) {
 	svc, _, _, _ := newSvc()
 	src, err := svc.CreateItem(context.Background(), menu.CreateItemInput{
 		VendorID: "v1", Name: "雞腿便當", Description: "經典", PriceMinor: 11000,
-		Tags: []string{"halal"}, Badges: []string{"hot"},
+		Tags: []string{"halal"},
 	})
 	require.NoError(t, err)
-	require.NoError(t, svc.Publish(context.Background(), src.ID, "v1")) // source is active
 
 	copied, err := svc.CopyItem(context.Background(), src.ID, "v1")
 	require.NoError(t, err)
 	assert.NotEqual(t, src.ID, copied.ID)
 	assert.Equal(t, "雞腿便當（複製）", copied.Name)
-	assert.Equal(t, menu.ItemStatusDraft, copied.Status, "copy is a draft even when source is active")
+	assert.Equal(t, menu.ItemStatusActive, copied.Status)
 	assert.Equal(t, src.PriceMinor, copied.PriceMinor)
 	assert.Equal(t, src.Description, copied.Description)
 	assert.Equal(t, []string{"halal"}, copied.Tags)
-	assert.Equal(t, []string{"hot"}, copied.Badges)
 }
 
 func TestService_CopyItem_CopiesImages(t *testing.T) {
@@ -394,7 +390,7 @@ func TestService_ListForEmployee_JoinsImagesAndMarksSoldOut(t *testing.T) {
 	// Seed an item and two images for it via the fake repos.
 	item := &menu.Item{
 		ID: "item-99", VendorID: "v1", Name: "排骨便當", PriceMinor: 12000,
-		Tags: []string{"招牌"}, Badges: []string{"熱賣"}, Status: menu.ItemStatusActive,
+		Tags: []string{"招牌"}, Status: menu.ItemStatusActive,
 	}
 	ir.byID[item.ID] = item
 	require.NoError(t, gr.Add(ctx, &menu.Image{ItemID: item.ID, BlobURI: "blob://1"}))

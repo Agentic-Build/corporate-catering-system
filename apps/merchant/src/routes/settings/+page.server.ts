@@ -13,7 +13,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     if (r.data) settings = (r.data as { settings: typeof settings }).settings;
   } catch {}
 
-  return { user: locals.user, settings };
+  // Service-area selection lives here too: all plants + the vendor's current set.
+  const [allRes, myRes] = await Promise.allSettled([
+    client.GET("/api/plants"),
+    client.GET("/api/merchant/plants"),
+  ]);
+  const allPlants: { code: string; label: string; address: string }[] =
+    allRes.status === "fulfilled" ? ((allRes.value.data as any)?.items ?? []) : [];
+  const myPlantCodes: string[] =
+    myRes.status === "fulfilled"
+      ? ((myRes.value.data as any)?.items ?? []).map((p: { code: string }) => p.code)
+      : [];
+
+  return { user: locals.user, settings, allPlants, myPlantCodes };
 };
 
 export const actions: Actions = {
@@ -36,6 +48,19 @@ export const actions: Actions = {
       const err = r.error as { detail?: string };
       return fail(400, { error: err.detail ?? "儲存設定失敗，請稍後再試。" });
     }
-    return { ok: true };
+    return { settingsOk: true };
+  },
+
+  savePlants: async ({ request, locals }) => {
+    if (!locals.user) return fail(401, { error: "unauthenticated" });
+    const fd = await request.formData();
+    const plants = fd.getAll("plants").map(String);
+    const client = apiFor(locals.apiToken);
+    const r = await client.PUT("/api/merchant/plants", { body: { plants } as any });
+    if (r.error) {
+      const err = r.error as { detail?: string };
+      return fail(400, { error: err.detail ?? "儲存服務廠區失敗，請稍後再試。" });
+    }
+    return { plantsOk: true };
   },
 };

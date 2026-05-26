@@ -14,6 +14,18 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     if (r.data) items = (r.data as any).items ?? [];
   } catch {}
 
+  // Load menu items for name lookup (include archived so old orders still resolve)
+  let menuItems: any[] = [];
+  try {
+    const r = await client.GET("/api/merchant/menu-items", {
+      params: { query: { include_archived: true } as any },
+    });
+    if (r.data) menuItems = (r.data as any).items ?? [];
+  } catch {}
+  const itemsById: Record<string, { name: string }> = Object.fromEntries(
+    menuItems.map((i: any) => [i.id, { name: i.name }]),
+  );
+
   // Group by plant
   const byPlant: Record<string, any[]> = {};
   for (const o of items) {
@@ -31,7 +43,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     days.push({ id, label });
   }
 
-  return { user: locals.user, date, days, byPlant, totalCount: items.length };
+  return { user: locals.user, date, days, byPlant, totalCount: items.length, itemsById };
 };
 
 export const actions: Actions = {

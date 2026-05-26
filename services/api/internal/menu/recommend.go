@@ -4,7 +4,7 @@ import "sort"
 
 // MenuItemMeta is the minimal candidate-item projection used by the recommender.
 // It is intentionally narrower than the full menu.Item to keep score() pure and
-// free of unrelated fields (tags, badges, archival, etc.).
+// free of unrelated fields (tags, archival, etc.).
 type MenuItemMeta struct {
 	ID        string
 	Name      string

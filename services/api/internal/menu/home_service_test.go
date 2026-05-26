@@ -114,8 +114,8 @@ func seedHomeItem(t *testing.T, pool *pgxpool.Pool, vendorID string) string {
 	n := homeItemCounter.Add(1)
 	var id string
 	require.NoError(t, pool.QueryRow(context.Background(), `
-INSERT INTO menu_item (vendor_id, name, description, price_minor, tags, badges, status)
-VALUES ($1, $2, '', 12000, '{}', '{}', 'active') RETURNING id`,
+INSERT INTO menu_item (vendor_id, name, description, price_minor, tags, status)
+VALUES ($1, $2, '', 12000, '{}', 'active') RETURNING id`,
 		vendorID, fmt.Sprintf("item-%d", n)).Scan(&id))
 	return id
 }

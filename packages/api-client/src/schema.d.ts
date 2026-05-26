@@ -1609,7 +1609,6 @@ export interface components {
              * @example https://example.com/schemas/CreateItemInputBody.json
              */
             readonly $schema?: string;
-            badges: string[] | null;
             category_id?: string;
             description: string;
             /** @description Image URIs returned by POST /api/merchant/uploads */
@@ -1757,7 +1756,6 @@ export interface components {
             refunded_minor: number;
         };
         EmployeeMenuItemDTO: {
-            badges: string[] | null;
             /** Format: int64 */
             capacity: number;
             description: string;
@@ -1925,7 +1923,6 @@ export interface components {
             qty: number;
         };
         ItemDTO: {
-            badges: string[] | null;
             category_id?: string;
             description: string;
             id: string;
@@ -2166,7 +2163,6 @@ export interface components {
             warnings: components["schemas"]["WarningDTO"][] | null;
         };
         MerchantItemDTO: {
-            badges: string[] | null;
             category_id?: string;
             description: string;
             id: string;
@@ -2755,7 +2751,6 @@ export interface components {
              * @example https://example.com/schemas/UpdateItemInputBody.json
              */
             readonly $schema?: string;
-            badges: string[] | null;
             category_id?: string;
             description: string;
             /** @description Image URIs returned by POST /api/merchant/uploads */
