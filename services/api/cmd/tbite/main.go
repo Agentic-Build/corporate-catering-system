@@ -12,6 +12,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	// Embed the IANA tz database: the cluster image is distroless (no tzdata on
+	// disk) with CGO disabled, so without this LoadLocation("Asia/Taipei")
+	// fails and time.Local degrades to UTC — breaking cutoff math.
+	_ "time/tzdata"
 
 	"github.com/go-chi/chi/v5"
 	mcpgo "github.com/mark3labs/mcp-go/server"
@@ -370,7 +374,7 @@ func main() {
 			Plants:      plantRepo,
 			Vendors:     vpgrepo.NewVendorRepo(pool),
 			Clock:       clock.SystemClock{},
-			Location:    time.Local,
+			Location:    appLocation(),
 		}
 		// BoardHub fans live order events to the merchant prep board over SSE.
 		// It is wired to NATS below when NATS_URL is configured.
@@ -485,7 +489,7 @@ func main() {
 		recentOrdersRepo := opgrepo.NewRecentOrdersRepo(pool)
 		homeSvc := &menu.HomeService{
 			Clock:         clock.SystemClock{},
-			ServerTZ:      time.Local,
+			ServerTZ:      appLocation(),
 			RecentOrders:  recentOrdersRepo,
 			Popularity:    popularityRepo,
 			Affinity:      affinityRepo,
@@ -732,7 +736,7 @@ func main() {
 			Plants:      plantRepo,
 			Vendors:     vpgrepo.NewVendorRepo(pool),
 			Clock:       clock.SystemClock{},
-			Location:    time.Local,
+			Location:    appLocation(),
 		}
 		vendorService := &vendor.Service{
 			Vendors:     vpgrepo.NewVendorRepo(pool),
@@ -872,4 +876,17 @@ func getenv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// appLocation is the business timezone used for order-cutoff math and the
+// "today" derivation. Defaults to Asia/Taipei; override with APP_TIMEZONE.
+// Falls back to UTC if the zone can't be loaded.
+func appLocation() *time.Location {
+	name := getenv("APP_TIMEZONE", "Asia/Taipei")
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		slog.Warn("invalid APP_TIMEZONE; falling back to UTC", "value", name, "err", err)
+		return time.UTC
+	}
+	return loc
 }
