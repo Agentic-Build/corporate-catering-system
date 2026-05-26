@@ -27,7 +27,7 @@ spec:
         {{- include "tbite.podSecurityContext" . | nindent 8 }}
       initContainers:
         - name: fetch-migrations
-          image: {{ printf "%s:%s" .Values.hooks.dbMigrate.migrationsImage.repository (default .Chart.AppVersion .Values.hooks.dbMigrate.migrationsImage.tag) | quote }}
+          image: {{ printf "%s:%s" .Values.hooks.dbMigrate.migrationsImage.repository (default .Values.image.tag .Values.hooks.dbMigrate.migrationsImage.tag) | quote }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           command: ["/bin/sh", "-c"]
           # The migrations image is expected to ship .sql files at /migrations.

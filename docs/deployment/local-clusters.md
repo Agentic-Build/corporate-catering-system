@@ -99,7 +99,7 @@ OrbStack exposes Services on a routable IP; use that IP instead of
 
 ```bash
 kubectl -n tbite get pods                 # all roles Running/Ready
-kubectl -n tbite port-forward svc/tbite-tbite-platform-api 8080:80
+kubectl -n tbite port-forward svc/tbite-api 8080:80
 curl -s localhost:8080/readyz             # {"status":"ready"}
 ```
 
