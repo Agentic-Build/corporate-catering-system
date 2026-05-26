@@ -31,6 +31,9 @@ ON CONFLICT (primary_email) DO NOTHING;
 -- Three orders for the demo employee across statuses placed / ready / picked_up
 -- so the merchant prep board, pickup view, and employee order history all show
 -- data. Fixed order UUIDs make this idempotent. Each order has one order_item.
+-- user_id is resolved by email (not the fixed UUID above) so demo orders attach
+-- to whichever e2e-employee row exists — including one JIT-provisioned by
+-- Authentik login with a different id.
 -- placed_at / ready_at / picked_up_at are set per status to satisfy the
 -- lifecycle; totp_secret keeps its column default. Vendors a1111111/a2222222/
 -- a3333333 are r001/r002/r003; menu items are their deterministic UUIDs.
@@ -41,7 +44,7 @@ INSERT INTO "order"
 VALUES
   -- placed today: awaiting cutoff, visible on merchant prep board (r001 炙燒雞腿便當 165)
   ('d0000000-0000-0000-0000-000000000001',
-   'c0000000-0000-0000-0000-0000000000e1',
+   (SELECT id FROM "user" WHERE primary_email = 'e2e-employee@tbite.test'),
    'a1111111-1111-1111-1111-111111111111',
    'tn-a', CURRENT_DATE, 'placed', 165,
    now() - INTERVAL '2 hours',
@@ -49,7 +52,7 @@ VALUES
    NULL, NULL),
   -- ready today: prepared, awaiting pickup (r002 半熟蛋滷肉飯 75)
   ('d0000000-0000-0000-0000-000000000002',
-   'c0000000-0000-0000-0000-0000000000e1',
+   (SELECT id FROM "user" WHERE primary_email = 'e2e-employee@tbite.test'),
    'a2222222-2222-2222-2222-222222222222',
    'tn-a', CURRENT_DATE, 'ready', 75,
    now() - INTERVAL '3 hours',
@@ -57,7 +60,7 @@ VALUES
    now() - INTERVAL '30 minutes', NULL),
   -- picked_up yesterday: completed, shows in order history (r003 起司蛋餅 55)
   ('d0000000-0000-0000-0000-000000000003',
-   'c0000000-0000-0000-0000-0000000000e1',
+   (SELECT id FROM "user" WHERE primary_email = 'e2e-employee@tbite.test'),
    'a3333333-3333-3333-3333-333333333333',
    'tn-a', CURRENT_DATE - 1, 'picked_up', 55,
    (CURRENT_DATE - 1 + INTERVAL '9 hours')::timestamptz,

@@ -215,11 +215,11 @@ matching DNS CNAME automatically the moment you save each one.
 
 | Subdomain | Domain | Service type | URL |
 | --- | --- | --- | --- |
-| `api` | `tbite.example.com` | HTTP | `tbite-tbite-platform-api.tbite.svc.cluster.local:80` |
-| `app` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-employee.tbite.svc.cluster.local:80` |
-| `merchant` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-merchant.tbite.svc.cluster.local:80` |
-| `admin` | `tbite.example.com` | HTTP | `tbite-tbite-platform-web-admin.tbite.svc.cluster.local:80` |
-| `rt` | `tbite.example.com` | HTTP | `tbite-tbite-platform-realtime.tbite.svc.cluster.local:80` |
+| `api` | `tbite.example.com` | HTTP | `tbite-api.tbite.svc.cluster.local:80` |
+| `app` | `tbite.example.com` | HTTP | `tbite-web-employee.tbite.svc.cluster.local:80` |
+| `merchant` | `tbite.example.com` | HTTP | `tbite-web-merchant.tbite.svc.cluster.local:80` |
+| `admin` | `tbite.example.com` | HTTP | `tbite-web-admin.tbite.svc.cluster.local:80` |
+| `rt` | `tbite.example.com` | HTTP | `tbite-realtime.tbite.svc.cluster.local:80` |
 | `auth` | `tbite.example.com` | HTTP | `tbite-authentik-server.tbite.svc.cluster.local:80` |
 | `hydra` | `tbite.example.com` | HTTP | `tbite-hydra-public.tbite.svc.cluster.local:4444` |
 | `grafana` | `tbite.example.com` | HTTP | `tbite-grafana.tbite.svc.cluster.local:80` |
@@ -560,7 +560,7 @@ OAuth2 application with a seed `client_secret` that you MUST rotate.
      -p "$(printf '{"data":{"apiToken":"%s"}}' "$(printf %s "$AUTHENTIK_API_TOKEN" | base64)")"
    kubectl -n tbite patch secret tbite-oidc-clients --type=merge \
      -p "$(printf '{"data":{"apiClientSecret":"%s"}}' "$(printf %s "$NEW_OIDC_SECRET" | base64)")"
-   kubectl -n tbite rollout restart deploy/tbite-tbite-platform-api
+   kubectl -n tbite rollout restart deploy/tbite-api
    ```
 
 The api role's OIDC discovery against
@@ -568,7 +568,7 @@ The api role's OIDC discovery against
 will now succeed; check the log:
 
 ```bash
-kubectl -n tbite logs deploy/tbite-tbite-platform-api --tail=10
+kubectl -n tbite logs deploy/tbite-api --tail=10
 # … "msg":"http listening","addr":":8080"
 # … "msg":"board consumer started, tapping ORDERS_V1"
 # … "msg":"readmodel invalidator started"
@@ -698,7 +698,7 @@ UPDATE vendor_plant_mapping SET active = false WHERE plant = 'tn-22-1f';
 ```bash
 kubectl -n tbite get pods,svc,pvc
 helm -n tbite status tbite
-kubectl -n tbite logs deploy/tbite-tbite-platform-cloudflared
+kubectl -n tbite logs deploy/tbite-cloudflared
 # Zero Trust dashboard → Networks → Tunnels → tbite-demo → Connectors
 # shows live cloudflared replicas + edge connections.
 ```

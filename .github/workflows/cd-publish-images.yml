@@ -20,6 +20,7 @@ jobs:
           - { name: web-employee,  file: apps/employee/Dockerfile, context: . }
           - { name: web-merchant,  file: apps/merchant/Dockerfile, context: . }
           - { name: web-admin,     file: apps/admin/Dockerfile,    context: . }
+          - { name: migrations,    file: migrations/Dockerfile,    context: . }
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
