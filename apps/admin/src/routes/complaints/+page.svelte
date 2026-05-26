@@ -107,6 +107,15 @@
                 class="rounded-lg border border-tb-slate-300 px-2 py-1.5 text-sm text-tb-slate-900 focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
               ></textarea>
             </label>
+            <label class="flex items-center gap-2 text-xs text-tb-slate-700">
+              <input
+                type="checkbox"
+                name="compensate"
+                value="true"
+                class="h-4 w-4 rounded border-tb-slate-300 text-tb-emerald-600 focus:ring-tb-emerald-300"
+              />
+              同時啟動薪資沖銷（補償退款）
+            </label>
             <Button variant="primary" size="md" type="submit">
               <Icon name="check" class="h-3.5 w-3.5" />結案
             </Button>

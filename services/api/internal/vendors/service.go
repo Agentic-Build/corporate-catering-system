@@ -11,6 +11,12 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 )
 
+// AuditWriter records an admin action against the append-only audit log.
+// *order/postgres.AuditRepo satisfies it.
+type AuditWriter interface {
+	Write(ctx context.Context, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
+}
+
 // Service orchestrates admin operations over vendors, plant mappings, and the
 // Authentik-backed vendor-operator mirror.
 type Service struct {
@@ -20,6 +26,18 @@ type Service struct {
 	Provisioner identity.VendorOperatorProvisioner
 	Users       identity.UserRepository
 	Sessions    identity.SessionStore
+	Audit       AuditWriter
+}
+
+const auditRole = "welfare_admin"
+
+// writeAudit records an admin lifecycle action; no-op when Audit is unset.
+func (s *Service) writeAudit(ctx context.Context, actorID, action, vendorID string, payload map[string]any) error {
+	if s.Audit == nil {
+		return nil
+	}
+	role := auditRole
+	return s.Audit.Write(ctx, &actorID, &role, action, "vendor", vendorID, payload, "")
 }
 
 // CreatePending creates a vendor in pending status. Approval (and plant mapping)
@@ -53,11 +71,14 @@ func (s *Service) Approve(ctx context.Context, id, adminUserID string, plants []
 	if err := s.Vendors.UpdateStatus(ctx, id, StatusApproved, &adminUserID); err != nil {
 		return err
 	}
-	return s.Plants.Set(ctx, id, plants)
+	if err := s.Plants.Set(ctx, id, plants); err != nil {
+		return err
+	}
+	return s.writeAudit(ctx, adminUserID, "vendor.approve", id, map[string]any{"plants": plants})
 }
 
 // Suspend transitions an approved vendor to suspended.
-func (s *Service) Suspend(ctx context.Context, id string) error {
+func (s *Service) Suspend(ctx context.Context, id, adminUserID string) error {
 	v, err := s.Vendors.GetByID(ctx, id)
 	if err != nil {
 		return err
@@ -85,7 +106,7 @@ func (s *Service) Suspend(ctx context.Context, id string) error {
 			return err
 		}
 	}
-	return nil
+	return s.writeAudit(ctx, adminUserID, "vendor.suspend", id, map[string]any{})
 }
 
 // Reinstate transitions a suspended vendor back to approved.
@@ -109,7 +130,10 @@ func (s *Service) Reinstate(ctx context.Context, id, adminUserID string) error {
 	if err := s.Vendors.UpdateStatus(ctx, id, StatusApproved, &adminUserID); err != nil {
 		return err
 	}
-	return s.Operators.SetStatuses(ctx, id, []OperatorStatus{OperatorStatusVendorSuspended}, OperatorStatusActive)
+	if err := s.Operators.SetStatuses(ctx, id, []OperatorStatus{OperatorStatusVendorSuspended}, OperatorStatusActive); err != nil {
+		return err
+	}
+	return s.writeAudit(ctx, adminUserID, "vendor.reinstate", id, map[string]any{})
 }
 
 // List returns vendors filtered by status (empty slice means all).

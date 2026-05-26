@@ -21,6 +21,11 @@ type API struct {
 	Users    identity.UserRepository
 	AppURLs  AppBaseURLs
 
+	// Handoff brokers the single-use login code so the session token is never
+	// placed in the callback redirect URL. When nil, completeLogin falls back
+	// to the legacy token-in-URL behaviour.
+	Handoff identity.AuthHandoffStore
+
 	// JWT, when non-nil, lets AuthMiddleware accept JWT bearer tokens
 	// issued by Hydra in addition to T-Bite session tokens. The api role
 	// wires this; mcp-stdio leaves it nil because it speaks the
@@ -106,6 +111,14 @@ func (a *API) Register(api huma.API) {
 	}, a.completeLogin)
 
 	huma.Register(api, huma.Operation{
+		OperationID: "exchangeAuthSession",
+		Method:      http.MethodPost,
+		Path:        "/auth/session",
+		Summary:     "Exchange a single-use login code for a session token",
+		Tags:        []string{"auth"},
+	}, a.exchangeSession)
+
+	huma.Register(api, huma.Operation{
 		OperationID:   "logout",
 		Method:        http.MethodPost,
 		Path:          "/auth/logout",
@@ -162,12 +175,55 @@ func (a *API) completeLogin(ctx context.Context, in *completeLoginInput) (*compl
 	if !ok {
 		return nil, huma.Error500InternalServerError("unknown app base url for " + out.App)
 	}
+	// Hand the session token to the app via a single-use code rather than the
+	// URL, so it never lands in browser history or proxy logs. The app server
+	// redeems the code at POST /auth/session over its server-to-API channel.
+	if a.Handoff != nil {
+		code, err := a.Handoff.IssueCode(ctx, out.Session.Token)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("issue auth handoff", err)
+		}
+		landing := fmt.Sprintf("%s/auth/landing?code=%s&return_to=%s",
+			base, url.QueryEscape(code), url.QueryEscape(out.ReturnTo))
+		return &completeLoginOutput{Status: http.StatusFound, Url: landing}, nil
+	}
 	landing := fmt.Sprintf("%s/auth/landing?token=%s&return_to=%s",
 		base,
 		url.QueryEscape(out.Session.Token),
 		url.QueryEscape(out.ReturnTo),
 	)
 	return &completeLoginOutput{Status: http.StatusFound, Url: landing}, nil
+}
+
+type exchangeSessionInput struct {
+	Body struct {
+		Code string `json:"code" doc:"Single-use login code from the callback redirect"`
+	}
+}
+type exchangeSessionOutput struct {
+	Body struct {
+		Token string `json:"token"`
+	}
+}
+
+// exchangeSession redeems a single-use login code for its session token. It is
+// unauthenticated by design — possession of the short-lived, single-use code
+// is the credential (OAuth authorization-code style). Called server-side by
+// the app's /auth/landing endpoint.
+func (a *API) exchangeSession(ctx context.Context, in *exchangeSessionInput) (*exchangeSessionOutput, error) {
+	if a.Handoff == nil {
+		return nil, huma.Error503ServiceUnavailable("auth handoff not configured")
+	}
+	if in.Body.Code == "" {
+		return nil, huma.Error400BadRequest("code required")
+	}
+	token, err := a.Handoff.RedeemCode(ctx, in.Body.Code)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("invalid or expired code")
+	}
+	var resp exchangeSessionOutput
+	resp.Body.Token = token
+	return &resp, nil
 }
 
 // callbackErrorCode maps an OIDC callback failure to a short, stable code the

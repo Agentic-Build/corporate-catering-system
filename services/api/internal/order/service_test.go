@@ -258,6 +258,82 @@ func TestService_Place_UsesVendorCutoffHour(t *testing.T) {
 	assert.True(t, o.CutoffAt.Equal(want), "cutoff %v, want %v", o.CutoffAt, want)
 }
 
+func TestService_Place_OutsidePreorderWindow(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	vendorID, itemID, userID := seedScenario(t, pool, 5)
+	// Vendor only opens preorders 3 days ahead.
+	_, err := pool.Exec(ctx, `UPDATE vendor SET preorder_window_days=3 WHERE id=$1`, vendorID)
+	require.NoError(t, err)
+
+	// 2026-05-20 is beyond the 3-day window; its cutoff is still future, so only the window rejects it.
+	farDate := time.Date(2026, 5, 20, 0, 0, 0, 0, time.UTC)
+	farCutoff := time.Date(2026, 5, 19, 17, 0, 0, 0, time.UTC)
+	_, err = pool.Exec(ctx, `
+INSERT INTO meal_supply (menu_item_id, supply_date, capacity, remain, pickup_window, eta_label, cutoff_at)
+VALUES ($1, $2, 5, 5, '', '', $3)`, itemID, farDate, farCutoff)
+	require.NoError(t, err)
+
+	_, err = svc.Place(ctx, order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: farDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
+	})
+	assert.ErrorIs(t, err, order.ErrOutsidePreorderWindow)
+}
+
+func TestService_ListByUser_HydratesItems(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, itemID, userID := seedScenario(t, pool, 5)
+	placed, err := svc.Place(ctx, order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 2}},
+	})
+	require.NoError(t, err)
+
+	orders, err := svc.ListByUser(ctx, userID)
+	require.NoError(t, err)
+	require.Len(t, orders, 1)
+	assert.Equal(t, placed.ID, orders[0].ID)
+	require.Len(t, orders[0].Items, 1, "ListByUser must hydrate order items")
+	assert.Equal(t, itemID, orders[0].Items[0].MenuItemID)
+	assert.Equal(t, 2, orders[0].Items[0].Qty)
+}
+
+func TestService_Place_SoldOut(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, itemID, userID := seedScenario(t, pool, 5)
+	// Vendor flags the supply sold out for the day even though capacity remains.
+	_, err := pool.Exec(ctx, `UPDATE meal_supply SET sold_out=true WHERE menu_item_id=$1`, itemID)
+	require.NoError(t, err)
+
+	_, err = svc.Place(ctx, order.PlaceOrderInput{
+		UserID:     userID,
+		Plant:      testPlant,
+		SupplyDate: testSupplyDate,
+		Items:      []order.PlaceItem{{MenuItemID: itemID, Qty: 1}},
+	})
+	assert.ErrorIs(t, err, qmod.ErrOutOfStock)
+
+	// Sold-out supply must not be decremented and no order should persist.
+	var remain, orderCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT remain FROM meal_supply WHERE menu_item_id=$1`, itemID).Scan(&remain))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM "order"`).Scan(&orderCount))
+	assert.Equal(t, 5, remain)
+	assert.Equal(t, 0, orderCount)
+}
+
 func TestService_Cancel_Happy(t *testing.T) {
 	pool, svc, cleanup := setup(t)
 	defer cleanup()

@@ -185,6 +185,13 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		return nil, ErrCutoffPassed
 	}
 
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	maxDate := today.AddDate(0, 0, v.PreorderWindowDays)
+	if in.SupplyDate.After(maxDate) {
+		outcome = "outside_preorder_window"
+		return nil, ErrOutsidePreorderWindow
+	}
+
 	placedAt := now
 	o := &Order{
 		UserID:          in.UserID,

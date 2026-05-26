@@ -662,7 +662,8 @@ func mapErr(err error) error {
 	case errors.Is(err, order.ErrEmptyOrder),
 		errors.Is(err, order.ErrMultiVendor),
 		errors.Is(err, order.ErrVendorPlantMismatch),
-		errors.Is(err, order.ErrPlantMismatch):
+		errors.Is(err, order.ErrPlantMismatch),
+		errors.Is(err, order.ErrOutsidePreorderWindow):
 		return huma.Error400BadRequest(err.Error())
 	}
 	// Diagnostic: surface the unmapped error class so we can spot

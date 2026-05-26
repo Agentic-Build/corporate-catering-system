@@ -16,6 +16,9 @@ vite.config.ts.timestamp-*
 target
 /tbite
 /tmp/tbite
+# Stray binaries from `go build ./services/api/cmd/<name>` at the repo root.
+/contract-export
+/stress
 *.test
 *.out
 

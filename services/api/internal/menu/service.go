@@ -129,6 +129,14 @@ func (s *Service) CopyItem(ctx context.Context, itemID, vendorID string) (*Item,
 	if src.VendorID != vendorID {
 		return nil, ErrForbidden
 	}
+	imgs, err := s.Images.ListByItem(ctx, itemID)
+	if err != nil {
+		return nil, err
+	}
+	uris := make([]string, 0, len(imgs))
+	for _, im := range imgs {
+		uris = append(uris, im.BlobURI)
+	}
 	return s.CreateItem(ctx, CreateItemInput{
 		VendorID:    vendorID,
 		CategoryID:  src.CategoryID,
@@ -137,6 +145,7 @@ func (s *Service) CopyItem(ctx context.Context, itemID, vendorID string) (*Item,
 		PriceMinor:  src.PriceMinor,
 		Tags:        src.Tags,
 		Badges:      src.Badges,
+		Images:      uris,
 	})
 }
 

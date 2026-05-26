@@ -25,13 +25,14 @@ export const actions: Actions = {
     const fd = await request.formData();
     const id = String(fd.get("id") ?? "");
     const resolution = String(fd.get("resolution") ?? "").trim();
+    const compensate = fd.get("compensate") === "true";
     if (!id) return fail(400, { error: "缺少客訴編號" });
     if (resolution.length < 5) return fail(400, { error: "結案說明至少需 5 個字" });
 
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/complaints/{id}/resolve", {
       params: { path: { id } },
-      body: { resolution },
+      body: { resolution, compensate },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { ok: true, resolved: id };

@@ -8,4 +8,6 @@ var (
 	ErrInvalidStatus    = errors.New("compliance: invalid status transition")
 	ErrInvalidResupply  = errors.New("compliance: document cannot be resupplied")
 	ErrInvalidAction    = errors.New("compliance: invalid governance action")
+	ErrInvalidFilename  = errors.New("compliance: invalid filename")
+	ErrFileTooLarge     = errors.New("compliance: file exceeds the maximum allowed size")
 )

@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -53,6 +54,19 @@ func validateImageUpload(contentType string, size int64) (string, error) {
 // imageObjectKey builds a vendor-scoped object key for a menu image.
 func imageObjectKey(vendorID, ext string) string {
 	return fmt.Sprintf("menu-images/%s/%s.%s", vendorID, uuid.NewString(), ext)
+}
+
+// validateMenuImageKey confines a download key to menu-images/. The bucket is
+// shared with payroll exports and vendor docs, so an arbitrary key would be an
+// IDOR.
+func validateMenuImageKey(key string) error {
+	if strings.Contains(key, "..") {
+		return huma.Error400BadRequest("invalid key")
+	}
+	if !strings.HasPrefix(key, "menu-images/") {
+		return huma.Error403Forbidden("key must be under menu-images/")
+	}
+	return nil
 }
 
 // presignedUploadInput carries the client's declared content-type and
@@ -154,6 +168,9 @@ func (a *API) presignedMenuImageDownload(ctx context.Context, in *struct {
 	// Require auth; we deliberately do not require vendor since
 	// employees view menu images.
 	if _, err := requireAuthed(ctx); err != nil {
+		return nil, err
+	}
+	if err := validateMenuImageKey(in.Key); err != nil {
 		return nil, err
 	}
 	url, err := a.Storage.PresignedGet(ctx, in.Key, presignTTL)

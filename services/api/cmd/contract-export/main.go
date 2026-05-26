@@ -34,6 +34,7 @@ func main() {
 	(&vhttp.API{}).Register(api)
 	(&phttp.API{}).Register(api)
 	(&mhttp.API{}).Register(api)
+	(&mhttp.API{}).RegisterPresigned(api)
 	(&qhttp.API{}).Register(api)
 	(&ohttp.API{}).Register(api)
 	(&payrollhttp.API{}).Register(api)

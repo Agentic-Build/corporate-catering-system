@@ -881,6 +881,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/menu/uploads/presigned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Issue a presigned GET URL for a stored menu-item image */
+        get: operations["presignedMenuImageDownload"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/merchant/categories": {
         parameters: {
             query?: never;
@@ -1259,6 +1276,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/uploads/presigned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a presigned PUT URL for a menu-item image upload */
+        post: operations["presignedMenuImageUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/plants": {
         parameters: {
             query?: never;
@@ -1338,6 +1372,23 @@ export interface paths {
         get: operations["listAuthProviders"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange a single-use login code for a session token */
+        post: operations["exchangeAuthSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1801,6 +1852,25 @@ export interface components {
              */
             readonly $schema?: string;
             exception: components["schemas"]["ExceptionDTO"];
+        };
+        ExchangeSessionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ExchangeSessionInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Single-use login code from the callback redirect */
+            code: string;
+        };
+        ExchangeSessionOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ExchangeSessionOutputBody.json
+             */
+            readonly $schema?: string;
+            token: string;
         };
         FavoriteChipDTO: {
             available_today: boolean;
@@ -2320,6 +2390,33 @@ export interface components {
             plant: string;
             /** Format: int64 */
             portion_count: number;
+        };
+        PresignedUploadInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PresignedUploadInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description image/jpeg, image/png, or image/webp */
+            content_type: string;
+            /**
+             * Format: int64
+             * @description size of the upload in bytes; must be > 0 and <= 2MB
+             */
+            size: number;
+        };
+        PresignedUploadOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PresignedUploadOutputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            expires_in: number;
+            key: string;
+            url: string;
         };
         ProviderDTO: {
             display_name: string;
@@ -4725,6 +4822,37 @@ export interface operations {
             };
         };
     };
+    presignedMenuImageDownload: {
+        parameters: {
+            query: {
+                key: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresignedUploadOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     listMerchantCategories: {
         parameters: {
             query?: never;
@@ -5556,6 +5684,39 @@ export interface operations {
             };
         };
     };
+    presignedMenuImageUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresignedUploadInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresignedUploadOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     listPlants: {
         parameters: {
             query?: never;
@@ -5697,6 +5858,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProvidersOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    exchangeAuthSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExchangeSessionInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExchangeSessionOutputBody"];
                 };
             };
             /** @description Error */

@@ -138,7 +138,16 @@ func (r *AnomalyRepo) List(ctx context.Context, statuses []compliance.AnomalySta
 }
 
 func (r *AnomalyRepo) Triage(ctx context.Context, id, by, notes string) error {
-	tag, err := r.pool.Exec(ctx, `
+	return triageAnomaly(ctx, r.pool, id, by, notes)
+}
+
+// TriageTx is the transactional variant of Triage.
+func (r *AnomalyRepo) TriageTx(ctx context.Context, tx pgx.Tx, id, by, notes string) error {
+	return triageAnomaly(ctx, tx, id, by, notes)
+}
+
+func triageAnomaly(ctx context.Context, q pgxQuerier, id, by, notes string) error {
+	tag, err := q.Exec(ctx, `
 UPDATE anomaly_alert SET status='triaged', triaged_at=now(), triaged_by=$2, notes=$3, updated_at=now()
 WHERE id=$1 AND status='open'`, id, by, notes)
 	if err != nil {
@@ -151,7 +160,16 @@ WHERE id=$1 AND status='open'`, id, by, notes)
 }
 
 func (r *AnomalyRepo) Close(ctx context.Context, id, by, notes string) error {
-	tag, err := r.pool.Exec(ctx, `
+	return closeAnomaly(ctx, r.pool, id, by, notes)
+}
+
+// CloseTx is the transactional variant of Close.
+func (r *AnomalyRepo) CloseTx(ctx context.Context, tx pgx.Tx, id, by, notes string) error {
+	return closeAnomaly(ctx, tx, id, by, notes)
+}
+
+func closeAnomaly(ctx context.Context, q pgxQuerier, id, by, notes string) error {
+	tag, err := q.Exec(ctx, `
 UPDATE anomaly_alert SET status='closed', closed_at=now(), closed_by=$2,
 notes = CASE WHEN $3 = '' THEN notes ELSE $3 END, updated_at=now()
 WHERE id=$1 AND status IN ('open', 'triaged')`, id, by, notes)

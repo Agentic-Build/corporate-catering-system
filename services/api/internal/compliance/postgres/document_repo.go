@@ -19,11 +19,20 @@ func NewDocumentRepo(p *pgxpool.Pool) *DocumentRepo { return &DocumentRepo{pool:
 const docCols = `id, vendor_id, kind, blob_uri, filename, uploaded_by, expires_at, status, reviewed_by, reviewed_at, notes, supersedes, created_at, updated_at`
 
 func (r *DocumentRepo) Create(ctx context.Context, d *compliance.Document) error {
+	return createDoc(ctx, r.pool, d)
+}
+
+// CreateTx is the transactional variant of Create.
+func (r *DocumentRepo) CreateTx(ctx context.Context, tx pgx.Tx, d *compliance.Document) error {
+	return createDoc(ctx, tx, d)
+}
+
+func createDoc(ctx context.Context, q pgxQuerier, d *compliance.Document) error {
 	status := d.Status
 	if status == "" {
 		status = compliance.DocStatusPending
 	}
-	err := r.pool.QueryRow(ctx, `
+	err := q.QueryRow(ctx, `
 INSERT INTO vendor_document (vendor_id, kind, blob_uri, filename, uploaded_by, expires_at, status, notes, supersedes)
 VALUES ($1, $2::vendor_document_kind, $3, $4, $5, $6, $7::vendor_document_status, $8, $9)
 RETURNING id, created_at, updated_at`,
@@ -69,7 +78,16 @@ func (r *DocumentRepo) ListByVendor(ctx context.Context, vendorID string, includ
 }
 
 func (r *DocumentRepo) UpdateStatus(ctx context.Context, id string, status compliance.DocumentStatus, reviewedBy *string, notes string) error {
-	tag, err := r.pool.Exec(ctx, `
+	return updateDocStatus(ctx, r.pool, id, status, reviewedBy, notes)
+}
+
+// UpdateStatusTx is the transactional variant of UpdateStatus.
+func (r *DocumentRepo) UpdateStatusTx(ctx context.Context, tx pgx.Tx, id string, status compliance.DocumentStatus, reviewedBy *string, notes string) error {
+	return updateDocStatus(ctx, tx, id, status, reviewedBy, notes)
+}
+
+func updateDocStatus(ctx context.Context, q pgxQuerier, id string, status compliance.DocumentStatus, reviewedBy *string, notes string) error {
+	tag, err := q.Exec(ctx, `
 UPDATE vendor_document
 SET status=$2::vendor_document_status, reviewed_by=$3, reviewed_at=now(), notes=$4, updated_at=now()
 WHERE id=$1`, id, string(status), reviewedBy, notes)

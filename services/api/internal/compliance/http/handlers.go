@@ -461,7 +461,9 @@ func mapErr(err error) error {
 	case errors.Is(err, compliance.ErrInvalidStatus),
 		errors.Is(err, compliance.ErrInvalidResupply):
 		return huma.Error409Conflict(err.Error())
-	case errors.Is(err, compliance.ErrInvalidAction):
+	case errors.Is(err, compliance.ErrInvalidAction),
+		errors.Is(err, compliance.ErrInvalidFilename),
+		errors.Is(err, compliance.ErrFileTooLarge):
 		return huma.Error400BadRequest(err.Error())
 	}
 	return huma.Error500InternalServerError("internal", err)

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -19,7 +21,7 @@ import (
 // VendorSuspender lets anomaly governance suspend a vendor. *vendor.Service
 // satisfies it; kept narrow to avoid pulling the whole vendor service in.
 type VendorSuspender interface {
-	Suspend(ctx context.Context, vendorID string) error
+	Suspend(ctx context.Context, vendorID, adminUserID string) error
 }
 
 // Clock lets tests pin "now".
@@ -104,6 +106,22 @@ type UploadInput struct {
 // When in.Supersedes is set the upload is a resupply: the referenced document
 // must belong to the same vendor and already be reviewed (validateResupplyTarget),
 // and the new row links back to it via vendor_document.supersedes.
+const maxDocumentBytes int64 = 10 << 20
+
+// sanitizeDocFilename strips path components so a filename like
+// "../../payroll/x.csv" can't escape the vendor-docs/{vendor}/ key prefix.
+func sanitizeDocFilename(name string) (string, error) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "", ErrInvalidFilename
+	}
+	base := path.Base(trimmed)
+	if base == "." || base == ".." || base == "/" {
+		return "", ErrInvalidFilename
+	}
+	return base, nil
+}
+
 func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document, error) {
 	if in.Supersedes != nil {
 		target, err := s.Docs.GetByID(ctx, *in.Supersedes)
@@ -114,11 +132,18 @@ func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document
 			return nil, err
 		}
 	}
-	buf, err := io.ReadAll(in.Body)
+	filename, err := sanitizeDocFilename(in.Filename)
+	if err != nil {
+		return nil, err
+	}
+	buf, err := io.ReadAll(io.LimitReader(in.Body, maxDocumentBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read upload: %w", err)
 	}
-	key := fmt.Sprintf("vendor-docs/%s/%d-%s", in.VendorID, s.Clock.Now().UnixNano(), in.Filename)
+	if int64(len(buf)) > maxDocumentBytes {
+		return nil, ErrFileTooLarge
+	}
+	key := fmt.Sprintf("vendor-docs/%s/%d-%s", in.VendorID, s.Clock.Now().UnixNano(), filename)
 	uri, err := s.Storage.PutObject(ctx, key, bytes.NewReader(buf), "application/octet-stream")
 	if err != nil {
 		return nil, fmt.Errorf("upload: %w", err)
@@ -128,25 +153,27 @@ func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document
 		VendorID:   in.VendorID,
 		Kind:       in.Kind,
 		BlobURI:    uri,
-		Filename:   in.Filename,
+		Filename:   filename,
 		UploadedBy: &uploadedBy,
 		ExpiresAt:  in.ExpiresAt,
 		Status:     DocStatusPending,
 		Supersedes: in.Supersedes,
 	}
-	if err := s.Docs.Create(ctx, d); err != nil {
-		return nil, err
-	}
-
 	role := in.ActorRole
 	if role == "" {
 		role = "welfare_admin"
 	}
+	// Row insert + audit in one tx so a failed audit can't leave an orphan
+	// document row. (The S3 object is written above and is outside the tx;
+	// orphan blobs are handled by storage reconciliation, not this path.)
 	auditErr := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := s.Docs.CreateTx(ctx, tx, d); err != nil {
+			return err
+		}
 		payload := map[string]any{
 			"vendor_id":  in.VendorID,
 			"kind":       string(in.Kind),
-			"filename":   in.Filename,
+			"filename":   filename,
 			"uri":        uri,
 			"size_bytes": len(buf),
 		}
@@ -168,7 +195,7 @@ func (s *Service) ReviewDocument(ctx context.Context, docID, reviewerID string, 
 		return ErrInvalidStatus
 	}
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		if err := s.Docs.UpdateStatus(ctx, docID, status, &reviewerID, notes); err != nil {
+		if err := s.Docs.UpdateStatusTx(ctx, tx, docID, status, &reviewerID, notes); err != nil {
 			return err
 		}
 		role := "welfare_admin"
@@ -222,11 +249,11 @@ func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes, action strin
 	if err != nil {
 		return err
 	}
-	if err := s.Anomaly.Triage(ctx, id, by, notes); err != nil {
-		return err
-	}
 	role := "welfare_admin"
 	auditErr := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := s.Anomaly.TriageTx(ctx, tx, id, by, notes); err != nil {
+			return err
+		}
 		payload := map[string]any{"anomaly_id": id, "notes": notes, "action": action}
 		if werr := s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.triage", "anomaly_alert", id, payload, ""); werr != nil {
 			return werr
@@ -243,7 +270,7 @@ func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes, action strin
 	if action == ActionSuspend && a.TargetKind == "vendor" && s.VendorGov != nil {
 		// An already-suspended/terminated vendor surfaces ErrInvalidStatus —
 		// the goal (vendor not operating) is already met, so treat as success.
-		if err := s.VendorGov.Suspend(ctx, a.TargetID); err != nil && !errors.Is(err, vendor.ErrInvalidStatus) {
+		if err := s.VendorGov.Suspend(ctx, a.TargetID, by); err != nil && !errors.Is(err, vendor.ErrInvalidStatus) {
 			return err
 		}
 	}
@@ -252,10 +279,10 @@ func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes, action strin
 
 // CloseAnomaly closes an open/triaged anomaly + writes an audit row.
 func (s *Service) CloseAnomaly(ctx context.Context, id, by, notes string) error {
-	if err := s.Anomaly.Close(ctx, id, by, notes); err != nil {
-		return err
-	}
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := s.Anomaly.CloseTx(ctx, tx, id, by, notes); err != nil {
+			return err
+		}
 		role := "welfare_admin"
 		payload := map[string]any{"anomaly_id": id, "notes": notes}
 		return s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.close", "anomaly_alert", id, payload, "")

@@ -3,13 +3,17 @@ package compliance
 import (
 	"context"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type DocumentRepository interface {
 	Create(ctx context.Context, d *Document) error
+	CreateTx(ctx context.Context, tx pgx.Tx, d *Document) error
 	GetByID(ctx context.Context, id string) (*Document, error)
 	ListByVendor(ctx context.Context, vendorID string, includeAll bool) ([]*Document, error)
 	UpdateStatus(ctx context.Context, id string, status DocumentStatus, reviewedBy *string, notes string) error
+	UpdateStatusTx(ctx context.Context, tx pgx.Tx, id string, status DocumentStatus, reviewedBy *string, notes string) error
 	ListExpiringBefore(ctx context.Context, before time.Time) ([]*Document, error)
 	ListPastExpiry(ctx context.Context, now time.Time) ([]*Document, error)
 }
@@ -22,5 +26,7 @@ type AnomalyRepository interface {
 	GetByID(ctx context.Context, id string) (*Anomaly, error)
 	List(ctx context.Context, statuses []AnomalyStatus, severities []AnomalySeverity) ([]*Anomaly, error)
 	Triage(ctx context.Context, id string, by string, notes string) error
+	TriageTx(ctx context.Context, tx pgx.Tx, id string, by string, notes string) error
 	Close(ctx context.Context, id string, by string, notes string) error
+	CloseTx(ctx context.Context, tx pgx.Tx, id string, by string, notes string) error
 }
