@@ -29,12 +29,15 @@ export const actions: Actions = {
       body: { order_id: params.id, reason } as any,
     });
     if (r.error) {
-      // RFC 9457 problem-details — surface a calm Chinese message, not raw JSON.
-      // Backend rejects (4xx) when the order has no payroll entry yet.
+      // RFC 9457 problem-details — surface a calm Chinese message, never the raw
+      // backend string. A 404 here means the order has no payroll entry yet
+      // (current, not-yet-settled period); disputes open once it's settled.
       const err = r.error as { status?: number; detail?: string };
-      return fail(err.status ?? 400, {
-        error: err.detail ?? "送出申訴失敗，此訂單可能尚未產生薪資代扣紀錄，請稍後再試。",
-      });
+      const message =
+        err.status === 404
+          ? "此訂單尚未產生薪資代扣紀錄，將於結算後開放申訴。"
+          : "送出申訴失敗，請稍後再試。";
+      return fail(err.status ?? 400, { error: message });
     }
     throw redirect(303, "/disputes");
   },

@@ -28,9 +28,16 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
   // Surface an already-filed complaint for this order (no per-order GET, so
   // pull the employee's complaint list and match on order_id).
   let complaint = undefined;
+  // Surface an already-submitted rating so a revisit shows it instead of a
+  // blank form (404 = not rated yet, leaves rating undefined).
+  let rating = undefined;
   if (order.status === "picked_up") {
     const cr = await client.GET("/api/employee/complaints");
     if (cr.data) complaint = (cr.data.items ?? []).find((c) => c.order_id === params.id);
+    const rr = await client.GET("/api/employee/orders/{id}/rating", {
+      params: { path: { id: params.id } },
+    });
+    if (rr.data) rating = rr.data.rating;
   }
 
   // For a still-editable order, load the vendor's menu on the supply date so
@@ -43,7 +50,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     if (mr.data) menu = (mr.data.items ?? []).filter((m) => m.vendor_id === order.vendor_id);
   }
 
-  return { user: locals.user, order, complaint, menu };
+  return { user: locals.user, order, complaint, rating, menu };
 };
 
 export const actions: Actions = {

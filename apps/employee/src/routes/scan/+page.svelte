@@ -4,7 +4,7 @@
   // permission. html5-qrcode is imported client-side (avoids SSR).
   import { PageHeader, Card, Button, Icon } from "@tbite/ui";
   import { enhance } from "$app/forms";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import { parsePickupQR } from "@tbite/pickup";
 
   let { form } = $props();
@@ -19,11 +19,14 @@
   let scannedId = $state("");
   let submitting = $state(false);
 
-  function submitScanned(orderId: string) {
+  async function submitScanned(orderId: string) {
     if (submitting) return;
     submitting = true;
     scannedId = orderId;
     void stopScanner();
+    // Let Svelte flush scannedId into the hidden input's value before submit,
+    // otherwise the form posts an empty orderId and the action rejects it.
+    await tick();
     scanForm.requestSubmit();
   }
 

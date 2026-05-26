@@ -80,7 +80,7 @@
 {:else}
   <ol class="relative grid gap-3 border-l-2 border-tb-slate-200 pl-4">
     {#each data.events as e (e.id)}
-      <li class="relative rounded-tb-2xl border border-tb-slate-200 bg-white p-4 shadow-tb-sm">
+      <li class="relative min-w-0 rounded-tb-2xl border border-tb-slate-200 bg-white p-4 shadow-tb-sm">
         <span
           class="absolute -left-[1.4rem] top-5 h-3 w-3 rounded-full bg-tb-slate-300 ring-2 ring-white"
         ></span>
@@ -102,7 +102,7 @@
         </p>
         {#if e.payload}
           <pre
-            class="mt-2 overflow-x-auto rounded-lg bg-tb-slate-50 p-2 font-jetbrains-mono text-xs text-tb-slate-700">{preview(
+            class="mt-2 min-w-0 overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-tb-slate-50 p-2 font-jetbrains-mono text-xs text-tb-slate-700">{preview(
               e.payload,
             )}</pre>
         {/if}
