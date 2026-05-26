@@ -21,7 +21,7 @@
           <Icon name="cart" class="h-4 w-4" />
         </span>
         <div>
-          <div class="text-[11px] text-tb-slate-300">已選 {cart.count} 份 · 薪資代扣</div>
+          <div class="text-[11px] text-tb-slate-300">已選 {cart.count} 份 · 月結</div>
           <div class="font-jetbrains-mono text-base font-black leading-tight tabular-nums">
             ${cart.total.toLocaleString()}
           </div>
