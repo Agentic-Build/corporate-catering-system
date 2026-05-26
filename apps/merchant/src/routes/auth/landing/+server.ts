@@ -11,7 +11,7 @@ export async function GET(event) {
   let token = event.url.searchParams.get("token") ?? undefined;
 
   if (code) {
-    const r = await event.fetch(`${API_BASE_URL}/api/auth/session`, {
+    const r = await event.fetch(`${API_BASE_URL}/auth/session`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ code }),
