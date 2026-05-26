@@ -140,19 +140,20 @@ service: `menu:<uuid>`, `order:<uuid>`, `vendor:<uuid>`.
         "MCP_BEARER_TOKEN": "tb_…",
         "DATABASE_RW_URL": "postgres://…",
         "REDIS_URL": "redis://…",
-        "OIDC_CALLBACK_BASE_URL": "http://localhost:8080",
+        "OIDC_CALLBACK_BASE_URL": "http://api.tbite.local",
         "AUTH_PROVIDER_SLUGS": "authentik",
-        "AUTH_PROVIDER_AUTHENTIK_ISSUER_URL": "http://localhost:9002/application/o/tbite/",
+        "AUTH_PROVIDER_AUTHENTIK_ISSUER_URL": "http://auth.tbite.local/application/o/tbite/",
         "AUTH_PROVIDER_AUTHENTIK_CLIENT_ID": "tbite-local",
-        "AUTH_PROVIDER_AUTHENTIK_CLIENT_SECRET": "tbite-local-client-secret",
-        "AUTHENTIK_BASE_URL": "http://localhost:9002",
-        "AUTHENTIK_API_TOKEN": "tbite-dev-authentik-api-token",
-        "APP_BASE_URL_EMPLOYEE": "http://localhost:5173",
-        "APP_BASE_URL_MERCHANT": "http://localhost:5174",
-        "APP_BASE_URL_ADMIN": "http://localhost:5175",
-        "S3_ACCESS_KEY_ID": "x",
-        "S3_SECRET_ACCESS_KEY": "x",
-        "S3_BUCKET": "tbite"
+        "AUTH_PROVIDER_AUTHENTIK_CLIENT_SECRET": "change-me",
+        "AUTHENTIK_BASE_URL": "http://auth.tbite.local",
+        "AUTHENTIK_API_TOKEN": "change-me",
+        "APP_BASE_URL_EMPLOYEE": "http://app.tbite.local",
+        "APP_BASE_URL_MERCHANT": "http://merchant.tbite.local",
+        "APP_BASE_URL_ADMIN": "http://admin.tbite.local",
+        "S3_ENDPOINT": "http://minio.tbite.local",
+        "S3_ACCESS_KEY_ID": "change-me",
+        "S3_SECRET_ACCESS_KEY": "change-me",
+        "S3_BUCKET": "tbite-dev"
       }
     }
   }

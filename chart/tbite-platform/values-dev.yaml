@@ -72,6 +72,8 @@ scheduler:
 
 postgres:
   enabled: true
+  operator:
+    bundled: true
   cluster:
     instances: 1
     storage:
@@ -158,6 +160,7 @@ observability:
     enabled: false
   grafana:
     enabled: true
+    ingressHost: grafana.tbite.local
   otelCollector:
     enabled: true
 

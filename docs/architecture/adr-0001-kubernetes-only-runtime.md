@@ -102,7 +102,7 @@ validation.
 | Dev, staging, and production all deploy through the same chart family. | `chart/tbite-platform/` with shared templates and `chart/tbite-platform/values.yaml` schema; environment-specific overlays in `chart/tbite-platform/values-dev.yaml` and `chart/tbite-platform/values-prod.yaml`. |
 | Runtime differences are confined to values: replicas, resources, storage class, storage size, domains, certificates, and secrets. | `chart/tbite-platform/values.schema.json` enforces the permitted value surface; `chart/tbite-platform/values-dev.yaml` and `chart/tbite-platform/values-prod.yaml` differ only along these dimensions. |
 | docker-compose and single-node manifests are not production behavior models. | The chart is the only packaging artifact governed by this baseline. Any existing single-node manifest is retained for non-production use only and is not part of the production contract. |
-| Local instructions cover kind, k3d, and OrbStack Kubernetes. | **Follow-up** — local cluster instructions for kind, k3d, and OrbStack are to be added to `docs/deployment/` in a subsequent change. |
+| Local instructions cover kind, k3d, and OrbStack Kubernetes. | `docs/deployment/local-clusters.md` documents all three supported local cluster paths and the Helm dev chart workflow. |
 | The baseline uses standard Kubernetes APIs unless a provider-specific integration is explicitly guarded behind values. | The chart templates use core Kubernetes APIs, Gateway API, and the operators declared in [`adr-0004`](adr-0004-self-hosted-ha-data-plane.md); no OpenShift-specific or provider-specific resources are included unconditionally. |
 
 ## Scope Boundary
