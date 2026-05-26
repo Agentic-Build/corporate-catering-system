@@ -126,8 +126,9 @@
     })(),
   );
 
-  // ── category filter — chips from distinct day_menu tags ──
-  let activeCat = $state("all");
+  // ── category filter — chips from distinct day_menu tags. Selection is the
+  //    shared URL `tags` set (same state the MenuFilterBar writes), so the top
+  //    strip and the filter bar are one filter, not two. ──
   const categories = $derived(
     (() => {
       const seen = new Set<string>();
@@ -136,18 +137,34 @@
     })(),
   );
 
+  // Toggle a tag in the URL `tags` set (or clear all via the "全部" chip),
+  // then let the server-filtered grid pick it up like the MenuFilterBar does.
+  function toggleCategory(id: string) {
+    const url = new URL($page.url);
+    const sp = url.searchParams;
+    if (id === "all") {
+      sp.delete("tags");
+    } else {
+      const current = sp.getAll("tags");
+      const next = current.includes(id) ? current.filter((t) => t !== id) : [...current, id];
+      sp.delete("tags");
+      for (const t of next) sp.append("tags", t);
+    }
+    goto(url.pathname + url.search, { keepFocus: true, noScroll: true });
+  }
+
   // ── header search query (set by the layout SearchInput) ──
   const query = $derived($page.url.searchParams.get("q")?.trim() ?? "");
 
-  // ── F3 — when the filter bar is active the server returns an already
-  //    filtered/sorted grid; otherwise the day_menu is filtered client-side
-  //    by the category strip + header search box. ──
+  // ── F3 — tag selection (top strip or filter bar) and any other filter live
+  //    in the URL, so an active filter means the server returns the
+  //    filtered/sorted grid; otherwise the day_menu is shown, narrowed only by
+  //    the header search box client-side. ──
   const serverFiltered = $derived(Boolean(data.filterActive));
   const filteredMenu = $derived(
     serverFiltered
       ? ((data.filteredMenu as DayMenuItem[]) ?? [])
       : dayMenu.filter((m) => {
-          if (activeCat !== "all" && !(m.tags ?? []).includes(activeCat)) return false;
           if (query && !m.name.includes(query) && !m.vendor.includes(query)) return false;
           return true;
         }),
@@ -367,7 +384,7 @@
   <!-- Category strip -->
   {#if categories.length > 1}
     <section class="mb-5">
-      <CategoryStrip {categories} active={activeCat} onChange={(id) => (activeCat = id)} />
+      <CategoryStrip {categories} selected={data.menuFilter.tags} onChange={toggleCategory} />
     </section>
   {/if}
 

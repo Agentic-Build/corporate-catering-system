@@ -48,15 +48,17 @@
   }
   interface Props {
     categories: Category[];
-    active: string;
+    // Shared tag selection (the URL `tags` set). The "all" chip is on when
+    // nothing is selected; tag chips are multi-select and toggle.
+    selected: string[];
     onChange: (id: string) => void;
   }
-  let { categories, active, onChange }: Props = $props();
+  let { categories, selected, onChange }: Props = $props();
 </script>
 
 <div class="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-2">
   {#each categories as c (c.id)}
-    {@const on = active === c.id}
+    {@const on = c.id === "all" ? selected.length === 0 : selected.includes(c.id)}
     {@const s = tagStyle(c.id)}
     <button
       type="button"
