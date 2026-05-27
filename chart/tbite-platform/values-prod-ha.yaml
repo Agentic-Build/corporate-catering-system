@@ -18,6 +18,10 @@ profile:
 global:
   podAnnotations:
     sidecar.istio.io/inject: "false"
+  nats:
+    # 5-node JetStream cluster (see nats.cluster.replicas below) → run streams
+    # at 3 replicas so the loss of one node never makes a stream unavailable.
+    streamReplicas: 3
 
 # Pod anti-affinity for application roles (tbite.* templates only;
 # subcharts use their own affinity preset to avoid the Helm

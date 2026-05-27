@@ -71,6 +71,11 @@ global:
       secretKeyKey: secretAccessKey
   nats:
     url: "nats://tbite-nats.tbite.svc.cluster.local:4222"
+    # JetStream stream replica count (NATS_STREAM_REPLICAS, read by the
+    # provision-streams role). Kept at 1 here to match the streams already
+    # provisioned on the live deploy — raising it reconfigures existing
+    # streams, so do that deliberately (see values-prod-ha.yaml, which ships 3).
+    streamReplicas: 1
     credentialsSecretRef:
       name: tbite-nats
       key: creds
