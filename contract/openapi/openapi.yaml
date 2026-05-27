@@ -1655,6 +1655,9 @@ components:
                         - "null"
                 notes:
                     type: string
+                order_number:
+                    format: int64
+                    type: integer
                 picked_up_at:
                     type: string
                 placed_at:
@@ -1670,6 +1673,7 @@ components:
                     type: integer
             required:
                 - id
+                - order_number
                 - plant
                 - status
                 - total_price_minor
@@ -1852,6 +1856,9 @@ components:
                         - "null"
                 notes:
                     type: string
+                order_number:
+                    format: int64
+                    type: integer
                 placed_at:
                     type: string
                 plant:
@@ -1867,6 +1874,7 @@ components:
                     type: string
             required:
                 - id
+                - order_number
                 - vendor_id
                 - plant
                 - supply_date

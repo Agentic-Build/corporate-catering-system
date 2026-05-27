@@ -10,6 +10,7 @@
   }
   interface MerchantOrder {
     id: string;
+    order_number: number;
     plant: string;
     status: string;
     items: OrderItem[];
@@ -78,9 +79,9 @@
   <div class="label-grid">
     {#each orders as o (o.id)}
       <div class="label">
-        <div class="label-id font-jetbrains-mono">{o.id.slice(0, 8)}</div>
+        <div class="label-id font-jetbrains-mono">#{o.order_number}</div>
         {#if qrByOrder[o.id]}
-          <img class="label-qr" src={qrByOrder[o.id]} alt="QR {o.id.slice(0, 8)}" />
+          <img class="label-qr" src={qrByOrder[o.id]} alt="QR #{o.order_number}" />
         {:else}
           <div class="label-qr label-qr-placeholder"></div>
         {/if}

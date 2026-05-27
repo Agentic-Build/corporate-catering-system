@@ -208,10 +208,11 @@ func (r *fakeRecentOrders) OrderAvailability(_ context.Context, _ []string, _ ti
 type fakePopularity struct {
 	popularity map[string]float64
 	meta       []menu.MenuItemMeta
-	cutoffs    bool
-	popErr     error
-	metaErr    error
-	cutoffErr  error
+	cutoffs           bool
+	cutoffsPassedDays map[string]bool
+	popErr            error
+	metaErr           error
+	cutoffErr         error
 }
 
 func (r *fakePopularity) PlantPopularity(_ context.Context, _ string, _ time.Time) (map[string]float64, error) {
@@ -226,9 +227,12 @@ func (r *fakePopularity) MetaByIDs(_ context.Context, _ []string) ([]menu.MenuIt
 	}
 	return r.meta, nil
 }
-func (r *fakePopularity) AllCutoffsPassed(_ context.Context, _ string, _ time.Time, _ time.Time) (bool, error) {
+func (r *fakePopularity) AllCutoffsPassed(_ context.Context, _ string, day time.Time, _ time.Time) (bool, error) {
 	if r.cutoffErr != nil {
 		return false, r.cutoffErr
+	}
+	if r.cutoffsPassedDays != nil {
+		return r.cutoffsPassedDays[day.Format("2006-01-02")], nil
 	}
 	return r.cutoffs, nil
 }
@@ -1144,7 +1148,7 @@ func TestGetHome_OK(t *testing.T) {
 func TestGetHome_NoOrderTomorrowWhenCutoffsPassed(t *testing.T) {
 	srv, ro, pop, _, _, _ := buildHome(t, employeeUser())
 	ro.orderToday = nil
-	pop.cutoffs = true // all cutoffs passed → target_day rolls to tomorrow
+	pop.cutoffsPassedDays = map[string]bool{"2026-05-14": true}
 	resp := do(t, http.MethodGet, srv.URL+"/api/employee/home", "")
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)

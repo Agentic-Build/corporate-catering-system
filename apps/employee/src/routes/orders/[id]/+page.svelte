@@ -138,7 +138,10 @@
   {/if}
 
   <Card>
-    <p class="font-jetbrains-mono text-[11px] text-tb-slate-500">{o.id}</p>
+    <p class="font-jetbrains-mono text-2xl font-black tabular-nums text-tb-slate-900">
+      單號 #{o.order_number}
+    </p>
+    <p class="mt-1 font-jetbrains-mono text-[11px] text-tb-slate-400">{o.id}</p>
     <dl class="mt-3 grid grid-cols-2 gap-y-2.5 text-sm">
       <dt class="text-tb-slate-500">取餐日</dt>
       <dd class="font-jetbrains-mono">{o.supply_date}</dd>

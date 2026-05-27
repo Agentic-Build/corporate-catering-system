@@ -2202,6 +2202,8 @@ export interface components {
             id: string;
             items: components["schemas"]["OrderItemDTO"][] | null;
             notes: string;
+            /** Format: int64 */
+            order_number: number;
             picked_up_at?: string;
             placed_at?: string;
             plant: string;
@@ -2293,6 +2295,8 @@ export interface components {
             id: string;
             items: components["schemas"]["OrderItemDTO"][] | null;
             notes: string;
+            /** Format: int64 */
+            order_number: number;
             placed_at?: string;
             plant: string;
             status: string;

@@ -139,11 +139,12 @@ const (
 //  1. If dayOverride is non-empty, parse it as YYYY-MM-DD and use as-is.
 //     Still surface the day's order summary if one exists.
 //  2. Otherwise, today = clock.Now() in ServerTZ.
-//  3. If the user has an order today and it is picked_up/no_show, return
-//     tomorrow (today is "done" for this user).
-//  4. Otherwise, if every meal_supply row for today has cutoff_at ≤ now,
-//     return tomorrow (you can't order today any more).
-//  5. Otherwise, stay on today.
+//  3. If the user has an order today and it is picked_up/no_show, today is
+//     "done" for this user → advance to the next orderable day (the first
+//     day from tomorrow whose supplies aren't all past cutoff).
+//  4. Otherwise, target the next orderable day starting from today: stay on
+//     today unless every meal_supply row for the day has cutoff_at ≤ now, in
+//     which case skip forward to the first day that is still orderable.
 func (s *HomeService) Compute(ctx context.Context, userID, plant, dayOverride string) (HomeState, error) {
 	tz := s.ServerTZ
 	if tz == nil {
@@ -177,7 +178,19 @@ func (s *HomeService) Compute(ctx context.Context, userID, plant, dayOverride st
 	}
 	if row != nil {
 		if row.Status == "picked_up" || row.Status == "no_show" {
-			return HomeState{TargetDay: tomorrow.Format(dateLayout)}, nil
+			next, err := s.nextOrderableDay(ctx, plant, tomorrow)
+			if err != nil {
+				return HomeState{}, fmt.Errorf("next-orderable-day: %w", err)
+			}
+			summary, err := s.orderSummaryFor(ctx, userID, plant, next)
+			if err != nil {
+				return HomeState{}, err
+			}
+			return HomeState{
+				TargetDay:    next.Format(dateLayout),
+				HasOrdered:   summary != nil,
+				OrderSummary: summary,
+			}, nil
 		}
 		return HomeState{
 			TargetDay:    today.Format(dateLayout),
@@ -186,14 +199,34 @@ func (s *HomeService) Compute(ctx context.Context, userID, plant, dayOverride st
 		}, nil
 	}
 
-	passed, err := s.Popularity.AllCutoffsPassed(ctx, plant, today, s.Clock.Now())
+	next, err := s.nextOrderableDay(ctx, plant, today)
 	if err != nil {
-		return HomeState{}, fmt.Errorf("all-cutoffs-passed: %w", err)
+		return HomeState{}, fmt.Errorf("next-orderable-day: %w", err)
 	}
-	if passed {
-		return HomeState{TargetDay: tomorrow.Format(dateLayout)}, nil
+	summary, err := s.orderSummaryFor(ctx, userID, plant, next)
+	if err != nil {
+		return HomeState{}, err
 	}
-	return HomeState{TargetDay: today.Format(dateLayout)}, nil
+	return HomeState{
+		TargetDay:    next.Format(dateLayout),
+		HasOrdered:   summary != nil,
+		OrderSummary: summary,
+	}, nil
+}
+
+func (s *HomeService) nextOrderableDay(ctx context.Context, plant string, start time.Time) (time.Time, error) {
+	day := start
+	for i := 0; i < 14; i++ {
+		passed, err := s.Popularity.AllCutoffsPassed(ctx, plant, day, s.Clock.Now())
+		if err != nil {
+			return day, err
+		}
+		if !passed {
+			return day, nil
+		}
+		day = day.AddDate(0, 0, 1)
+	}
+	return day, nil
 }
 
 func (s *HomeService) orderSummaryFor(ctx context.Context, userID, plant string, day time.Time) (*OrderSummary, error) {

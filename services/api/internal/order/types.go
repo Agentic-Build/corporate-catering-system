@@ -17,6 +17,7 @@ const (
 
 type Order struct {
 	ID              string
+	OrderNumber     int64
 	UserID          string
 	VendorID        string
 	Plant           string

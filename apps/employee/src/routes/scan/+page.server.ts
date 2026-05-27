@@ -10,11 +10,28 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   return { user: locals.user };
 };
 
-async function pickup(client: ReturnType<typeof createApiClient>, id: string) {
+async function pickup(
+  client: ReturnType<typeof createApiClient>,
+  id: string,
+): Promise<number | null> {
   const r = await client.POST("/api/employee/orders/{id}/pickup", {
     params: { path: { id } },
   });
-  return r.error ? JSON.stringify(r.error) : null;
+  if (!r.error) return null;
+  return r.response?.status ?? 0;
+}
+
+function pickupError(status: number): string {
+  switch (status) {
+    case 403:
+      return "這不是您本人的訂單，無法核銷。";
+    case 404:
+      return "找不到這筆訂單。";
+    case 409:
+      return "此訂單目前無法取餐：可能供應日尚未到、商家尚未備餐完成，或已領取過。";
+    default:
+      return "核銷失敗，請稍後再試。";
+  }
 }
 
 export const actions: Actions = {
@@ -26,9 +43,8 @@ export const actions: Actions = {
     if (!id) return fail(400, { error: "未取得訂單編號" });
 
     const client = createApiClient(API_BASE_URL, locals.apiToken);
-    const err = await pickup(client, id);
-    if (err)
-      return fail(400, { error: "核銷失敗，請確認這是您本人的餐點且尚未領取。", orderId: id });
+    const status = await pickup(client, id);
+    if (status !== null) return fail(400, { error: pickupError(status), orderId: id });
     return { ok: true, pickedUpId: id };
   },
 
@@ -46,13 +62,16 @@ export const actions: Actions = {
     const listRes = await client.GET("/api/employee/orders");
     const items = ((listRes.data as { items?: unknown[] } | undefined)?.items ?? []) as {
       id: string;
+      order_number: number;
       status: string;
     }[];
 
     const matches = items.filter(
       (o) =>
         o.status === "ready" &&
-        (o.id.toLowerCase() === code || o.id.slice(0, 8).toLowerCase() === code),
+        (String(o.order_number) === code ||
+          o.id.toLowerCase() === code ||
+          o.id.slice(0, 8).toLowerCase() === code),
     );
     if (matches.length === 0) {
       return fail(404, { error: "找不到符合的待領訂單，請確認編號或改用相機掃描。", manual: true });
@@ -64,8 +83,8 @@ export const actions: Actions = {
       });
     }
 
-    const err = await pickup(client, matches[0].id);
-    if (err) return fail(400, { error: "核銷失敗，請稍後再試。", manual: true });
+    const status = await pickup(client, matches[0].id);
+    if (status !== null) return fail(400, { error: pickupError(status), manual: true });
     return { ok: true, pickedUpId: matches[0].id };
   },
 };

@@ -264,6 +264,32 @@ func TestHomeCompute_AllCutoffsPassed_ReturnsTomorrow(t *testing.T) {
 	assert.False(t, state.HasOrdered)
 }
 
+func TestHomeCompute_TomorrowCutoffAlsoPassed_SkipsToNextOrderableDay(t *testing.T) {
+	pool, cleanup := setupHomePostgres(t)
+	defer cleanup()
+	ctx := context.Background()
+	plant := "F12B-3F"
+	user := seedHomeEmployee(t, pool, plant)
+	vendor := seedHomeVendor(t, pool, plant)
+	item := seedHomeItem(t, pool, vendor)
+
+	day := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
+	tomorrow := day.AddDate(0, 0, 1)
+	dayAfter := day.AddDate(0, 0, 2)
+	now := day.Add(11 * time.Hour)
+
+	seedHomeMealSupply(t, pool, item, day, day.Add(10*time.Hour))
+	seedHomeMealSupply(t, pool, item, tomorrow, day.Add(10*time.Hour))
+	seedHomeMealSupply(t, pool, item, dayAfter, dayAfter.Add(10*time.Hour))
+
+	svc := newHomeServiceForTest(pool, now, 1.0)
+	state, err := svc.Compute(ctx, user, plant, "")
+	require.NoError(t, err)
+	assert.Equal(t, "2026-05-17", state.TargetDay)
+	assert.False(t, state.HasOrdered)
+	assert.Nil(t, state.OrderSummary)
+}
+
 func TestHomeCompute_DayOverrideTakesPrecedence(t *testing.T) {
 	pool, cleanup := setupHomePostgres(t)
 	defer cleanup()
