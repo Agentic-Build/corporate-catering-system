@@ -1,6 +1,31 @@
 # Changelog
 
-All notable changes to T-Bite, by phase.
+All notable changes to T-Bite, by phase. From 2026-05-19 the project moved to
+closed-loop GitOps CD (push → CI sha write-back → ArgoCD), so this file is
+maintained by theme rather than per-PR; the authoritative fine-grained history
+is the git log / GitHub PRs.
+
+## Platform, deploy & architecture baseline (2026-05-19 → 2026-05-27)
+
+Architecture & delivery (Issue #47)
+- Locked a self-hostable cloud-native scaling baseline (ADRs + arch specs) (#64, #67)
+- Closed-loop GitOps CD: immutable `sha-<commit>` image tags + CI git write-back, ArgoCD auto-deploy (#28, #43, #44); GHCR image publish
+- Read/write split wired through (RO pool), MCP auth-failure metric (#95)
+- JetStream stream replicas configurable via `NATS_STREAM_REPLICAS` (#92)
+- SSE events fragment-scoped invalidation, replacing `invalidateAll` (#93)
+- Popularity / recommendation aggregation moved onto a read model (Issue #59) (#94)
+
+Product
+- Merchant revamp: card-based menu, board/sticker integration, two-state menu, badges removed (+ DB columns), service-area management (#85, #74, #91)
+- Plant registry (addresses + merchant self-select) and image object storage on S3/MinIO (#72, #73)
+- Pickup redesign: employees scan a meal-sticker QR for self-service verification (#26)
+- Three frontends re-aligned to the mobile design (RWD); native/Tauri employee app and the docker-compose runtime removed (#24, #29, #88)
+
+Quality, observability & hardening
+- Internal backend test coverage raised from ~46% to 79.6% (#87)
+- Backfilled missing Grafana metrics, fixed silent alerts and dashboard metric sources (#75, #77, #78, #79, #45, #46)
+- Deployment convergence + NYCU in-cluster hardening: drift-proof OIDC client_id/secret, cloudflared tunnel in GitOps, automatic DB migration, service rename to `tbite-<role>` (#66, #68, #69, #70, #76, #31–#41)
+- Bug-fix waves: 12-issue functional audit (#80), demo-playbook fixes (#81), order-cutoff timezone + unified tag filters (#83), team-reported bugs (#84), HackMD checklist follow-ups (#89, #90, #91)
 
 ## Remaining Audit Gaps — Menu / Settings / Prep / Governance (2026-05-18)
 - G 菜單複製: `POST /api/merchant/menu-items/{id}/copy` clones a menu item into a fresh draft
