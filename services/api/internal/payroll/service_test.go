@@ -134,8 +134,8 @@ func seedMenuItem(t *testing.T, pool *pgxpool.Pool, vendorID string, priceMinor 
 	n := itemCounter.Add(1)
 	var id string
 	err := pool.QueryRow(context.Background(), `
-INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags, badges)
-VALUES ($1, $2, '', $3, 'active', '{}', '{}') RETURNING id`,
+INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags)
+VALUES ($1, $2, '', $3, 'active', '{}') RETURNING id`,
 		vendorID, fmt.Sprintf("payroll-svc-item-%d", n), priceMinor,
 	).Scan(&id)
 	require.NoError(t, err)
@@ -314,7 +314,8 @@ func TestService_OpenDispute_Happy(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, d.ID)
 	assert.Equal(t, payroll.DisputeStatusOpen, d.Status)
-	assert.Equal(t, entryID, d.EntryID)
+	require.NotNil(t, d.EntryID)
+	assert.Equal(t, entryID, *d.EntryID)
 	assert.Equal(t, orderID, d.OrderID)
 	assert.Equal(t, user, d.OpenedBy)
 
@@ -354,6 +355,53 @@ func TestService_OpenDispute_NotOwner(t *testing.T) {
 		OpenedBy: intruder,
 		Reason:   "not mine",
 	})
+	assert.ErrorIs(t, err, payroll.ErrForbidden)
+}
+
+// TestService_OpenDisputeByOrder_CurrentPeriodNoEntry verifies a current-period
+// order (no payroll entry built yet) can still be disputed; the dispute is
+// created with a NULL entry_id linked only to the order.
+func TestService_OpenDisputeByOrder_CurrentPeriodNoEntry(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	vendor := seedVendor(t, pool)
+	user := seedEmployeeUser(t, pool)
+	// no_show order, but no batch is built → no payroll entry exists.
+	orderID := seedOrderWithStatus(t, pool, user, vendor,
+		time.Date(2026, 5, 20, 0, 0, 0, 0, time.UTC), 15000, order.StatusNoShow)
+
+	d, err := svc.OpenDisputeByOrder(ctx, orderID, user, "沒拿到餐")
+	require.NoError(t, err)
+	require.NotEmpty(t, d.ID)
+	assert.Equal(t, payroll.DisputeStatusOpen, d.Status)
+	assert.Equal(t, orderID, d.OrderID)
+	assert.Equal(t, user, d.OpenedBy)
+	assert.Nil(t, d.EntryID, "entry_id should be nil for a current-period dispute")
+
+	// Persisted and visible in the employee's dispute list.
+	mine, err := svc.ListMyDisputes(ctx, user)
+	require.NoError(t, err)
+	require.Len(t, mine, 1)
+	assert.Equal(t, d.ID, mine[0].ID)
+	assert.Nil(t, mine[0].EntryID)
+}
+
+// TestService_OpenDisputeByOrder_CurrentPeriodNotOwner verifies a non-owner
+// cannot open an entry-less dispute against someone else's order.
+func TestService_OpenDisputeByOrder_CurrentPeriodNotOwner(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	vendor := seedVendor(t, pool)
+	owner := seedEmployeeUser(t, pool)
+	intruder := seedEmployeeUser(t, pool)
+	orderID := seedOrderWithStatus(t, pool, owner, vendor,
+		time.Date(2026, 5, 20, 0, 0, 0, 0, time.UTC), 15000, order.StatusNoShow)
+
+	_, err := svc.OpenDisputeByOrder(ctx, orderID, intruder, "not mine")
 	assert.ErrorIs(t, err, payroll.ErrForbidden)
 }
 

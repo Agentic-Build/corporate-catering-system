@@ -2,8 +2,8 @@ import { test, expect } from "@playwright/test";
 import { loginEmployee, pickTomorrow } from "./auth";
 
 // P9 personalization: chip carousels + ⭐ favorites. Runs against the local
-// dev stack (`make dev`) — same prerequisites as the
-// other employee specs in this directory.
+// Kubernetes dev chart (`make dev`) with the same prerequisites as the other
+// employee specs in this directory.
 
 test("cold-start employee sees three empty chip rows with onboarding hints", async ({ page }) => {
   // Use a dedicated employee that no other spec orders/favorites for, so the
@@ -53,12 +53,12 @@ test("clicking ⭐ on a meal card surfaces it in the 我的最愛 row", async ({
   await expect(page.getByText(itemName?.trim() ?? "")).toBeVisible();
 });
 
-// Deferred scenarios. The dev-stack seed does not yet provide the
+// Deferred scenarios. The dev-chart seed does not yet provide the
 // preconditions these need; reactivate once seed scripts cover them.
 //
 // 3. Employee places + picks up today's order → home target_day flips to
 //    tomorrow. Needs an API hook (or test-only endpoint) to transition the
-//    order through ready→picked_up; current dev stack only exposes the
+//    order through ready→picked_up; current dev chart only exposes the
 //    cutoff path.
 //
 // 4. Employee reorders a past order with 1 archived item → 201 + toast

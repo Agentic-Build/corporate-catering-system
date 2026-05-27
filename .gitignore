@@ -43,7 +43,6 @@ Desktop.ini
 
 # Docker
 .docker/
-docker-compose.override.yml
 
 # Logs & temp
 *.log

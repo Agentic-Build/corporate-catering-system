@@ -87,7 +87,7 @@
       if (!rows.has(it.menu_item_id)) {
         rows.set(it.menu_item_id, {
           id: it.menu_item_id,
-          name: it.menu_item_id.slice(0, 8),
+          name: it.name || it.menu_item_id.slice(0, 8),
           price: it.unit_price_minor,
           remain: 0,
         });
@@ -154,7 +154,7 @@
       {/if}
     </dl>
     <div class="mt-3 flex items-end justify-between border-t border-tb-slate-100 pt-3">
-      <span class="text-sm text-tb-slate-600">合計（薪資代扣）</span>
+      <span class="text-sm text-tb-slate-600">合計（月結）</span>
       <span class="font-jetbrains-mono text-2xl font-black tabular-nums text-tb-slate-900">
         ${o.total_price_minor.toLocaleString()}
       </span>
@@ -243,8 +243,8 @@
       <ul class="divide-y divide-tb-slate-100 text-sm">
         {#each items as it (it.id)}
           <li class="flex items-center justify-between gap-3 py-3">
-            <span class="font-jetbrains-mono text-xs text-tb-slate-600">
-              {it.menu_item_id.slice(0, 8)}
+            <span class="text-sm text-tb-slate-700">
+              {it.name || it.menu_item_id.slice(0, 8)}
             </span>
             <span class="font-jetbrains-mono tabular-nums">
               × {it.qty} · ${(it.unit_price_minor * it.qty).toLocaleString()}

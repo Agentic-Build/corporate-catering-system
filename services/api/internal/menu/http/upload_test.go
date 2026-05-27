@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
 )
 
@@ -47,9 +47,9 @@ func buildMultipart(t *testing.T, fieldName, filename, contentType string, data 
 // --- PublicURL ---------------------------------------------------------------
 
 func TestPublicURL(t *testing.T) {
-	a := &API{StoragePublicBaseURL: "http://localhost:9000", StorageBucket: "tbite"}
+	a := &API{StoragePublicBaseURL: "http://minio.tbite.local", StorageBucket: "tbite-dev"}
 	got := a.PublicURL("menu-images/v1/abc.jpg")
-	want := "http://localhost:9000/tbite/menu-images/v1/abc.jpg"
+	want := "http://minio.tbite.local/tbite-dev/menu-images/v1/abc.jpg"
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
@@ -140,7 +140,7 @@ func (s *stubStorage) PutObject(_ context.Context, key string, _ io.Reader, _ st
 // and separately verify the auth path.
 
 func TestHandleDirectUpload_NoAuth(t *testing.T) {
-	a := &API{StoragePublicBaseURL: "http://localhost:9000", StorageBucket: "tbite"}
+	a := &API{StoragePublicBaseURL: "http://minio.tbite.local", StorageBucket: "tbite-dev"}
 
 	body, ct := buildMultipart(t, "file", "photo.jpg", "image/jpeg", []byte("fake-jpeg"))
 	req := httptest.NewRequest(http.MethodPost, "/api/merchant/uploads", body)
@@ -159,8 +159,8 @@ func TestHandleDirectUpload_NoStorage(t *testing.T) {
 	vid := "vendor-1"
 	a := &API{
 		Storage:              nil,
-		StoragePublicBaseURL: "http://localhost:9000",
-		StorageBucket:        "tbite",
+		StoragePublicBaseURL: "http://minio.tbite.local",
+		StorageBucket:        "tbite-dev",
 	}
 
 	body, ct := buildMultipart(t, "file", "photo.jpg", "image/jpeg", []byte("fake-jpeg"))
@@ -180,8 +180,8 @@ func TestHandleDirectUpload_MissingFile(t *testing.T) {
 	vid := "vendor-1"
 	a := &API{
 		Storage:              &storage.S3Client{}, // non-nil but won't be called
-		StoragePublicBaseURL: "http://localhost:9000",
-		StorageBucket:        "tbite",
+		StoragePublicBaseURL: "http://minio.tbite.local",
+		StorageBucket:        "tbite-dev",
 	}
 
 	// Send a body without a "file" field.
@@ -202,8 +202,8 @@ func TestHandleDirectUpload_UnsupportedContentType(t *testing.T) {
 	vid := "vendor-1"
 	a := &API{
 		Storage:              &storage.S3Client{},
-		StoragePublicBaseURL: "http://localhost:9000",
-		StorageBucket:        "tbite",
+		StoragePublicBaseURL: "http://minio.tbite.local",
+		StorageBucket:        "tbite-dev",
 	}
 
 	var buf bytes.Buffer

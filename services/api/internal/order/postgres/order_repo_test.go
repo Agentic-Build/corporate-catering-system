@@ -63,6 +63,45 @@ func TestOrderRepo_CreateAndGet(t *testing.T) {
 	assert.Equal(t, int64(12000), got.Items[0].UnitPriceMinor)
 }
 
+func TestOrderRepo_GetByID_PopulatesItemName(t *testing.T) {
+	pool, cleanup := setupPostgres(t)
+	defer cleanup()
+	ctx := context.Background()
+	uid := seedUser(t, pool, "employee")
+	vid := seedApprovedVendor(t, pool)
+	iid := seedNamedMenuItem(t, pool, vid, "招牌雞腿便當", 12000)
+
+	repo := pgrepo.NewOrderRepo(pool)
+	day := time.Now().UTC().Truncate(24 * time.Hour)
+	o := newOrder(t, uid, vid, iid, day)
+	require.NoError(t, repo.Create(ctx, o))
+
+	got, err := repo.GetByID(ctx, o.ID)
+	require.NoError(t, err)
+	require.Len(t, got.Items, 1)
+	assert.Equal(t, "招牌雞腿便當", got.Items[0].Name)
+}
+
+func TestOrderRepo_ListByVendorDay_PopulatesItemName(t *testing.T) {
+	pool, cleanup := setupPostgres(t)
+	defer cleanup()
+	ctx := context.Background()
+	uid := seedUser(t, pool, "employee")
+	vid := seedApprovedVendor(t, pool)
+	iid := seedNamedMenuItem(t, pool, vid, "牛肉麵", 15000)
+
+	repo := pgrepo.NewOrderRepo(pool)
+	day := time.Now().UTC().Truncate(24 * time.Hour)
+	o := newOrder(t, uid, vid, iid, day)
+	require.NoError(t, repo.Create(ctx, o))
+
+	list, err := repo.ListByVendorDay(ctx, vid, day, nil)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Len(t, list[0].Items, 1)
+	assert.Equal(t, "牛肉麵", list[0].Items[0].Name)
+}
+
 func TestOrderRepo_GetByID_NotFound(t *testing.T) {
 	pool, cleanup := setupPostgres(t)
 	defer cleanup()

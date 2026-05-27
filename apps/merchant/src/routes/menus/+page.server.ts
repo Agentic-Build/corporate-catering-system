@@ -30,4 +30,17 @@ export const actions: Actions = {
     const newId = (r.data as { item?: { id?: string } } | undefined)?.item?.id;
     throw redirect(303, newId ? `/menus/${newId}` : "/menus");
   },
+
+  // Soft-delete (archive) a menu item; it disappears from the default list.
+  delete: async ({ request, locals }) => {
+    if (!locals.user) return fail(401, { error: "unauthenticated" });
+    const id = String((await request.formData()).get("id") ?? "");
+    if (!id) return fail(400, { error: "缺少品項 id" });
+    const client = apiFor(locals.apiToken);
+    const r = await client.POST("/api/merchant/menu-items/{id}/archive", {
+      params: { path: { id } },
+    });
+    if (r.error) return fail(400, { error: "刪除菜單失敗，請稍後再試。" });
+    throw redirect(303, "/menus");
+  },
 };

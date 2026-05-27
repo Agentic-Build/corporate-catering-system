@@ -197,7 +197,6 @@ func fetchMenuItem(ctx context.Context, deps Deps, u *identity.User, itemID stri
 				"vendor":        it.VendorName,
 				"price_minor":   it.PriceMinor,
 				"tags":          it.Tags,
-				"badges":        it.Badges,
 				"sold_out":      it.SoldOut,
 				"remain":        it.Remain,
 				"pickup_window": it.PickupWindow,
@@ -286,9 +285,6 @@ func formatMenuFull(it menu.EmployeeMenuItem) string {
 	}
 	if len(it.Tags) > 0 {
 		parts = append(parts, "Tags: "+strings.Join(it.Tags, ", "))
-	}
-	if len(it.Badges) > 0 {
-		parts = append(parts, "Badges: "+strings.Join(it.Badges, ", "))
 	}
 	if it.Description != "" {
 		parts = append(parts, "", it.Description)

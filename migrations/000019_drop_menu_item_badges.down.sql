@@ -1,0 +1,1 @@
+ALTER TABLE menu_item ADD COLUMN badges TEXT[] NOT NULL DEFAULT '{}';

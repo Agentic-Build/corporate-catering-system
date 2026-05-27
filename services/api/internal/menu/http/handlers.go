@@ -20,7 +20,7 @@ import (
 //
 // Storage backs the presigned URL endpoints in presign.go and the direct
 // multipart upload endpoint in upload.go.
-// StoragePublicBaseURL is the public MinIO base (e.g. http://localhost:9000)
+// StoragePublicBaseURL is the public MinIO base (e.g. http://minio.tbite.local)
 // used to build full public URLs returned from uploads.
 type API struct {
 	Svc                  *menu.Service
@@ -45,7 +45,6 @@ type itemDTO struct {
 	Description string   `json:"description"`
 	PriceMinor  int64    `json:"price_minor"`
 	Tags        []string `json:"tags"`
-	Badges      []string `json:"badges"`
 	Status      string   `json:"status"`
 	Images      []string `json:"images,omitempty"`
 }
@@ -60,7 +59,6 @@ type merchantItemDTO struct {
 	Description string   `json:"description"`
 	PriceMinor  int64    `json:"price_minor"`
 	Tags        []string `json:"tags"`
-	Badges      []string `json:"badges"`
 	Status      string   `json:"status"`
 	Images      []string `json:"images,omitempty"`
 	LastUsed    *string  `json:"last_used" doc:"Most recent supply date (YYYY-MM-DD), null if never scheduled"`
@@ -75,7 +73,6 @@ type employeeMenuItemDTO struct {
 	Description  string   `json:"description"`
 	PriceMinor   int64    `json:"price_minor"`
 	Tags         []string `json:"tags"`
-	Badges       []string `json:"badges"`
 	Images       []string `json:"images,omitempty"`
 	Remain       int      `json:"remain"`
 	Capacity     int      `json:"capacity"`
@@ -112,7 +109,6 @@ type createItemInput struct {
 		Description string   `json:"description"`
 		PriceMinor  int64    `json:"price_minor" minimum:"0"`
 		Tags        []string `json:"tags"`
-		Badges      []string `json:"badges"`
 		Images      []string `json:"images,omitempty" doc:"Image URIs returned by POST /api/merchant/uploads"`
 	}
 }
@@ -131,7 +127,6 @@ type updateItemInput struct {
 		Description string   `json:"description"`
 		PriceMinor  int64    `json:"price_minor" minimum:"0"`
 		Tags        []string `json:"tags"`
-		Badges      []string `json:"badges"`
 		Images      []string `json:"images,omitempty" doc:"Image URIs returned by POST /api/merchant/uploads"`
 	}
 }
@@ -368,7 +363,6 @@ func (a *API) createItem(ctx context.Context, in *createItemInput) (*itemOutput,
 		Description: in.Body.Description,
 		PriceMinor:  in.Body.PriceMinor,
 		Tags:        in.Body.Tags,
-		Badges:      in.Body.Badges,
 		Images:      in.Body.Images,
 	})
 	if err != nil {
@@ -390,7 +384,6 @@ func (a *API) updateItem(ctx context.Context, in *updateItemInput) (*itemOutput,
 		Description: in.Body.Description,
 		PriceMinor:  in.Body.PriceMinor,
 		Tags:        in.Body.Tags,
-		Badges:      in.Body.Badges,
 		CategoryID:  in.Body.CategoryID,
 		Images:      in.Body.Images,
 	})
@@ -500,7 +493,6 @@ func (a *API) listEmployeeMenu(ctx context.Context, in *listEmployeeMenuInput) (
 			Description:  it.Description,
 			PriceMinor:   it.PriceMinor,
 			Tags:         it.Tags,
-			Badges:       it.Badges,
 			Images:       it.Images,
 			Remain:       it.Remain,
 			Capacity:     it.Capacity,
@@ -519,10 +511,6 @@ func toItemDTO(i *menu.Item) itemDTO {
 	if tags == nil {
 		tags = []string{}
 	}
-	badges := i.Badges
-	if badges == nil {
-		badges = []string{}
-	}
 	return itemDTO{
 		ID:          i.ID,
 		VendorID:    i.VendorID,
@@ -531,7 +519,6 @@ func toItemDTO(i *menu.Item) itemDTO {
 		Description: i.Description,
 		PriceMinor:  i.PriceMinor,
 		Tags:        tags,
-		Badges:      badges,
 		Status:      string(i.Status),
 	}
 }
@@ -548,7 +535,6 @@ func toMerchantItemDTO(row *menu.MerchantItemRow) merchantItemDTO {
 		Description: d.Description,
 		PriceMinor:  d.PriceMinor,
 		Tags:        d.Tags,
-		Badges:      d.Badges,
 		Status:      d.Status,
 		Images:      d.Images,
 		TotalSold:   row.TotalSold,

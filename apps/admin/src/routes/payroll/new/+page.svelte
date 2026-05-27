@@ -11,7 +11,7 @@
 </a>
 
 <PageHeader
-  eyebrow="薪資代扣"
+  eyebrow="月結"
   title="建立月結批次"
   subtitle="指定期間後，系統會聚合該期間內 picked_up 與 no_show 的訂單為草稿批次"
 />

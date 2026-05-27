@@ -6,7 +6,7 @@ set -euo pipefail
 #
 # Optional env:
 #   NS=tbite
-#   API_SERVICE=svc/tbite-tbite-platform-api
+#   API_SERVICE=svc/tbite-api
 #   DB_SERVICE=svc/tbite-pg-rw
 #   VALKEY_SERVICE=svc/tbite-valkey-primary
 #   DB_SECRET=tbite-db
@@ -20,7 +20,7 @@ set -euo pipefail
 #   EMPLOYEES=800
 
 NS="${NS:-tbite}"
-API_SERVICE="${API_SERVICE:-svc/tbite-tbite-platform-api}"
+API_SERVICE="${API_SERVICE:-svc/tbite-api}"
 DB_SERVICE="${DB_SERVICE:-svc/tbite-pg-rw}"
 VALKEY_SERVICE="${VALKEY_SERVICE:-svc/tbite-valkey-primary}"
 DB_SECRET="${DB_SECRET:-tbite-db}"

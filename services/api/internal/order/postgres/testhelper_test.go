@@ -123,10 +123,24 @@ func seedActiveMenuItem(t *testing.T, pool *pgxpool.Pool, vendorID string, price
 	n := itemSeedCounter.Add(1)
 	var id string
 	err := pool.QueryRow(context.Background(), `
-INSERT INTO menu_item (vendor_id, name, description, price_minor, tags, badges, status)
-VALUES ($1, $2, '', $3, '{}', '{}', 'active')
+INSERT INTO menu_item (vendor_id, name, description, price_minor, tags, status)
+VALUES ($1, $2, '', $3, '{}', 'active')
 RETURNING id`,
 		vendorID, fmt.Sprintf("item-%d", n), priceMinor,
+	).Scan(&id)
+	require.NoError(t, err)
+	return id
+}
+
+// seedNamedMenuItem inserts an active menu_item with a caller-chosen name.
+func seedNamedMenuItem(t *testing.T, pool *pgxpool.Pool, vendorID, name string, priceMinor int64) string {
+	t.Helper()
+	var id string
+	err := pool.QueryRow(context.Background(), `
+INSERT INTO menu_item (vendor_id, name, description, price_minor, tags, status)
+VALUES ($1, $2, '', $3, '{}', 'active')
+RETURNING id`,
+		vendorID, name, priceMinor,
 	).Scan(&id)
 	require.NoError(t, err)
 	return id

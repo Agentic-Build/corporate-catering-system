@@ -1,12 +1,6 @@
 <script lang="ts">
-  import { StateTag, Button, PageHeader, Icon, EmptyState } from "@tbite/ui";
+  import { Button, PageHeader, Icon, EmptyState } from "@tbite/ui";
   let { data } = $props();
-
-  const statusMeta = {
-    active: { tone: "success", label: "上架中" },
-    draft: { tone: "neutral", label: "草稿" },
-    archived: { tone: "warning", label: "已封存" },
-  } as Record<string, { tone: "success" | "neutral" | "warning"; label: string }>;
 </script>
 
 <PageHeader
@@ -23,111 +17,59 @@
   {/snippet}
 </PageHeader>
 
-<div class="mb-4 flex gap-2 text-xs">
-  <a
-    href="/menus"
-    class="rounded-full px-3 py-1 font-semibold {!data.includeArchived
-      ? 'bg-tb-slate-900 text-white'
-      : 'bg-tb-slate-100 text-tb-slate-700 hover:text-tb-slate-900'}"
-  >
-    上架中
-  </a>
-  <a
-    href="/menus?archived=1"
-    class="rounded-full px-3 py-1 font-semibold {data.includeArchived
-      ? 'bg-tb-slate-900 text-white'
-      : 'bg-tb-slate-100 text-tb-slate-700 hover:text-tb-slate-900'}"
-  >
-    含已封存
-  </a>
-</div>
-
 {#if data.items.length === 0}
   <EmptyState icon="doc" title="尚未建立任何餐點" hint="點「新增餐點」建立第一道菜色。" />
 {:else}
-  <!-- Mobile: stacked cards -->
-  <div class="space-y-3 md:hidden">
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
     {#each data.items as item (item.id)}
-      {@const meta = statusMeta[item.status] ?? { tone: "neutral", label: item.status }}
-      <div class="rounded-tb-2xl border border-tb-slate-200 bg-white p-4 shadow-tb-sm">
-        <div class="mb-2 flex items-start justify-between gap-3">
+      <div
+        class="flex flex-col overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm"
+      >
+        <!-- 主圖 -->
+        {#if item.images?.[0]}
+          <img src={item.images[0]} alt={item.name} class="aspect-video w-full object-cover" />
+        {:else}
+          <div class="flex aspect-video w-full items-center justify-center bg-tb-slate-100">
+            <Icon name="tag" class="h-10 w-10 text-tb-slate-300" />
+          </div>
+        {/if}
+
+        <!-- 名稱 + 價格 -->
+        <div class="flex flex-1 flex-col gap-1 px-4 py-3">
           <div class="font-semibold text-tb-slate-900">{item.name}</div>
-          <div class="font-jetbrains-mono tabular-nums font-bold text-tb-slate-900">
+          <div class="font-jetbrains-mono tabular-nums text-tb-slate-700">
             ${item.price_minor.toLocaleString()}
           </div>
         </div>
-        <div class="flex items-center justify-between">
-          <StateTag tone={meta.tone}>{meta.label}</StateTag>
-          <div class="flex items-center gap-3">
-            <form method="POST" action="?/copy">
-              <input type="hidden" name="id" value={item.id} />
-              <button
-                type="submit"
-                class="text-sm font-semibold text-tb-slate-500 hover:text-tb-slate-800"
-              >
-                複製
-              </button>
-            </form>
-            <a
-              href="/menus/{item.id}"
-              class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+
+        <!-- 操作列 -->
+        <div class="flex items-center justify-end gap-2 border-t border-tb-slate-100 px-4 py-2">
+          <form method="POST" action="?/copy">
+            <input type="hidden" name="id" value={item.id} />
+            <button
+              type="submit"
+              class="text-sm font-semibold text-tb-slate-500 hover:text-tb-slate-800"
             >
-              編輯
-            </a>
-          </div>
+              複製
+            </button>
+          </form>
+          <a
+            href="/menus/{item.id}"
+            class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+          >
+            編輯
+          </a>
+          <form method="POST" action="?/delete">
+            <input type="hidden" name="id" value={item.id} />
+            <button
+              type="submit"
+              class="text-sm font-semibold text-tb-slate-400 hover:text-red-600"
+            >
+              刪除
+            </button>
+          </form>
         </div>
       </div>
     {/each}
-  </div>
-
-  <!-- Desktop: table -->
-  <div
-    class="hidden overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm md:block"
-  >
-    <table class="w-full text-sm">
-      <thead
-        class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
-      >
-        <tr>
-          <th class="px-5 py-3">名稱</th>
-          <th class="px-3 py-3 text-right">價格</th>
-          <th class="px-3 py-3">狀態</th>
-          <th class="px-5 py-3"></th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-tb-slate-100">
-        {#each data.items as item (item.id)}
-          {@const meta = statusMeta[item.status] ?? { tone: "neutral", label: item.status }}
-          <tr class="hover:bg-tb-slate-50/60">
-            <td class="px-5 py-3 font-semibold text-tb-slate-900">{item.name}</td>
-            <td class="px-3 py-3 text-right font-jetbrains-mono tabular-nums text-tb-slate-900">
-              ${item.price_minor.toLocaleString()}
-            </td>
-            <td class="px-3 py-3">
-              <StateTag tone={meta.tone}>{meta.label}</StateTag>
-            </td>
-            <td class="px-5 py-3 text-right">
-              <div class="flex items-center justify-end gap-3">
-                <form method="POST" action="?/copy">
-                  <input type="hidden" name="id" value={item.id} />
-                  <button
-                    type="submit"
-                    class="text-sm font-semibold text-tb-slate-500 hover:text-tb-slate-800"
-                  >
-                    複製
-                  </button>
-                </form>
-                <a
-                  href="/menus/{item.id}"
-                  class="text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
-                >
-                  編輯
-                </a>
-              </div>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
   </div>
 {/if}

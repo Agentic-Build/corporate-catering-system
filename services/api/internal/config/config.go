@@ -125,25 +125,25 @@ func FromEnv() (Config, error) {
 
 		AuthProviders: providers,
 
-		OIDCCallbackBaseURL: getenv("OIDC_CALLBACK_BASE_URL", "http://api.tbite.test"),
-		AuthentikBaseURL:    getenv("AUTHENTIK_BASE_URL", "http://localhost:9002"),
+		OIDCCallbackBaseURL: getenv("OIDC_CALLBACK_BASE_URL", "http://api.tbite.local"),
+		AuthentikBaseURL:    getenv("AUTHENTIK_BASE_URL", "http://auth.tbite.local"),
 		AuthentikAPIToken:   os.Getenv("AUTHENTIK_API_TOKEN"),
 		AuthentikVendorOperatorGroup: getenv(
 			"AUTHENTIK_VENDOR_OPERATOR_GROUP",
 			"tbite:role:vendor_operator",
 		),
 
-		AppBaseURLEmployee: getenv("APP_BASE_URL_EMPLOYEE", "http://app.tbite.test"),
-		AppBaseURLMerchant: getenv("APP_BASE_URL_MERCHANT", "http://merchant.tbite.test"),
-		AppBaseURLAdmin:    getenv("APP_BASE_URL_ADMIN", "http://admin.tbite.test"),
+		AppBaseURLEmployee: getenv("APP_BASE_URL_EMPLOYEE", "http://app.tbite.local"),
+		AppBaseURLMerchant: getenv("APP_BASE_URL_MERCHANT", "http://merchant.tbite.local"),
+		AppBaseURLAdmin:    getenv("APP_BASE_URL_ADMIN", "http://admin.tbite.local"),
 
 		S3Endpoint:        os.Getenv("S3_ENDPOINT"),
 		S3Region:          os.Getenv("S3_REGION"),
 		S3AccessKeyID:     os.Getenv("S3_ACCESS_KEY_ID"),
 		S3SecretAccessKey: os.Getenv("S3_SECRET_ACCESS_KEY"),
-		S3Bucket:          getenv("S3_BUCKET", "tbite"),
+		S3Bucket:          getenv("S3_BUCKET", "tbite-dev"),
 		S3UsePathStyle:    os.Getenv("S3_USE_PATH_STYLE") == "1",
-		S3PublicBaseURL:   getenv("S3_PUBLIC_BASE_URL", "http://localhost:9000"),
+		S3PublicBaseURL:   getenv("S3_PUBLIC_BASE_URL", "http://minio.tbite.local"),
 
 		HydraPublicURL: strings.TrimRight(os.Getenv("HYDRA_PUBLIC_URL"), "/"),
 		HydraAdminURL:  strings.TrimRight(os.Getenv("HYDRA_ADMIN_URL"), "/"),

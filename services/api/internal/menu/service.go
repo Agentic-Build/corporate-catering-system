@@ -25,7 +25,6 @@ type CreateItemInput struct {
 	Description string
 	PriceMinor  int64
 	Tags        []string
-	Badges      []string
 	Images      []string
 }
 
@@ -34,7 +33,6 @@ type UpdateItemInput struct {
 	Description string
 	PriceMinor  int64
 	Tags        []string
-	Badges      []string
 	CategoryID  *string
 	Images      []string
 }
@@ -53,8 +51,8 @@ func (s *Service) ListCategories(ctx context.Context, vendorID string) ([]*Categ
 	return s.Categories.ListByVendor(ctx, vendorID)
 }
 
-// CreateItem creates a menu item in draft status owned by the supplied vendor.
-// Nil tag/badge slices are normalized to empty slices so JSON encoding emits [].
+// CreateItem creates an active menu item owned by the supplied vendor.
+// Nil tag slices are normalized to empty slices so JSON encoding emits [].
 func (s *Service) CreateItem(ctx context.Context, in CreateItemInput) (*Item, error) {
 	item := &Item{
 		VendorID:    in.VendorID,
@@ -63,14 +61,10 @@ func (s *Service) CreateItem(ctx context.Context, in CreateItemInput) (*Item, er
 		Description: in.Description,
 		PriceMinor:  in.PriceMinor,
 		Tags:        in.Tags,
-		Badges:      in.Badges,
-		Status:      ItemStatusDraft,
+		Status:      ItemStatusActive,
 	}
 	if item.Tags == nil {
 		item.Tags = []string{}
-	}
-	if item.Badges == nil {
-		item.Badges = []string{}
 	}
 	if err := s.Items.Create(ctx, item); err != nil {
 		return nil, err
@@ -97,13 +91,9 @@ func (s *Service) UpdateItem(ctx context.Context, itemID, vendorID string, in Up
 	existing.Description = in.Description
 	existing.PriceMinor = in.PriceMinor
 	existing.Tags = in.Tags
-	existing.Badges = in.Badges
 	existing.CategoryID = in.CategoryID
 	if existing.Tags == nil {
 		existing.Tags = []string{}
-	}
-	if existing.Badges == nil {
-		existing.Badges = []string{}
 	}
 	if err := s.Items.Update(ctx, existing); err != nil {
 		return nil, err
@@ -144,7 +134,6 @@ func (s *Service) CopyItem(ctx context.Context, itemID, vendorID string) (*Item,
 		Description: src.Description,
 		PriceMinor:  src.PriceMinor,
 		Tags:        src.Tags,
-		Badges:      src.Badges,
 		Images:      uris,
 	})
 }
@@ -193,7 +182,6 @@ type EmployeeMenuItem struct {
 	Description  string
 	PriceMinor   int64
 	Tags         []string
-	Badges       []string
 	Images       []string
 	Capacity     int
 	Remain       int
@@ -227,10 +215,6 @@ func (s *Service) ListForEmployee(ctx context.Context, f EmployeeMenuFilter) ([]
 		if tags == nil {
 			tags = []string{}
 		}
-		badges := r.Item.Badges
-		if badges == nil {
-			badges = []string{}
-		}
 		out = append(out, EmployeeMenuItem{
 			ID:           r.Item.ID,
 			VendorID:     r.Item.VendorID,
@@ -239,7 +223,6 @@ func (s *Service) ListForEmployee(ctx context.Context, f EmployeeMenuFilter) ([]
 			Description:  r.Item.Description,
 			PriceMinor:   r.Item.PriceMinor,
 			Tags:         tags,
-			Badges:       badges,
 			Images:       uris,
 			Capacity:     r.Capacity,
 			Remain:       r.Remain,

@@ -29,11 +29,7 @@ export const actions: Actions = {
       description: String(fd.get("description") ?? ""),
       price_minor: parseInt(String(fd.get("price") ?? "0"), 10),
       tags: String(fd.get("tags") ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      badges: String(fd.get("badges") ?? "")
-        .split(",")
+        .split(/\s+/)
         .map((s) => s.trim())
         .filter(Boolean),
       images,
@@ -42,22 +38,6 @@ export const actions: Actions = {
     const r = await client.PATCH("/api/merchant/menu-items/{id}", {
       params: { path: { id: params.id } },
       body: body as any,
-    });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
-    throw redirect(303, "/menus");
-  },
-  publish: async ({ params, locals }) => {
-    const client = apiFor(locals.apiToken);
-    const r = await client.POST("/api/merchant/menu-items/{id}/publish", {
-      params: { path: { id: params.id } },
-    });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
-    throw redirect(303, "/menus");
-  },
-  archive: async ({ params, locals }) => {
-    const client = apiFor(locals.apiToken);
-    const r = await client.POST("/api/merchant/menu-items/{id}/archive", {
-      params: { path: { id: params.id } },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     throw redirect(303, "/menus");

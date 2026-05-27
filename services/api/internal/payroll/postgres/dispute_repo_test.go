@@ -52,7 +52,7 @@ func TestDisputeRepo_CreateAndGet(t *testing.T) {
 	entryID, userID, orderID := makeEntry(t, pool, time.January)
 
 	d := &payroll.Dispute{
-		EntryID:  entryID,
+		EntryID:  &entryID,
 		OrderID:  orderID,
 		OpenedBy: userID,
 		Reason:   "missing item",
@@ -63,7 +63,8 @@ func TestDisputeRepo_CreateAndGet(t *testing.T) {
 
 	got, err := repo.GetByID(ctx, d.ID)
 	require.NoError(t, err)
-	assert.Equal(t, entryID, got.EntryID)
+	require.NotNil(t, got.EntryID)
+	assert.Equal(t, entryID, *got.EntryID)
 	assert.Equal(t, orderID, got.OrderID)
 	assert.Equal(t, userID, got.OpenedBy)
 	assert.Equal(t, "missing item", got.Reason)
@@ -90,7 +91,7 @@ func TestDisputeRepo_UpdateStatus_Resolve(t *testing.T) {
 	entryID, userID, orderID := makeEntry(t, pool, time.February)
 
 	d := &payroll.Dispute{
-		EntryID:  entryID,
+		EntryID:  &entryID,
 		OrderID:  orderID,
 		OpenedBy: userID,
 		Reason:   "wrong food",
@@ -121,7 +122,7 @@ func TestDisputeRepo_ListByStatus(t *testing.T) {
 	var ids [3]string
 	for i := 0; i < 3; i++ {
 		entryID, userID, orderID := makeEntry(t, pool, time.Month(time.March+time.Month(i)))
-		d := &payroll.Dispute{EntryID: entryID, OrderID: orderID, OpenedBy: userID, Reason: "r"}
+		d := &payroll.Dispute{EntryID: &entryID, OrderID: orderID, OpenedBy: userID, Reason: "r"}
 		require.NoError(t, repo.Create(ctx, d))
 		ids[i] = d.ID
 	}
@@ -156,15 +157,15 @@ func TestDisputeRepo_ListByUser(t *testing.T) {
 
 	// user A opens 2 disputes; user B opens 1.
 	entryA1, userA, orderA1 := makeEntry(t, pool, time.June)
-	dA1 := &payroll.Dispute{EntryID: entryA1, OrderID: orderA1, OpenedBy: userA, Reason: "a1"}
+	dA1 := &payroll.Dispute{EntryID: &entryA1, OrderID: orderA1, OpenedBy: userA, Reason: "a1"}
 	require.NoError(t, repo.Create(ctx, dA1))
 
 	entryA2, _, orderA2 := makeEntry(t, pool, time.July)
-	dA2 := &payroll.Dispute{EntryID: entryA2, OrderID: orderA2, OpenedBy: userA, Reason: "a2"}
+	dA2 := &payroll.Dispute{EntryID: &entryA2, OrderID: orderA2, OpenedBy: userA, Reason: "a2"}
 	require.NoError(t, repo.Create(ctx, dA2))
 
 	entryB, userB, orderB := makeEntry(t, pool, time.August)
-	dB := &payroll.Dispute{EntryID: entryB, OrderID: orderB, OpenedBy: userB, Reason: "b"}
+	dB := &payroll.Dispute{EntryID: &entryB, OrderID: orderB, OpenedBy: userB, Reason: "b"}
 	require.NoError(t, repo.Create(ctx, dB))
 
 	listA, err := repo.ListByUser(ctx, userA)

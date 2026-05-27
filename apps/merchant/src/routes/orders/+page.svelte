@@ -130,12 +130,20 @@
       <Icon name="qr" class="h-4 w-4" />掃描出餐
     </Button>
   </div>
-  <a
-    href="/prep-sheet?date={data.date}"
-    class="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
-  >
-    <Icon name="doc" class="h-3.5 w-3.5" />備餐與配送輸出（分區表 · 標籤 · 配送清單）
-  </a>
+  <div class="mt-2 flex flex-wrap gap-3">
+    <a
+      href="/prep-sheet?date={data.date}"
+      class="inline-flex items-center gap-1 text-sm font-semibold text-tb-red-600 hover:text-tb-red-700"
+    >
+      <Icon name="doc" class="h-3.5 w-3.5" />備餐與配送輸出（分區表 · 標籤 · 配送清單）
+    </a>
+    <a
+      href="/labels?date={data.date}"
+      class="inline-flex items-center gap-1 text-sm font-semibold text-tb-slate-600 hover:text-tb-slate-900"
+    >
+      <Icon name="doc" class="h-3.5 w-3.5" />列印今日貼紙
+    </a>
+  </div>
 </section>
 
 <div
@@ -181,80 +189,64 @@
 {:else}
   <div class="space-y-4">
     {#each Object.entries(data.byPlant) as [plant, orders] (plant)}
-      <form method="POST" action="?/markReady">
-        <Card>
-          <header class="mb-3 flex items-center justify-between">
-            <h2 class="text-base font-bold text-tb-slate-900">{plant}</h2>
-            <span class="font-jetbrains-mono text-xs text-tb-slate-500 tabular-nums">
-              {orders.length} 筆
-            </span>
-          </header>
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead
-                class="text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
-              >
-                <tr>
-                  <th class="pb-2 pl-2">選</th>
-                  <th class="pb-2">訂單</th>
-                  <th class="pb-2 text-right">項目數</th>
-                  <th class="pb-2 text-right">金額</th>
-                  <th class="pb-2">狀態</th>
+      <Card>
+        <header class="mb-3 flex items-center justify-between">
+          <h2 class="text-base font-bold text-tb-slate-900">{plant}</h2>
+          <span class="font-jetbrains-mono text-xs text-tb-slate-500 tabular-nums">
+            {orders.length} 筆
+          </span>
+        </header>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead
+              class="text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
+            >
+              <tr>
+                <th class="pb-2">訂單</th>
+                <th class="pb-2">訂購明細</th>
+                <th class="pb-2 text-right">金額</th>
+                <th class="pb-2">狀態</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-tb-slate-100">
+              {#each orders as o (o.id)}
+                <tr class="hover:bg-tb-slate-50/60">
+                  <td class="py-2.5 pr-3 align-top">
+                    <span
+                      class="font-jetbrains-mono text-[10px] text-tb-slate-400 break-all leading-tight"
+                      >{o.id}</span
+                    >
+                  </td>
+                  <td class="py-2.5 pr-3 align-top text-xs text-tb-slate-700">
+                    {#each o.items as item (item.menu_item_id)}
+                      <div>
+                        {data.itemsById[item.menu_item_id]?.name ?? "未知餐點"} ×{item.qty}
+                      </div>
+                    {/each}
+                  </td>
+                  <td
+                    class="py-2.5 text-right align-top font-jetbrains-mono tabular-nums text-tb-slate-900"
+                  >
+                    ${o.total_price_minor.toLocaleString()}
+                  </td>
+                  <td class="py-2.5 align-top">
+                    <StateTag tone={statusTone[o.status] ?? "neutral"}>
+                      {statusLabel[o.status] ?? o.status}
+                    </StateTag>
+                  </td>
                 </tr>
-              </thead>
-              <tbody class="divide-y divide-tb-slate-100">
-                {#each orders as o (o.id)}
-                  <tr class="hover:bg-tb-slate-50/60">
-                    <td class="py-2.5 pl-2">
-                      {#if o.status === "cutoff" || o.status === "placed"}
-                        <input
-                          type="checkbox"
-                          name="order_id"
-                          value={o.id}
-                          class="accent-tb-red-600"
-                        />
-                      {/if}
-                    </td>
-                    <td class="py-2.5 font-jetbrains-mono text-xs text-tb-slate-500">
-                      {o.id.slice(0, 8)}…
-                    </td>
-                    <td
-                      class="py-2.5 text-right font-jetbrains-mono tabular-nums text-tb-slate-700"
-                    >
-                      {o.items.length}
-                    </td>
-                    <td
-                      class="py-2.5 text-right font-jetbrains-mono tabular-nums text-tb-slate-900"
-                    >
-                      ${o.total_price_minor.toLocaleString()}
-                    </td>
-                    <td class="py-2.5">
-                      <StateTag tone={statusTone[o.status] ?? "neutral"}>
-                        {statusLabel[o.status] ?? o.status}
-                      </StateTag>
+                {#if o.notes}
+                  <tr class="bg-tb-amber-50/70">
+                    <td colspan="4" class="pb-2.5 text-xs text-tb-amber-800">
+                      <span class="font-bold">特殊需求：</span>{o.notes}
                     </td>
                   </tr>
-                  {#if o.notes}
-                    <tr class="bg-tb-amber-50/70">
-                      <td></td>
-                      <td colspan="4" class="pb-2.5 text-xs text-tb-amber-800">
-                        <span class="font-bold">特殊需求：</span>{o.notes}
-                      </td>
-                    </tr>
-                  {/if}
-                {/each}
-              </tbody>
-            </table>
-          </div>
-          {#if orders.some((o: any) => o.status === "cutoff" || o.status === "placed")}
-            <div class="mt-3 flex justify-end">
-              <Button variant="primary" size="md" type="submit">
-                <Icon name="check" class="h-4 w-4" />標記選取為備餐完成
-              </Button>
-            </div>
-          {/if}
-        </Card>
-      </form>
+                {/if}
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     {/each}
   </div>
 {/if}
@@ -271,9 +263,7 @@
     {#if scanError}
       <p class="mt-3 rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">{scanError}</p>
     {/if}
-    <p class="mt-3 text-xs text-tb-slate-400">
-      相機被拒或無法使用時，仍可改用看板上的「標記選取為備餐完成」批次按鈕。
-    </p>
+    <p class="mt-3 text-xs text-tb-slate-400">掃描成功後系統會自動標記該訂單為備餐完成（出餐）。</p>
   {/snippet}
   {#snippet footer()}
     <Button variant="secondary" onclick={closeScan}>關閉</Button>

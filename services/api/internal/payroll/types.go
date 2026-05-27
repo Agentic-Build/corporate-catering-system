@@ -107,7 +107,7 @@ type Exception struct {
 
 type Dispute struct {
 	ID          string
-	EntryID     string
+	EntryID     *string // nil for current-period orders with no payroll entry yet
 	OrderID     string
 	OpenedBy    string
 	Reason      string

@@ -25,7 +25,7 @@
 </script>
 
 <PageHeader
-  eyebrow="薪資代扣"
+  eyebrow="月結"
   title="月結批次"
   subtitle="聚合 picked_up／no_show 訂單為對帳批次 · 鎖定後排程匯出 HR CSV"
 >

@@ -7,8 +7,8 @@ production; only the values differ (`values-dev.yaml`). This page
 covers creating each supported local cluster and pointing the chart at
 it.
 
-Prerequisites: `kubectl`, `helm` (≥ 3.14), and one of the cluster tools
-below. The dev profile fits **≥ 8 GiB** RAM (~6 GiB of requests).
+Prerequisites: `kubectl`, `helm` (>= 3.14), and one of the cluster tools
+below. The dev profile fits **>= 8 GiB** RAM (~6 GiB of requests).
 
 ## Create a cluster
 
@@ -52,33 +52,36 @@ k3d cluster create tbite -p "80:80@loadbalancer" -p "443:443@loadbalancer"
 
 ## Install the chart
 
-The chart bundles fourteen CRD-owning subcharts, so a fresh cluster
-needs the **two-pass install** documented in the chart README —
-phase 1 brings up the operators/CRDs, phase 2 installs the full stack.
-See [`chart/tbite-platform/README.md`](../../chart/tbite-platform/README.md#two-pass-install-recommended-for-fresh-clusters)
-for the exact commands; the short form is:
+The chart owns the local development runtime. The normal upgrade path is:
+
+```bash
+make dev
+```
+
+That target runs `helm dependency build` and installs/upgrades
+`chart/tbite-platform` with `values-dev.yaml` in the current Kubernetes
+context.
+
+A fresh cluster may still need a CRD bootstrap pass because several
+subcharts own CustomResourceDefinitions. Use the two-pass install in
+[`chart/tbite-platform/README.md`](../../chart/tbite-platform/README.md#two-pass-install-recommended-for-fresh-clusters),
+then use `make dev` for routine upgrades.
+
+The direct Helm form is:
 
 ```bash
 helm dependency build chart/tbite-platform
 
-# phase 1 — operators/CRDs only
-helm install tbite chart/tbite-platform \
-  -f chart/tbite-platform/values.yaml \
+helm upgrade --install tbite chart/tbite-platform \
   -f chart/tbite-platform/values-dev.yaml \
-  --namespace tbite --create-namespace \
-  --set crdsReady=false
-
-# phase 2 — full stack once CRDs are established
-helm upgrade tbite chart/tbite-platform \
-  -f chart/tbite-platform/values.yaml \
-  -f chart/tbite-platform/values-dev.yaml \
-  --namespace tbite --set crdsReady=true
+  --namespace tbite --create-namespace
 ```
 
-`values-dev.yaml` drops every role to one replica, disables HPA/KEDA
-and PDBs, shrinks storage, and disables Authentik/Hydra (use a stub
-OIDC or BYO) — while preserving the same service names, env vars, and
-health semantics as production.
+`values-dev.yaml` bundles the CNPG operator for local clusters, drops
+every role to one replica, disables HPA/KEDA and PDBs, shrinks storage,
+and disables Authentik/Hydra by default (use a stub OIDC or BYO) while
+preserving the same service names, env vars, and health semantics as
+production.
 
 ## Reach the app
 
@@ -88,7 +91,7 @@ them to the cluster ingress:
 ```bash
 # kind/k3d: Traefik is on localhost via the port mappings above
 sudo sh -c 'cat >>/etc/hosts <<EOF
-127.0.0.1 api.tbite.local app.tbite.local merchant.tbite.local admin.tbite.local auth.tbite.local minio.tbite.local
+127.0.0.1 api.tbite.local app.tbite.local merchant.tbite.local admin.tbite.local auth.tbite.local hydra.tbite.local minio.tbite.local grafana.tbite.local
 EOF'
 ```
 
@@ -99,10 +102,27 @@ OrbStack exposes Services on a routable IP; use that IP instead of
 
 ```bash
 kubectl -n tbite get pods                 # all roles Running/Ready
-kubectl -n tbite port-forward svc/tbite-tbite-platform-api 8080:80
+kubectl -n tbite port-forward svc/tbite-api 8080:80
 curl -s localhost:8080/readyz             # {"status":"ready"}
 ```
 
 Hook Jobs (`db-migrate`, `provision-streams`, `bucket-bootstrap`) run
 on install/upgrade; a failed Job surfaces as a failed pod — inspect
 with `kubectl -n tbite logs job/<name>`.
+
+## Seed data
+
+Seed scripts require explicit host-side connectivity and do not start
+containers. Port-forward the chart-managed services or use routable
+cluster endpoints, then export the concrete values:
+
+```bash
+export DATABASE_URL='postgres://...'
+export S3_ENDPOINT='http://minio.tbite.local'
+export S3_ACCESS_KEY_ID='...'
+export S3_SECRET_ACCESS_KEY='...'
+export S3_BUCKET='tbite-dev'
+export S3_PUBLIC_BASE_URL='http://minio.tbite.local'
+
+make seed
+```

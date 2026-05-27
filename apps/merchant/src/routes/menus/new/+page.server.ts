@@ -14,7 +14,6 @@ export const actions: Actions = {
     const description = String(fd.get("description") ?? "").trim();
     const priceStr = String(fd.get("price") ?? "0").trim();
     const tagsStr = String(fd.get("tags") ?? "").trim();
-    const badgesStr = String(fd.get("badges") ?? "").trim();
     if (!name) return fail(400, { error: "name 必填" });
     const priceMinor = parseInt(priceStr, 10);
     if (!Number.isFinite(priceMinor) || priceMinor < 0) return fail(400, { error: "price 非數字" });
@@ -35,13 +34,7 @@ export const actions: Actions = {
         price_minor: priceMinor,
         tags: tagsStr
           ? tagsStr
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : [],
-        badges: badgesStr
-          ? badgesStr
-              .split(",")
+              .split(/\s+/)
               .map((s) => s.trim())
               .filter(Boolean)
           : [],

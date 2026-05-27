@@ -399,6 +399,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/vendors/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update a vendor's contact email and/or plants (admin) */
+        patch: operations["updateVendor"];
+        trace?: never;
+    };
     "/api/admin/vendors/{id}/approve": {
         parameters: {
             query?: never;
@@ -1609,7 +1626,6 @@ export interface components {
              * @example https://example.com/schemas/CreateItemInputBody.json
              */
             readonly $schema?: string;
-            badges: string[] | null;
             category_id?: string;
             description: string;
             /** @description Image URIs returned by POST /api/merchant/uploads */
@@ -1705,7 +1721,7 @@ export interface components {
             total_minor: number;
         };
         DisputeDTO: {
-            entry_id: string;
+            entry_id?: string;
             id: string;
             opened_by: string;
             order_id: string;
@@ -1757,7 +1773,6 @@ export interface components {
             refunded_minor: number;
         };
         EmployeeMenuItemDTO: {
-            badges: string[] | null;
             /** Format: int64 */
             capacity: number;
             description: string;
@@ -1925,7 +1940,6 @@ export interface components {
             qty: number;
         };
         ItemDTO: {
-            badges: string[] | null;
             category_id?: string;
             description: string;
             id: string;
@@ -2166,7 +2180,6 @@ export interface components {
             warnings: components["schemas"]["WarningDTO"][] | null;
         };
         MerchantItemDTO: {
-            badges: string[] | null;
             category_id?: string;
             description: string;
             id: string;
@@ -2291,6 +2304,7 @@ export interface components {
         OrderItemDTO: {
             id: string;
             menu_item_id: string;
+            name: string;
             /** Format: int64 */
             qty: number;
             /** Format: int64 */
@@ -2755,7 +2769,6 @@ export interface components {
              * @example https://example.com/schemas/UpdateItemInputBody.json
              */
             readonly $schema?: string;
-            badges: string[] | null;
             category_id?: string;
             description: string;
             /** @description Image URIs returned by POST /api/merchant/uploads */
@@ -2798,6 +2811,30 @@ export interface components {
              */
             readonly $schema?: string;
             plant: components["schemas"]["PlantDTO"];
+        };
+        UpdateVendorInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateVendorInputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: email
+             * @description New contact email; omit to leave unchanged
+             */
+            contact_email?: string;
+            /** @description Full plant set; omit to leave unchanged */
+            plants?: string[];
+        };
+        UpdateVendorOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateVendorOutputBody.json
+             */
+            readonly $schema?: string;
+            vendor: components["schemas"]["VendorDTO"];
         };
         UploadDocumentInputBody: {
             /**
@@ -3711,6 +3748,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreateVendorOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    updateVendor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateVendorInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateVendorOutputBody"];
                 };
             };
             /** @description Error */

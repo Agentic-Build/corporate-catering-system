@@ -113,8 +113,8 @@ VALUES ('Vendor', 'Vendor Ltd', 'vendor@test.com', 'approved')
 RETURNING id`).Scan(&vendorID))
 
 	require.NoError(t, pool.QueryRow(ctx, `
-INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags, badges)
-VALUES ($1, 'Item', '', 110, 'active', ARRAY[]::text[], ARRAY[]::text[])
+INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags)
+VALUES ($1, 'Item', '', 110, 'active', ARRAY[]::text[])
 RETURNING id`, vendorID).Scan(&itemID))
 
 	_, err := pool.Exec(ctx,
@@ -397,8 +397,8 @@ func seedExtraItem(t *testing.T, pool *pgxpool.Pool, vendorID string, priceMinor
 	t.Helper()
 	ctx := context.Background()
 	require.NoError(t, pool.QueryRow(ctx, `
-INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags, badges)
-VALUES ($1, 'Item B', '', $2, 'active', ARRAY[]::text[], ARRAY[]::text[])
+INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags)
+VALUES ($1, 'Item B', '', $2, 'active', ARRAY[]::text[])
 RETURNING id`, vendorID, priceMinor).Scan(&itemID))
 	_, err := pool.Exec(ctx, `
 INSERT INTO meal_supply (menu_item_id, supply_date, capacity, remain, pickup_window, eta_label, cutoff_at)

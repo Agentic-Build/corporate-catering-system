@@ -26,7 +26,6 @@ type Item struct {
 	Description string
 	PriceMinor  int64
 	Tags        []string
-	Badges      []string
 	Status      ItemStatus
 	ArchivedAt  *time.Time
 	CreatedAt   time.Time

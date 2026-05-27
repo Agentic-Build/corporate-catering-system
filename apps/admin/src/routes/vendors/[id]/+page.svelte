@@ -5,7 +5,9 @@
   const currentPlants = $derived(new Set<string>(v.plants ?? []));
 
   const plantLabelMap = $derived(
-    Object.fromEntries(data.knownPlants.map((p: { code: string; label: string }) => [p.code, p.label])),
+    Object.fromEntries(
+      data.knownPlants.map((p: { code: string; label: string }) => [p.code, p.label]),
+    ),
   );
   const labelFor = (id: string) => plantLabelMap[id] ?? id;
 
@@ -70,7 +72,12 @@
               <label
                 class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-tb-slate-300 px-3 py-1 text-xs font-semibold text-tb-slate-700 hover:border-tb-slate-500"
               >
-                <input type="checkbox" name="plants" value={p.code} checked={currentPlants.has(p.code)} />
+                <input
+                  type="checkbox"
+                  name="plants"
+                  value={p.code}
+                  checked={currentPlants.has(p.code)}
+                />
                 {p.label}
               </label>
             {/each}
@@ -108,6 +115,52 @@
       </form>
     </Card>
   {/if}
+
+  <Card title="商家基本資料" description="更新聯絡 email 與服務廠區。">
+    <form method="POST" action="?/update" class="space-y-4">
+      <div>
+        <label
+          for="vendor-email"
+          class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
+        >
+          聯絡 email
+        </label>
+        <input
+          id="vendor-email"
+          name="contact_email"
+          type="email"
+          value={v.contact_email}
+          required
+          class="mt-1.5 w-full rounded-lg border border-tb-slate-300 px-3 py-2 text-sm font-jetbrains-mono focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
+        />
+      </div>
+      <fieldset>
+        <legend class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
+          服務廠區
+        </legend>
+        <div class="mt-2 flex flex-wrap gap-2">
+          {#each data.knownPlants as p (p.code)}
+            <label
+              class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-tb-slate-300 px-3 py-1 text-xs font-semibold text-tb-slate-700 hover:border-tb-slate-500"
+            >
+              <input
+                type="checkbox"
+                name="plants"
+                value={p.code}
+                checked={currentPlants.has(p.code)}
+              />
+              {p.label}
+            </label>
+          {:else}
+            <span class="text-sm text-tb-slate-500">尚無可選廠區</span>
+          {/each}
+        </div>
+      </fieldset>
+      <Button variant="primary" size="md" type="submit">
+        <Icon name="check" class="h-3.5 w-3.5" />儲存變更
+      </Button>
+    </form>
+  </Card>
 
   {#if v.status === "approved"}
     {#if (v.plant_mappings ?? []).length > 0}

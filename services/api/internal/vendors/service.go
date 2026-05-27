@@ -161,6 +161,40 @@ func (s *Service) UpdateSettings(ctx context.Context, id string, cutoffHour, pre
 	return s.Vendors.GetByID(ctx, id)
 }
 
+// UpdateProfile lets an admin update a vendor's contact email and/or its plant
+// set. Both fields are optional: a nil pointer leaves that aspect untouched.
+// The plant set fully replaces the vendor's active mappings (reusing the same
+// path as Approve), so removed plants are deactivated and added plants get a
+// default window; retained plants keep their service_window.
+func (s *Service) UpdateProfile(ctx context.Context, id, adminUserID string, email *string, plants *[]string) (*Vendor, error) {
+	if _, err := s.Vendors.GetByID(ctx, id); err != nil {
+		return nil, err
+	}
+	payload := map[string]any{}
+	if email != nil {
+		normalized, err := normalizeEmail(*email)
+		if err != nil {
+			return nil, fmt.Errorf("%w: invalid contact_email", ErrInvalidSettings)
+		}
+		if err := s.Vendors.UpdateContactEmail(ctx, id, normalized); err != nil {
+			return nil, err
+		}
+		payload["contact_email"] = normalized
+	}
+	if plants != nil {
+		if err := s.Plants.Set(ctx, id, *plants); err != nil {
+			return nil, err
+		}
+		payload["plants"] = *plants
+	}
+	if len(payload) > 0 {
+		if err := s.writeAudit(ctx, adminUserID, "vendor.update_profile", id, payload); err != nil {
+			return nil, err
+		}
+	}
+	return s.Vendors.GetByID(ctx, id)
+}
+
 // ListPlants returns the active plant codes mapped to a vendor.
 func (s *Service) ListPlants(ctx context.Context, id string) ([]string, error) {
 	list, err := s.Plants.ListByVendor(ctx, id)

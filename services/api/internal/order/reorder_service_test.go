@@ -185,8 +185,8 @@ RETURNING id`).Scan(&vendorID))
 	itemIDs = make([]string, len(itemNames))
 	for i, name := range itemNames {
 		require.NoError(t, pool.QueryRow(ctx, `
-INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags, badges)
-VALUES ($1, $2, '', 110, 'active', ARRAY[]::text[], ARRAY[]::text[])
+INSERT INTO menu_item (vendor_id, name, description, price_minor, status, tags)
+VALUES ($1, $2, '', 110, 'active', ARRAY[]::text[])
 RETURNING id`, vendorID, name).Scan(&itemIDs[i]))
 	}
 

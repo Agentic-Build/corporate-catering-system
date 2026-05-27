@@ -91,14 +91,17 @@ func (r *OrderRepo) GetByID(ctx context.Context, id string) (*order.Order, error
 	}
 
 	rows, err := r.pool.Query(ctx, `
-SELECT id, order_id, menu_item_id, qty, unit_price_minor FROM order_item WHERE order_id=$1`, id)
+SELECT oi.id, oi.order_id, oi.menu_item_id, COALESCE(mi.name, ''), oi.qty, oi.unit_price_minor
+  FROM order_item oi
+  LEFT JOIN menu_item mi ON mi.id = oi.menu_item_id
+ WHERE oi.order_id=$1`, id)
 	if err != nil {
 		return nil, fmt.Errorf("get items: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var it order.Item
-		if err := rows.Scan(&it.ID, &it.OrderID, &it.MenuItemID, &it.Qty, &it.UnitPriceMinor); err != nil {
+		if err := rows.Scan(&it.ID, &it.OrderID, &it.MenuItemID, &it.Name, &it.Qty, &it.UnitPriceMinor); err != nil {
 			return nil, err
 		}
 		o.Items = append(o.Items, it)
@@ -343,17 +346,18 @@ func (r *OrderRepo) hydrateItems(ctx context.Context, orders []*order.Order) err
 		ids = append(ids, o.ID)
 	}
 	rows, err := r.pool.Query(ctx, `
-SELECT id, order_id, menu_item_id, qty, unit_price_minor
-  FROM order_item
- WHERE order_id = ANY($1)
- ORDER BY order_id, id`, ids)
+SELECT oi.id, oi.order_id, oi.menu_item_id, COALESCE(mi.name, ''), oi.qty, oi.unit_price_minor
+  FROM order_item oi
+  LEFT JOIN menu_item mi ON mi.id = oi.menu_item_id
+ WHERE oi.order_id = ANY($1)
+ ORDER BY oi.order_id, oi.id`, ids)
 	if err != nil {
 		return fmt.Errorf("hydrate items: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var it order.Item
-		if err := rows.Scan(&it.ID, &it.OrderID, &it.MenuItemID, &it.Qty, &it.UnitPriceMinor); err != nil {
+		if err := rows.Scan(&it.ID, &it.OrderID, &it.MenuItemID, &it.Name, &it.Qty, &it.UnitPriceMinor); err != nil {
 			return err
 		}
 		if o := byID[it.OrderID]; o != nil {
