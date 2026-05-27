@@ -69,7 +69,10 @@ pnpm install && make coverage-web
 - [x] Phase 2：`order/http`→77.7%、`menu/http`→90.3%、`vendors/http`→97.1%。
 - [x] Phase 2b（部分）：`mcpserver` 16%→94.7%（+server.go txBeginner 重構）、`plants/http` 35%→100%、`identity/http` 49%→96.7%、`menu/readmodel` 41%→82.8%（RedisCache 卡具體 redis client）。
 - [x] Phase 3（postgres 整合測試，testcontainers）：plants/postgres 0→95.1%、vendors/postgres 46→88.5%、payroll/postgres 58→86.9%、order/postgres 57→83.0%。（commit b627e81）
-- [ ] Phase 2b 續：`compliance/scanner` 56%、`identity/oidc` 23%、`platform/observability` 11%、`identity/hydra` 13%（外部 OAuth，低價值）、`httpserver` 49%、各 service 包內部分支（compliance 40%、order 73%…）、其餘 postgres（quota 61.5% 等）。
+- [x] Phase 4（service 包內部分支）：vendors 60→100%、compliance 40→95.8%、menu 79→94.3%、payroll 76→91.1%。（commit b552585）
+- [ ] Phase 4 續：`order`(service) 73%（大包，剩寫入錯誤分支）、`feedback`(service) 73%、`compliance/scanner` 56%、`feedback/scanner`。
+- [ ] 低價值/外部：`identity/oidc` 23%、`platform/observability` 11%、`identity/hydra` 13%、`httpserver` 49%、其餘 postgres（quota 61.5%）。
+- [ ] Phase 5：前端 3 個 app（≈0%）。
 - 目標分母：`make coverage-go` 已改為只測 `services/api/internal/...`（排除 cmd）。
 - [ ] 殘留 storage/pool-bound：menu presign/upload、order SSE + reorder 2xx — 需把 `*storage.S3Client`、reorder 的 `pool` 抽成 interface（同 txBeginner 手法）才能純測。
 - [ ] Phase 3：前端 3 個 app 元件/邏輯測試（目前 ≈0%）。
