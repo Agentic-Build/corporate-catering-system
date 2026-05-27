@@ -159,7 +159,11 @@ func (a *API) replay(ctx context.Context, in *idInput) (*replayOutput, error) {
 	if err != nil {
 		return nil, huma.Error500InternalServerError("marshal payload", err)
 	}
-	if _, err := a.JS.Publish(ctx, msg.SourceSubject, payloadBytes); err != nil {
+	// Dedup on the DLQ message id: two admins replaying the same message
+	// concurrently (both passing the not-replayed check above) collapse to a
+	// single stream delivery instead of double-delivering. Idempotent on retry.
+	if _, err := a.JS.Publish(ctx, msg.SourceSubject, payloadBytes,
+		jetstream.WithMsgID("dlq-"+msg.ID)); err != nil {
 		return nil, huma.Error500InternalServerError("publish failed", err)
 	}
 	if err := a.Repo.MarkReplayed(ctx, msg.ID, u.ID); err != nil {

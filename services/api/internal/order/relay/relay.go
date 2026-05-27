@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
@@ -57,7 +58,11 @@ func (r *Relay) cycle(ctx context.Context) (int, error) {
 	successIDs := make([]int64, 0, len(events))
 	for _, ev := range events {
 		payload, _ := json.Marshal(ev.Payload)
-		if err := r.NATS.PublishTraced(ctx, ev.Subject, payload); err != nil {
+		// The outbox row id is a stable per-event dedup key: if a crash between
+		// publish and MarkPublished causes a re-publish next cycle, JetStream
+		// collapses it via Nats-Msg-Id.
+		dedupID := "outbox-" + strconv.FormatInt(ev.ID, 10)
+		if err := r.NATS.PublishTraced(ctx, ev.Subject, payload, dedupID); err != nil {
 			r.Logger.Warn("publish failed", "event_id", ev.ID, "subject", ev.Subject, "err", err)
 			// Stage the failure (attempts++, last_error) on the cycle tx without
 			// committing; the failed event stays unpublished and gets re-locked

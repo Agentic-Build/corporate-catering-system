@@ -22,6 +22,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
 )
 
@@ -135,7 +136,9 @@ func (s *Settler) Run(ctx context.Context) error {
 		}
 		if err := s.handle(ctx, msg.Data()); err != nil {
 			s.Logger.Error("handle event", "err", err)
-			_ = msg.Nak()
+			// MaxDeliver below is 5; once exhausted, DLQ + Term instead of
+			// re-Naking a poison message forever.
+			messaging.DLQOnExhaustion(ctx, msg, s.Pool, "payroll-settler", 5, err)
 			continue
 		}
 		_ = msg.Ack()

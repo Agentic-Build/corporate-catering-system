@@ -223,6 +223,7 @@ func runOnTimeEvaluator(ctx context.Context, logger *slog.Logger, cfg config.Con
 
 	eval := &evaluator.OnTimeRateEvaluator{
 		JS:      nc.JS,
+		Pool:    pool,
 		Anomaly: cpgrepo.NewAnomalyRepo(pool),
 		Logger:  logger.With("component", "on-time-evaluator"),
 	}
