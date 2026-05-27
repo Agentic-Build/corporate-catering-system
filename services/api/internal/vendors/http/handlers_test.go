@@ -195,6 +195,8 @@ func (r *fakeVendorRepo) UpdateSettings(_ context.Context, id string, cutoffHour
 	return nil
 }
 
+func (r *fakeVendorRepo) UpdateContactEmail(context.Context, string, string) error { return nil }
+
 func (r *fakeVendorRepo) List(_ context.Context, statuses []vendor.Status) ([]*vendor.Vendor, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

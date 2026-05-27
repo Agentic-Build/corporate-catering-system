@@ -34,6 +34,8 @@ const (
 	employeeID = "emp-1"
 )
 
+func sp(s string) *string { return &s }
+
 // ----- Fakes -----
 //
 // These cover the four payroll repository interfaces plus CurrentLinesRepository,
@@ -193,7 +195,7 @@ func (r *fakeOrderRepo) GetByID(_ context.Context, id string) (*order.Order, err
 	if o, ok := r.byID[id]; ok {
 		return o, nil
 	}
-	return nil, errors.New("order not found")
+	return nil, order.ErrOrderNotFound
 }
 func (r *fakeOrderRepo) ListPickedOrNoShowInPeriod(context.Context, time.Time, time.Time) ([]*order.Order, error) {
 	return r.picked, r.listErr
@@ -609,7 +611,7 @@ func TestListDisputes_OK(t *testing.T) {
 	f.disputes.byStatus = []*payroll.Dispute{
 		{
 			ID:          disputeID,
-			EntryID:     entryID,
+			EntryID:     sp(entryID),
 			OrderID:     orderID,
 			OpenedBy:    employeeID,
 			Reason:      "missing dessert",
@@ -706,7 +708,7 @@ func TestResolveDispute_NotOpen_409(t *testing.T) {
 func TestResolveDispute_Reject_OK_204(t *testing.T) {
 	srv, f := buildHandler(t, adminUserObj())
 	f.disputes.byID[disputeID] = &payroll.Dispute{
-		ID: disputeID, EntryID: entryID, OrderID: orderID, Status: payroll.DisputeStatusOpen,
+		ID: disputeID, EntryID: sp(entryID), OrderID: orderID, Status: payroll.DisputeStatusOpen,
 	}
 	resp := do(t, http.MethodPost, srv.URL+"/api/admin/payroll/disputes/"+disputeID+"/resolve",
 		`{"status":"resolved_reject","resolution":"not substantiated","refund_minor":0}`)
@@ -717,7 +719,7 @@ func TestResolveDispute_Reject_OK_204(t *testing.T) {
 func TestResolveDispute_Refund_OK_204(t *testing.T) {
 	srv, f := buildHandler(t, adminUserObj())
 	f.disputes.byID[disputeID] = &payroll.Dispute{
-		ID: disputeID, EntryID: entryID, OrderID: orderID, Status: payroll.DisputeStatusOpen,
+		ID: disputeID, EntryID: sp(entryID), OrderID: orderID, Status: payroll.DisputeStatusOpen,
 	}
 	// Order picked_up with 12000 NTD; refund 5000 (whole NTD) is within bounds.
 	f.orders.byID[orderID] = &order.Order{ID: orderID, TotalPriceMinor: 12000, Status: order.StatusPickedUp}
@@ -730,7 +732,7 @@ func TestResolveDispute_Refund_OK_204(t *testing.T) {
 func TestResolveDispute_RefundExceedsOrder_400(t *testing.T) {
 	srv, f := buildHandler(t, adminUserObj())
 	f.disputes.byID[disputeID] = &payroll.Dispute{
-		ID: disputeID, EntryID: entryID, OrderID: orderID, Status: payroll.DisputeStatusOpen,
+		ID: disputeID, EntryID: sp(entryID), OrderID: orderID, Status: payroll.DisputeStatusOpen,
 	}
 	f.orders.byID[orderID] = &order.Order{ID: orderID, TotalPriceMinor: 12000, Status: order.StatusPickedUp}
 	resp := do(t, http.MethodPost, srv.URL+"/api/admin/payroll/disputes/"+disputeID+"/resolve",
@@ -778,7 +780,8 @@ func TestOpenDispute_EmptyReason_422(t *testing.T) {
 }
 
 func TestOpenDispute_OrderNotInEntry_404(t *testing.T) {
-	// FindByOrderForUser returns ErrEntryNotFound → mapped to 404.
+	// No entry yet (ErrEntryNotFound) → falls back to order lookup; the order is
+	// absent (ErrOrderNotFound) → mapped to 404.
 	srv, f := buildHandler(t, employeeUserObj())
 	f.entries.findOrderErr = payroll.ErrEntryNotFound
 	resp := do(t, http.MethodPost, srv.URL+"/api/employee/disputes",
@@ -877,7 +880,7 @@ func TestListMyDisputes_WrongRole(t *testing.T) {
 func TestListMyDisputes_OK(t *testing.T) {
 	srv, f := buildHandler(t, employeeUserObj())
 	f.disputes.byUser = []*payroll.Dispute{
-		{ID: disputeID, EntryID: entryID, OrderID: orderID, OpenedBy: employeeID, Reason: "r", Status: payroll.DisputeStatusOpen},
+		{ID: disputeID, EntryID: sp(entryID), OrderID: orderID, OpenedBy: employeeID, Reason: "r", Status: payroll.DisputeStatusOpen},
 	}
 	resp := do(t, http.MethodGet, srv.URL+"/api/employee/disputes", "")
 	defer resp.Body.Close()

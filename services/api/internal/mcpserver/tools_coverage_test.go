@@ -23,6 +23,8 @@ import (
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
+func sp(s string) *string { return &s }
+
 // ---------------------------------------------------------------------------
 // shared audit-path fakes (mirrors settlement/http/handlers_test.go precedent)
 // ---------------------------------------------------------------------------
@@ -196,7 +198,8 @@ func (f *fakeVendorRepo) Create(context.Context, *vendor.Vendor) error { return 
 func (f *fakeVendorRepo) UpdateStatus(context.Context, string, vendor.Status, *string) error {
 	return nil
 }
-func (f *fakeVendorRepo) UpdateSettings(context.Context, string, int, int) error { return nil }
+func (f *fakeVendorRepo) UpdateSettings(context.Context, string, int, int) error   { return nil }
+func (f *fakeVendorRepo) UpdateContactEmail(context.Context, string, string) error { return nil }
 func (f *fakeVendorRepo) List(_ context.Context, statuses []vendor.Status) ([]*vendor.Vendor, error) {
 	f.statuses = statuses
 	return f.vendors, f.listErr
@@ -1059,7 +1062,7 @@ func TestPayrollLockBatch_MissingArg(t *testing.T) {
 func TestPayrollResolveDispute_Success(t *testing.T) {
 	audit, pool := auditDeps()
 	disputes := &fakeDisputeRepo{byID: map[string]*payroll.Dispute{
-		"d-1": {ID: "d-1", OrderID: "o-1", EntryID: "e-1", Status: payroll.DisputeStatusOpen},
+		"d-1": {ID: "d-1", OrderID: "o-1", EntryID: sp("e-1"), Status: payroll.DisputeStatusOpen},
 	}}
 	svc := payrollService(&fakeBatchRepo{}, disputes, audit, pool)
 	srv := mcpserver.New(mcpserver.Deps{Payroll: svc, Pool: pool, Audit: audit})
@@ -1783,7 +1786,6 @@ func seedRichMenuRow(id string) *menu.ActiveItemRow {
 			Description: "A full set with miso soup",
 			PriceMinor:  25000,
 			Tags:        []string{"vegan", "low_carb"},
-			Badges:      []string{"chef_special"},
 		},
 		VendorName:   "Bento Co",
 		Capacity:     10,
@@ -1804,7 +1806,6 @@ func TestFetch_Menu_SoldOutFullMetadata(t *testing.T) {
 	assert.Equal(t, "menu:m-rich", out["id"])
 	assert.Contains(t, out["text"], "SOLD OUT")
 	assert.Contains(t, out["text"], "Tags:")
-	assert.Contains(t, out["text"], "Badges:")
 }
 
 func TestSearch_SoldOutSnippet(t *testing.T) {

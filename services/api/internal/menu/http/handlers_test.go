@@ -522,7 +522,7 @@ func TestListItems_OK(t *testing.T) {
 			Item: menu.Item{
 				ID: itemID, VendorID: vendorID, Name: "雞腿便當",
 				PriceMinor: 11000, Status: menu.ItemStatusActive,
-				Tags: []string{"招牌"}, Badges: []string{"熱賣"},
+				Tags: []string{"招牌"},
 			},
 			LastUsed:  &last,
 			TotalSold: 42,
@@ -579,7 +579,7 @@ func TestListItems_ImagesRepoError_500(t *testing.T) {
 func TestCreateItem_Unauthenticated(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, nil)
 	resp := do(t, http.MethodPost, srv.URL+"/api/merchant/menu-items",
-		`{"name":"雞腿便當","description":"經典","price_minor":11000,"tags":[],"badges":[]}`)
+		`{"name":"雞腿便當","description":"經典","price_minor":11000,"tags":[]}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
@@ -587,7 +587,7 @@ func TestCreateItem_Unauthenticated(t *testing.T) {
 func TestCreateItem_MissingName_422(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, vendorUser())
 	resp := do(t, http.MethodPost, srv.URL+"/api/merchant/menu-items",
-		`{"name":"","description":"x","price_minor":11000,"tags":[],"badges":[]}`)
+		`{"name":"","description":"x","price_minor":11000,"tags":[]}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
 }
@@ -595,7 +595,7 @@ func TestCreateItem_MissingName_422(t *testing.T) {
 func TestCreateItem_NegativePrice_422(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, vendorUser())
 	resp := do(t, http.MethodPost, srv.URL+"/api/merchant/menu-items",
-		`{"name":"X","description":"x","price_minor":-1,"tags":[],"badges":[]}`)
+		`{"name":"X","description":"x","price_minor":-1,"tags":[]}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
 }
@@ -603,7 +603,7 @@ func TestCreateItem_NegativePrice_422(t *testing.T) {
 func TestCreateItem_OK_201(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, vendorUser())
 	resp := do(t, http.MethodPost, srv.URL+"/api/merchant/menu-items",
-		`{"name":"雞腿便當","description":"經典","price_minor":11000,"tags":["招牌"],"badges":["熱賣"],"images":["s3://b/1.jpg"]}`)
+		`{"name":"雞腿便當","description":"經典","price_minor":11000,"tags":["招牌"],"images":["s3://b/1.jpg"]}`)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
@@ -622,7 +622,7 @@ func TestCreateItem_OK_201(t *testing.T) {
 	assert.Equal(t, itemID, out.Item.ID)
 	assert.Equal(t, vendorID, out.Item.VendorID)
 	assert.Equal(t, int64(11000), out.Item.PriceMinor) // whole NTD
-	assert.Equal(t, "draft", out.Item.Status)
+	assert.Equal(t, "active", out.Item.Status)
 	assert.Equal(t, []string{"招牌"}, out.Item.Tags)
 	assert.Equal(t, []string{"s3://b/1.jpg"}, out.Item.Images)
 }
@@ -631,7 +631,7 @@ func TestCreateItem_RepoError_500(t *testing.T) {
 	srv, _, ir, _ := buildMenu(t, vendorUser())
 	ir.createErr = errors.New("db down")
 	resp := do(t, http.MethodPost, srv.URL+"/api/merchant/menu-items",
-		`{"name":"X","description":"x","price_minor":11000,"tags":[],"badges":[]}`)
+		`{"name":"X","description":"x","price_minor":11000,"tags":[]}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
@@ -643,7 +643,7 @@ func TestCreateItem_RepoError_500(t *testing.T) {
 func TestUpdateItem_Unauthenticated(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, nil)
 	resp := do(t, http.MethodPatch, srv.URL+"/api/merchant/menu-items/"+itemID,
-		`{"name":"X","description":"x","price_minor":12000,"tags":[],"badges":[]}`)
+		`{"name":"X","description":"x","price_minor":12000,"tags":[]}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
@@ -651,7 +651,7 @@ func TestUpdateItem_Unauthenticated(t *testing.T) {
 func TestUpdateItem_InvalidUUID_422(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, vendorUser())
 	resp := do(t, http.MethodPatch, srv.URL+"/api/merchant/menu-items/not-a-uuid",
-		`{"name":"X","description":"x","price_minor":12000,"tags":[],"badges":[]}`)
+		`{"name":"X","description":"x","price_minor":12000,"tags":[]}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
 }
@@ -659,7 +659,7 @@ func TestUpdateItem_InvalidUUID_422(t *testing.T) {
 func TestUpdateItem_NotFound(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, vendorUser()) // item not seeded
 	resp := do(t, http.MethodPatch, srv.URL+"/api/merchant/menu-items/"+itemID,
-		`{"name":"X","description":"x","price_minor":12000,"tags":[],"badges":[]}`)
+		`{"name":"X","description":"x","price_minor":12000,"tags":[]}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
@@ -668,7 +668,7 @@ func TestUpdateItem_WrongVendor_403(t *testing.T) {
 	srv, _, ir, _ := buildMenu(t, vendorUser())
 	ir.byID[itemID] = &menu.Item{ID: itemID, VendorID: "someone-else", Name: "X", Status: menu.ItemStatusDraft}
 	resp := do(t, http.MethodPatch, srv.URL+"/api/merchant/menu-items/"+itemID,
-		`{"name":"X","description":"x","price_minor":12000,"tags":[],"badges":[]}`)
+		`{"name":"X","description":"x","price_minor":12000,"tags":[]}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
@@ -677,7 +677,7 @@ func TestUpdateItem_OK(t *testing.T) {
 	srv, _, ir, _ := buildMenu(t, vendorUser())
 	ir.byID[itemID] = &menu.Item{ID: itemID, VendorID: vendorID, Name: "old", PriceMinor: 9000, Status: menu.ItemStatusDraft}
 	resp := do(t, http.MethodPatch, srv.URL+"/api/merchant/menu-items/"+itemID,
-		`{"name":"new","description":"d","price_minor":12000,"tags":["a"],"badges":["b"],"images":["s3://b/x.jpg"]}`)
+		`{"name":"new","description":"d","price_minor":12000,"tags":["a"],"images":["s3://b/x.jpg"]}`)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -814,7 +814,7 @@ func TestCopyItem_OK_201(t *testing.T) {
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
 	assert.Equal(t, "雞腿便當（複製）", out.Item.Name)
-	assert.Equal(t, "draft", out.Item.Status) // copy is always a draft
+	assert.Equal(t, "active", out.Item.Status)
 	assert.Equal(t, int64(11000), out.Item.PriceMinor)
 }
 

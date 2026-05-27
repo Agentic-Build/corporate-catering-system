@@ -99,7 +99,8 @@ func TestService_OpenDisputeByOrder_Happy(t *testing.T) {
 
 	d, err := svc.OpenDisputeByOrder(ctx, orderID, user, "missing dessert")
 	require.NoError(t, err)
-	assert.Equal(t, entries[0].ID, d.EntryID)
+	require.NotNil(t, d.EntryID)
+	assert.Equal(t, entries[0].ID, *d.EntryID)
 	assert.Equal(t, orderID, d.OrderID)
 	assert.Equal(t, payroll.DisputeStatusOpen, d.Status)
 }
@@ -111,7 +112,7 @@ func TestService_OpenDisputeByOrder_NoEntry(t *testing.T) {
 	user := seedEmployeeUser(t, pool)
 
 	_, err := svc.OpenDisputeByOrder(ctx, missingUUID, user, "no entry")
-	assert.ErrorIs(t, err, payroll.ErrEntryNotFound)
+	assert.ErrorContains(t, err, "not found")
 }
 
 // ---------- ResolveDispute error paths ----------
