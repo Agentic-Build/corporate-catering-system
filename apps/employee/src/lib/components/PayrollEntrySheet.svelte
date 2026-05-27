@@ -168,10 +168,7 @@
     {:else if alreadyComplained}
       <div class="rounded-tb-xl bg-tb-slate-50 p-3 text-sm text-tb-slate-600">
         此訂單已有客訴紀錄。
-        <a
-          href="/complaints"
-          class="ml-1 font-semibold text-tb-red-600 hover:text-tb-red-700"
-        >
+        <a href="/complaints" class="ml-1 font-semibold text-tb-red-600 hover:text-tb-red-700">
           查看進度 →
         </a>
       </div>

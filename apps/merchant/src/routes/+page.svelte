@@ -74,7 +74,13 @@
 
   /** After publishItem resolves, fire the queued capacity submit (if any). */
   const publishEnhance = () => {
-    return async ({ update, result }: { update: () => Promise<void>; result: { type: string } }) => {
+    return async ({
+      update,
+      result,
+    }: {
+      update: () => Promise<void>;
+      result: { type: string };
+    }) => {
       await update();
       const next = pendingCap;
       pendingCap = null;
@@ -199,7 +205,13 @@
   <input type="hidden" name="pickup_window" value={capPickup} />
   <input type="hidden" name="cutoff_at" value={capDate ? defaultCutoffAt(capDate) : ""} />
 </form>
-<form bind:this={publishForm} method="POST" action="?/publishItem" class="hidden" use:enhance={publishEnhance}>
+<form
+  bind:this={publishForm}
+  method="POST"
+  action="?/publishItem"
+  class="hidden"
+  use:enhance={publishEnhance}
+>
   <input type="hidden" name="item_id" value={publishItemId} />
 </form>
 <form bind:this={soldOutForm} method="POST" action="?/toggleSoldOut" class="hidden" use:enhance>

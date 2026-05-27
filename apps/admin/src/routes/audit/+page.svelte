@@ -80,7 +80,9 @@
 {:else}
   <ol class="relative grid gap-3 border-l-2 border-tb-slate-200 pl-4">
     {#each data.events as e (e.id)}
-      <li class="relative min-w-0 rounded-tb-2xl border border-tb-slate-200 bg-white p-4 shadow-tb-sm">
+      <li
+        class="relative min-w-0 rounded-tb-2xl border border-tb-slate-200 bg-white p-4 shadow-tb-sm"
+      >
         <span
           class="absolute -left-[1.4rem] top-5 h-3 w-3 rounded-full bg-tb-slate-300 ring-2 ring-white"
         ></span>

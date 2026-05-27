@@ -1,8 +1,6 @@
 <script lang="ts">
   import { PageHeader, Card, StateTag, EmptyState, Icon } from "@tbite/ui";
-  import PayrollEntrySheet, {
-    type PayrollLine,
-  } from "$lib/components/PayrollEntrySheet.svelte";
+  import PayrollEntrySheet, { type PayrollLine } from "$lib/components/PayrollEntrySheet.svelte";
 
   let { data } = $props();
 
