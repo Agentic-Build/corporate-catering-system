@@ -160,3 +160,33 @@
 | **W6 後端結構重構** | buildServices、errmap rule-table、require* 移 idhttp、拆 payroll/order handlers、SSE 泛型、formatTimePtr | 中 | 中高（可維護性）|
 | **W7 其餘 P1 bug** | NATS msg-id 去重、reorder vendor-plant/ cutoff、dispute 狀態檢查、DLQ TOCTOU、menu N+1、ontime idempotency | 中 | 中高 |
 | **W8 CI 加固** | gofmt 檢查、prettier 阻斷、恢復 e2e、SQL guard 已有 | 低 | 中 |
+
+---
+
+## 實作進度（2026-05-28，branch `chore/codebase-audit-fixes`，未 push）
+
+### 已完成並驗證（commit 各自獨立）
+- **W1 P0 bug**（`5084e40`）：MCP 兩個金額 bug、outbox relay 交易、merchant cutoff/race；含回歸測試。
+- **W2 死碼＋格式**（`9690e7a`）：gofmt 19 檔、刪 `idgen`、刪 `RemainBar`。
+- **W3 文件**（`b654a71`）：mcp.md 幽靈工具、README 11 roles/pickup、CHANGELOG 補錄、api-client/pickup/ui README、plans 歸檔註記。
+- **W4 Ops 接線**（`c7b5470`）：CD concurrency+retry、`NATS_STREAM_REPLICAS`、prod-ha affinity、networkpolicy standalone MinIO、example.sops.yaml 對齊真實 secret 模型；經 `helm lint` + 三 values 渲染驗證。
+- **W5 前端（部分）**（`df275fa`）：Asia/Taipei `taipeiISO` 一致化＋去重 buildDays/dayId、Drawer `inert` a11y、三 app `+error.svelte`。
+- **W7 P1 bug**（`05910a0` + `f12bf13`）：reorder vendor-plant/cutoff、dispute 狀態 guard、menu N+1、NATS msg-id 去重、DLQ replay 去重、接上 DLQ 寫入端（`DLQOnExhaustion`）。
+- **W8 CI**（`f8ed352`）：gofmt gate、prettier 改阻斷。
+
+### 審查後調整的判斷（與原清單不同處，附理由）
+- **`current_lines_repo` 不刪**：經查它是 HTTP handler 單元測試與 8 個 repo 測試的注入 seam（非純死碼）；刪除會 churn 3 個測試檔、損失免 DB 的單元測試能力，僅換得一個 `if` 分支的精簡。比照 W2 對 `Server.Handler`/`FixedClock` 的處理，保留為刻意 seam。
+- **`GetComplaint`/`GetAnomaly`/`GetForItem` 不刪**：是測試的 read-back API，刪除 churn 測試而不簡化 production。
+- **DLQ 寫入端「接上」而非刪**：admin DLQ 介面完整，正解是 wire（已於 W7 完成），非移除。
+- **W7 ontime idempotency**：evaluator 套件自身將 shared dedup store 列為 out-of-scope（single-replica best-effort）；W7 的 `DLQOnExhaustion` 已限制 poison 重投，完整 per-event 冪等列為已知限制。
+- **staticcheck `RealIP`/`rp.Director` 棄用**：屬安全/行為決策（trusted-proxy、Rewrite 遷移），未盲改。
+- **e2e CI 不啟用**：`if:false` 卡在 k3d DinD 基建（或改 post-deploy smoke），屬基建決策，非一行翻轉。
+- **本地 onboarding 文件**：未臆造未驗證的最小本地迴圈。
+
+### 尚未實作（大型／高 churn，建議各自獨立 PR）
+這些是真正大範圍的重構，逐項已分析，適合分開、可審查地進行：
+- **W6 結構重構**：`buildServices`（拆 `cmd/tbite/main.go` 915 行 god-function、收斂 RoleAPI/RoleMCPStdio 已分岔的 wiring）、`errmap` rule-table（×11 context）、`require*` 移入 `idhttp`（×22）、拆 payroll(716)/order handler、SSE 泛型 helper、`formatTimePtr`（×28）。
+- **前端型別安全**：移除 50+ 處 `as any`/`as never` 改用 `schema.d.ts` 既有型別、app tsconfig 開 `noUncheckedIndexedAccess`。
+- **跨 app 共用 package**：把 `taipeiISO`/`formatMinor`/order&complaint 狀態表/auth 路由樹抽進共用 `@tbite/*`（含本次暫採 per-app 的 date helper）。
+- **錯誤處理**：`problemMessage()` helper ＋ 遷移 47 處 `JSON.stringify(error)` 的 `fail()`。
+- **Observability instrumentation**：emit `tbite_db_pool_*`（vmalert 目前查不到）與 `catering_order_*` business metrics（dashboard 目前空白）；需對齊 PromQL 命名後驗證。
