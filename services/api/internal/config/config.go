@@ -94,6 +94,10 @@ type Config struct {
 	// the Authentik issuer directly (no DCR).
 	HydraPublicURL string
 	HydraAdminURL  string
+
+	// NATSStreamReplicas sets the JetStream stream replica count for HA deployments.
+	// Defaults to 1 (single-node dev); set to 3 in clustered production.
+	NATSStreamReplicas int
 }
 
 type AuthProviderConfig struct {
@@ -147,6 +151,8 @@ func FromEnv() (Config, error) {
 
 		HydraPublicURL: strings.TrimRight(os.Getenv("HYDRA_PUBLIC_URL"), "/"),
 		HydraAdminURL:  strings.TrimRight(os.Getenv("HYDRA_ADMIN_URL"), "/"),
+
+		NATSStreamReplicas: envInt("NATS_STREAM_REPLICAS", 1),
 	}
 	if c.DatabaseRW == "" {
 		return c, fmt.Errorf("config: DATABASE_RW_URL is required")
@@ -179,6 +185,18 @@ func envInt32(k string, def int32) int32 {
 		return def
 	}
 	return int32(n)
+}
+
+func envInt(k string, def int) int {
+	v := os.Getenv(k)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return def
+	}
+	return n
 }
 
 func authProvidersFromEnv() ([]AuthProviderConfig, error) {
