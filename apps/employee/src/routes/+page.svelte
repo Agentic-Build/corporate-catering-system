@@ -4,7 +4,7 @@
   // Header / LocationBar / floating cart / cart drawer all live in
   // +layout.svelte; this page owns the home content + its form actions.
   import { MealCard, StateTag, WeekCalendar } from "@tbite/ui";
-  import { invalidateAll, goto } from "$app/navigation";
+  import { invalidate, invalidateAll, goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { onMount } from "svelte";
   import FeaturedRow from "$lib/components/FeaturedRow.svelte";
@@ -34,8 +34,9 @@
     goto(u.pathname + u.search, { keepFocus: true, noScroll: true });
   }
 
-  // Live menu: an SSE stream signals when any order shifts available stock so
-  // the menu refetches and sold-out states surface without a manual refresh.
+  // Live menu: an SSE stream signals when any order shifts available stock.
+  // A "changed" event refetches only the menu/home fragment (app:home),
+  // leaving the layout's order/plant data untouched.
   onMount(() => {
     const es = new EventSource("/menu/events");
     es.onmessage = (e) => {
@@ -45,7 +46,7 @@
       } catch {
         // unparseable payload still signals activity
       }
-      if (kind && kind !== "ping") invalidateAll();
+      if (kind && kind !== "ping") invalidate("app:home");
     };
     return () => es.close();
   });

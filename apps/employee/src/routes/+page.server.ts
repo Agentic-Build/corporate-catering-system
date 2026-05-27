@@ -32,10 +32,12 @@ function buildDays(today: Date, selectedISO?: string) {
 // these is set; otherwise the home payload's day_menu is used as-is.
 const MENU_SORTS = new Set(["name", "price_asc", "price_desc", "remain"]);
 
-export const load: PageServerLoad = async ({ locals, url, parent }) => {
+export const load: PageServerLoad = async ({ locals, url, parent, depends }) => {
   if (!locals.user) {
     throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname + url.search));
   }
+  // SSE menu "changed" events invalidate only this fragment, not the whole page.
+  depends("app:home");
 
   const { plants } = await parent();
   const selectedPlant = url.searchParams.get("plant") ?? locals.user.plant ?? plants[0]?.id ?? "";
