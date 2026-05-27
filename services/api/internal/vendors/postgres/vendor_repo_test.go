@@ -84,3 +84,39 @@ func TestVendorRepo_UpdateStatusAndList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, all, 2)
 }
+
+func TestVendorRepo_UpdateStatusNonApproved(t *testing.T) {
+	pool, cleanup := setupPostgres(t)
+	defer cleanup()
+	repo := postgres.NewVendorRepo(pool)
+	ctx := context.Background()
+
+	v := &vendor.Vendor{DisplayName: "C", LegalName: "C Ltd", ContactEmail: "c@x.com", Status: vendor.StatusPending}
+	require.NoError(t, repo.Create(ctx, v))
+
+	require.NoError(t, repo.UpdateStatus(ctx, v.ID, vendor.StatusSuspended, nil))
+	got, err := repo.GetByID(ctx, v.ID)
+	require.NoError(t, err)
+	assert.Equal(t, vendor.StatusSuspended, got.Status)
+	assert.Nil(t, got.ApprovedAt)
+	assert.Nil(t, got.ApprovedBy)
+}
+
+func TestVendorRepo_UpdateSettings(t *testing.T) {
+	pool, cleanup := setupPostgres(t)
+	defer cleanup()
+	repo := postgres.NewVendorRepo(pool)
+	ctx := context.Background()
+
+	v := &vendor.Vendor{DisplayName: "D", LegalName: "D Ltd", ContactEmail: "d@x.com", Status: vendor.StatusApproved}
+	require.NoError(t, repo.Create(ctx, v))
+
+	require.NoError(t, repo.UpdateSettings(ctx, v.ID, 14, 7))
+	got, err := repo.GetByID(ctx, v.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 14, got.CutoffHour)
+	assert.Equal(t, 7, got.PreorderWindowDays)
+
+	err = repo.UpdateSettings(ctx, "00000000-0000-0000-0000-000000000000", 10, 3)
+	assert.ErrorIs(t, err, vendor.ErrVendorNotFound)
+}
