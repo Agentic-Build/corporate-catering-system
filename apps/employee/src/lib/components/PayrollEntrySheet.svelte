@@ -3,7 +3,7 @@
   // the App's EntryDetailSheet: two modes ⭐評分 / 📣客訴, reusing the payroll
   // page's ?/rate and ?/complain actions (same backend wiring as the order
   // detail page). An already-rated order shows rating mode disabled.
-  import { Modal, Button } from "@tbite/ui";
+  import { Modal, Button, Icon } from "@tbite/ui";
   import { enhance } from "$app/forms";
   import { invalidateAll } from "$app/navigation";
 
@@ -66,21 +66,22 @@
       <button
         type="button"
         onclick={() => (mode = "rate")}
-        class="flex-1 rounded-tb-lg px-3 py-1.5 text-sm font-semibold transition {mode === 'rate'
+        class="flex items-center justify-center gap-1.5 flex-1 rounded-tb-lg px-3 py-1.5 text-sm font-semibold transition {mode ===
+        'rate'
           ? 'bg-tb-slate-900 text-white'
           : 'bg-tb-slate-100 text-tb-slate-700 hover:text-tb-slate-900'}"
       >
-        ⭐ 評分
+        <Icon name="heart" class="h-4 w-4" />評分
       </button>
       <button
         type="button"
         onclick={() => (mode = "complain")}
-        class="flex-1 rounded-tb-lg px-3 py-1.5 text-sm font-semibold transition {mode ===
+        class="flex items-center justify-center gap-1.5 flex-1 rounded-tb-lg px-3 py-1.5 text-sm font-semibold transition {mode ===
         'complain'
           ? 'bg-tb-slate-900 text-white'
           : 'bg-tb-slate-100 text-tb-slate-700 hover:text-tb-slate-900'}"
       >
-        📣 客訴
+        <Icon name="bell" class="h-4 w-4" />客訴
       </button>
     </div>
 
@@ -168,10 +169,7 @@
     {:else if alreadyComplained}
       <div class="rounded-tb-xl bg-tb-slate-50 p-3 text-sm text-tb-slate-600">
         此訂單已有客訴紀錄。
-        <a
-          href="/complaints"
-          class="ml-1 font-semibold text-tb-red-600 hover:text-tb-red-700"
-        >
+        <a href="/complaints" class="ml-1 font-semibold text-tb-red-600 hover:text-tb-red-700">
           查看進度 →
         </a>
       </div>

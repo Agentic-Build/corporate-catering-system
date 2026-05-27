@@ -127,6 +127,7 @@
           bind:value={priceMinInput}
           onkeydown={(e) => e.key === "Enter" && apply()}
           placeholder="最低"
+          aria-label="最低價格"
           class="w-20 rounded-tb-lg border border-tb-slate-300 px-2 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
         />
         <span class="text-tb-slate-400">–</span>
@@ -136,6 +137,7 @@
           bind:value={priceMaxInput}
           onkeydown={(e) => e.key === "Enter" && apply()}
           placeholder="最高"
+          aria-label="最高價格"
           class="w-20 rounded-tb-lg border border-tb-slate-300 px-2 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
         />
       </div>

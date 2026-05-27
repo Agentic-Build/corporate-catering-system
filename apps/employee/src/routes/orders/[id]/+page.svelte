@@ -3,7 +3,7 @@
   // detail card mirroring the reference OrderCard footer. For picked_up
   // orders this page also hosts the F1 員工回饋 forms: a meal rating and a
   // 回報問題 (complaint) form.
-  import { PageHeader, Card, StateTag, Button, Icon } from "@tbite/ui";
+  import { PageHeader, Card, StateTag, Button, Icon, Modal } from "@tbite/ui";
 
   let { data, form } = $props();
   const o = $derived(data.order);
@@ -115,6 +115,10 @@
   function setQty(id: string, n: number) {
     draft = { ...draft, [id]: Math.max(0, n) };
   }
+
+  // ── cancel confirmation ──
+  let cancelOpen = $state(false);
+  let cancelFormEl = $state<HTMLFormElement | undefined>();
 </script>
 
 <a
@@ -275,9 +279,10 @@
       >
         <Icon name="doc" class="h-4 w-4" />編輯訂單
       </button>
-      <form method="POST" action="?/cancel">
-        <Button variant="danger" size="md" type="submit">取消訂單</Button>
-      </form>
+      <form method="POST" action="?/cancel" bind:this={cancelFormEl}></form>
+      <Button variant="danger" size="md" type="button" onclick={() => (cancelOpen = true)}
+        >取消訂單</Button
+      >
     {/if}
     {#if o.status === "ready" || o.status === "picked_up" || o.status === "no_show"}
       <a
@@ -290,6 +295,22 @@
       </a>
     {/if}
   </div>
+
+  <!-- ── cancel confirmation modal ── -->
+  <Modal open={cancelOpen} onClose={() => (cancelOpen = false)} title="取消訂單">
+    <p class="text-sm text-tb-slate-700">取消後無法復原，確定取消這筆訂單？</p>
+    {#snippet footer()}
+      <Button variant="secondary" size="md" onclick={() => (cancelOpen = false)}>返回</Button>
+      <Button
+        variant="danger"
+        size="md"
+        onclick={() => {
+          cancelOpen = false;
+          cancelFormEl?.requestSubmit();
+        }}>確認取消</Button
+      >
+    {/snippet}
+  </Modal>
 
   <!-- ── F1 員工回饋 — only for picked_up orders ── -->
   {#if o.status === "picked_up"}

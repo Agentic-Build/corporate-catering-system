@@ -1,7 +1,9 @@
 <script lang="ts">
   import { PageHeader, Card, StateTag, EmptyState, Icon, Button } from "@tbite/ui";
+  import { enhance } from "$app/forms";
 
   let { data, form } = $props();
+  let submitting = $state(false);
 
   const docKinds = [
     { id: "business_license", label: "營業登記" },
@@ -87,6 +89,13 @@
     document_missing: { label: "缺少必繳文件" },
   } as Record<string, { label: string }>;
 
+  const severityLabel: Record<string, string> = {
+    critical: "嚴重",
+    high: "高",
+    medium: "中",
+    low: "低",
+  };
+
   function warningTone(severity: string): "danger" | "warning" | "info" {
     if (severity === "high" || severity === "critical") return "danger";
     if (severity === "medium") return "warning";
@@ -142,7 +151,9 @@
             <div>
               <div class="flex items-center gap-2">
                 <span class="text-sm font-bold text-tb-slate-900">{meta.label}</span>
-                <StateTag tone={warningTone(w.severity)}>{w.severity}</StateTag>
+                <StateTag tone={warningTone(w.severity)}
+                  >{severityLabel[w.severity] ?? w.severity}</StateTag
+                >
               </div>
               <p class="mt-1 text-sm text-tb-slate-700">{w.message}</p>
             </div>
@@ -177,11 +188,11 @@
           <div class="text-sm text-tb-slate-600">{doc.filename}</div>
           <dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-tb-slate-500">
             <div>
-              <dt class="text-tb-slate-400">到期日</dt>
+              <dt class="text-tb-slate-500">到期日</dt>
               <dd class="font-jetbrains-mono text-tb-slate-600">{fmtDate(doc.expires_at)}</dd>
             </div>
             <div>
-              <dt class="text-tb-slate-400">審核日</dt>
+              <dt class="text-tb-slate-500">審核日</dt>
               <dd class="font-jetbrains-mono text-tb-slate-600">{fmtDate(doc.reviewed_at)}</dd>
             </div>
           </dl>
@@ -212,13 +223,13 @@
           class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
         >
           <tr>
-            <th class="px-5 py-3">文件種類</th>
-            <th class="px-3 py-3">檔名</th>
-            <th class="px-3 py-3">狀態</th>
-            <th class="px-3 py-3">到期日</th>
-            <th class="px-3 py-3">審核日</th>
-            <th class="px-3 py-3">備註</th>
-            <th class="px-5 py-3">操作</th>
+            <th scope="col" class="px-5 py-3">文件種類</th>
+            <th scope="col" class="px-3 py-3">檔名</th>
+            <th scope="col" class="px-3 py-3">狀態</th>
+            <th scope="col" class="px-3 py-3">到期日</th>
+            <th scope="col" class="px-3 py-3">審核日</th>
+            <th scope="col" class="px-3 py-3">備註</th>
+            <th scope="col" class="px-5 py-3">操作</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-tb-slate-100">
@@ -287,7 +298,19 @@
         >
       </p>
     {/if}
-    <form method="POST" action="?/uploadDocument" enctype="multipart/form-data" class="space-y-3">
+    <form
+      method="POST"
+      action="?/uploadDocument"
+      enctype="multipart/form-data"
+      class="space-y-3"
+      use:enhance={() => {
+        submitting = true;
+        return async ({ update }) => {
+          await update();
+          submitting = false;
+        };
+      }}
+    >
       {#if resupplyDoc}
         <input type="hidden" name="supersedes" value={resupplyDoc.id} />
         <input type="hidden" name="kind" value={resupplyDoc.kind} />
@@ -330,8 +353,8 @@
           class="rounded-tb-lg border border-tb-slate-300 px-3 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
         />
       </label>
-      <Button variant="primary" size="md" type="submit">
-        {resupplyDoc ? "送出補件" : "上傳文件"}
+      <Button variant="primary" size="md" type="submit" disabled={submitting}>
+        {submitting ? "處理中…" : resupplyDoc ? "送出補件" : "上傳文件"}
       </Button>
     </form>
   </Card>

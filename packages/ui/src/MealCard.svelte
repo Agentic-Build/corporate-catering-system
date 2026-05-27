@@ -104,7 +104,7 @@
   {#if onToggleFavorite}
     <button
       type="button"
-      class="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-base shadow-tb-sm transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tb-amber-400 active:scale-95
+      class="absolute right-2 top-2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-base shadow-tb-sm transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tb-amber-400 active:scale-95
         {isFavorite ? 'text-tb-amber-400' : 'text-tb-slate-400 hover:text-tb-amber-400'}"
       onclick={onToggleFavorite}
       aria-label={isFavorite ? "取消最愛" : "加入最愛"}
@@ -118,7 +118,7 @@
     <div class="absolute bottom-3 right-3 flex items-center gap-1.5">
       <button
         type="button"
-        class="h-7 w-7 rounded-full border border-tb-slate-300 bg-white text-base font-black text-tb-slate-700 transition active:scale-95 disabled:opacity-40"
+        class="h-11 w-11 rounded-full border border-tb-slate-300 bg-white text-base font-black text-tb-slate-700 transition active:scale-95 disabled:opacity-40"
         onclick={onDecrement}
         disabled={qty === 0}
         aria-label="減少">−</button
@@ -128,7 +128,7 @@
       >
       <button
         type="button"
-        class="h-7 w-7 rounded-full border border-tb-red-600 bg-tb-red-600 text-base font-black text-white transition active:scale-95 disabled:bg-tb-slate-100 disabled:text-tb-slate-400 disabled:border-tb-slate-200"
+        class="h-11 w-11 rounded-full border border-tb-red-600 bg-tb-red-600 text-base font-black text-white transition active:scale-95 disabled:bg-tb-slate-100 disabled:text-tb-slate-400 disabled:border-tb-slate-200"
         onclick={onIncrement}
         disabled={qty >= remain}
         aria-label="增加">+</button

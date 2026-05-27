@@ -111,19 +111,19 @@
           </div>
           <dl class="grid grid-cols-3 gap-2 text-xs">
             <div>
-              <dt class="text-tb-slate-400">訂單數</dt>
+              <dt class="text-tb-slate-500">訂單數</dt>
               <dd class="font-jetbrains-mono tabular-nums text-tb-slate-700">
                 {s.order_count ?? 0}
               </dd>
             </div>
             <div>
-              <dt class="text-tb-slate-400">份數</dt>
+              <dt class="text-tb-slate-500">份數</dt>
               <dd class="font-jetbrains-mono tabular-nums text-tb-slate-700">
                 {s.portion_count ?? 0}
               </dd>
             </div>
             <div>
-              <dt class="text-tb-slate-400">金額</dt>
+              <dt class="text-tb-slate-500">金額</dt>
               <dd class="font-jetbrains-mono tabular-nums text-tb-slate-900">
                 {formatMinor(s.gross_minor)}
               </dd>
@@ -153,13 +153,13 @@
           class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
         >
           <tr>
-            <th class="px-5 py-3">結算期間</th>
-            <th class="px-3 py-3 text-right">訂單數</th>
-            <th class="px-3 py-3 text-right">份數</th>
-            <th class="px-3 py-3 text-right">金額</th>
-            <th class="px-3 py-3">狀態</th>
-            <th class="px-3 py-3">關帳日</th>
-            <th class="px-5 py-3"></th>
+            <th scope="col" class="px-5 py-3">結算期間</th>
+            <th scope="col" class="px-3 py-3 text-right">訂單數</th>
+            <th scope="col" class="px-3 py-3 text-right">份數</th>
+            <th scope="col" class="px-3 py-3 text-right">金額</th>
+            <th scope="col" class="px-3 py-3">狀態</th>
+            <th scope="col" class="px-3 py-3">關帳日</th>
+            <th scope="col" class="px-5 py-3"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-tb-slate-100">

@@ -8,6 +8,7 @@
     onClose: () => void;
     side?: "left" | "right";
     maxWidth?: string;
+    title?: string;
     header?: Snippet;
     children: Snippet;
     footer?: Snippet;
@@ -17,6 +18,7 @@
     onClose,
     side = "right",
     maxWidth = "max-w-md",
+    title,
     header,
     children,
     footer,
@@ -24,8 +26,35 @@
 
   let panel = $state<HTMLDivElement>();
 
+  const FOCUSABLE =
+    'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
   function onKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape" && open) onClose();
+    if (!open) return;
+    if (e.key === "Escape") {
+      onClose();
+      return;
+    }
+    if (e.key === "Tab" && panel) {
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable.at(0)!;
+      const last = focusable.at(-1)!;
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
   }
 
   const sideClass = $derived(side === "left" ? "left-0" : "right-0");
@@ -63,6 +92,7 @@
       : hiddenTransform}"
     role="dialog"
     aria-modal="true"
+    aria-label={title}
     tabindex="-1"
   >
     {#if header}

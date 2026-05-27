@@ -71,7 +71,7 @@
     載入失敗：{data.error}
   </div>
 {:else if chips.length === 0}
-  <EmptyState icon="heart" title="尚無收藏" hint="從今日菜單點 ⭐ 收藏喜歡的菜色。" />
+  <EmptyState icon="heart" title="尚無收藏" hint="從今日菜單點收藏喜歡的菜色。" />
 {:else}
   <!-- Hero — favourite #1 -->
   <article

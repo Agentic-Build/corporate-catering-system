@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PageHeader, Card, StateTag, Button, Icon } from "@tbite/ui";
+  import { PageHeader, Card, StateTag, Button, Icon, Modal } from "@tbite/ui";
 
   let { data, form } = $props();
   const v = $derived(data.vendor);
@@ -56,6 +56,12 @@
       uploading = false;
     }
   }
+
+  // Confirm reject modal
+  type Doc = (typeof data.documents)[number];
+  let confirmRejectTarget = $state<Doc | null>(null);
+  // Record of doc.id → reject form element
+  const rejectFormEls: Record<string, HTMLFormElement> = {};
 </script>
 
 <a
@@ -138,11 +144,11 @@
             class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
           >
             <tr>
-              <th class="px-4 py-2.5">檔名</th>
-              <th class="px-4 py-2.5">種類</th>
-              <th class="px-4 py-2.5">狀態</th>
-              <th class="px-4 py-2.5">到期</th>
-              <th class="px-4 py-2.5"></th>
+              <th scope="col" class="px-4 py-2.5">檔名</th>
+              <th scope="col" class="px-4 py-2.5">種類</th>
+              <th scope="col" class="px-4 py-2.5">狀態</th>
+              <th scope="col" class="px-4 py-2.5">到期</th>
+              <th scope="col" class="px-4 py-2.5"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-tb-slate-100">
@@ -173,13 +179,31 @@
                         <input type="hidden" name="id" value={d.id} />
                         <input type="hidden" name="status" value="approved" />
                         <input type="hidden" name="notes" value="" />
-                        <Button variant="primary" size="sm" type="submit" fullWidth>核准</Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          type="submit"
+                          fullWidth
+                          ariaLabel={`核准文件：${d.filename}`}
+                        >
+                          核准
+                        </Button>
                       </form>
-                      <form method="POST" action="?/review">
+                      <!-- Reject requires confirm modal -->
+                      <form method="POST" action="?/review" bind:this={rejectFormEls[d.id]}>
                         <input type="hidden" name="id" value={d.id} />
                         <input type="hidden" name="status" value="rejected" />
                         <input type="hidden" name="notes" value="" />
-                        <Button variant="danger" size="sm" type="submit" fullWidth>駁回</Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          type="button"
+                          fullWidth
+                          ariaLabel={`駁回文件：${d.filename}`}
+                          onclick={() => (confirmRejectTarget = d)}
+                        >
+                          駁回
+                        </Button>
                       </form>
                     </div>
                   {/if}
@@ -192,3 +216,36 @@
     </Card>
   {/if}
 </div>
+
+<!-- Confirm reject modal -->
+<Modal
+  open={confirmRejectTarget !== null}
+  onClose={() => (confirmRejectTarget = null)}
+  title="確認駁回文件"
+>
+  {#if confirmRejectTarget}
+    <p class="text-sm text-tb-slate-700">
+      駁回後此文件將標記為「已駁回」。商家需重新上傳合格文件。此操作<strong>不可復原</strong>。
+    </p>
+    <p class="mt-2 font-semibold text-sm text-tb-slate-900">{confirmRejectTarget.filename}</p>
+    <p class="text-xs text-tb-slate-500">
+      {kindLabel[confirmRejectTarget.kind] ?? confirmRejectTarget.kind}
+    </p>
+  {/if}
+  {#snippet footer()}
+    <Button variant="secondary" size="md" onclick={() => (confirmRejectTarget = null)}>取消</Button>
+    <Button
+      variant="danger"
+      size="md"
+      onclick={() => {
+        if (confirmRejectTarget) {
+          const el = rejectFormEls[confirmRejectTarget.id];
+          confirmRejectTarget = null;
+          el?.requestSubmit();
+        }
+      }}
+    >
+      確認駁回
+    </Button>
+  {/snippet}
+</Modal>

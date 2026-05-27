@@ -29,6 +29,7 @@
     name="stream"
     value={data.stream}
     placeholder="篩選 stream"
+    aria-label="篩選 Stream"
     class="rounded-lg border border-tb-slate-300 px-3 py-1.5 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
   />
   <Button variant="secondary" size="md" type="submit">篩選</Button>
@@ -52,10 +53,10 @@
             class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
           >
             <tr>
-              <th class="px-4 py-2.5">subject / consumer</th>
-              <th class="px-4 py-2.5">last_error</th>
-              <th class="px-4 py-2.5">age</th>
-              <th class="px-4 py-2.5"></th>
+              <th scope="col" class="px-4 py-2.5">subject / consumer</th>
+              <th scope="col" class="px-4 py-2.5">last_error</th>
+              <th scope="col" class="px-4 py-2.5">age</th>
+              <th scope="col" class="px-4 py-2.5"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-tb-slate-100">

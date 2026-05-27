@@ -55,18 +55,21 @@
     <input
       name="display_name"
       placeholder="顯示名稱"
+      aria-label="顯示名稱"
       required
       class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
     />
     <input
       name="legal_name"
       placeholder="法人名稱"
+      aria-label="法人名稱"
       required
       class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
     />
     <input
       name="contact_email"
       placeholder="contact@example.com"
+      aria-label="聯絡 Email"
       type="email"
       required
       class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm font-jetbrains-mono focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
@@ -123,11 +126,11 @@
             class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
           >
             <tr>
-              <th class="px-4 py-2.5">商家</th>
-              <th class="px-4 py-2.5">Email</th>
-              <th class="px-4 py-2.5">狀態</th>
-              <th class="px-4 py-2.5">服務廠區</th>
-              <th class="px-4 py-2.5"></th>
+              <th scope="col" class="px-4 py-2.5">商家</th>
+              <th scope="col" class="px-4 py-2.5">Email</th>
+              <th scope="col" class="px-4 py-2.5">狀態</th>
+              <th scope="col" class="px-4 py-2.5">服務廠區</th>
+              <th scope="col" class="px-4 py-2.5"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-tb-slate-100">

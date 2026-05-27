@@ -49,7 +49,11 @@
 
 <div class="mt-4">
   {#if data.disputes.length === 0}
-    <EmptyState icon="check" title="尚無符合條件的申訴" hint="員工對月結金額提出申訴後會出現在此處" />
+    <EmptyState
+      icon="check"
+      title="尚無符合條件的申訴"
+      hint="員工對月結金額提出申訴後會出現在此處"
+    />
   {:else}
     <div class="grid gap-3">
       {#each data.disputes as d (d.id)}
@@ -58,7 +62,7 @@
             <div class="min-w-0">
               <div class="flex items-center gap-2">
                 <span class="font-jetbrains-mono text-xs text-tb-slate-500"
-                  >#{d.id.slice(0, 8)}</span
+                  ><span title={d.id}>#{d.id.slice(0, 8)}</span></span
                 >
                 <StateTag tone={statusTone[d.status] ?? "neutral"}>
                   {statusLabel[d.status] ?? d.status}
@@ -66,7 +70,8 @@
               </div>
               <p class="mt-2 text-sm text-tb-slate-900">{d.reason}</p>
               <p class="mt-1 font-jetbrains-mono text-xs text-tb-slate-500">
-                order {d.order_id.slice(0, 8)} · opened_by {d.opened_by.slice(0, 8)}
+                order <span title={d.order_id}>{d.order_id.slice(0, 8)}</span> · opened_by
+                <span title={d.opened_by}>{d.opened_by.slice(0, 8)}</span>
               </p>
               {#if d.status !== "open" && d.resolution}
                 <p class="mt-2 rounded-lg bg-tb-slate-50 p-2 text-xs text-tb-slate-700">
@@ -112,11 +117,9 @@
                     class="rounded-lg border border-tb-slate-300 px-2 py-1 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
                   />
                 </label>
-                <button
-                  class="inline-flex items-center gap-1.5 rounded-lg bg-tb-emerald-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-tb-emerald-700"
-                >
+                <Button variant="primary" size="sm" type="submit">
                   <Icon name="check" class="h-3.5 w-3.5" />確認退款
-                </button>
+                </Button>
               </form>
 
               <form
@@ -138,7 +141,7 @@
                     class="rounded-lg border border-tb-slate-300 px-2 py-1 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
                   />
                 </label>
-                <Button variant="secondary" size="md" type="submit">駁回申訴</Button>
+                <Button variant="danger" size="md" type="submit">駁回申訴</Button>
               </form>
             </div>
           {/if}

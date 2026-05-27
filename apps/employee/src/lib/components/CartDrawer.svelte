@@ -19,6 +19,7 @@
   // Surface a failed `?/placeOrder` (e.g. duplicate same-day order) inside the
   // drawer, where the user is looking — the home page's error banner sits behind it.
   let submitError = $state<string | null>(null);
+  let submitting = $state(false);
 </script>
 
 <Drawer {open} {onClose}>
@@ -76,7 +77,7 @@
             <button
               type="button"
               onclick={() => cart.dec(id)}
-              class="grid h-7 w-7 place-items-center rounded-full border border-tb-slate-200 text-tb-slate-700 transition hover:bg-tb-slate-50"
+              class="grid min-h-[44px] min-w-[44px] place-items-center rounded-full border border-tb-slate-200 text-tb-slate-700 transition hover:bg-tb-slate-50"
               aria-label="減少"
             >
               <Icon name="minus" class="h-3.5 w-3.5" />
@@ -87,7 +88,7 @@
             <button
               type="button"
               onclick={() => cart.inc(id)}
-              class="grid h-7 w-7 place-items-center rounded-full border border-tb-slate-200 text-tb-slate-700 transition hover:bg-tb-slate-50"
+              class="grid min-h-[44px] min-w-[44px] place-items-center rounded-full border border-tb-slate-200 text-tb-slate-700 transition hover:bg-tb-slate-50"
               aria-label="增加"
             >
               <Icon name="plus" class="h-3.5 w-3.5" />
@@ -121,11 +122,13 @@
       action="/?/placeOrder"
       use:enhance={() => {
         submitError = null;
-        return ({ result, update }) => {
+        submitting = true;
+        return async ({ result, update }) => {
           if (result.type === "redirect") cart.clear();
           else if (result.type === "failure")
             submitError = (result.data?.error as string) ?? "送出預訂失敗，請稍後再試。";
-          update();
+          await update();
+          submitting = false;
         };
       }}
       class="mt-3"
@@ -151,8 +154,14 @@
           {submitError}
         </p>
       {/if}
-      <Button variant="primary" size="md" type="submit" fullWidth disabled={entries.length === 0}>
-        送出預訂 · 本月月結
+      <Button
+        variant="primary"
+        size="md"
+        type="submit"
+        fullWidth
+        disabled={submitting || entries.length === 0}
+      >
+        {submitting ? "送出中…" : "送出預訂 · 本月月結"}
       </Button>
     </form>
     <p class="mt-2 text-center text-[11px] text-tb-slate-500">截單前可至「我的訂單」修改或取消。</p>

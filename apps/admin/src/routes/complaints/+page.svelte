@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enhance } from "$app/forms";
   import { PageHeader, Card, StateTag, Button, Icon, EmptyState } from "@tbite/ui";
   let { data, form } = $props();
 
@@ -15,6 +16,9 @@
   function ts(s: string | null | undefined): string {
     return s ? s.slice(0, 16).replace("T", " ") : "—";
   }
+
+  // Per-complaint submitting state (keyed by complaint id)
+  let submitting = $state<Record<string, boolean>>({});
 </script>
 
 <PageHeader
@@ -36,7 +40,9 @@
         <Card>
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-2">
-              <span class="font-jetbrains-mono text-xs text-tb-slate-500">#{c.id.slice(0, 8)}</span>
+              <span class="font-jetbrains-mono text-xs text-tb-slate-500" title={c.id}
+                >#{c.id.slice(0, 8)}</span
+              >
               <StateTag tone="warning" pulse>已升級</StateTag>
               <StateTag tone="neutral">{categoryLabel[c.category] ?? c.category}</StateTag>
             </div>
@@ -46,10 +52,9 @@
           </div>
 
           <p class="mt-2 font-jetbrains-mono text-xs text-tb-slate-500">
-            訂單 {c.order_id.slice(0, 8)} · 商家 {c.vendor_id.slice(0, 8)} · 員工 {c.user_id.slice(
-              0,
-              8,
-            )}
+            訂單 <span title={c.order_id}>{c.order_id.slice(0, 8)}</span> · 商家
+            <span title={c.vendor_id}>{c.vendor_id.slice(0, 8)}</span>
+            · 員工 <span title={c.user_id}>{c.user_id.slice(0, 8)}</span>
           </p>
 
           <!-- Complaint history timeline -->
@@ -91,6 +96,13 @@
             method="POST"
             action="?/resolve"
             class="mt-3 space-y-2 rounded-xl border border-tb-emerald-200 bg-tb-emerald-50/40 p-3"
+            use:enhance={() => {
+              submitting[c.id] = true;
+              return async ({ update }) => {
+                await update();
+                submitting[c.id] = false;
+              };
+            }}
           >
             <input type="hidden" name="id" value={c.id} />
             <p class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-emerald-700">
@@ -116,8 +128,10 @@
               />
               同時啟動薪資沖銷（補償退款）
             </label>
-            <Button variant="primary" size="md" type="submit">
-              <Icon name="check" class="h-3.5 w-3.5" />結案
+            <Button variant="primary" size="md" type="submit" disabled={submitting[c.id] ?? false}>
+              <Icon name="check" class="h-3.5 w-3.5" />{(submitting[c.id] ?? false)
+                ? "處理中…"
+                : "結案"}
             </Button>
           </form>
         </Card>

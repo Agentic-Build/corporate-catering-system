@@ -17,6 +17,7 @@
     { href: "/disputes", label: "申訴", icon: "alert" },
     { href: "/anomalies", label: "告警", icon: "alert" },
     { href: "/audit", label: "稽核紀錄", icon: "download" },
+    { href: "/dlq", label: "死信佇列", icon: "alert" },
   ];
 
   /** A nav item is active when the path matches it or sits beneath it. */

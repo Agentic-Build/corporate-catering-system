@@ -84,13 +84,13 @@
             </div>
             <dl class="mt-2 grid grid-cols-2 gap-1 text-xs text-tb-slate-500">
               <div>
-                <dt class="text-tb-slate-400">鎖定時間</dt>
+                <dt class="text-tb-slate-500">鎖定時間</dt>
                 <dd class="font-jetbrains-mono">
                   {b.locked_at ? b.locked_at.slice(0, 16).replace("T", " ") : "—"}
                 </dd>
               </div>
               <div>
-                <dt class="text-tb-slate-400">匯出時間</dt>
+                <dt class="text-tb-slate-500">匯出時間</dt>
                 <dd class="font-jetbrains-mono">
                   {b.exported_at ? b.exported_at.slice(0, 16).replace("T", " ") : "—"}
                 </dd>
@@ -107,11 +107,11 @@
             class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
           >
             <tr>
-              <th class="px-4 py-2.5">月結周期</th>
-              <th class="px-4 py-2.5">狀態</th>
-              <th class="px-4 py-2.5">鎖定時間</th>
-              <th class="px-4 py-2.5">匯出時間</th>
-              <th class="px-4 py-2.5"></th>
+              <th scope="col" class="px-4 py-2.5">月結周期</th>
+              <th scope="col" class="px-4 py-2.5">狀態</th>
+              <th scope="col" class="px-4 py-2.5">鎖定時間</th>
+              <th scope="col" class="px-4 py-2.5">匯出時間</th>
+              <th scope="col" class="px-4 py-2.5"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-tb-slate-100">

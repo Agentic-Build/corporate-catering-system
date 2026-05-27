@@ -7,6 +7,7 @@
     disabled?: boolean;
     fullWidth?: boolean;
     title?: string;
+    ariaLabel?: string;
     onclick?: (e: MouseEvent) => void;
     children?: import("svelte").Snippet;
   }
@@ -17,6 +18,7 @@
     disabled = false,
     fullWidth = false,
     title,
+    ariaLabel,
     onclick,
     children,
   }: Props = $props();
@@ -43,6 +45,7 @@
   {type}
   {disabled}
   {title}
+  aria-label={ariaLabel}
   class="{base} {sizes[size]} {variants[variant]} {fullWidth ? 'w-full' : ''}"
   {onclick}
 >

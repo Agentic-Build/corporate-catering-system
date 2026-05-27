@@ -1,8 +1,6 @@
 <script lang="ts">
   import { PageHeader, Card, StateTag, EmptyState, Icon } from "@tbite/ui";
-  import PayrollEntrySheet, {
-    type PayrollLine,
-  } from "$lib/components/PayrollEntrySheet.svelte";
+  import PayrollEntrySheet, { type PayrollLine } from "$lib/components/PayrollEntrySheet.svelte";
 
   let { data } = $props();
 
@@ -128,8 +126,8 @@
     </Card>
   </div>
 
-  <div class="overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm">
-    <table class="w-full text-sm">
+  <div class="overflow-x-auto rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm">
+    <table class="min-w-[540px] w-full text-sm">
       <thead
         class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
       >

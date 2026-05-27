@@ -161,6 +161,7 @@
                     type="text"
                     name="notes"
                     placeholder="標記為處理中的備註"
+                    aria-label="標記處理中備註"
                     class="rounded-lg border border-tb-slate-300 px-2 py-1 text-xs focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
                   />
                   <select
@@ -182,6 +183,7 @@
                   type="text"
                   name="notes"
                   placeholder="關閉備註"
+                  aria-label="關閉告警備註"
                   class="rounded-lg border border-tb-slate-300 px-2 py-1 text-xs focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
                 />
                 <Button variant="primary" size="sm" type="submit">關閉告警</Button>

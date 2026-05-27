@@ -80,7 +80,7 @@
             </span>
           {/if}
           <div
-            class="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-tb-slate-900/60 p-1 opacity-0 transition group-hover:opacity-100"
+            class="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-tb-slate-900/60 p-1 opacity-100 transition [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
           >
             <button
               type="button"

@@ -1,6 +1,10 @@
 <script lang="ts">
-  import { Button, PageHeader, Icon, EmptyState } from "@tbite/ui";
+  import { Button, PageHeader, Icon, EmptyState, Modal } from "@tbite/ui";
+  import { enhance } from "$app/forms";
   let { data } = $props();
+
+  let confirmTarget = $state<{ id: string; name: string } | null>(null);
+  let deleteFormEl: HTMLFormElement | undefined;
 </script>
 
 <PageHeader
@@ -44,7 +48,7 @@
 
         <!-- 操作列 -->
         <div class="flex items-center justify-end gap-2 border-t border-tb-slate-100 px-4 py-2">
-          <form method="POST" action="?/copy">
+          <form method="POST" action="?/copy" use:enhance>
             <input type="hidden" name="id" value={item.id} />
             <button
               type="submit"
@@ -59,17 +63,40 @@
           >
             編輯
           </a>
-          <form method="POST" action="?/delete">
-            <input type="hidden" name="id" value={item.id} />
-            <button
-              type="submit"
-              class="text-sm font-semibold text-tb-slate-400 hover:text-red-600"
-            >
-              刪除
-            </button>
-          </form>
+          <button
+            type="button"
+            onclick={() => (confirmTarget = { id: item.id, name: item.name })}
+            class="text-sm font-semibold text-tb-slate-400 hover:text-red-600"
+          >
+            刪除
+          </button>
         </div>
       </div>
     {/each}
   </div>
 {/if}
+
+<!-- 隱藏的實際刪除表單，由 Modal 確認後 requestSubmit() -->
+<form method="POST" action="?/delete" use:enhance bind:this={deleteFormEl} class="hidden">
+  <input type="hidden" name="id" value={confirmTarget?.id ?? ""} />
+</form>
+
+<Modal open={confirmTarget !== null} onClose={() => (confirmTarget = null)} title="確認刪除餐點？">
+  <p class="text-sm text-tb-slate-600">
+    確定要刪除「<span class="font-semibold text-tb-slate-900">{confirmTarget?.name}</span
+    >」嗎？刪除後無法復原。
+  </p>
+  {#snippet footer()}
+    <Button variant="secondary" size="md" onclick={() => (confirmTarget = null)}>取消</Button>
+    <Button
+      variant="danger"
+      size="md"
+      onclick={() => {
+        confirmTarget = null;
+        deleteFormEl?.requestSubmit();
+      }}
+    >
+      確認刪除
+    </Button>
+  {/snippet}
+</Modal>

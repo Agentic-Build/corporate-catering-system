@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { PageHeader, Card, StateTag, Button, Icon } from "@tbite/ui";
+  import { enhance } from "$app/forms";
+  import { PageHeader, Card, StateTag, Button, Icon, Modal } from "@tbite/ui";
   let { data, form } = $props();
   const v = $derived(data.vendor);
   const currentPlants = $derived(new Set<string>(v.plants ?? []));
@@ -28,6 +29,16 @@
     suspended: "停用",
     vendor_suspended: "商家停權",
   } as Record<string, string>;
+
+  // Confirm suspend modal
+  let confirmSuspend = $state(false);
+  let suspendFormEl = $state<HTMLFormElement | null>(null);
+
+  // Loading states
+  let submittingApprove = $state(false);
+  let submittingReinstate = $state(false);
+  let submittingUpdate = $state(false);
+  let submittingSuspend = $state(false);
 </script>
 
 <a
@@ -62,7 +73,18 @@
 
   {#if v.status === "pending"}
     <Card title="核准入駐">
-      <form method="POST" action="?/approve" class="space-y-3">
+      <form
+        method="POST"
+        action="?/approve"
+        class="space-y-3"
+        use:enhance={() => {
+          submittingApprove = true;
+          return async ({ update }) => {
+            await update();
+            submittingApprove = false;
+          };
+        }}
+      >
         <fieldset>
           <legend class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
             服務廠區
@@ -83,15 +105,26 @@
             {/each}
           </div>
         </fieldset>
-        <Button variant="primary" size="md" type="submit">
+        <Button variant="primary" size="md" type="submit" disabled={submittingApprove}>
           <Icon name="check" class="h-3.5 w-3.5" />
-          核准並設定廠區
+          {submittingApprove ? "處理中…" : "核准並設定廠區"}
         </Button>
       </form>
     </Card>
   {:else if v.status === "suspended"}
     <Card title="復權">
-      <form method="POST" action="?/reinstate" class="space-y-3">
+      <form
+        method="POST"
+        action="?/reinstate"
+        class="space-y-3"
+        use:enhance={() => {
+          submittingReinstate = true;
+          return async ({ update }) => {
+            await update();
+            submittingReinstate = false;
+          };
+        }}
+      >
         <div>
           <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
             服務廠區
@@ -108,16 +141,27 @@
             {/each}
           </div>
         </div>
-        <Button variant="primary" size="md" type="submit">
+        <Button variant="primary" size="md" type="submit" disabled={submittingReinstate}>
           <Icon name="check" class="h-3.5 w-3.5" />
-          復權
+          {submittingReinstate ? "處理中…" : "復權"}
         </Button>
       </form>
     </Card>
   {/if}
 
   <Card title="商家基本資料" description="更新聯絡 email 與服務廠區。">
-    <form method="POST" action="?/update" class="space-y-4">
+    <form
+      method="POST"
+      action="?/update"
+      class="space-y-4"
+      use:enhance={() => {
+        submittingUpdate = true;
+        return async ({ update }) => {
+          await update();
+          submittingUpdate = false;
+        };
+      }}
+    >
       <div>
         <label
           for="vendor-email"
@@ -156,8 +200,8 @@
           {/each}
         </div>
       </fieldset>
-      <Button variant="primary" size="md" type="submit">
-        <Icon name="check" class="h-3.5 w-3.5" />儲存變更
+      <Button variant="primary" size="md" type="submit" disabled={submittingUpdate}>
+        <Icon name="check" class="h-3.5 w-3.5" />{submittingUpdate ? "處理中…" : "儲存變更"}
       </Button>
     </form>
   </Card>
@@ -188,8 +232,27 @@
 
     <Card title="商家操作">
       <div class="flex flex-wrap gap-2">
-        <form method="POST" action="?/suspend">
-          <Button variant="danger" size="md" type="submit">停權</Button>
+        <form
+          method="POST"
+          action="?/suspend"
+          bind:this={suspendFormEl}
+          use:enhance={() => {
+            submittingSuspend = true;
+            return async ({ update }) => {
+              await update();
+              submittingSuspend = false;
+            };
+          }}
+        >
+          <Button
+            variant="danger"
+            size="md"
+            type="button"
+            disabled={submittingSuspend}
+            onclick={() => (confirmSuspend = true)}
+          >
+            {submittingSuspend ? "處理中…" : "停權"}
+          </Button>
         </form>
       </div>
     </Card>
@@ -207,12 +270,14 @@
             name="email"
             type="email"
             placeholder="operator@vendor.tw"
+            aria-label="操作員 Email"
             required
             class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm font-jetbrains-mono focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
           />
           <input
             name="display_name"
             placeholder="操作員姓名"
+            aria-label="操作員姓名"
             required
             class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
           />
@@ -228,10 +293,10 @@
             class="bg-tb-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
           >
             <tr>
-              <th class="px-4 py-2.5">操作員</th>
-              <th class="px-4 py-2.5">Provider</th>
-              <th class="px-4 py-2.5">狀態</th>
-              <th class="px-4 py-2.5"></th>
+              <th scope="col" class="px-4 py-2.5">操作員</th>
+              <th scope="col" class="px-4 py-2.5">Provider</th>
+              <th scope="col" class="px-4 py-2.5">狀態</th>
+              <th scope="col" class="px-4 py-2.5"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-tb-slate-100">
@@ -272,3 +337,24 @@
     </Card>
   {/if}
 </div>
+
+<!-- Confirm suspend modal -->
+<Modal open={confirmSuspend} onClose={() => (confirmSuspend = false)} title="確認停權商家">
+  <p class="text-sm text-tb-slate-700">
+    停權後商家將無法接單，操作員無法登入系統。此操作可於日後復權，但期間所有在途訂單將受影響。
+  </p>
+  {#snippet footer()}
+    <Button variant="secondary" size="md" onclick={() => (confirmSuspend = false)}>取消</Button>
+    <Button
+      variant="danger"
+      size="md"
+      disabled={submittingSuspend}
+      onclick={() => {
+        confirmSuspend = false;
+        suspendFormEl?.requestSubmit();
+      }}
+    >
+      {submittingSuspend ? "處理中…" : "確認停權"}
+    </Button>
+  {/snippet}
+</Modal>
