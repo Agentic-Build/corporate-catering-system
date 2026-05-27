@@ -1,14 +1,14 @@
 <script lang="ts">
   import { StateTag, Card, Button, Modal, Icon } from "@tbite/ui";
-  import { invalidateAll } from "$app/navigation";
+  import { invalidate } from "$app/navigation";
   import { parsePickupQR } from "@tbite/pickup";
   import { onMount } from "svelte";
 
   let { data, form } = $props();
 
   // Live updates: an SSE stream pushes order events the moment they happen;
-  // each event triggers a board re-fetch. A slow fallback poll keeps the
-  // board fresh if SSE is unavailable (NATS down / proxy issue).
+  // each event refetches only the order board fragment (app:orders). A slow
+  // fallback poll keeps the board fresh if SSE is unavailable (NATS down / proxy issue).
   onMount(() => {
     const es = new EventSource("/orders/events");
     es.onmessage = (e) => {
@@ -18,9 +18,9 @@
       } catch {
         // Unparseable payload still signals activity — refetch anyway.
       }
-      if (kind !== "ping") invalidateAll();
+      if (kind !== "ping") invalidate("app:orders");
     };
-    const fallback = setInterval(() => invalidateAll(), 60_000);
+    const fallback = setInterval(() => invalidate("app:orders"), 60_000);
     return () => {
       es.close();
       clearInterval(fallback);

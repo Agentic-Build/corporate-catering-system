@@ -2,9 +2,11 @@ import { redirect, fail, type Actions } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, depends }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
   if (locals.user.role !== "vendor_operator") throw redirect(303, "/login");
+  // SSE board events invalidate only this fragment, not the whole page.
+  depends("app:orders");
 
   const date = url.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
   const client = apiFor(locals.apiToken);
