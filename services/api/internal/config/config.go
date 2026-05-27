@@ -275,11 +275,3 @@ func (c Config) EffectiveDatabaseRO() string {
 	}
 	return c.DatabaseRO
 }
-
-func MustParsePort(s string) int {
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		panic(err)
-	}
-	return n
-}

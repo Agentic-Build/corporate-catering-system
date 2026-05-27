@@ -78,7 +78,6 @@ func migrateUp(dsn string) error {
 var (
 	userSeedCounter   atomic.Uint64
 	vendorSeedCounter atomic.Uint64
-	itemSeedCounter   atomic.Uint64
 )
 
 func seedEmployeeUser(t *testing.T, pool *pgxpool.Pool) string {

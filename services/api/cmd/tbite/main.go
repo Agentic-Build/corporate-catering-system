@@ -189,6 +189,18 @@ func main() {
 		}
 		defer pool.Close()
 
+		// 1b. Read-only pool for the home/recommendation read-model paths
+		// (ADR-0007). newROPool targets DATABASE_RO_URL and falls back to the
+		// primary when no replica is configured, so single-DB deployments are
+		// unaffected while production offloads these eventual-consistency reads
+		// to a replica.
+		roPool, err := newROPool(ctx, cfg)
+		if err != nil {
+			logger.Error("pg ro pool", "err", err)
+			os.Exit(1)
+		}
+		defer roPool.Close()
+
 		// 2. Redis client
 		rdb, err := cache.NewClient(ctx, cfg.RedisURL)
 		if err != nil {
@@ -484,9 +496,12 @@ func main() {
 				logger.Warn("invalid RECOMMENDATION_ALPHA; defaulting to 1.0", "raw", raw)
 			}
 		}
-		popularityRepo := mpgrepo.NewPopularityRepo(pool)
-		affinityRepo := mpgrepo.NewAffinityRepo(pool)
-		recentOrdersRepo := opgrepo.NewRecentOrdersRepo(pool)
+		// Read-model repos read off the RO pool (ADR-0007): these aggregates
+		// are already eventual-consistency (Redis-cached, NATS-invalidated), so
+		// replica lag is within tolerance.
+		popularityRepo := mpgrepo.NewPopularityRepo(roPool)
+		affinityRepo := mpgrepo.NewAffinityRepo(roPool)
+		recentOrdersRepo := opgrepo.NewRecentOrdersRepo(roPool)
 		// Read-model cache (Valkey) shared by the employee home aggregate and
 		// the recommendation aggregates. The namespace prefix scopes keys so
 		// SCAN-based invalidation stays bounded.
@@ -514,7 +529,7 @@ func main() {
 				if len(ids) == 0 {
 					return out, nil
 				}
-				rows, err := pool.Query(ctx, `SELECT id, display_name FROM vendor WHERE id = ANY($1)`, ids)
+				rows, err := roPool.Query(ctx, `SELECT id, display_name FROM vendor WHERE id = ANY($1)`, ids)
 				if err != nil {
 					return nil, err
 				}

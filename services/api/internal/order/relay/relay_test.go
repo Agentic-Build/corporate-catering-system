@@ -13,7 +13,6 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -217,23 +216,3 @@ func TestRelay_CycleEmptyOutbox(t *testing.T) {
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
-// pull receives all available messages on subject pattern.
-func pullAll(ctx context.Context, t *testing.T, js jetstream.JetStream, subject string, max int) []jetstream.Msg {
-	t.Helper()
-	stream, err := js.Stream(ctx, "ORDERS_V1")
-	require.NoError(t, err)
-	c, err := stream.CreateConsumer(ctx, jetstream.ConsumerConfig{
-		Name:          "pull-" + t.Name(),
-		AckPolicy:     jetstream.AckExplicitPolicy,
-		FilterSubject: subject,
-	})
-	require.NoError(t, err)
-	batch, err := c.FetchNoWait(max)
-	require.NoError(t, err)
-	var out []jetstream.Msg
-	for m := range batch.Messages() {
-		out = append(out, m)
-		_ = m.Ack()
-	}
-	return out
-}

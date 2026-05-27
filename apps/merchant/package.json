@@ -18,7 +18,6 @@
     "@tbite/ui": "workspace:*",
     "@tbite/web-auth": "workspace:*",
     "html5-qrcode": "^2.3.8",
-    "openapi-fetch": "^0.17.0",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
