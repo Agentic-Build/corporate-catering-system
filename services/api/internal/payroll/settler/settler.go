@@ -143,10 +143,10 @@ func (s *Settler) Run(ctx context.Context) error {
 }
 
 // handle processes a single payroll.batch_locked.v1 event end-to-end:
-//   1) Load batch + entries; short-circuit if already exported (idempotent).
-//   2) Render UTF-8 BOM + CSV with one row per entry.
-//   3) Upload to S3 at payroll/<batch_id>.csv.
-//   4) In a single tx: SetExportInfo + outbox payroll.export_ready.v1 + audit.
+//  1. Load batch + entries; short-circuit if already exported (idempotent).
+//  2. Render UTF-8 BOM + CSV with one row per entry.
+//  3. Upload to S3 at payroll/<batch_id>.csv.
+//  4. In a single tx: SetExportInfo + outbox payroll.export_ready.v1 + audit.
 func (s *Settler) handle(ctx context.Context, data []byte) error {
 	var ev struct {
 		BatchID     string `json:"batch_id"`

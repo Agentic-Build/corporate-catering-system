@@ -2,10 +2,10 @@
 //
 // Employees use these tools to browse and search the daily menu before
 // placing an order through the order.* tools. Every handler:
-//   1. Authenticates via context (set by idhttp.AuthMiddleware or stdio bootstrap).
-//   2. Enforces employee-only access (welfare_admin is allowed to read too).
-//   3. Delegates to menu.Service / vendor.Service so business rules stay shared.
-//   4. Returns compact JSON results suitable for LLM tool-use.
+//  1. Authenticates via context (set by idhttp.AuthMiddleware or stdio bootstrap).
+//  2. Enforces employee-only access (welfare_admin is allowed to read too).
+//  3. Delegates to menu.Service / vendor.Service so business rules stay shared.
+//  4. Returns compact JSON results suitable for LLM tool-use.
 package mcpserver
 
 import (

@@ -79,10 +79,10 @@ func migrationsDirReorder() string {
 // reorderTestEnv bundles the dependencies a ReorderService needs plus the
 // Service used to seed a source order.
 type reorderTestEnv struct {
-	Pool     *pgxpool.Pool
-	Reorder  *order.ReorderService
-	Place    *order.Service
-	Cleanup  func()
+	Pool    *pgxpool.Pool
+	Reorder *order.ReorderService
+	Place   *order.Service
+	Cleanup func()
 }
 
 const reorderTestPlant = "F12B-3F"
@@ -93,7 +93,7 @@ var (
 	// Clock is mid-day on the day before reorderSourceDate so we are well within
 	// the 17:00 prev-day cutoff that Service.Place enforces, AND well before
 	// reorderTargetDate's cutoff for typical supplies (cutoff_at = day before 17:00 UTC).
-	reorderClockTime  = time.Date(2026, 5, 12, 10, 0, 0, 0, time.UTC)
+	reorderClockTime = time.Date(2026, 5, 12, 10, 0, 0, 0, time.UTC)
 	// targetCutoff is the meal_supply.cutoff_at for reorderTargetDate supplies.
 	// Setting it AFTER reorderClockTime keeps target items available.
 	reorderTargetCutoff = time.Date(2026, 5, 13, 17, 0, 0, 0, time.UTC)

@@ -1,10 +1,10 @@
 // Package mcpserver — order tools.
 //
 // Exposes employee-facing order operations as MCP tools. Each handler:
-//   1. Authenticates via context (idhttp.AuthMiddleware populated it).
-//   2. Enforces the same role gate the HTTP handler uses (employee-only).
-//   3. Delegates to order.Service so business rules stay shared.
-//   4. Returns JSON-encoded results (or mcp.NewToolResultError on failure).
+//  1. Authenticates via context (idhttp.AuthMiddleware populated it).
+//  2. Enforces the same role gate the HTTP handler uses (employee-only).
+//  3. Delegates to order.Service so business rules stay shared.
+//  4. Returns JSON-encoded results (or mcp.NewToolResultError on failure).
 package mcpserver
 
 import (

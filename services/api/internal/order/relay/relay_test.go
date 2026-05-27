@@ -215,4 +215,3 @@ func TestRelay_CycleEmptyOutbox(t *testing.T) {
 	err := r.Run(runCtx)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
-

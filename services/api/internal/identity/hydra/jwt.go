@@ -123,11 +123,11 @@ func (v *AccessTokenVerifier) Verify(ctx context.Context, raw string) (*AccessTo
 	// Pull extra claims; ignore decoder errors so unrelated fields don't
 	// break otherwise-valid tokens.
 	var raw_claims struct {
-		Audience  any    `json:"aud"`
-		Scope     string `json:"scope"`
-		Subject   string `json:"sub"`
-		ClientID  string `json:"client_id"`
-		Ext       struct {
+		Audience any    `json:"aud"`
+		Scope    string `json:"scope"`
+		Subject  string `json:"sub"`
+		ClientID string `json:"client_id"`
+		Ext      struct {
 			Email      string `json:"email"`
 			Name       string `json:"name"`
 			TBiteRole  string `json:"tbite_role"`

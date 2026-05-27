@@ -61,14 +61,14 @@ type reorderItemRepo interface {
 // the UI can render a partial-fallback toast. If zero items survive the
 // service does NOT create an order — the handler maps that to HTTP 409.
 type ReorderService struct {
-	pool    *pgxpool.Pool
-	orders  reorderOrderRepo
-	supply  reorderSupplyRepo
-	items   reorderItemRepo
-	state   StateEventTx
-	audit   AuditTx
-	outbox  OutboxTx
-	clock   Clock
+	pool   *pgxpool.Pool
+	orders reorderOrderRepo
+	supply reorderSupplyRepo
+	items  reorderItemRepo
+	state  StateEventTx
+	audit  AuditTx
+	outbox OutboxTx
+	clock  Clock
 }
 
 // NewReorderService wires the service. Each repo argument can be the concrete

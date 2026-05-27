@@ -3,8 +3,8 @@
 // ChatGPT (Custom Connectors and the Apps SDK) requires every MCP server it
 // connects to expose two specific tools with a strict result shape:
 //
-//   search(query)            -> { "results": [ {id, title, text, url}, … ] }
-//   fetch(id)                -> { id, title, text, url, metadata? }
+//	search(query)            -> { "results": [ {id, title, text, url}, … ] }
+//	fetch(id)                -> { id, title, text, url, metadata? }
 //
 // We map these into the same business operations the dedicated employee tools
 // use, just with the ChatGPT shape so the connector works out of the box.
