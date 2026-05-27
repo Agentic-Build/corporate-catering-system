@@ -15,6 +15,7 @@
   ];
   const bottomRow: Tab[] = [
     { href: "/complaints", label: "客訴", icon: "bell" },
+    { href: "/disputes", label: "申訴", icon: "alert" },
     { href: "/anomalies", label: "告警", icon: "alert" },
     { href: "/audit", label: "稽核", icon: "download" },
   ];
@@ -45,7 +46,7 @@
       </a>
     {/each}
   </div>
-  <div class="mx-auto grid max-w-md grid-cols-3 gap-1 pt-1">
+  <div class="mx-auto grid max-w-md grid-cols-4 gap-1 pt-1">
     {#each bottomRow as tab (tab.href)}
       {@const on = isActive(tab.href)}
       <a

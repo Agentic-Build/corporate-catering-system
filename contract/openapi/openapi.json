@@ -2876,6 +2876,10 @@
           "order_id": {
             "type": "string"
           },
+          "order_number": {
+            "format": "int64",
+            "type": "integer"
+          },
           "total_price_minor": {
             "format": "int64",
             "type": "integer"
@@ -2883,6 +2887,7 @@
         },
         "required": [
           "order_id",
+          "order_number",
           "total_price_minor",
           "notes",
           "items"
