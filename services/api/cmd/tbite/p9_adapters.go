@@ -9,6 +9,7 @@ import (
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
 	mpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/menu/readmodel"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
 	qpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
@@ -53,4 +54,25 @@ func (a p9SupplyRepoAdapter) Get(ctx context.Context, itemID string, date time.T
 
 func (a p9SupplyRepoAdapter) DecrementTx(ctx context.Context, tx pgx.Tx, itemID string, date time.Time, n int) (int, error) {
 	return a.inner.DecrementTx(ctx, tx, itemID, date, n)
+}
+
+// cachedPopularityAdapter satisfies menu.PopularityForHome by serving
+// PlantPopularity from the read-model cache (the only raw-orders aggregate)
+// while delegating MetaByIDs / AllCutoffsPassed (menu_item / meal_supply
+// lookups, not order aggregates) to the concrete repo.
+type cachedPopularityAdapter struct {
+	cached *readmodel.CachedPopularity
+	repo   *mpgrepo.PopularityRepo
+}
+
+func (a cachedPopularityAdapter) PlantPopularity(ctx context.Context, plant string, day time.Time) (map[string]float64, error) {
+	return a.cached.PlantPopularity(ctx, plant, day)
+}
+
+func (a cachedPopularityAdapter) MetaByIDs(ctx context.Context, ids []string) ([]menu.MenuItemMeta, error) {
+	return a.repo.MetaByIDs(ctx, ids)
+}
+
+func (a cachedPopularityAdapter) AllCutoffsPassed(ctx context.Context, plant string, day, now time.Time) (bool, error) {
+	return a.repo.AllCutoffsPassed(ctx, plant, day, now)
 }

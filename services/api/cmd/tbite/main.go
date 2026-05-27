@@ -487,12 +487,26 @@ func main() {
 		popularityRepo := mpgrepo.NewPopularityRepo(pool)
 		affinityRepo := mpgrepo.NewAffinityRepo(pool)
 		recentOrdersRepo := opgrepo.NewRecentOrdersRepo(pool)
+		// Read-model cache (Valkey) shared by the employee home aggregate and
+		// the recommendation aggregates. The namespace prefix scopes keys so
+		// SCAN-based invalidation stays bounded.
+		homeCache := &readmodel.RedisCache{C: rdb, Prefix: "tbite:rm:"}
+		homeMetrics := readmodel.NewMetrics()
+		// Popularity + affinity are recomputed from raw orders per request;
+		// cache them so AC3 holds. Popularity is plant/date keyed and shared;
+		// affinity is user keyed over a 30-day window. The outbox invalidator
+		// drops both on order events; TTL is the safety net.
+		cachedPopularity := cachedPopularityAdapter{
+			cached: &readmodel.CachedPopularity{Inner: popularityRepo, Cache: homeCache, Metrics: homeMetrics},
+			repo:   popularityRepo,
+		}
+		cachedAffinity := &readmodel.CachedAffinity{Inner: affinityRepo, Cache: homeCache, Metrics: homeMetrics}
 		homeSvc := &menu.HomeService{
 			Clock:         clock.SystemClock{},
 			ServerTZ:      appLocation(),
 			RecentOrders:  recentOrdersRepo,
-			Popularity:    popularityRepo,
-			Affinity:      affinityRepo,
+			Popularity:    cachedPopularity,
+			Affinity:      cachedAffinity,
 			FavoritesRepo: favoriteRepo,
 			Alpha:         alpha,
 			VendorNames: func(ctx context.Context, ids []string) (map[string]string, error) {
@@ -515,12 +529,6 @@ func main() {
 				return out, rows.Err()
 			},
 		}
-		// Wire the read-model cache for the employee home aggregate.
-		// The Valkey client is the same one used by the session
-		// store; the namespace prefix scopes the keys so SCAN-based
-		// invalidation stays bounded.
-		homeCache := &readmodel.RedisCache{C: rdb, Prefix: "tbite:rm:"}
-		homeMetrics := readmodel.NewMetrics()
 		homeAPI := &mhttp.HomeAPI{
 			Home:        homeSvc,
 			MenuSvc:     menuService,
