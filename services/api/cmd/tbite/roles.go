@@ -419,6 +419,7 @@ func runProvisionStreams(ctx context.Context, logger *slog.Logger, cfg config.Co
 		return fmt.Errorf("nats connect: %w", err)
 	}
 	defer nc.Close()
+	nc.StreamReplicas = cfg.NATSStreamReplicas
 	if err := nc.ProvisionStreams(ctx); err != nil {
 		return fmt.Errorf("provision streams: %w", err)
 	}

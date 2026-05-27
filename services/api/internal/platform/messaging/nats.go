@@ -12,8 +12,9 @@ import (
 )
 
 type Client struct {
-	NC *nats.Conn
-	JS jetstream.JetStream
+	NC             *nats.Conn
+	JS             jetstream.JetStream
+	StreamReplicas int // JetStream stream replica count; 1 = single-node default
 }
 
 func New(ctx context.Context, url string) (*Client, error) {
@@ -29,7 +30,7 @@ func New(ctx context.Context, url string) (*Client, error) {
 		nc.Close()
 		return nil, fmt.Errorf("jetstream: %w", err)
 	}
-	return &Client{NC: nc, JS: js}, nil
+	return &Client{NC: nc, JS: js, StreamReplicas: 1}, nil
 }
 
 // ProvisionStreams creates or updates the streams expected by the platform.
@@ -40,7 +41,7 @@ func (c *Client) ProvisionStreams(ctx context.Context) error {
 		Description: "Order domain events (place/cutoff/cancel/...)",
 		Subjects:    []string{"order.>"},
 		Storage:     jetstream.FileStorage,
-		Replicas:    1,
+		Replicas:    c.StreamReplicas,
 		MaxAge:      30 * 24 * time.Hour,
 	})
 	if err != nil {
@@ -51,7 +52,7 @@ func (c *Client) ProvisionStreams(ctx context.Context) error {
 		Description: "Payroll domain events (batch_locked / export_ready / dispute_resolved)",
 		Subjects:    []string{"payroll.>"},
 		Storage:     jetstream.FileStorage,
-		Replicas:    1,
+		Replicas:    c.StreamReplicas,
 		MaxAge:      90 * 24 * time.Hour,
 	})
 	if err != nil {

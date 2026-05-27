@@ -42,3 +42,30 @@ func TestFromEnvRejectsDuplicateAuthProviderSlugs(t *testing.T) {
 		t.Fatal("FromEnv() error = nil, want duplicate provider error")
 	}
 }
+
+func TestNATSStreamReplicasDefaultsToOne(t *testing.T) {
+	t.Setenv("DATABASE_RW_URL", "postgres://tbite:tbite@localhost:5432/tbite?sslmode=disable")
+	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+
+	cfg, err := FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv() error = %v", err)
+	}
+	if cfg.NATSStreamReplicas != 1 {
+		t.Fatalf("NATSStreamReplicas = %d, want 1", cfg.NATSStreamReplicas)
+	}
+}
+
+func TestNATSStreamReplicasOverrideFromEnv(t *testing.T) {
+	t.Setenv("DATABASE_RW_URL", "postgres://tbite:tbite@localhost:5432/tbite?sslmode=disable")
+	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+	t.Setenv("NATS_STREAM_REPLICAS", "3")
+
+	cfg, err := FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv() error = %v", err)
+	}
+	if cfg.NATSStreamReplicas != 3 {
+		t.Fatalf("NATSStreamReplicas = %d, want 3", cfg.NATSStreamReplicas)
+	}
+}

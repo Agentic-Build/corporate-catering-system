@@ -25,6 +25,30 @@ func setupNATS(t *testing.T) (string, func()) {
 	return url, func() { _ = c.Terminate(ctx) }
 }
 
+func TestClient_ProvisionStreams_ReplicasFromField(t *testing.T) {
+	url, cleanup := setupNATS(t)
+	defer cleanup()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	cl, err := messaging.New(ctx, url)
+	require.NoError(t, err)
+	defer cl.Close()
+
+	// default replicas = 1
+	if cl.StreamReplicas != 1 {
+		t.Fatalf("StreamReplicas default = %d, want 1", cl.StreamReplicas)
+	}
+
+	require.NoError(t, cl.ProvisionStreams(ctx))
+
+	info, err := cl.JS.Stream(ctx, "ORDERS_V1")
+	require.NoError(t, err)
+	state, err := info.Info(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, state.Config.Replicas)
+}
+
 func TestClient_ProvisionAndPublish(t *testing.T) {
 	url, cleanup := setupNATS(t)
 	defer cleanup()
