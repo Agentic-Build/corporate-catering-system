@@ -260,40 +260,15 @@ func (a *API) Register(api huma.API) {
 // ----- Auth helpers -----
 
 func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleEmployee {
-		return nil, huma.Error403Forbidden("employee role required")
-	}
-	return u, nil
+	return idhttp.RequireEmployee(ctx)
 }
 
-// requireVendor enforces vendor_operator role + a non-empty vendor binding.
 func (a *API) requireVendor(ctx context.Context) (*identity.User, string, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, "", huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleVendorOperator {
-		return nil, "", huma.Error403Forbidden("vendor operator required")
-	}
-	if u.VendorID == nil || *u.VendorID == "" {
-		return nil, "", huma.Error403Forbidden("user is not bound to a vendor")
-	}
-	return u, *u.VendorID, nil
+	return idhttp.RequireVendor(ctx)
 }
 
 func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleWelfareAdmin {
-		return nil, huma.Error403Forbidden("admin role required")
-	}
-	return u, nil
+	return idhttp.RequireAdmin(ctx)
 }
 
 // ----- Handlers -----

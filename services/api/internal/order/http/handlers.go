@@ -358,28 +358,11 @@ func (a *API) Register(api huma.API) {
 // ----- Auth helper -----
 
 func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleEmployee {
-		return nil, huma.Error403Forbidden("employee role required")
-	}
-	return u, nil
+	return idhttp.RequireEmployee(ctx)
 }
 
 func (a *API) requireVendor(ctx context.Context) (*identity.User, string, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, "", huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleVendorOperator {
-		return nil, "", huma.Error403Forbidden("vendor operator required")
-	}
-	if u.VendorID == nil || *u.VendorID == "" {
-		return nil, "", huma.Error403Forbidden("user not bound to a vendor")
-	}
-	return u, *u.VendorID, nil
+	return idhttp.RequireVendor(ctx)
 }
 
 // ----- Handlers -----

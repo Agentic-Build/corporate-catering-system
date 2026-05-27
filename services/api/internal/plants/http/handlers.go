@@ -7,7 +7,6 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/plants"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
@@ -234,28 +233,13 @@ func (a *API) merchantSet(ctx context.Context, in *setMerchantPlantsInput) (*str
 // ----- Auth guards -----
 
 func (a *API) requireAdmin(ctx context.Context) error {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleWelfareAdmin {
-		return huma.Error403Forbidden("admin role required")
-	}
-	return nil
+	_, err := idhttp.RequireAdmin(ctx)
+	return err
 }
 
 func (a *API) requireVendor(ctx context.Context) (string, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return "", huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleVendorOperator {
-		return "", huma.Error403Forbidden("vendor operator required")
-	}
-	if u.VendorID == nil || *u.VendorID == "" {
-		return "", huma.Error403Forbidden("user is not bound to a vendor")
-	}
-	return *u.VendorID, nil
+	_, vendorID, err := idhttp.RequireVendor(ctx)
+	return vendorID, err
 }
 
 // ----- Helpers -----

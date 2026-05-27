@@ -213,28 +213,11 @@ func (a *API) Register(api huma.API) {
 // ----- Auth helpers -----
 
 func (a *API) requireVendor(ctx context.Context) (*identity.User, string, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, "", huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleVendorOperator {
-		return nil, "", huma.Error403Forbidden("vendor operator required")
-	}
-	if u.VendorID == nil || *u.VendorID == "" {
-		return nil, "", huma.Error403Forbidden("user not bound to a vendor")
-	}
-	return u, *u.VendorID, nil
+	return idhttp.RequireVendor(ctx)
 }
 
 func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleWelfareAdmin {
-		return nil, huma.Error403Forbidden("admin role required")
-	}
-	return u, nil
+	return idhttp.RequireAdmin(ctx)
 }
 
 // parseMonth turns "YYYY-MM" into the [first day, last day] of that month (UTC).

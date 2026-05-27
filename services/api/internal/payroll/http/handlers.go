@@ -418,25 +418,11 @@ func (a *API) Register(api huma.API) {
 // ----- Auth helpers -----
 
 func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleWelfareAdmin {
-		return nil, huma.Error403Forbidden("admin role required")
-	}
-	return u, nil
+	return idhttp.RequireAdmin(ctx)
 }
 
 func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleEmployee {
-		return nil, huma.Error403Forbidden("employee role required")
-	}
-	return u, nil
+	return idhttp.RequireEmployee(ctx)
 }
 
 // parseDay parses YYYY-MM-DD into UTC midnight.
