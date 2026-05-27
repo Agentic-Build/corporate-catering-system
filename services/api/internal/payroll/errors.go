@@ -13,4 +13,5 @@ var (
 	ErrExceptionNotFound  = errors.New("payroll: exception not found")
 	ErrInvalidException   = errors.New("payroll: invalid exception request")
 	ErrRefundExceedsOrder = errors.New("payroll: refund exceeds the order amount")
+	ErrOrderNotDisputable = errors.New("payroll: order is not in a disputable state")
 )

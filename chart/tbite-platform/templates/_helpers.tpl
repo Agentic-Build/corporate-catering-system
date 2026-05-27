@@ -254,7 +254,13 @@ nodeSelector:
 tolerations:
 {{ toYaml . | indent 2 }}
 {{- end }}
-{{- with .Values.global.affinity }}
+{{/* Prefer an app-role-specific affinity (.Values.tbite.affinity) so anti-
+     affinity can be set without putting it under global.* — which Helm would
+     propagate into subcharts whose helpers expect a string preset. Falls back
+     to .Values.global.affinity. */}}
+{{- $affinity := .Values.global.affinity -}}
+{{- with .Values.tbite }}{{- with .affinity }}{{- $affinity = . }}{{- end }}{{- end }}
+{{- with $affinity }}
 affinity:
 {{ toYaml . | indent 2 }}
 {{- end }}

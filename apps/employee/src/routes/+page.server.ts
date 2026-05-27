@@ -2,30 +2,10 @@ import type { Actions, PageServerLoad } from "./$types";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient, type operations } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { buildDays, taipeiISO } from "$lib/date";
 
 type MenuQuery = NonNullable<operations["listEmployeeMenu"]["parameters"]["query"]>;
 type MenuSort = NonNullable<MenuQuery["sort"]>;
-
-function buildDays(today: Date, selectedISO?: string) {
-  const wk = ["日", "一", "二", "三", "四", "五", "六"];
-  const labels = ["今天", "明天"];
-  const out: { id: string; head: string; sub?: string }[] = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const m = d.getMonth() + 1;
-    const day = d.getDate();
-    const w = wk[d.getDay()];
-    const head = labels[i] ?? `${m}/${day}(${w})`;
-    const id = `${d.getFullYear()}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    out.push({ id, head, sub: i < 2 ? `${m}/${day}(${w})` : undefined });
-  }
-  // If the server-derived target_day isn't in the next 7 days, prepend it.
-  if (selectedISO && !out.find((d) => d.id === selectedISO)) {
-    out.unshift({ id: selectedISO, head: selectedISO });
-  }
-  return out;
-}
 
 // F3 — keys the filter bar writes into the URL. The full-menu grid is
 // served from /api/employee/menu (filtered server-side) whenever any of
@@ -77,7 +57,7 @@ export const load: PageServerLoad = async ({ locals, url, parent, depends }) => 
     recommend_chips: NonNullable<unknown>[];
     day_menu: NonNullable<unknown>[];
   } = {
-    target_day: dayOverride ?? new Date().toISOString().slice(0, 10),
+    target_day: dayOverride ?? taipeiISO(),
     has_ordered: false,
     order_summary: undefined,
     reorder_chips: [],

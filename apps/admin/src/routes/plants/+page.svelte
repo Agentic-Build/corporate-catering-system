@@ -21,9 +21,7 @@
 {/if}
 
 <details class="mb-6 rounded-tb-2xl border border-tb-slate-200 bg-white p-4 shadow-tb-sm md:p-5">
-  <summary class="cursor-pointer text-sm font-semibold text-tb-slate-900">
-    新增廠區
-  </summary>
+  <summary class="cursor-pointer text-sm font-semibold text-tb-slate-900"> 新增廠區 </summary>
   <form method="POST" action="?/create" class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
     <input
       name="code"
@@ -60,7 +58,9 @@
 <Card>
   <div class="overflow-x-auto rounded-xl border border-tb-slate-200">
     <table class="w-full min-w-[40rem] text-sm">
-      <thead class="bg-tb-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500">
+      <thead
+        class="bg-tb-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
+      >
         <tr>
           <th class="px-4 py-2.5">代碼</th>
           <th class="px-4 py-2.5">名稱</th>
@@ -122,9 +122,15 @@
               <td class="px-4 py-3 text-tb-slate-500">{p.sort_order}</td>
               <td class="px-4 py-3">
                 {#if p.active}
-                  <span class="rounded-full bg-tb-emerald-100 px-2 py-0.5 text-xs font-semibold text-tb-emerald-700">啟用</span>
+                  <span
+                    class="rounded-full bg-tb-emerald-100 px-2 py-0.5 text-xs font-semibold text-tb-emerald-700"
+                    >啟用</span
+                  >
                 {:else}
-                  <span class="rounded-full bg-tb-slate-200 px-2 py-0.5 text-xs font-semibold text-tb-slate-600">停用</span>
+                  <span
+                    class="rounded-full bg-tb-slate-200 px-2 py-0.5 text-xs font-semibold text-tb-slate-600"
+                    >停用</span
+                  >
                 {/if}
               </td>
               <td class="px-4 py-3 text-right">

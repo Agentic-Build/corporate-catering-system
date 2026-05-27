@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -69,4 +70,27 @@ VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)`,
 		c.Add(ctx, 1, metric.WithAttributes(attribute.String("source_stream", stream)))
 	}
 	return nil
+}
+
+// DLQOnExhaustion is the standard terminal-failure handler for a durable
+// consumer: once a message's delivery attempts are exhausted
+// (NumDelivered >= maxDeliver, which must match the consumer's MaxDeliver), it
+// records the failure to the DLQ and Terms the message so JetStream stops
+// redelivering it. Before exhaustion it Naks for another attempt. Returns true
+// when the message was DLQ'd. If the DLQ write itself fails it Naks instead, so
+// the message is parked rather than silently dropped.
+func DLQOnExhaustion(ctx context.Context, msg jetstream.Msg, pool *pgxpool.Pool, consumer string, maxDeliver int, procErr error) bool {
+	meta, err := msg.Metadata()
+	if err != nil || pool == nil || meta.NumDelivered < uint64(maxDeliver) {
+		_ = msg.Nak()
+		return false
+	}
+	var payload map[string]any
+	_ = json.Unmarshal(msg.Data(), &payload)
+	if werr := WriteDLQ(ctx, pool, meta.Stream, msg.Subject(), consumer, payload, nil, procErr.Error()); werr != nil {
+		_ = msg.Nak()
+		return false
+	}
+	_ = msg.Term()
+	return true
 }

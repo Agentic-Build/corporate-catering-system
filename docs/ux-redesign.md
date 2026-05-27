@@ -3,6 +3,8 @@
 > 本文件是整個前端重新設計的**單一權威來源**。改 UI、新增路由、改 navigation 時，必須先來這裡對齊。
 >
 > 對應 user story 定義在 `docs/user-story-book.md`。
+>
+> 註 (2026-05-28)：本藍圖所驅動的「舊版 `*-portal-mvp.svelte` 巨型元件重構」已完成（現為 task-oriented `+page.svelte` 路由）；以下路由/導覽藍圖仍為設計參考。
 
 ---
 

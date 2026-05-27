@@ -7,8 +7,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
 )
@@ -139,6 +139,9 @@ func reorderMapErr(err error) error {
 		errors.Is(err, order.ErrInvalidTransition),
 		errors.Is(err, order.ErrCutoffPassed):
 		return huma.Error409Conflict(err.Error())
+	case errors.Is(err, order.ErrVendorPlantMismatch):
+		// Reorder's plant guard mirrors Service.Place; map to 400 like Place does.
+		return huma.Error400BadRequest(err.Error())
 	}
 	return huma.Error500InternalServerError("internal", err)
 }

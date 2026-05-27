@@ -1,5 +1,8 @@
 # Test coverage → 90% (進度 / 交接)
 
+> **狀態 (2026-05-28)：已合併 (#87, commit `7d1eb28`)，內部後端覆蓋率達 79.6%。**
+> 本文件是當時「未 commit 交接」的時點快照，已凍結，非現況。
+
 Branch: `test/coverage-90`　Worktree: `.worktrees/test-coverage-90`　Date: 2026-05-27
 
 目標：後端 + 前端整體測試覆蓋率拉到 **90%（方向性目標**，`cmd`/glue 可低）。

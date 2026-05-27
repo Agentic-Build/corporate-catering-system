@@ -1,5 +1,6 @@
 <script lang="ts">
   import { PageHeader, Button, Icon, EmptyState } from "@tbite/ui";
+  import { dayId } from "$lib/date";
 
   let { data } = $props();
 
@@ -27,11 +28,8 @@
   // Day quick-picker: today + next 6.
   const days = $derived.by(() => {
     const out: { id: string; label: string }[] = [];
-    const today = new Date();
     for (let i = 0; i < 7; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      const id = d.toISOString().slice(0, 10);
+      const id = dayId(i);
       out.push({ id, label: i === 0 ? "今天" : i === 1 ? "明天" : id.slice(5) });
     }
     return out;

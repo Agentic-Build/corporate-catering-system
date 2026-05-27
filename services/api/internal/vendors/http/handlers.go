@@ -280,30 +280,14 @@ func (a *API) Register(api huma.API) {
 // requireVendor enforces a vendor_operator bound to a vendor, returning the
 // vendor_id from the session.
 func (a *API) requireVendor(ctx context.Context) (string, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return "", huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleVendorOperator {
-		return "", huma.Error403Forbidden("vendor operator required")
-	}
-	if u.VendorID == nil || *u.VendorID == "" {
-		return "", huma.Error403Forbidden("user is not bound to a vendor")
-	}
-	return *u.VendorID, nil
+	_, vendorID, err := idhttp.RequireVendor(ctx)
+	return vendorID, err
 }
 
 // ----- Auth guard -----
 
 func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleWelfareAdmin {
-		return nil, huma.Error403Forbidden("admin role required")
-	}
-	return u, nil
+	return idhttp.RequireAdmin(ctx)
 }
 
 // ----- Handlers -----

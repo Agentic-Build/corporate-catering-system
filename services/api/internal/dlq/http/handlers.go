@@ -108,14 +108,7 @@ func (a *API) Register(api huma.API) {
 // ----- Auth -----
 
 func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleWelfareAdmin {
-		return nil, huma.Error403Forbidden("admin role required")
-	}
-	return u, nil
+	return idhttp.RequireAdmin(ctx)
 }
 
 // ----- Handlers -----
@@ -159,7 +152,11 @@ func (a *API) replay(ctx context.Context, in *idInput) (*replayOutput, error) {
 	if err != nil {
 		return nil, huma.Error500InternalServerError("marshal payload", err)
 	}
-	if _, err := a.JS.Publish(ctx, msg.SourceSubject, payloadBytes); err != nil {
+	// Dedup on the DLQ message id: two admins replaying the same message
+	// concurrently (both passing the not-replayed check above) collapse to a
+	// single stream delivery instead of double-delivering. Idempotent on retry.
+	if _, err := a.JS.Publish(ctx, msg.SourceSubject, payloadBytes,
+		jetstream.WithMsgID("dlq-"+msg.ID)); err != nil {
 		return nil, huma.Error500InternalServerError("publish failed", err)
 	}
 	if err := a.Repo.MarkReplayed(ctx, msg.ID, u.ID); err != nil {

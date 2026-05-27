@@ -42,13 +42,13 @@ func NewAdminClient(baseURL string) *AdminClient {
 // decide whether the user needs to log in again or can skip straight to
 // consent.
 type LoginRequest struct {
-	Challenge      string `json:"challenge"`
-	Skip           bool   `json:"skip"`
-	Subject        string `json:"subject"`
-	RequestURL     string `json:"request_url"`
+	Challenge      string   `json:"challenge"`
+	Skip           bool     `json:"skip"`
+	Subject        string   `json:"subject"`
+	RequestURL     string   `json:"request_url"`
 	RequestedScope []string `json:"requested_scope"`
 	Client         struct {
-		ClientID string `json:"client_id"`
+		ClientID   string `json:"client_id"`
 		ClientName string `json:"client_name"`
 	} `json:"client"`
 }

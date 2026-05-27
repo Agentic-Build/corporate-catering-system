@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
 // ReorderMenuItem is the menu_item view ReorderService needs. We mirror just
@@ -65,10 +67,15 @@ type ReorderService struct {
 	orders  reorderOrderRepo
 	supply  reorderSupplyRepo
 	items   reorderItemRepo
+	vendors VendorReader
+	plants  vendor.PlantMappingRepository
 	state   StateEventTx
 	audit   AuditTx
 	outbox  OutboxTx
 	clock   Clock
+	// loc is the timezone for computing the order-level cutoff_at, matching
+	// Service.Location. Nil means UTC.
+	loc *time.Location
 }
 
 // NewReorderService wires the service. Each repo argument can be the concrete
@@ -79,20 +86,26 @@ func NewReorderService(
 	orders reorderOrderRepo,
 	supply reorderSupplyRepo,
 	items reorderItemRepo,
+	vendors VendorReader,
+	plants vendor.PlantMappingRepository,
 	state StateEventTx,
 	audit AuditTx,
 	outbox OutboxTx,
 	clock Clock,
+	loc *time.Location,
 ) *ReorderService {
 	return &ReorderService{
-		pool:   pool,
-		orders: orders,
-		supply: supply,
-		items:  items,
-		state:  state,
-		audit:  audit,
-		outbox: outbox,
-		clock:  clock,
+		pool:    pool,
+		orders:  orders,
+		supply:  supply,
+		items:   items,
+		vendors: vendors,
+		plants:  plants,
+		state:   state,
+		audit:   audit,
+		outbox:  outbox,
+		clock:   clock,
+		loc:     loc,
 	}
 }
 
@@ -143,6 +156,24 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 	}
 	if src.UserID != in.UserID {
 		return nil, ErrForbidden
+	}
+
+	// The source vendor must still serve the employee's (possibly changed)
+	// plant — mirror Service.Place so a transferred employee can't reorder from
+	// a vendor that no longer serves their new plant.
+	servingPlants, err := s.plants.ListByVendor(ctx, src.VendorID)
+	if err != nil {
+		return nil, err
+	}
+	served := false
+	for _, p := range servingPlants {
+		if p.Plant == in.Plant {
+			served = true
+			break
+		}
+	}
+	if !served {
+		return nil, ErrVendorPlantMismatch
 	}
 
 	// First pass: classify each source item without touching quota. This lets
@@ -233,11 +264,19 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 		totalPrice += c.price * int64(c.qty)
 	}
 	placedAt := now
-	// Use the source order's cutoff_at as the new order's cutoff_at. The
-	// supply-level cutoff already gated each item; the order-level cutoff_at
-	// is informational (Service.Place uses prev-day 17:00 UTC by convention,
-	// which matches the supply cutoff for the same target day).
-	newCutoff := time.Date(targetDay.Year(), targetDay.Month(), targetDay.Day()-1, 17, 0, 0, 0, time.UTC)
+	// Order-level cutoff_at gates a later Modify (Service.Modify), so compute it
+	// the same way Service.Place does — the vendor's configured cutoff hour, in
+	// the service timezone, the day before the supply date — rather than a
+	// hardcoded prev-day 17:00 UTC that ignores vendor settings and locale.
+	v, err := s.vendors.GetByID(ctx, src.VendorID)
+	if err != nil {
+		return nil, err
+	}
+	loc := s.loc
+	if loc == nil {
+		loc = time.UTC
+	}
+	newCutoff := time.Date(targetDay.Year(), targetDay.Month(), targetDay.Day()-1, v.CutoffHour, 0, 0, 0, loc)
 	o := &Order{
 		UserID:          in.UserID,
 		VendorID:        src.VendorID,

@@ -89,7 +89,7 @@ func TestCutoff_TransitionsPastCutoffOrders(t *testing.T) {
 	ctx := context.Background()
 
 	// 1 placed past cutoff, 1 placed future, 1 draft past cutoff
-	pastOrderID := seedOrder(t, pool, order.StatusPlaced, time.Date(2026, 5, 13, 17, 0, 0, 0, time.UTC))    // exactly at cutoff
+	pastOrderID := seedOrder(t, pool, order.StatusPlaced, time.Date(2026, 5, 13, 17, 0, 0, 0, time.UTC))   // exactly at cutoff
 	futureOrderID := seedOrder(t, pool, order.StatusPlaced, time.Date(2026, 5, 14, 17, 0, 0, 0, time.UTC)) // future
 	draftOrderID := seedOrder(t, pool, order.StatusDraft, time.Date(2026, 5, 13, 17, 0, 0, 0, time.UTC))   // not placed
 

@@ -18,9 +18,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
 )
 
 // onTimeEvent is the minimal record kept in the rolling window.
@@ -35,7 +37,10 @@ type onTimeEvent struct {
 // evaluator only emits once at least MinSamples events are in the window
 // to avoid early false positives.
 type OnTimeRateEvaluator struct {
-	JS         jetstream.JetStream
+	JS jetstream.JetStream
+	// Pool backs DLQ writes when a message exhausts its delivery attempts.
+	// Nil disables DLQ (the message is Nak'd instead).
+	Pool       *pgxpool.Pool
 	Anomaly    compliance.AnomalyRepository
 	Window     time.Duration
 	Threshold  float64
@@ -121,7 +126,9 @@ func (e *OnTimeRateEvaluator) Run(ctx context.Context) error {
 		}
 		if err := e.handle(ctx, msg.Subject(), msg.Data()); err != nil {
 			e.Logger.Warn("handle event", "subject", msg.Subject(), "err", err)
-			_ = msg.Nak()
+			// MaxDeliver above is 5; once exhausted, DLQ + Term so a poison
+			// event stops being redelivered (and double-counted) forever.
+			messaging.DLQOnExhaustion(ctx, msg, e.Pool, "on-time-evaluator", 5, err)
 			continue
 		}
 		_ = msg.Ack()

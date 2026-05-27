@@ -49,7 +49,11 @@
 
 <div class="mt-4">
   {#if data.disputes.length === 0}
-    <EmptyState icon="check" title="尚無符合條件的申訴" hint="員工對月結金額提出申訴後會出現在此處" />
+    <EmptyState
+      icon="check"
+      title="尚無符合條件的申訴"
+      hint="員工對月結金額提出申訴後會出現在此處"
+    />
   {:else}
     <div class="grid gap-3">
       {#each data.disputes as d (d.id)}

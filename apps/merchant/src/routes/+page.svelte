@@ -4,6 +4,7 @@
   import ScheduleDayPicker from "$lib/components/ScheduleDayPicker.svelte";
   import ScheduleTable from "$lib/components/ScheduleTable.svelte";
   import MealLibraryDrawer from "$lib/components/MealLibraryDrawer.svelte";
+  import { defaultCutoffAt } from "$lib/cutoff";
 
   let { data, form } = $props();
 
@@ -59,6 +60,9 @@
 
   let publishForm = $state<HTMLFormElement>();
   let publishItemId = $state("");
+  // When set, run this capacity submit only after the publish action resolves
+  // (see addFromLibrary): setSupply on a still-archived item would otherwise race.
+  let pendingCap = $state<{ itemId: string; capacity: number; pickupWindow: string } | null>(null);
 
   function submitCap(itemId: string, capacity: number, pickupWindow: string) {
     capItemId = itemId;
@@ -67,6 +71,24 @@
     capPickup = pickupWindow;
     queueMicrotask(() => capForm?.requestSubmit());
   }
+
+  /** After publishItem resolves, fire the queued capacity submit (if any). */
+  const publishEnhance = () => {
+    return async ({
+      update,
+      result,
+    }: {
+      update: () => Promise<void>;
+      result: { type: string };
+    }) => {
+      await update();
+      const next = pendingCap;
+      pendingCap = null;
+      if (next && result.type === "success") {
+        submitCap(next.itemId, next.capacity, next.pickupWindow);
+      }
+    };
+  };
 
   // ── Hidden-form plumbing for the sold-out toggle ──
   let soldOutForm = $state<HTMLFormElement>();
@@ -84,10 +106,14 @@
   /** Library "加入此日" — publish if archived, then schedule a default cap. */
   function addFromLibrary(item: any) {
     if (item.status === "archived") {
+      // Publish first; the default capacity is submitted from publishEnhance
+      // once publish succeeds, so setSupply never races a still-archived item.
+      pendingCap = { itemId: item.id, capacity: 50, pickupWindow: "11:50-12:10" };
       publishItemId = item.id;
       queueMicrotask(() => publishForm?.requestSubmit());
+    } else {
+      submitCap(item.id, 50, "11:50-12:10");
     }
-    submitCap(item.id, 50, "11:50-12:10");
   }
 </script>
 
@@ -177,9 +203,15 @@
   <input type="hidden" name="date" value={capDate} />
   <input type="hidden" name="capacity" value={capValue} />
   <input type="hidden" name="pickup_window" value={capPickup} />
-  <input type="hidden" name="cutoff_at" value={`${capDate}T17:00:00Z`} />
+  <input type="hidden" name="cutoff_at" value={capDate ? defaultCutoffAt(capDate) : ""} />
 </form>
-<form bind:this={publishForm} method="POST" action="?/publishItem" class="hidden" use:enhance>
+<form
+  bind:this={publishForm}
+  method="POST"
+  action="?/publishItem"
+  class="hidden"
+  use:enhance={publishEnhance}
+>
   <input type="hidden" name="item_id" value={publishItemId} />
 </form>
 <form bind:this={soldOutForm} method="POST" action="?/toggleSoldOut" class="hidden" use:enhance>

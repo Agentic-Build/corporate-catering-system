@@ -110,10 +110,11 @@ func vendorOpCtx() context.Context {
 // ---------------------------------------------------------------------------
 
 type fakeItemRepo struct {
-	rows   []*menu.ActiveItemRow
-	err    error
-	byID   map[string]*menu.Item // backs GetByID for the order Place/Modify paths
-	getErr error
+	rows       []*menu.ActiveItemRow
+	err        error
+	byID       map[string]*menu.Item // backs GetByID for the order Place/Modify paths
+	getErr     error
+	lastFilter menu.EmployeeMenuFilter // captured by ListActiveByPlant for assertions
 }
 
 func (f *fakeItemRepo) Create(context.Context, *menu.Item) error { return nil }
@@ -133,7 +134,8 @@ func (f *fakeItemRepo) GetByID(_ context.Context, id string) (*menu.Item, error)
 func (f *fakeItemRepo) ListByVendor(context.Context, string, bool) ([]*menu.MerchantItemRow, error) {
 	return nil, nil
 }
-func (f *fakeItemRepo) ListActiveByPlant(context.Context, menu.EmployeeMenuFilter) ([]*menu.ActiveItemRow, error) {
+func (f *fakeItemRepo) ListActiveByPlant(_ context.Context, flt menu.EmployeeMenuFilter) ([]*menu.ActiveItemRow, error) {
+	f.lastFilter = flt
 	return f.rows, f.err
 }
 
@@ -641,6 +643,23 @@ func TestMenuSearch_Success(t *testing.T) {
 	var out map[string]any
 	require.NoError(t, json.Unmarshal([]byte(text), &out))
 	assert.Equal(t, float64(1), out["count"])
+}
+
+// Regression: price_min/price_max are whole NTD (price_minor stores whole NTD,
+// not cents) and must pass through to the filter unscaled. A previous *100
+// turned "50–200" into "5000–20000" so menu.search almost always returned empty.
+func TestMenuSearch_PriceFilterIsWholeNTD(t *testing.T) {
+	repo := &fakeItemRepo{rows: []*menu.ActiveItemRow{seedMenuRow("m-1", "Vegan Bowl", 12000)}}
+	srv := mcpserver.New(mcpserver.Deps{Menu: &menu.Service{Items: repo, Images: fakeImageRepo{}}})
+	callTool(t, newEmployeeCtx(), srv, "menu.search", map[string]any{
+		"query":     "bowl",
+		"price_min": float64(50),
+		"price_max": float64(200),
+	})
+	require.NotNil(t, repo.lastFilter.PriceMin)
+	require.NotNil(t, repo.lastFilter.PriceMax)
+	assert.Equal(t, int64(50), *repo.lastFilter.PriceMin)
+	assert.Equal(t, int64(200), *repo.lastFilter.PriceMax)
 }
 
 func TestMenuSearch_ServiceNotConfigured(t *testing.T) {
@@ -1523,6 +1542,8 @@ func TestFetch_Menu_Success(t *testing.T) {
 	var out map[string]any
 	require.NoError(t, json.Unmarshal([]byte(text), &out))
 	assert.Equal(t, "menu:m-1", out["id"])
+	// price_minor is whole NTD: 12000 must render as NT$12000, not NT$120 (no /100).
+	assert.Contains(t, text, "NT$12000")
 }
 
 func TestFetch_Menu_NotFound(t *testing.T) {

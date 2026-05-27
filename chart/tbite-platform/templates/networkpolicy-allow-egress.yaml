@@ -61,11 +61,16 @@ spec:
           port: 6379
         - protocol: TCP
           port: 26379
-    # MinIO tenant
+    # MinIO — operator tenant (v1.min.io/tenant) and the standalone deployment
+    # (the chart default, minioStandalone.enabled). Both serve the S3 API on
+    # the pod's container port 9000; the standalone Service fronts it on :80.
     - to:
         - podSelector:
             matchLabels:
               v1.min.io/tenant: tbite
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: minio
       ports:
         - protocol: TCP
           port: 9000

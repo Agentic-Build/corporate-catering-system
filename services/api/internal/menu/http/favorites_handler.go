@@ -191,4 +191,3 @@ func mapFavoriteErr(err error) error {
 	}
 	return huma.Error500InternalServerError("internal", err)
 }
-

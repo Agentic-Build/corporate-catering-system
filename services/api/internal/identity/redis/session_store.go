@@ -122,8 +122,8 @@ func (s *SessionStore) RevokeAllForUser(ctx context.Context, userID string) erro
 	return s.rdb.Del(ctx, userKey(userID)).Err()
 }
 
-func key(token string) string      { return "sess:" + token }
-func userKey(userID string) string { return "sess-user:" + userID }
+func key(token string) string       { return "sess:" + token }
+func userKey(userID string) string  { return "sess-user:" + userID }
 func handoffKey(code string) string { return "handoff:" + code }
 
 // handoffTTL bounds how long the login-redirect code is valid; the app server

@@ -70,7 +70,12 @@ func (c *Client) Close() {
 // PublishTraced publishes a JetStream message and emits an OpenTelemetry span
 // around the publish. When no tracer provider is configured (OTel disabled),
 // the global no-op tracer makes this effectively free.
-func (c *Client) PublishTraced(ctx context.Context, subject string, data []byte) error {
+//
+// dedupID, when non-empty, is sent as the Nats-Msg-Id header so JetStream's
+// built-in dedup window collapses re-publishes of the same logical event (e.g.
+// the outbox relay re-sending after a crash between publish and mark) into a
+// single stream message. Pass "" to opt out.
+func (c *Client) PublishTraced(ctx context.Context, subject string, data []byte, dedupID string) error {
 	tracer := otel.Tracer("tbite.nats")
 	ctx, span := tracer.Start(ctx, "nats.publish")
 	defer span.End()
@@ -78,7 +83,11 @@ func (c *Client) PublishTraced(ctx context.Context, subject string, data []byte)
 		attribute.String("subject", subject),
 		attribute.Int("size", len(data)),
 	)
-	_, err := c.JS.Publish(ctx, subject, data)
+	var opts []jetstream.PublishOpt
+	if dedupID != "" {
+		opts = append(opts, jetstream.WithMsgID(dedupID))
+	}
+	_, err := c.JS.Publish(ctx, subject, data, opts...)
 	if err != nil {
 		span.RecordError(err)
 	}

@@ -18,20 +18,20 @@ import (
 // Hydra, and there is no "paste your token" step.
 //
 // Flow:
-//   1. Hydra GET /oauth/login?login_challenge=xxx
-//      Bridge.LoginHandler asks Hydra for the request. If Hydra says skip
-//      (existing remembered subject), accept immediately. Otherwise the
-//      handler builds an Authentik authorize URL with state stuffing the
-//      login_challenge into the OIDC state-store payload, then 302s the
-//      browser to Authentik.
-//   2. Authentik GET /oauth/callback?state=…&code=…
-//      Bridge.CallbackHandler looks up the state, exchanges the code via
-//      the OIDC provider, finds/creates the matching T-Bite user, accepts
-//      the Hydra login with user.ID as subject, and 302s back to Hydra's
-//      consent endpoint.
-//   3. Hydra GET /oauth/consent?consent_challenge=xxx
-//      Bridge.ConsentHandler auto-approves with the user's role/plant
-//      claims forwarded into Hydra's session so they land in the JWT.
+//  1. Hydra GET /oauth/login?login_challenge=xxx
+//     Bridge.LoginHandler asks Hydra for the request. If Hydra says skip
+//     (existing remembered subject), accept immediately. Otherwise the
+//     handler builds an Authentik authorize URL with state stuffing the
+//     login_challenge into the OIDC state-store payload, then 302s the
+//     browser to Authentik.
+//  2. Authentik GET /oauth/callback?state=…&code=…
+//     Bridge.CallbackHandler looks up the state, exchanges the code via
+//     the OIDC provider, finds/creates the matching T-Bite user, accepts
+//     the Hydra login with user.ID as subject, and 302s back to Hydra's
+//     consent endpoint.
+//  3. Hydra GET /oauth/consent?consent_challenge=xxx
+//     Bridge.ConsentHandler auto-approves with the user's role/plant
+//     claims forwarded into Hydra's session so they land in the JWT.
 type Bridge struct {
 	Hydra      *AdminClient
 	Sessions   identity.SessionStore
@@ -330,4 +330,3 @@ func isNotFound(err error) bool {
 		err == identity.ErrUserNotFound ||
 		err == identity.ErrIdentityNotFound
 }
-

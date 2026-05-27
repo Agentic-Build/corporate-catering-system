@@ -405,6 +405,23 @@ func TestService_OpenDisputeByOrder_CurrentPeriodNotOwner(t *testing.T) {
 	assert.ErrorIs(t, err, payroll.ErrForbidden)
 }
 
+// TestService_OpenDisputeByOrder_NotDisputableStatus verifies a current-period
+// order that was never charged (e.g. still placed) cannot be disputed — opening
+// one would record a refund ResolveDispute could never apply.
+func TestService_OpenDisputeByOrder_NotDisputableStatus(t *testing.T) {
+	pool, svc, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	vendor := seedVendor(t, pool)
+	user := seedEmployeeUser(t, pool)
+	orderID := seedOrderWithStatus(t, pool, user, vendor,
+		time.Date(2026, 5, 20, 0, 0, 0, 0, time.UTC), 15000, order.StatusPlaced)
+
+	_, err := svc.OpenDisputeByOrder(ctx, orderID, user, "too early")
+	assert.ErrorIs(t, err, payroll.ErrOrderNotDisputable)
+}
+
 // ---------- ResolveDispute tests ----------
 
 func TestService_ResolveDispute_Refund(t *testing.T) {

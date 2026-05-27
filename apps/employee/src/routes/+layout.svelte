@@ -11,12 +11,12 @@
   import CartDrawer from "$lib/components/CartDrawer.svelte";
   import FloatingCartBar from "$lib/components/FloatingCartBar.svelte";
   import { cart } from "$lib/cart.svelte";
-  import { buildDays } from "$lib/plants";
+  import { buildDays, taipeiISO } from "$lib/plants";
 
   let { data, children } = $props();
 
   // ── plant / day — driven by URL search params, user.plant as fallback ──
-  const today = new Date().toISOString().slice(0, 10);
+  const today = taipeiISO();
   const selectedPlant = $derived(
     $page.url.searchParams.get("plant") ?? data.user?.plant ?? data.plants[0]?.id ?? "",
   );

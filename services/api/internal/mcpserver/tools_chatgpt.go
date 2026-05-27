@@ -3,8 +3,8 @@
 // ChatGPT (Custom Connectors and the Apps SDK) requires every MCP server it
 // connects to expose two specific tools with a strict result shape:
 //
-//   search(query)            -> { "results": [ {id, title, text, url}, … ] }
-//   fetch(id)                -> { id, title, text, url, metadata? }
+//	search(query)            -> { "results": [ {id, title, text, url}, … ] }
+//	fetch(id)                -> { id, title, text, url, metadata? }
 //
 // We map these into the same business operations the dedicated employee tools
 // use, just with the ChatGPT shape so the connector works out of the box.
@@ -269,13 +269,13 @@ func formatMenuSnippet(it menu.EmployeeMenuItem) string {
 	if it.SoldOut {
 		status = "sold out"
 	}
-	return fmt.Sprintf("%s · NT$%d · %s · %s", it.VendorName, it.PriceMinor/100, status, it.PickupWindow)
+	return fmt.Sprintf("%s · NT$%d · %s · %s", it.VendorName, it.PriceMinor, status, it.PickupWindow)
 }
 
 func formatMenuFull(it menu.EmployeeMenuItem) string {
 	parts := []string{
 		fmt.Sprintf("Vendor: %s", it.VendorName),
-		fmt.Sprintf("Price: NT$%d", it.PriceMinor/100),
+		fmt.Sprintf("Price: NT$%d", it.PriceMinor),
 		fmt.Sprintf("Pickup: %s (%s)", it.PickupWindow, it.ETALabel),
 	}
 	if it.SoldOut {

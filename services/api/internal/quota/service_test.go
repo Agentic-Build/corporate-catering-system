@@ -144,7 +144,7 @@ func (r *fakeItemRepo) seed(id, vendorID string) {
 func (r *fakeItemRepo) Create(_ context.Context, _ *menu.Item) error {
 	return nil
 }
-func (r *fakeItemRepo) Update(_ context.Context, _ *menu.Item) error      { return nil }
+func (r *fakeItemRepo) Update(_ context.Context, _ *menu.Item) error { return nil }
 func (r *fakeItemRepo) SetStatus(_ context.Context, _ string, _ menu.ItemStatus) error {
 	return nil
 }

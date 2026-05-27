@@ -13,7 +13,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 )
 
@@ -52,17 +51,8 @@ func warningToDTO(w compliance.Warning) warningDTO {
 // requireVendor enforces a vendor_operator bound to a vendor and returns the
 // resolved vendor_id from the session (never a path param).
 func (a *API) requireVendor(ctx context.Context) (string, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return "", huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleVendorOperator {
-		return "", huma.Error403Forbidden("vendor operator required")
-	}
-	if u.VendorID == nil || *u.VendorID == "" {
-		return "", huma.Error403Forbidden("user is not bound to a vendor")
-	}
-	return *u.VendorID, nil
+	_, vendorID, err := idhttp.RequireVendor(ctx)
+	return vendorID, err
 }
 
 // ----- Registration -----

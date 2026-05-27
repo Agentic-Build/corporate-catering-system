@@ -9,7 +9,6 @@ export { default as MealCard } from "./MealCard.svelte";
 export { default as Modal } from "./Modal.svelte";
 export { default as PageHeader } from "./PageHeader.svelte";
 export { default as ProviderButton } from "./ProviderButton.svelte";
-export { default as RemainBar } from "./RemainBar.svelte";
 export { default as SearchInput } from "./SearchInput.svelte";
 export { default as StateTag } from "./StateTag.svelte";
 export { default as StatCard } from "./StatCard.svelte";

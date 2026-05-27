@@ -25,7 +25,7 @@ jobs:
           done
       - run: pnpm -r --filter "./apps/*" exec svelte-kit sync
       - run: pnpm -r check
-      - run: pnpm -r lint || true   # P0: prettier check is non-blocking until we standardize
+      - run: pnpm -r lint
   go:
     runs-on: ubuntu-latest
     steps:
@@ -34,6 +34,14 @@ jobs:
         with:
           go-version: "1.26.3"
           cache: true
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l services/)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-clean — run 'gofmt -w services/':" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
       - run: go vet ./...
       - name: SQL injection guard (fmt.Sprintf with SQL keywords)
         run: scripts/security/check-sql-strings.sh

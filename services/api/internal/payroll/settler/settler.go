@@ -22,6 +22,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
 )
 
@@ -135,7 +136,9 @@ func (s *Settler) Run(ctx context.Context) error {
 		}
 		if err := s.handle(ctx, msg.Data()); err != nil {
 			s.Logger.Error("handle event", "err", err)
-			_ = msg.Nak()
+			// MaxDeliver below is 5; once exhausted, DLQ + Term instead of
+			// re-Naking a poison message forever.
+			messaging.DLQOnExhaustion(ctx, msg, s.Pool, "payroll-settler", 5, err)
 			continue
 		}
 		_ = msg.Ack()
@@ -143,10 +146,10 @@ func (s *Settler) Run(ctx context.Context) error {
 }
 
 // handle processes a single payroll.batch_locked.v1 event end-to-end:
-//   1) Load batch + entries; short-circuit if already exported (idempotent).
-//   2) Render UTF-8 BOM + CSV with one row per entry.
-//   3) Upload to S3 at payroll/<batch_id>.csv.
-//   4) In a single tx: SetExportInfo + outbox payroll.export_ready.v1 + audit.
+//  1. Load batch + entries; short-circuit if already exported (idempotent).
+//  2. Render UTF-8 BOM + CSV with one row per entry.
+//  3. Upload to S3 at payroll/<batch_id>.csv.
+//  4. In a single tx: SetExportInfo + outbox payroll.export_ready.v1 + audit.
 func (s *Settler) handle(ctx context.Context, data []byte) error {
 	var ev struct {
 		BatchID     string `json:"batch_id"`

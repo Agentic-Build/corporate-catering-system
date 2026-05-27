@@ -201,15 +201,15 @@ func (s *Service) ListForEmployee(ctx context.Context, f EmployeeMenuFilter) ([]
 	if err != nil {
 		return nil, err
 	}
+	imagesByItem, err := s.imageURIsForRows(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]EmployeeMenuItem, 0, len(rows))
 	for _, r := range rows {
-		imgs, err := s.Images.ListByItem(ctx, r.Item.ID)
-		if err != nil {
-			return nil, err
-		}
-		uris := make([]string, 0, len(imgs))
-		for _, im := range imgs {
-			uris = append(uris, im.BlobURI)
+		uris := imagesByItem[r.Item.ID]
+		if uris == nil {
+			uris = []string{}
 		}
 		tags := r.Item.Tags
 		if tags == nil {
@@ -230,6 +230,49 @@ func (s *Service) ListForEmployee(ctx context.Context, f EmployeeMenuFilter) ([]
 			PickupWindow: r.PickupWindow,
 			ETALabel:     r.ETALabel,
 		})
+	}
+	return out, nil
+}
+
+// BatchImageRepository is an optional capability implemented by the postgres
+// ImageRepo: load images for many items in one query. ListForEmployee uses it
+// to avoid an N+1 (one ListByItem per row); repos that don't implement it fall
+// back to per-item loads.
+type BatchImageRepository interface {
+	ListByItems(ctx context.Context, itemIDs []string) (map[string][]*Image, error)
+}
+
+// imageURIsForRows returns item ID → ordered blob URIs for the given rows,
+// using a single batched query when the image repo supports it.
+func (s *Service) imageURIsForRows(ctx context.Context, rows []*ActiveItemRow) (map[string][]string, error) {
+	out := make(map[string][]string, len(rows))
+	toURIs := func(imgs []*Image) []string {
+		uris := make([]string, 0, len(imgs))
+		for _, im := range imgs {
+			uris = append(uris, im.BlobURI)
+		}
+		return uris
+	}
+	if batch, ok := s.Images.(BatchImageRepository); ok {
+		ids := make([]string, len(rows))
+		for i, r := range rows {
+			ids[i] = r.Item.ID
+		}
+		byItem, err := batch.ListByItems(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for id, imgs := range byItem {
+			out[id] = toURIs(imgs)
+		}
+		return out, nil
+	}
+	for _, r := range rows {
+		imgs, err := s.Images.ListByItem(ctx, r.Item.ID)
+		if err != nil {
+			return nil, err
+		}
+		out[r.Item.ID] = toURIs(imgs)
 	}
 	return out, nil
 }
