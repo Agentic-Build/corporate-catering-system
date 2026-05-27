@@ -43,7 +43,8 @@ func (r *OutboxRepo) Append(ctx context.Context, tx order.Tx, aggregateType, agg
 
 // LockBatch starts a new transaction and selects up to `limit` unpublished events
 // using FOR UPDATE SKIP LOCKED so multiple relay workers do not double-lock.
-// The caller MUST eventually call MarkPublished or MarkFailed which commits the tx.
+// The caller MUST eventually call MarkPublished (optionally after staging
+// per-event failures via MarkFailed) to commit and release the row locks.
 // If no rows are available, returns (nil, nil, nil) with the tx already rolled back.
 func (r *OutboxRepo) LockBatch(ctx context.Context, limit int) ([]*order.OutboxEvent, order.Tx, error) {
 	tx, err := r.pool.Begin(ctx)
@@ -88,9 +89,11 @@ SELECT id, aggregate_type, aggregate_id, subject, payload, headers, created_at, 
 	return out, tx, nil
 }
 
-// MarkPublished updates the given ids to published_at=now() and commits the tx
-// returned by LockBatch. If ids is empty the tx is simply committed (which
-// releases the row locks held by LockBatch).
+// MarkPublished is the single commit point of a relay cycle: it stages
+// published_at=now() for the given ids and commits the tx returned by LockBatch,
+// atomically persisting both these published marks and any MarkFailed updates
+// staged earlier on the same tx. Pass nil/empty ids to commit a cycle with no
+// successful publishes (which also releases the row locks held by LockBatch).
 func (r *OutboxRepo) MarkPublished(ctx context.Context, tx order.Tx, ids []int64) error {
 	ptx, ok := tx.(pgx.Tx)
 	if !ok {
@@ -106,16 +109,16 @@ func (r *OutboxRepo) MarkPublished(ctx context.Context, tx order.Tx, ids []int64
 	return ptx.Commit(ctx)
 }
 
-// MarkFailed increments attempts and records last_error for the given id,
-// then commits the tx.
+// MarkFailed stages an attempts++ / last_error update for the given id on the
+// cycle's tx. It does NOT commit — the relay records every per-event failure
+// here and then commits the whole cycle once via MarkPublished. (Committing per
+// failure mid-batch would close the tx and make the cycle-final MarkPublished
+// run on a dead tx, leaving already-published events unmarked and re-delivered.)
 func (r *OutboxRepo) MarkFailed(ctx context.Context, tx order.Tx, id int64, lastError string) error {
 	ptx, ok := tx.(pgx.Tx)
 	if !ok {
 		return fmt.Errorf("outbox: tx must be pgx.Tx")
 	}
-	if _, err := ptx.Exec(ctx, `UPDATE outbox_event SET attempts = attempts + 1, last_error = $2 WHERE id=$1`, id, lastError); err != nil {
-		_ = ptx.Rollback(ctx)
-		return err
-	}
-	return ptx.Commit(ctx)
+	_, err := ptx.Exec(ctx, `UPDATE outbox_event SET attempts = attempts + 1, last_error = $2 WHERE id=$1`, id, lastError)
+	return err
 }

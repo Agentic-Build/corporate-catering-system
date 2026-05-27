@@ -59,9 +59,9 @@ func (r *Relay) cycle(ctx context.Context) (int, error) {
 		payload, _ := json.Marshal(ev.Payload)
 		if err := r.NATS.PublishTraced(ctx, ev.Subject, payload); err != nil {
 			r.Logger.Warn("publish failed", "event_id", ev.ID, "subject", ev.Subject, "err", err)
-			// Mark this one failed but don't kill the batch; the tx still
-			// commits via MarkPublished below — but the failed event remains
-			// unpublished (published_at = NULL, attempts incremented).
+			// Stage the failure (attempts++, last_error) on the cycle tx without
+			// committing; the failed event stays unpublished and gets re-locked
+			// next cycle. The whole cycle commits once via MarkPublished below.
 			if err2 := r.Outbox.MarkFailed(ctx, tx, ev.ID, err.Error()); err2 != nil {
 				r.Logger.Error("mark failed errored", "err", err2)
 			}
@@ -70,7 +70,8 @@ func (r *Relay) cycle(ctx context.Context) (int, error) {
 		successIDs = append(successIDs, ev.ID)
 		recordPublished(ctx, ev.AggregateType)
 	}
-	// MarkPublished commits the transaction even if successIDs is empty
+	// Single commit point: persists the published marks above plus any staged
+	// MarkFailed updates atomically. Commits even when successIDs is empty.
 	if err := r.Outbox.MarkPublished(ctx, tx, successIDs); err != nil {
 		return len(events), err
 	}

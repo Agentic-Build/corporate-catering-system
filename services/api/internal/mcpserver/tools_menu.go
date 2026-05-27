@@ -156,11 +156,11 @@ func registerMenuTools(s *server.MCPServer, deps Deps) {
 				Sort:  menu.EmployeeMenuSort(stringArg(args, "sort")),
 			}
 			if v, ok := args["price_min"].(float64); ok {
-				minV := int64(v * 100) // convert TWD → minor units (cents)
+				minV := int64(v) // price_minor is whole NTD, not cents — no *100
 				filter.PriceMin = &minV
 			}
 			if v, ok := args["price_max"].(float64); ok {
-				maxV := int64(v * 100)
+				maxV := int64(v)
 				filter.PriceMax = &maxV
 			}
 			if v, ok := args["in_stock"].(bool); ok {

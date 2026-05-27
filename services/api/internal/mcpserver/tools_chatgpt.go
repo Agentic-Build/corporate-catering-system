@@ -269,13 +269,13 @@ func formatMenuSnippet(it menu.EmployeeMenuItem) string {
 	if it.SoldOut {
 		status = "sold out"
 	}
-	return fmt.Sprintf("%s · NT$%d · %s · %s", it.VendorName, it.PriceMinor/100, status, it.PickupWindow)
+	return fmt.Sprintf("%s · NT$%d · %s · %s", it.VendorName, it.PriceMinor, status, it.PickupWindow)
 }
 
 func formatMenuFull(it menu.EmployeeMenuItem) string {
 	parts := []string{
 		fmt.Sprintf("Vendor: %s", it.VendorName),
-		fmt.Sprintf("Price: NT$%d", it.PriceMinor/100),
+		fmt.Sprintf("Price: NT$%d", it.PriceMinor),
 		fmt.Sprintf("Pickup: %s (%s)", it.PickupWindow, it.ETALabel),
 	}
 	if it.SoldOut {

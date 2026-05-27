@@ -1,6 +1,7 @@
 import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
+import { defaultCutoffAt } from "$lib/cutoff";
 
 /** Local YYYY-MM-DD for a Date offset by `addDays` from today. */
 function dayId(addDays: number): string {
@@ -94,7 +95,7 @@ export const actions: Actions = {
     const date = String(fd.get("date") ?? "");
     const capacity = parseInt(String(fd.get("capacity") ?? "0"), 10);
     const pickupWindow = String(fd.get("pickup_window") ?? "11:50-12:10");
-    const cutoffAt = String(fd.get("cutoff_at") ?? `${date}T17:00:00Z`);
+    const cutoffAt = String(fd.get("cutoff_at") || defaultCutoffAt(date));
 
     if (!itemId || !date) return fail(400, { error: "缺少餐點或日期" });
     if (!Number.isFinite(capacity) || capacity < 0) return fail(400, { error: "上限數值無效" });
