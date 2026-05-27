@@ -2385,6 +2385,8 @@ export interface components {
             notes: string;
             order_id: string;
             /** Format: int64 */
+            order_number: number;
+            /** Format: int64 */
             total_price_minor: number;
         };
         PrepSheetOutputBody: {

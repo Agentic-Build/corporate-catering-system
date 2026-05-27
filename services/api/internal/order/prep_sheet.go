@@ -15,6 +15,7 @@ type PrepSheetItem struct {
 // PrepSheetOrder is one order's label data — what to portion into a basket.
 type PrepSheetOrder struct {
 	OrderID         string
+	OrderNumber     int64
 	TotalPriceMinor int64
 	Notes           string
 	Items           []PrepSheetItem
@@ -68,7 +69,7 @@ func assemblePrepSheet(date time.Time, vendorID string, orders []*Order, names m
 			byPlant[o.Plant] = pa
 			plantOrder = append(plantOrder, o.Plant)
 		}
-		pso := PrepSheetOrder{OrderID: o.ID, TotalPriceMinor: o.TotalPriceMinor, Notes: o.Notes}
+		pso := PrepSheetOrder{OrderID: o.ID, OrderNumber: o.OrderNumber, TotalPriceMinor: o.TotalPriceMinor, Notes: o.Notes}
 		for _, it := range o.Items {
 			pso.Items = append(pso.Items, PrepSheetItem{
 				MenuItemID: it.MenuItemID, Name: nameOf(it.MenuItemID), Qty: it.Qty,

@@ -209,6 +209,7 @@ type prepSheetItemDTO struct {
 
 type prepSheetOrderDTO struct {
 	OrderID         string             `json:"order_id"`
+	OrderNumber     int64              `json:"order_number"`
 	TotalPriceMinor int64              `json:"total_price_minor"`
 	Notes           string             `json:"notes"`
 	Items           []prepSheetItemDTO `json:"items"`
@@ -570,6 +571,7 @@ func (a *API) prepSheet(ctx context.Context, in *prepSheetInput) (*prepSheetOutp
 		for _, o := range p.Orders {
 			pd.Orders = append(pd.Orders, prepSheetOrderDTO{
 				OrderID:         o.OrderID,
+				OrderNumber:     o.OrderNumber,
 				TotalPriceMinor: o.TotalPriceMinor,
 				Notes:           o.Notes,
 				Items:           prepItemDTOs(o.Items),

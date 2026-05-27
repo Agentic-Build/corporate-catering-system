@@ -10,6 +10,7 @@
   }
   interface Order {
     order_id: string;
+    order_number: number;
     total_price_minor: number;
     notes: string;
     items: Item[];
@@ -41,7 +42,7 @@
     for (const p of plants) {
       for (const o of p.orders) {
         for (const it of o.items) {
-          rows.push([p.plant, o.order_id.slice(0, 8), it.name, String(it.qty), o.notes ?? ""]);
+          rows.push([p.plant, `#${o.order_number}`, it.name, String(it.qty), o.notes ?? ""]);
         }
       }
     }
@@ -127,7 +128,7 @@
             {#each p.orders as o (o.order_id)}
               <tr>
                 <td class="py-1.5 font-jetbrains-mono text-xs text-tb-slate-600">
-                  {o.order_id.slice(0, 8)}
+                  #{o.order_number}
                 </td>
                 <td class="py-1.5">
                   {o.items.map((it) => `${it.name}×${it.qty}`).join("、")}
