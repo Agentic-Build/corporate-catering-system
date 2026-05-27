@@ -27,9 +27,8 @@ type sseInstruments struct {
 }
 
 var (
-	sseOnce   sync.Once
-	sseInstr  sseInstruments
-	sseInited bool
+	sseOnce  sync.Once
+	sseInstr sseInstruments
 )
 
 func realtimeMetrics() sseInstruments {
@@ -51,7 +50,6 @@ func realtimeMetrics() sseInstruments {
 		if err == nil {
 			sseInstr.disconnects = disc
 		}
-		sseInited = true
 	})
 	return sseInstr
 }

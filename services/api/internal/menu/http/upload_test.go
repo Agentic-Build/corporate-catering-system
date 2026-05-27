@@ -3,8 +3,6 @@ package mhttp
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -118,18 +116,6 @@ func TestValidateMenuImageKey_Rejected(t *testing.T) {
 }
 
 // --- HandleDirectUpload -----------------------------------------------------
-
-// stubStorage records what was put and returns the s3:// URI.
-type stubStorage struct {
-	putCalled bool
-	putKey    string
-}
-
-func (s *stubStorage) PutObject(_ context.Context, key string, _ io.Reader, _ string) (string, error) {
-	s.putCalled = true
-	s.putKey = key
-	return fmt.Sprintf("s3://tbite/%s", key), nil
-}
 
 // We need API.Storage to satisfy the storage.S3Client interface — but S3Client
 // is a concrete struct, not an interface. The handler calls a.Storage.PutObject

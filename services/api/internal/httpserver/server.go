@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 )
 
 type Server struct {
@@ -195,6 +196,11 @@ func mcpAuthEnforce(next http.Handler, opts MCPOpts, endpoint string) http.Handl
 		// discover OAuth metadata.
 		if r.Method == http.MethodPost {
 			if _, ok := idhttp.UserFromContext(r.Context()); !ok {
+				// AuthMiddleware falls through to anonymous on a missing,
+				// expired, or invalid Bearer token, so this 401 is the real
+				// MCP authentication-failure gate that backs the
+				// AuthFailureSurge alert.
+				observability.RecordMCPAuthFailure(r.Context(), "missing_or_invalid_token")
 				if opts.PublicBaseURL != "" && len(opts.AuthorizationServers) > 0 {
 					resource := strings.TrimRight(opts.PublicBaseURL, "/") + endpoint
 					metaURL := strings.TrimRight(opts.PublicBaseURL, "/") + "/.well-known/oauth-protected-resource"

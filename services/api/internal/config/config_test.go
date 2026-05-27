@@ -69,3 +69,17 @@ func TestNATSStreamReplicasOverrideFromEnv(t *testing.T) {
 		t.Fatalf("NATSStreamReplicas = %d, want 3", cfg.NATSStreamReplicas)
 	}
 }
+
+func TestEffectiveDatabaseROFallsBackToRW(t *testing.T) {
+	cfg := Config{DatabaseRW: "postgres://primary/tbite"}
+	if got := cfg.EffectiveDatabaseRO(); got != cfg.DatabaseRW {
+		t.Fatalf("EffectiveDatabaseRO() = %q, want RW %q when DATABASE_RO_URL is unset", got, cfg.DatabaseRW)
+	}
+}
+
+func TestEffectiveDatabaseROPrefersReplica(t *testing.T) {
+	cfg := Config{DatabaseRW: "postgres://primary/tbite", DatabaseRO: "postgres://replica/tbite"}
+	if got := cfg.EffectiveDatabaseRO(); got != cfg.DatabaseRO {
+		t.Fatalf("EffectiveDatabaseRO() = %q, want RO %q when DATABASE_RO_URL is set", got, cfg.DatabaseRO)
+	}
+}

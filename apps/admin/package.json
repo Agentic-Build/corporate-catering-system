@@ -14,8 +14,7 @@
     "@tbite/api-client": "workspace:*",
     "@tbite/tokens": "workspace:*",
     "@tbite/ui": "workspace:*",
-    "@tbite/web-auth": "workspace:*",
-    "openapi-fetch": "^0.17.0"
+    "@tbite/web-auth": "workspace:*"
   },
   "devDependencies": {
     "@sveltejs/kit": "^2.61.1",

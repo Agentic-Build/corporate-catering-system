@@ -3,7 +3,7 @@
 // Imported as a singleton so the header badge, floating bar, drawer and the
 // home grid all read/write the same instance.
 
-export interface CartLine {
+interface CartLine {
   qty: number;
   name: string;
   vendor: string;

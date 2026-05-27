@@ -27,12 +27,6 @@ func DefaultPoolConfig() PoolConfig {
 	return PoolConfig{MaxConns: 16, MinConns: 2}
 }
 
-// NewPool creates a pgxpool with the default budget. Retained for tests
-// and short-lived tooling. Production roles must use NewPoolWithConfig.
-func NewPool(ctx context.Context, dsn string) (*Pool, error) {
-	return NewPoolWithConfig(ctx, dsn, DefaultPoolConfig())
-}
-
 // NewPoolWithConfig creates a pgxpool with an explicit budget. The
 // caller is responsible for picking a budget that fits the database's
 // max_connections / PgBouncer pool size when summed across all

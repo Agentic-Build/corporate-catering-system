@@ -103,11 +103,6 @@ func MustInitMetrics() *Metrics {
 	return metrics
 }
 
-// Get returns the global instrument set. Returns nil if MustInitMetrics has
-// not been called; emission helpers below short-circuit safely in that case
-// so unit tests don't need to spin up the meter provider.
-func Get() *Metrics { return metrics }
-
 // ───────────────────────────── Emission helpers ─────────────────────────────
 // Helpers nil-check `metrics` so domain code can call them without an extra
 // init dance in every package.
