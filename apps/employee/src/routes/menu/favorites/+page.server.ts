@@ -2,6 +2,7 @@ import type { Actions, PageServerLoad } from "./$types";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { taipeiISO } from "$lib/date";
 
 const PAGE_LIMIT = 20;
 
@@ -11,7 +12,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   }
   const client = createApiClient(API_BASE_URL, locals.apiToken);
   // The favorites endpoint requires `day` (it computes per-day availability).
-  const day = new Date().toISOString().slice(0, 10);
+  const day = taipeiISO();
   const r = await client.GET("/api/employee/favorites", {
     params: { query: { day, limit: PAGE_LIMIT } },
   });
@@ -29,7 +30,7 @@ export const actions: Actions = {
     const fd = await request.formData();
     const cursor = String(fd.get("cursor") ?? "");
     const client = createApiClient(API_BASE_URL, locals.apiToken);
-    const day = new Date().toISOString().slice(0, 10);
+    const day = taipeiISO();
     const r = await client.GET("/api/employee/favorites", {
       params: { query: { day, cursor, limit: PAGE_LIMIT } },
     });
@@ -58,7 +59,7 @@ export const actions: Actions = {
     if (!menuItemId) return fail(400, { error: "menu_item_id required" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const h = await client.GET("/api/employee/home", { params: { query: {} } });
-    const supplyDate = h.data?.target_day ?? new Date().toISOString().slice(0, 10);
+    const supplyDate = h.data?.target_day ?? taipeiISO();
     const plant = locals.user.plant ?? "tn-a";
     const r = await client.POST("/api/employee/orders", {
       body: {

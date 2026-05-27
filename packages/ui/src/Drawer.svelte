@@ -47,7 +47,13 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="fixed inset-0 z-[70] transition {open ? 'pointer-events-auto' : 'pointer-events-none'}">
+<!-- inert when closed: keeps the slide transition (stays mounted) but removes
+     the backdrop + panel from the tab order and the accessibility tree, so a
+     closed drawer is not a phantom modal for keyboard / screen-reader users. -->
+<div
+  class="fixed inset-0 z-[70] transition {open ? 'pointer-events-auto' : 'pointer-events-none'}"
+  inert={!open}
+>
   <button
     type="button"
     aria-label="關閉"

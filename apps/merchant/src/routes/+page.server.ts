@@ -2,16 +2,7 @@ import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
 import { defaultCutoffAt } from "$lib/cutoff";
-
-/** Local YYYY-MM-DD for a Date offset by `addDays` from today. */
-function dayId(addDays: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + addDays);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+import { dayId } from "$lib/date";
 
 const WEEKDAY = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
 

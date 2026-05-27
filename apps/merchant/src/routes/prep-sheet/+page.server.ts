@@ -1,12 +1,13 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
+import { taipeiISO } from "$lib/date";
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
   if (locals.user.role !== "vendor_operator") throw redirect(303, "/login");
 
-  const date = url.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
+  const date = url.searchParams.get("date") ?? taipeiISO();
   const client = apiFor(locals.apiToken);
 
   let sheet: { date: string; total_orders: number; total_portions: number; plants: unknown[] } = {
