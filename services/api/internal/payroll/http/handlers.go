@@ -709,7 +709,8 @@ func mapErr(err error) error {
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, payroll.ErrBatchLocked),
 		errors.Is(err, payroll.ErrBatchPeriodExists),
-		errors.Is(err, payroll.ErrInvalidTransition):
+		errors.Is(err, payroll.ErrInvalidTransition),
+		errors.Is(err, payroll.ErrOrderNotDisputable):
 		return huma.Error409Conflict(err.Error())
 	}
 	return huma.Error500InternalServerError("internal", err)

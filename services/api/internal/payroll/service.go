@@ -252,6 +252,14 @@ func (s *Service) OpenDisputeByOrder(ctx context.Context, orderID, openedBy, rea
 	if o.UserID != openedBy {
 		return nil, ErrForbidden
 	}
+	// Only a charge is disputable: picked_up (received) or no_show (charged for
+	// a missed pickup). Orders not yet resolved (draft/placed/cutoff/ready) or
+	// never charged (cancelled/refunded) must be rejected here — otherwise the
+	// dispute records a refund that ResolveDispute can never actually apply
+	// (it only transitions picked_up/no_show orders to refunded).
+	if o.Status != order.StatusPickedUp && o.Status != order.StatusNoShow {
+		return nil, ErrOrderNotDisputable
+	}
 	d := &Dispute{
 		OrderID:  orderID,
 		OpenedBy: openedBy,

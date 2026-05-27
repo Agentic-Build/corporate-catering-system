@@ -481,10 +481,13 @@ func main() {
 			orderRepo,
 			p9SupplyRepoAdapter{inner: supplyRepo},
 			p9ItemRepoAdapter{inner: itemRepo},
+			vpgrepo.NewVendorRepo(pool),
+			plantRepo,
 			stateEventRepo,
 			auditRepo,
 			outboxRepo,
 			clock.SystemClock{},
+			appLocation(),
 		)
 		reorderAPI := &ohttp.ReorderAPI{Svc: reorderSvc}
 
