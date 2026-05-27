@@ -36,9 +36,12 @@ func sanitizeConsumerToken(s string) string {
 }
 
 // orderEvent is the minimal projection the invalidator needs from
-// ORDERS_V1 payloads. Plant + supply_date drive the SCAN pattern.
+// ORDERS_V1 payloads. Plant + supply_date drive the home/popularity SCAN
+// pattern; user_id (present on placed/modified events) drives the affinity
+// key.
 type orderEvent struct {
 	OrderID    string `json:"order_id"`
+	UserID     string `json:"user_id"`
 	Plant      string `json:"plant"`
 	SupplyDate string `json:"supply_date"` // YYYY-MM-DD
 }
@@ -71,9 +74,19 @@ func RunOrderInvalidator(ctx context.Context, js jetstream.JetStream, cache Cach
 		if p.Plant == "" || p.SupplyDate == "" {
 			return
 		}
-		pattern := HomeKeyPattern(p.Plant, p.SupplyDate)
-		if err := cache.Invalidate(ctx, pattern); err != nil {
-			logger.Warn("invalidate failed", "pattern", pattern, "err", err)
+		// Home + plant popularity are both plant/date keyed; affinity is
+		// keyed by user (only invalidated when the event carries user_id).
+		patterns := []string{
+			HomeKeyPattern(p.Plant, p.SupplyDate),
+			PopularityKeyPattern(p.Plant, p.SupplyDate),
+		}
+		if p.UserID != "" {
+			patterns = append(patterns, AffinityKeyPattern(p.UserID))
+		}
+		for _, pattern := range patterns {
+			if err := cache.Invalidate(ctx, pattern); err != nil {
+				logger.Warn("invalidate failed", "pattern", pattern, "err", err)
+			}
 		}
 	})
 	if err != nil {

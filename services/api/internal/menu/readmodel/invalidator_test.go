@@ -174,11 +174,16 @@ func TestRunOrderInvalidatorInvalidatesOnEvent(t *testing.T) {
 
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	if len(cache.patterns) != 1 {
-		t.Fatalf("invalidate patterns = %v, want exactly the valid event", cache.patterns)
+	// The valid event (no user_id) invalidates home + popularity, not affinity.
+	if len(cache.patterns) != 2 {
+		t.Fatalf("invalidate patterns = %v, want home + popularity for the valid event", cache.patterns)
 	}
-	if cache.patterns[0] != "home:*:plant-a:2026-05-26" {
-		t.Errorf("pattern = %q", cache.patterns[0])
+	got := map[string]bool{}
+	for _, p := range cache.patterns {
+		got[p] = true
+	}
+	if !got["home:*:plant-a:2026-05-26"] || !got["pop:plant-a:2026-05-26"] {
+		t.Errorf("patterns = %v, want home + popularity", cache.patterns)
 	}
 	if cons.cc == nil || !cons.cc.stopped {
 		t.Error("consume context Stop() not called on return")
@@ -209,7 +214,8 @@ func TestRunOrderInvalidatorLogsInvalidateError(t *testing.T) {
 	}
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	if len(cache.patterns) != 1 {
-		t.Fatalf("invalidate attempted = %d, want 1", len(cache.patterns))
+	// Both home + popularity invalidations are attempted (and both error).
+	if len(cache.patterns) != 2 {
+		t.Fatalf("invalidate attempted = %d, want 2 (home + popularity)", len(cache.patterns))
 	}
 }
