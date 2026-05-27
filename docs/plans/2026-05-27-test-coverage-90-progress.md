@@ -68,7 +68,8 @@ pnpm install && make coverage-web
 - [ ] 修 `compliance` 疑似真壞的 SERVICE 測試 `TestTriageAnomaly_SuspendCallsVendorGov`（governance_test.go，testcontainers，187s FAIL 非 timeout）— 需能跑測試時確認；注意新增的 http 層 `TestTriageAnomaly_Suspend_OK_204` 是通過的。
 - [x] Phase 2：`order/http`→77.7%、`menu/http`→90.3%、`vendors/http`→97.1%。
 - [x] Phase 2b（部分）：`mcpserver` 16%→94.7%（+server.go txBeginner 重構）、`plants/http` 35%→100%、`identity/http` 49%→96.7%、`menu/readmodel` 41%→82.8%（RedisCache 卡具體 redis client）。
-- [ ] Phase 2b 續：`compliance/scanner` 56%、`identity/oidc` 23%、`platform/observability` 11%、`identity/hydra` 13%（外部 OAuth，低價值）、`httpserver` 49%、各 service 包內部分支（compliance 40%、order 73%…）、postgres 包（需 testcontainers）。
+- [x] Phase 3（postgres 整合測試，testcontainers）：plants/postgres 0→95.1%、vendors/postgres 46→88.5%、payroll/postgres 58→86.9%、order/postgres 57→83.0%。（commit b627e81）
+- [ ] Phase 2b 續：`compliance/scanner` 56%、`identity/oidc` 23%、`platform/observability` 11%、`identity/hydra` 13%（外部 OAuth，低價值）、`httpserver` 49%、各 service 包內部分支（compliance 40%、order 73%…）、其餘 postgres（quota 61.5% 等）。
 - 目標分母：`make coverage-go` 已改為只測 `services/api/internal/...`（排除 cmd）。
 - [ ] 殘留 storage/pool-bound：menu presign/upload、order SSE + reorder 2xx — 需把 `*storage.S3Client`、reorder 的 `pool` 抽成 interface（同 txBeginner 手法）才能純測。
 - [ ] Phase 3：前端 3 個 app 元件/邏輯測試（目前 ≈0%）。
