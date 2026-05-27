@@ -8,6 +8,7 @@ type Repository interface {
 	Create(ctx context.Context, v *Vendor) error
 	UpdateStatus(ctx context.Context, id string, status Status, approvedBy *string) error
 	UpdateSettings(ctx context.Context, id string, cutoffHour, preorderWindowDays int) error
+	UpdateContactEmail(ctx context.Context, id, email string) error
 	List(ctx context.Context, statuses []Status) ([]*Vendor, error)
 }
 

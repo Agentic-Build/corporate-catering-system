@@ -30,13 +30,11 @@ export const actions: Actions = {
     });
     if (r.error) {
       // RFC 9457 problem-details — surface a calm Chinese message, never the raw
-      // backend string. A 404 here means the order has no payroll entry yet
-      // (current, not-yet-settled period); disputes open once it's settled.
+      // backend string. Current-period (not-yet-settled) orders now open an
+      // entry-less dispute on the backend, so 404 here means the order genuinely
+      // doesn't exist.
       const err = r.error as { status?: number; detail?: string };
-      const message =
-        err.status === 404
-          ? "此訂單尚未產生薪資代扣紀錄，將於結算後開放申訴。"
-          : "送出申訴失敗，請稍後再試。";
+      const message = err.status === 404 ? "找不到訂單。" : "送出申訴失敗，請稍後再試。";
       return fail(err.status ?? 400, { error: message });
     }
     throw redirect(303, "/disputes");

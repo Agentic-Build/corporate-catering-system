@@ -102,6 +102,20 @@ type approveInput struct {
 	}
 }
 
+type updateVendorInput struct {
+	ID   string `path:"id" format:"uuid"`
+	Body struct {
+		ContactEmail *string   `json:"contact_email,omitempty" format:"email" doc:"New contact email; omit to leave unchanged"`
+		Plants       *[]string `json:"plants,omitempty" doc:"Full plant set; omit to leave unchanged"`
+	}
+}
+
+type updateVendorOutput struct {
+	Body struct {
+		Vendor vendorDTO `json:"vendor"`
+	}
+}
+
 type operatorDTO struct {
 	ID              string  `json:"id"`
 	VendorID        string  `json:"vendor_id"`
@@ -165,6 +179,15 @@ func (a *API) Register(api huma.API) {
 		Security:      []map[string][]string{{"bearer": {}}},
 		DefaultStatus: http.StatusNoContent,
 	}, a.approve)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "updateVendor",
+		Method:      http.MethodPatch,
+		Path:        "/api/admin/vendors/{id}",
+		Summary:     "Update a vendor's contact email and/or plants (admin)",
+		Tags:        []string{"admin", "vendor"},
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, a.update)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "suspendVendor",
@@ -382,6 +405,31 @@ func (a *API) approve(ctx context.Context, in *approveInput) (*struct{}, error) 
 		return nil, mapErr(err)
 	}
 	return &struct{}{}, nil
+}
+
+func (a *API) update(ctx context.Context, in *updateVendorInput) (*updateVendorOutput, error) {
+	user, err := a.requireAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	v, err := a.Svc.UpdateProfile(ctx, in.ID, user.ID, in.Body.ContactEmail, in.Body.Plants)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	d := toDTO(v)
+	mappings, _ := a.Svc.ListPlantMappings(ctx, v.ID)
+	for _, m := range mappings {
+		if !m.Active {
+			continue
+		}
+		d.Plants = append(d.Plants, m.Plant)
+		d.PlantMappings = append(d.PlantMappings, plantMappingDTO{
+			Plant: m.Plant, ServiceWindow: m.ServiceWindow,
+		})
+	}
+	var resp updateVendorOutput
+	resp.Body.Vendor = d
+	return &resp, nil
 }
 
 func (a *API) suspend(ctx context.Context, in *vendorIDInput) (*struct{}, error) {

@@ -43,7 +43,7 @@ export const actions: Actions = {
     const fd = await request.formData();
     const entryId = String(fd.get("entry_id") ?? "");
     const detail = String(fd.get("detail") ?? "").trim();
-    if (!entryId) return fail(400, { exError: "請選擇要標記的代扣明細" });
+    if (!entryId) return fail(400, { exError: "請選擇要標記的月結明細" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/payroll/batches/{id}/exceptions", {
       params: { path: { id: params.id } },

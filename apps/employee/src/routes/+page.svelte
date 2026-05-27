@@ -7,7 +7,6 @@
   import { invalidateAll, goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { onMount } from "svelte";
-  import CategoryStrip from "$lib/components/CategoryStrip.svelte";
   import FeaturedRow from "$lib/components/FeaturedRow.svelte";
   import MenuFilterBar from "$lib/components/MenuFilterBar.svelte";
   import MenuViewToggle from "$lib/components/MenuViewToggle.svelte";
@@ -125,37 +124,10 @@
     })(),
   );
 
-  // ── category filter — chips from distinct day_menu tags. Selection is the
-  //    shared URL `tags` set (same state the MenuFilterBar writes), so the top
-  //    strip and the filter bar are one filter, not two. ──
-  const categories = $derived(
-    (() => {
-      const seen = new Set<string>();
-      for (const m of dayMenu) for (const t of m.tags ?? []) seen.add(t);
-      return [{ id: "all", label: "全部" }, ...[...seen].map((t) => ({ id: t, label: t }))];
-    })(),
-  );
-
-  // Toggle a tag in the URL `tags` set (or clear all via the "全部" chip),
-  // then let the server-filtered grid pick it up like the MenuFilterBar does.
-  function toggleCategory(id: string) {
-    const url = new URL($page.url);
-    const sp = url.searchParams;
-    if (id === "all") {
-      sp.delete("tags");
-    } else {
-      const current = sp.getAll("tags");
-      const next = current.includes(id) ? current.filter((t) => t !== id) : [...current, id];
-      sp.delete("tags");
-      for (const t of next) sp.append("tags", t);
-    }
-    goto(url.pathname + url.search, { keepFocus: true, noScroll: true });
-  }
-
   // ── header search query (set by the layout SearchInput) ──
   const query = $derived($page.url.searchParams.get("q")?.trim() ?? "");
 
-  // ── F3 — tag selection (top strip or filter bar) and any other filter live
+  // ── F3 — tag selection (filter bar) and any other filter live
   //    in the URL, so an active filter means the server returns the
   //    filtered/sorted grid; otherwise the day_menu is shown, narrowed only by
   //    the header search box client-side. ──
@@ -378,13 +350,6 @@
         {orderStatusLabel[orderSummary.status] ?? orderSummary.status}
       </StateTag>
     </a>
-  {/if}
-
-  <!-- Category strip -->
-  {#if categories.length > 1}
-    <section class="mb-5">
-      <CategoryStrip {categories} selected={data.menuFilter.tags} onChange={toggleCategory} />
-    </section>
   {/if}
 
   <!-- Featured row · 再點一次 -->

@@ -110,7 +110,7 @@
         <span>外送費</span><span class="font-semibold text-tb-slate-900">免費</span>
       </div>
       <div class="mt-1 flex items-end justify-between border-t border-tb-slate-200 pt-2">
-        <span class="text-sm text-tb-slate-600">合計（薪資代扣）</span>
+        <span class="text-sm text-tb-slate-600">合計（月結）</span>
         <span class="font-jetbrains-mono text-2xl font-black tabular-nums text-tb-slate-900"
           >${cart.total.toLocaleString()}</span
         >
@@ -152,7 +152,7 @@
         </p>
       {/if}
       <Button variant="primary" size="md" type="submit" fullWidth disabled={entries.length === 0}>
-        送出預訂 · 由本月薪資代扣
+        送出預訂 · 本月月結
       </Button>
     </form>
     <p class="mt-2 text-center text-[11px] text-tb-slate-500">截單前可至「我的訂單」修改或取消。</p>

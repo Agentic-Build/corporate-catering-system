@@ -87,7 +87,13 @@
         服務廠區已更新。
       </p>
     {/if}
-    <form method="POST" action="?/savePlants" class="space-y-4" bind:this={plantsFormEl} onsubmit={onPlantsSubmit}>
+    <form
+      method="POST"
+      action="?/savePlants"
+      class="space-y-4"
+      bind:this={plantsFormEl}
+      onsubmit={onPlantsSubmit}
+    >
       <fieldset>
         <legend class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
           服務廠區（複選）

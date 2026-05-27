@@ -214,7 +214,8 @@
                   <td class="py-2.5 pr-3 align-top">
                     <span
                       class="font-jetbrains-mono text-[10px] text-tb-slate-400 break-all leading-tight"
-                    >{o.id}</span>
+                      >{o.id}</span
+                    >
                   </td>
                   <td class="py-2.5 pr-3 align-top text-xs text-tb-slate-700">
                     {#each o.items as item (item.menu_item_id)}
@@ -262,9 +263,7 @@
     {#if scanError}
       <p class="mt-3 rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">{scanError}</p>
     {/if}
-    <p class="mt-3 text-xs text-tb-slate-400">
-      掃描成功後系統會自動標記該訂單為備餐完成（出餐）。
-    </p>
+    <p class="mt-3 text-xs text-tb-slate-400">掃描成功後系統會自動標記該訂單為備餐完成（出餐）。</p>
   {/snippet}
   {#snippet footer()}
     <Button variant="secondary" onclick={closeScan}>關閉</Button>

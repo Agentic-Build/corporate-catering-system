@@ -74,6 +74,19 @@ UPDATE vendor SET cutoff_hour=$2, preorder_window_days=$3, updated_at=now() WHER
 	return nil
 }
 
+// UpdateContactEmail updates the vendor's contact email.
+func (r *VendorRepo) UpdateContactEmail(ctx context.Context, id, email string) error {
+	tag, err := r.pool.Exec(ctx, `
+UPDATE vendor SET contact_email=$2, updated_at=now() WHERE id=$1`, id, email)
+	if err != nil {
+		return fmt.Errorf("update vendor contact email: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return vendor.ErrVendorNotFound
+	}
+	return nil
+}
+
 func (r *VendorRepo) List(ctx context.Context, statuses []vendor.Status) ([]*vendor.Vendor, error) {
 	args := []any{}
 	where := ""
