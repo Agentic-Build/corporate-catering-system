@@ -7,11 +7,19 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 )
+
+// txBeginner is the slice of *pgxpool.Pool the service uses: Begin for the
+// pgx.BeginFunc write paths and Query for the current-lines read fallback.
+// Depending on this interface (not the concrete pool) lets tests inject a fake
+// that hands the write closure a no-op pgx.Tx; the repo fakes ignore the tx.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
 
 // AuditTx mirrors the audit-repo shape used by order.Service so we can share
 // the same postgres implementation across services.
@@ -45,7 +53,7 @@ type Clock interface{ Now() time.Time }
 // across batch / entry / dispute repos plus audit + outbox. All multi-row
 // writes happen inside pgx.BeginFunc so partial failure rolls back atomically.
 type Service struct {
-	Pool         *pgxpool.Pool
+	Pool         txBeginner
 	Batches      BatchRepository
 	Entries      EntryRepository
 	Disputes     DisputeRepository

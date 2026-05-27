@@ -16,6 +16,7 @@ CHART_VALUES ?= $(CHART_DIR)/values.yaml
         dev dev-down dev-reset dev-logs \
         migrate-up migrate-down migrate-new seed seed-tsmc \
         contract-sync test-go test-web test-e2e \
+        coverage coverage-go coverage-web \
         lunch-flow lunch-flow-cluster \
         build clean \
         sops-encrypt sops-decrypt sops-edit \
@@ -72,6 +73,18 @@ test-web: ## Frontend checks
 test-e2e: ## Playwright e2e against $$E2E_BASE_URL (default app.tbite.local)
 	@E2E_BASE_URL=$${E2E_BASE_URL:-http://app.tbite.local} \
 	 pnpm exec playwright test --config=tests/e2e/playwright.config.ts
+
+coverage: coverage-go coverage-web ## Full coverage report (Go + frontend)
+
+coverage-go: ## Go coverage of internal/ (excludes cmd wiring + load tool); serialized (-p 1) so testcontainers runs one DB at a time (no thrash). Writes coverage.out + coverage.html
+	@TESTCONTAINERS_RYUK_DISABLED=true go test ./services/api/internal/... \
+		-coverprofile=coverage.out -covermode=atomic -p 1 -timeout 25m
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo "==> total:"; go tool cover -func=coverage.out | tail -1
+	@echo "==> wrote coverage.out + coverage.html"
+
+coverage-web: ## Frontend coverage (vitest v8). Requires: pnpm install (adds @vitest/coverage-v8)
+	@pnpm -r --filter "./packages/*" --filter "./apps/*" test -- --coverage
 
 build: ## Build everything (web bundles + Go binary)
 	@pnpm -r build && go build -o /tmp/tbite ./services/api/cmd/tbite

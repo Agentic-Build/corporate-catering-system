@@ -11,12 +11,24 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
+
+// txBeginner is the transaction-starting surface of *pgxpool.Pool. The service
+// depends on this interface (not the concrete pool) so tests can inject a fake
+// that hands the write closure a no-op pgx.Tx; the repo fakes ignore the tx.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// objectStore is the blob-write surface of *storage.S3Client used by the upload
+// paths. Depending on the interface (not the concrete client) lets tests inject
+// a fake that returns a synthetic URI without reaching S3.
+type objectStore interface {
+	PutObject(ctx context.Context, key string, body io.Reader, contentType string) (string, error)
+}
 
 // VendorSuspender lets anomaly governance suspend a vendor. *vendor.Service
 // satisfies it; kept narrow to avoid pulling the whole vendor service in.
@@ -68,10 +80,10 @@ type AuditRow struct {
 // query. Document upload writes blob to S3 then row to DB then audit row.
 // Review and anomaly transitions emit outbox events + audit rows in one tx.
 type Service struct {
-	Pool     *pgxpool.Pool
+	Pool     txBeginner
 	Docs     DocumentRepository
 	Anomaly  AnomalyRepository
-	Storage  *storage.S3Client
+	Storage  objectStore
 	Audit    AuditTx
 	Outbox   OutboxTx
 	AuditQry AuditQuery

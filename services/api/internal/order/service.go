@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
@@ -19,6 +18,13 @@ import (
 // window this system currently supports. When multi-window support lands the
 // constant becomes a derived field on Order/Supply (PickupWindow).
 const defaultMealWindow = "lunch"
+
+// txBeginner is the transaction-starting surface of *pgxpool.Pool. The service
+// depends on this interface (not the concrete pool) so tests can inject a fake
+// that hands the write closure a no-op pgx.Tx; the repo fakes ignore the tx.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
 
 // QuotaTx is the subset of the quota repo Service needs inside a transaction.
 type QuotaTx interface {
@@ -65,7 +71,7 @@ type VendorReader interface {
 // failure at any step (including ErrOutOfStock) rolls the entire transaction
 // back atomically.
 type Service struct {
-	Pool        *pgxpool.Pool
+	Pool        txBeginner
 	Orders      Repository
 	OrdersTx    OrderTx
 	StateEvents StateEventRepository

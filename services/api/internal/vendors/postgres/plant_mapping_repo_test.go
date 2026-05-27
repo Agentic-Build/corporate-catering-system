@@ -71,3 +71,43 @@ func TestPlantMappingRepo_SetEmpty(t *testing.T) {
 	require.NoError(t, err2)
 	assert.Len(t, list, 0)
 }
+
+func TestPlantMappingRepo_SetWindow(t *testing.T) {
+	pool, cleanup := setupPostgres(t)
+	defer cleanup()
+	vrepo := postgres.NewVendorRepo(pool)
+	prepo := postgres.NewPlantMappingRepo(pool)
+	ctx := context.Background()
+
+	_, err := pool.Exec(ctx, `INSERT INTO plant (code, label) VALUES ('F12B-3F', 'F12B-3F') ON CONFLICT DO NOTHING`)
+	require.NoError(t, err)
+
+	v := &vendor.Vendor{DisplayName: "V", LegalName: "V Ltd", ContactEmail: "window@x.com", Status: vendor.StatusApproved}
+	require.NoError(t, vrepo.Create(ctx, v))
+	require.NoError(t, prepo.Set(ctx, v.ID, []string{"F12B-3F"}))
+
+	require.NoError(t, prepo.SetWindow(ctx, v.ID, "F12B-3F", "11:30-12:30"))
+	list, err := prepo.ListByVendor(ctx, v.ID)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.Equal(t, "11:30-12:30", list[0].ServiceWindow)
+
+	// No active mapping for that pair → ErrVendorNotFound.
+	err = prepo.SetWindow(ctx, v.ID, "F15-2F", "10:00-11:00")
+	assert.ErrorIs(t, err, vendor.ErrVendorNotFound)
+}
+
+func TestPlantMappingRepo_SetUnknownPlant(t *testing.T) {
+	pool, cleanup := setupPostgres(t)
+	defer cleanup()
+	vrepo := postgres.NewVendorRepo(pool)
+	prepo := postgres.NewPlantMappingRepo(pool)
+	ctx := context.Background()
+
+	v := &vendor.Vendor{DisplayName: "V", LegalName: "V Ltd", ContactEmail: "unknown@x.com", Status: vendor.StatusApproved}
+	require.NoError(t, vrepo.Create(ctx, v))
+
+	// Plant code absent from the registry violates the FK and surfaces an error.
+	err := prepo.Set(ctx, v.ID, []string{"NOPE-9F"})
+	require.Error(t, err)
+}

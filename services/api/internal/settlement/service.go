@@ -5,19 +5,25 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 )
 
 const auditActorRole = "welfare_admin"
 
+// txBeginner is the transaction-starting surface of *pgxpool.Pool. The service
+// depends on this interface (not the concrete pool) so tests can inject a fake
+// that hands the write closure a no-op pgx.Tx; the repo fakes ignore the tx.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
 // Service orchestrates vendor settlement: admin period close / void plus the
 // merchant-facing reconciliation and settlement reads. Close is a multi-row
 // write (one vendor_settlement per vendor + audit_event) so it runs inside
 // pgx.BeginFunc to keep a half-closed period from surviving a crash.
 type Service struct {
-	Pool        *pgxpool.Pool
+	Pool        txBeginner
 	Settlements SettlementRepository
 	Orders      OrderAggregateRepository
 	Audit       AuditTx
