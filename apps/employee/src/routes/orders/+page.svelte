@@ -5,6 +5,7 @@
 
   type Order = {
     id: string;
+    order_number: number;
     status: string;
     supply_date: string;
     plant: string;
@@ -111,8 +112,8 @@
             </StateTag>
             <span class="text-sm font-bold text-tb-slate-900">{o.supply_date}</span>
             <span class="text-tb-slate-300">·</span>
-            <span class="font-jetbrains-mono text-[11px] text-tb-slate-500">
-              {o.id.slice(0, 8)}
+            <span class="font-jetbrains-mono text-[11px] font-bold text-tb-slate-700">
+              #{o.order_number}
             </span>
           </div>
           <div class="flex items-center gap-1.5 text-xs text-tb-slate-500">

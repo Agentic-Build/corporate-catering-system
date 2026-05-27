@@ -229,7 +229,9 @@ func TestOrderRepo_ListReadyOlderThan(t *testing.T) {
 	_, err := pool.Exec(ctx, `UPDATE "order" SET ready_at = now() - interval '2 hours' WHERE id=$1`, old)
 	require.NoError(t, err)
 	// A ready order with a fresh ready_at → excluded by threshold.
-	createOrderWithStatus(t, pool, uid, vid, day, order.StatusReady)
+	fresh := createOrderWithStatus(t, pool, uid, vid, day, order.StatusReady)
+	_, err = pool.Exec(ctx, `UPDATE "order" SET ready_at = now() WHERE id=$1`, fresh)
+	require.NoError(t, err)
 	// A placed order → excluded by status.
 	createOrderWithStatus(t, pool, uid, vid, day, order.StatusPlaced)
 

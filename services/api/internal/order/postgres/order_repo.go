@@ -21,7 +21,7 @@ func NewOrderRepo(p *pgxpool.Pool) *OrderRepo { return &OrderRepo{pool: p} }
 // Keep the column order in lock-step with the Scan calls below.
 const orderSelectCols = `id, user_id, vendor_id, plant, supply_date, status, total_price_minor,
        notes, totp_secret, placed_at, cutoff_at, ready_at, picked_up_at, no_show_at,
-       cancelled_at, created_at, updated_at`
+       cancelled_at, created_at, updated_at, order_number`
 
 // scanOrder reads one row using the orderSelectCols projection.
 func scanOrder(row pgx.Row, o *order.Order) error {
@@ -29,7 +29,7 @@ func scanOrder(row pgx.Row, o *order.Order) error {
 	if err := row.Scan(
 		&o.ID, &o.UserID, &o.VendorID, &o.Plant, &o.SupplyDate, &status, &o.TotalPriceMinor,
 		&o.Notes, &o.TOTPSecret, &o.PlacedAt, &o.CutoffAt, &o.ReadyAt, &o.PickedUpAt, &o.NoShowAt,
-		&o.CancelledAt, &o.CreatedAt, &o.UpdatedAt,
+		&o.CancelledAt, &o.CreatedAt, &o.UpdatedAt, &o.OrderNumber,
 	); err != nil {
 		return err
 	}
@@ -51,10 +51,10 @@ func (r *OrderRepo) CreateTx(ctx context.Context, tx pgx.Tx, o *order.Order) err
 INSERT INTO "order"
   (user_id, vendor_id, plant, supply_date, status, total_price_minor, notes, placed_at, cutoff_at)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-RETURNING id, created_at, updated_at`,
+RETURNING id, created_at, updated_at, order_number`,
 		o.UserID, o.VendorID, o.Plant, o.SupplyDate, string(o.Status),
 		o.TotalPriceMinor, o.Notes, o.PlacedAt, o.CutoffAt,
-	).Scan(&o.ID, &o.CreatedAt, &o.UpdatedAt)
+	).Scan(&o.ID, &o.CreatedAt, &o.UpdatedAt, &o.OrderNumber)
 	if err != nil {
 		return fmt.Errorf("insert order: %w", err)
 	}

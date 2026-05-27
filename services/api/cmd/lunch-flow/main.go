@@ -661,12 +661,11 @@ func insertScenario(ctx context.Context, pool *pgxpool.Pool, cfg config, plants 
 				"load-test lunch-flow item",
 				defaultPriceMinor,
 				[]string{"load-test"},
-				[]string{},
 				"active",
 			})
 		}
 	}
-	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"menu_item"}, []string{"id", "vendor_id", "name", "description", "price_minor", "tags", "badges", "status"}, pgx.CopyFromRows(menuRows)); err != nil {
+	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"menu_item"}, []string{"id", "vendor_id", "name", "description", "price_minor", "tags", "status"}, pgx.CopyFromRows(menuRows)); err != nil {
 		return fmt.Errorf("copy menu items: %w", err)
 	}
 

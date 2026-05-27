@@ -42,6 +42,7 @@ type orderItemDTO struct {
 
 type orderDTO struct {
 	ID              string         `json:"id"`
+	OrderNumber     int64          `json:"order_number"`
 	VendorID        string         `json:"vendor_id"`
 	Plant           string         `json:"plant"`
 	SupplyDate      string         `json:"supply_date"`
@@ -57,6 +58,7 @@ type orderDTO struct {
 func toDTO(o *order.Order) orderDTO {
 	d := orderDTO{
 		ID:              o.ID,
+		OrderNumber:     o.OrderNumber,
 		VendorID:        o.VendorID,
 		Plant:           o.Plant,
 		SupplyDate:      o.SupplyDate.Format("2006-01-02"),
@@ -147,6 +149,7 @@ type listMerchantOrdersInput struct {
 
 type merchantOrderDTO struct {
 	ID              string         `json:"id"`
+	OrderNumber     int64          `json:"order_number"`
 	Plant           string         `json:"plant"`
 	Status          string         `json:"status"`
 	TotalPriceMinor int64          `json:"total_price_minor"`
@@ -167,6 +170,7 @@ type listMerchantOrdersOutput struct {
 func toMerchantDTO(o *order.Order) merchantOrderDTO {
 	d := merchantOrderDTO{
 		ID:              o.ID,
+		OrderNumber:     o.OrderNumber,
 		Plant:           o.Plant,
 		Status:          string(o.Status),
 		TotalPriceMinor: o.TotalPriceMinor,

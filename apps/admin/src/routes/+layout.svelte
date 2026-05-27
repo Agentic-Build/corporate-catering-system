@@ -14,6 +14,7 @@
     { href: "/payroll", label: "月結", icon: "wallet" },
     { href: "/vendor-settlements", label: "商家結算", icon: "card" },
     { href: "/complaints", label: "升級客訴", icon: "bell" },
+    { href: "/disputes", label: "申訴", icon: "alert" },
     { href: "/anomalies", label: "告警", icon: "alert" },
     { href: "/audit", label: "稽核紀錄", icon: "download" },
   ];
