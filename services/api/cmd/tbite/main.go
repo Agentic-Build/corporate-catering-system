@@ -177,6 +177,7 @@ func main() {
 			os.Exit(1)
 		}
 		defer pool.Close()
+		_ = db.RegisterPoolMetrics(pool, "rw")
 
 		// Read-only pool for read-model paths (ADR-0007); falls back to primary
 		// when no replica is configured.

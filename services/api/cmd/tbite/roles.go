@@ -47,12 +47,19 @@ import (
 
 // newRWPool constructs the RW pgxpool with the chart-supplied budget.
 // All split roles share this constructor so a single env knob controls
-// how many backend connections one replica may open.
+// how many backend connections one replica may open. Pool metrics are
+// registered here so every role emits tbite_db_pool_* without each
+// role needing to remember.
 func newRWPool(ctx context.Context, cfg config.Config) (*db.Pool, error) {
-	return db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{
+	p, err := db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{
 		MaxConns: cfg.DBMaxConns,
 		MinConns: cfg.DBMinConns,
 	})
+	if err != nil {
+		return nil, err
+	}
+	_ = db.RegisterPoolMetrics(p, "rw")
+	return p, nil
 }
 
 // newROPool returns a read-only pool aimed at the replica DSN. When
@@ -60,10 +67,15 @@ func newRWPool(ctx context.Context, cfg config.Config) (*db.Pool, error) {
 // DSN so small deployments keep one database endpoint while prod caps
 // the read budget separately.
 func newROPool(ctx context.Context, cfg config.Config) (*db.Pool, error) {
-	return db.NewPoolWithConfig(ctx, cfg.EffectiveDatabaseRO(), db.PoolConfig{
+	p, err := db.NewPoolWithConfig(ctx, cfg.EffectiveDatabaseRO(), db.PoolConfig{
 		MaxConns: cfg.DBMaxConnsRO,
 		MinConns: cfg.DBMinConnsRO,
 	})
+	if err != nil {
+		return nil, err
+	}
+	_ = db.RegisterPoolMetrics(p, "ro")
+	return p, nil
 }
 
 // newNATS connects to NATS and returns the messaging client. Workers
