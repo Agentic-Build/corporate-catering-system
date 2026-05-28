@@ -187,7 +187,9 @@ func main() {
 // noopCleanup is the no-op cleanup returned by setup helpers that haven't
 // acquired any resource yet (early-error paths and the NATS-off branch).
 // Callers can `defer cleanup()` unconditionally.
-func noopCleanup() {}
+func noopCleanup() {
+	// intentionally empty: returned when no resource needs releasing
+}
 
 type apiInfra struct {
 	pool   *pgxpool.Pool
