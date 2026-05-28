@@ -29,7 +29,6 @@
       <div
         class="flex flex-col overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm"
       >
-        <!-- 主圖 -->
         {#if item.images?.[0]}
           <img src={item.images[0]} alt={item.name} class="aspect-video w-full object-cover" />
         {:else}
@@ -38,7 +37,6 @@
           </div>
         {/if}
 
-        <!-- 名稱 + 價格 -->
         <div class="flex flex-1 flex-col gap-1 px-4 py-3">
           <div class="font-semibold text-tb-slate-900">{item.name}</div>
           <div class="font-jetbrains-mono tabular-nums text-tb-slate-700">
@@ -46,7 +44,6 @@
           </div>
         </div>
 
-        <!-- 操作列 -->
         <div class="flex items-center justify-end gap-2 border-t border-tb-slate-100 px-4 py-2">
           <form method="POST" action="?/copy" use:enhance>
             <input type="hidden" name="id" value={item.id} />
@@ -76,7 +73,6 @@
   </div>
 {/if}
 
-<!-- 隱藏的實際刪除表單，由 Modal 確認後 requestSubmit() -->
 <form method="POST" action="?/delete" use:enhance bind:this={deleteFormEl} class="hidden">
   <input type="hidden" name="id" value={confirmTarget?.id ?? ""} />
 </form>

@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 福委會 governance dashboard.
   import { Card, StatCard, StateTag, Button, Icon } from "@tbite/ui";
   import ApprovalCard from "$lib/components/ApprovalCard.svelte";
   import AlertList from "$lib/components/AlertList.svelte";
@@ -7,7 +6,6 @@
   let { data } = $props();
 
   const ntd = (minor: number) => "$" + Math.round(minor).toLocaleString();
-  /** Compact currency for the stat tile (e.g. $1.28M). */
   function compact(minor: number): string {
     const n = Math.round(minor);
     if (n >= 1_000_000) return "$" + (n / 1_000_000).toFixed(2) + "M";
@@ -117,7 +115,6 @@
       {batch ? "本批次尚無月結明細" : "尚未建立月結批次"}
     </p>
   {:else}
-    <!-- Mobile: card list. -->
     <div class="divide-y divide-tb-slate-100 md:hidden">
       {#each entries.slice(0, 8) as e (e.id)}
         <div class="py-3 first:pt-0 last:pb-0">
@@ -144,7 +141,6 @@
       {/each}
     </div>
 
-    <!-- Desktop: table (unchanged). -->
     <div class="hidden overflow-hidden rounded-xl border border-tb-slate-200 md:block">
       <table class="w-full text-sm">
         <thead

@@ -13,7 +13,7 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/clock"
 )
 
-// ----- Fakes for the four HomeService ports (no DB needed) -----
+// === Fakes for the four HomeService ports (no DB needed) ===
 
 type fakeRecentOrders struct {
 	recent       []menu.RecentOrderRow
@@ -92,7 +92,7 @@ func newFakeHomeService() (*menu.HomeService, *fakeRecentOrders, *fakePopularity
 	return svc, ro, pop, aff, fav
 }
 
-// ----- FavoriteChipsList -----
+// === FavoriteChipsList ===
 
 func TestHomeFavoriteChipsList_DefaultLimitAndDelegates(t *testing.T) {
 	svc, _, _, _, fav := newFakeHomeService()
@@ -119,7 +119,7 @@ func TestHomeFavoriteChipsList_ExplicitLimitPassthrough(t *testing.T) {
 	assert.Equal(t, 3, fav.lastArgs.limit)
 }
 
-// ----- ReorderChips -----
+// === ReorderChips ===
 
 func TestHomeReorderChips_EmptyReturnsNoMore(t *testing.T) {
 	svc, _, _, _, _ := newFakeHomeService()
@@ -210,7 +210,7 @@ func TestHomeReorderChips_VendorNamesError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// ----- RecommendChips -----
+// === RecommendChips ===
 
 func TestHomeRecommendChips_EmptyPopularityNoMore(t *testing.T) {
 	svc, _, pop, _, _ := newFakeHomeService()

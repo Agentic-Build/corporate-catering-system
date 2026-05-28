@@ -118,8 +118,6 @@ func TestRequireAdmin_RejectsAnonymous(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
-// ----- Fakes (vhttp_test can't import the vendor_test fakes) -----
-
 type fakeVendorRepo struct {
 	mu      sync.Mutex
 	byID    map[string]*vendor.Vendor
@@ -385,8 +383,6 @@ func (p *fakeProvisioner) ReinstateVendorOperator(_ context.Context, _ string, _
 	return p.err
 }
 
-// ----- Harness -----
-
 func adminUser() *identity.User {
 	return &identity.User{ID: "a-1", Role: identity.RoleWelfareAdmin}
 }
@@ -453,9 +449,7 @@ func seedVendor(vr *fakeVendorRepo, id string, status vendor.Status) *vendor.Ven
 	return v
 }
 
-// =========================================================================
-// GET /api/admin/vendors
-// =========================================================================
+// === GET /api/admin/vendors ===
 
 func TestListVendors_Unauthenticated(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, nil)
@@ -529,9 +523,7 @@ func TestListVendors_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =========================================================================
-// POST /api/admin/vendors
-// =========================================================================
+// === POST /api/admin/vendors ===
 
 func TestCreateVendor_Unauthenticated(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, nil)
@@ -584,9 +576,7 @@ func TestCreateVendor_OK_201(t *testing.T) {
 	assert.Equal(t, "pending", out.Vendor.Status)
 }
 
-// =========================================================================
-// POST /api/admin/vendors/{id}/approve
-// =========================================================================
+// === POST /api/admin/vendors/{id}/approve ===
 
 func TestApproveVendor_Unauthenticated(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, nil)
@@ -642,9 +632,7 @@ func TestApproveVendor_OK_204(t *testing.T) {
 	require.Len(t, pr.byVendor[vendorID], 2)
 }
 
-// =========================================================================
-// POST /api/admin/vendors/{id}/suspend
-// =========================================================================
+// === POST /api/admin/vendors/{id}/suspend ===
 
 func TestSuspendVendor_WrongRole(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, vendorUser())
@@ -677,9 +665,7 @@ func TestSuspendVendor_OK_204(t *testing.T) {
 	assert.Equal(t, vendor.StatusSuspended, vr.byID[vendorID].Status)
 }
 
-// =========================================================================
-// POST /api/admin/vendors/{id}/reinstate
-// =========================================================================
+// === POST /api/admin/vendors/{id}/reinstate ===
 
 func TestReinstateVendor_WrongRole(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, vendorUser())
@@ -705,9 +691,7 @@ func TestReinstateVendor_OK_204(t *testing.T) {
 	assert.Equal(t, vendor.StatusApproved, vr.byID[vendorID].Status)
 }
 
-// =========================================================================
-// GET /api/admin/vendors/{id}/operators
-// =========================================================================
+// === GET /api/admin/vendors/{id}/operators ===
 
 func TestListOperators_WrongRole(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, vendorUser())
@@ -756,9 +740,7 @@ func TestListOperators_OK(t *testing.T) {
 	assert.NotEmpty(t, out.Items[0].LastSyncedAt)
 }
 
-// =========================================================================
-// POST /api/admin/vendors/{id}/operators
-// =========================================================================
+// === POST /api/admin/vendors/{id}/operators ===
 
 func TestCreateOperator_WrongRole(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, vendorUser())
@@ -822,9 +804,7 @@ func TestCreateOperator_OK_201(t *testing.T) {
 	assert.NotEmpty(t, out.Operator.SetupURL)
 }
 
-// =========================================================================
-// POST /api/admin/vendors/{id}/operators/{operator_id}/suspend
-// =========================================================================
+// === POST /api/admin/vendors/{id}/operators/{operator_id}/suspend ===
 
 func TestSuspendOperator_WrongRole(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, vendorUser())
@@ -870,9 +850,7 @@ func TestSuspendOperator_OK_204(t *testing.T) {
 	assert.Equal(t, vendor.OperatorStatusSuspended, or.byID[operatorID].Status)
 }
 
-// =========================================================================
-// POST /api/admin/vendors/{id}/operators/{operator_id}/reinstate
-// =========================================================================
+// === POST /api/admin/vendors/{id}/operators/{operator_id}/reinstate ===
 
 func TestReinstateOperator_WrongRole(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, vendorUser())
@@ -901,9 +879,7 @@ func TestReinstateOperator_OK_204(t *testing.T) {
 	assert.Equal(t, vendor.OperatorStatusActive, or.byID[operatorID].Status)
 }
 
-// =========================================================================
-// PUT /api/admin/vendors/{id}/plants/{plant}/window
-// =========================================================================
+// === PUT /api/admin/vendors/{id}/plants/{plant}/window ===
 
 func TestSetPlantWindow_Unauthenticated(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, nil)
@@ -939,9 +915,7 @@ func TestSetPlantWindow_OK_204(t *testing.T) {
 	assert.Equal(t, "11:30-13:00", pr.windows[vendorID+"|F12B-3F"])
 }
 
-// =========================================================================
-// GET /api/merchant/settings
-// =========================================================================
+// === GET /api/merchant/settings ===
 
 func TestMerchantGetSettings_Unauthenticated(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, nil)
@@ -989,9 +963,7 @@ func TestMerchantGetSettings_OK(t *testing.T) {
 	assert.Equal(t, 7, out.Settings.PreorderWindowDays)
 }
 
-// =========================================================================
-// PUT /api/merchant/settings
-// =========================================================================
+// === PUT /api/merchant/settings ===
 
 func TestMerchantUpdateSettings_Unauthenticated(t *testing.T) {
 	srv, _, _, _, _ := buildHandler(t, nil)

@@ -1,5 +1,4 @@
 <script lang="ts" module>
-  // T-Bite stroke icon set. 24×24 viewBox, stroke-only.
   export type IconName =
     | "cart"
     | "qr"

@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 我的客訴 (F1 員工回饋): list, escalate after 24h, resolve.
   import { PageHeader, Card, StateTag, EmptyState, Button } from "@tbite/ui";
   import type { components } from "@tbite/api-client";
 

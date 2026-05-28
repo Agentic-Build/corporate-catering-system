@@ -197,7 +197,7 @@ func TestMerchantList_RejectsNonVendor(t *testing.T) {
 	assert.Equal(t, 403, statusOf(t, err))
 }
 
-// ----- HTTP harness (exercises huma validation + the full request path) -----
+// === HTTP harness (exercises huma validation + the full request path) ===
 
 // huma marks every non-pointer body field without ,omitempty as required, so
 // request bodies must carry all of them or validation 422s before the handler.
@@ -258,9 +258,7 @@ func seededRepos() (*fakePlantRepo, *fakeMappingRepo) {
 	}}, &fakeMappingRepo{byVendor: map[string][]string{}}
 }
 
-// =========================================================================
-// GET /api/plants  (listActive — any authenticated user)
-// =========================================================================
+// === GET /api/plants  (listActive — any authenticated user) ===
 
 func TestListPlants_Unauthenticated(t *testing.T) {
 	pr, mr := seededRepos()
@@ -300,9 +298,7 @@ func TestListPlants_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =========================================================================
-// GET /api/admin/plants  (listAll — welfare_admin only)
-// =========================================================================
+// === GET /api/admin/plants  (listAll — welfare_admin only) ===
 
 func TestListAllPlants_Unauthenticated(t *testing.T) {
 	pr, mr := seededRepos()
@@ -345,9 +341,7 @@ func TestListAllPlants_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =========================================================================
-// POST /api/admin/plants  (create — welfare_admin only)
-// =========================================================================
+// === POST /api/admin/plants  (create — welfare_admin only) ===
 
 func TestCreatePlant_Unauthenticated(t *testing.T) {
 	pr, mr := seededRepos()
@@ -428,9 +422,7 @@ func TestCreatePlant_OK_201(t *testing.T) {
 	assert.Equal(t, 3, out.Plant.SortOrder)
 }
 
-// =========================================================================
-// PUT /api/admin/plants/{code}  (update — welfare_admin only)
-// =========================================================================
+// === PUT /api/admin/plants/{code}  (update — welfare_admin only) ===
 
 func TestUpdatePlant_Unauthenticated(t *testing.T) {
 	pr, mr := seededRepos()
@@ -499,9 +491,7 @@ func TestUpdatePlant_OK(t *testing.T) {
 	assert.Equal(t, 9, out.Plant.SortOrder)
 }
 
-// =========================================================================
-// GET /api/merchant/plants  (merchantList — vendor_operator only)
-// =========================================================================
+// === GET /api/merchant/plants  (merchantList — vendor_operator only) ===
 
 func TestMerchantListHTTP_Unauthenticated(t *testing.T) {
 	pr, mr := seededRepos()
@@ -541,9 +531,7 @@ func TestMerchantListHTTP_OK_Enriched(t *testing.T) {
 	assert.Equal(t, "台北", out.Items[0].Address)
 }
 
-// =========================================================================
-// PUT /api/merchant/plants  (merchantSet — vendor_operator only)
-// =========================================================================
+// === PUT /api/merchant/plants  (merchantSet — vendor_operator only) ===
 
 func TestMerchantSetHTTP_Unauthenticated(t *testing.T) {
 	pr, mr := seededRepos()

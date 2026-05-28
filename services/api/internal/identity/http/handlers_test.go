@@ -141,7 +141,7 @@ func TestAuthMiddleware_IgnoresInvalidToken(t *testing.T) {
 	assert.Equal(t, 401, resp.StatusCode)
 }
 
-// ----- completeLogin redirect target (B4: mobile OIDC deep link) -----
+// === completeLogin redirect target (B4: mobile OIDC deep link) ===
 
 // fakeIdentities satisfies identity.UserIdentityRepository; the callback flow
 // always finds no existing identity and links a fresh one.

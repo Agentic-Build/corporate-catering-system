@@ -36,13 +36,10 @@ const (
 
 func sp(s string) *string { return &s }
 
-// ----- Fakes -----
-//
-// These cover the four payroll repository interfaces plus CurrentLinesRepository,
-// the order repos, audit + outbox. Service.Pool is a fakeBeginner that hands the
-// write closure a no-op pgx.Tx, so the pgx.BeginFunc(ctx, s.Pool, ...) write
-// paths (BuildDraft/Lock/ResolveDispute/FlagException/ResolveException) run
-// end-to-end without a real DB (the repo fakes ignore the tx).
+// Fakes cover the four payroll repos plus CurrentLinesRepository, the order
+// repos, audit + outbox. Pool=fakeBeginner so the pgx.BeginFunc write paths
+// (BuildDraft/Lock/ResolveDispute/FlagException/ResolveException) run without
+// a real DB.
 
 type fakeBatchRepo struct {
 	byID    map[string]*payroll.Batch
@@ -232,8 +229,6 @@ type fakeTx struct{ pgx.Tx }
 func (fakeTx) Commit(context.Context) error   { return nil }
 func (fakeTx) Rollback(context.Context) error { return nil }
 
-// ----- Harness -----
-
 type fakes struct {
 	batches  *fakeBatchRepo
 	entries  *fakeEntryRepo
@@ -300,9 +295,7 @@ func do(t *testing.T, method, url, body string) *http.Response {
 	return resp
 }
 
-// ===================================================================
-// createBatch  POST /api/admin/payroll/batches
-// ===================================================================
+// === createBatch  POST /api/admin/payroll/batches ===
 
 func TestCreateBatch_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -386,9 +379,7 @@ func TestCreateBatch_OK_201(t *testing.T) {
 	assert.Equal(t, "draft", out.Batch.Status)
 }
 
-// ===================================================================
-// listBatches  GET /api/admin/payroll/batches
-// ===================================================================
+// === listBatches  GET /api/admin/payroll/batches ===
 
 func TestListBatches_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -462,9 +453,7 @@ func TestListBatches_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================================================================
-// getBatch  GET /api/admin/payroll/batches/{id}
-// ===================================================================
+// === getBatch  GET /api/admin/payroll/batches/{id} ===
 
 func TestGetBatch_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -533,9 +522,7 @@ func TestGetBatch_EntriesError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================================================================
-// lockBatch  POST /api/admin/payroll/batches/{id}/lock
-// ===================================================================
+// === lockBatch  POST /api/admin/payroll/batches/{id}/lock ===
 
 func TestLockBatch_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -586,9 +573,7 @@ func TestLockBatch_OK_204(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-// ===================================================================
-// listDisputes  GET /api/admin/payroll/disputes
-// ===================================================================
+// === listDisputes  GET /api/admin/payroll/disputes ===
 
 func TestListDisputes_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -651,9 +636,7 @@ func TestListDisputes_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================================================================
-// resolveDispute  POST /api/admin/payroll/disputes/{id}/resolve
-// ===================================================================
+// === resolveDispute  POST /api/admin/payroll/disputes/{id}/resolve ===
 
 func TestResolveDispute_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -741,9 +724,7 @@ func TestResolveDispute_RefundExceedsOrder_400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-// ===================================================================
-// openDispute  POST /api/employee/disputes
-// ===================================================================
+// === openDispute  POST /api/employee/disputes ===
 
 func TestOpenDispute_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -859,9 +840,7 @@ func TestOpenDispute_CreateError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================================================================
-// listMyDisputes  GET /api/employee/disputes
-// ===================================================================
+// === listMyDisputes  GET /api/employee/disputes ===
 
 func TestListMyDisputes_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -906,9 +885,7 @@ func TestListMyDisputes_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================================================================
-// listMyEntries  GET /api/employee/payroll
-// ===================================================================
+// === listMyEntries  GET /api/employee/payroll ===
 
 func TestListMyEntries_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -970,9 +947,7 @@ func TestListMyEntries_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================================================================
-// getEmployeeCurrentPayroll  GET /api/employee/payroll/current
-// ===================================================================
+// === getEmployeeCurrentPayroll  GET /api/employee/payroll/current ===
 
 func TestGetCurrentPayroll_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -1044,9 +1019,7 @@ func TestGetCurrentPayroll_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================================================================
-// listExceptions  GET /api/admin/payroll/batches/{id}/exceptions
-// ===================================================================
+// === listExceptions  GET /api/admin/payroll/batches/{id}/exceptions ===
 
 func TestListExceptions_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -1135,9 +1108,7 @@ func TestListExceptions_ListError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================================================================
-// flagException  POST /api/admin/payroll/batches/{id}/exceptions
-// ===================================================================
+// === flagException  POST /api/admin/payroll/batches/{id}/exceptions ===
 
 func TestFlagException_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -1217,9 +1188,7 @@ func TestFlagException_OK_201(t *testing.T) {
 	assert.Equal(t, "bank error", out.Exception.Detail)
 }
 
-// ===================================================================
-// resolveException  POST /api/admin/payroll/exceptions/{id}/resolve
-// ===================================================================
+// === resolveException  POST /api/admin/payroll/exceptions/{id}/resolve ===
 
 func TestResolveException_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)

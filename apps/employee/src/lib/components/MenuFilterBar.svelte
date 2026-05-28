@@ -1,5 +1,4 @@
 <script lang="ts">
-  // F3 菜單搜尋與篩選: filter state mirrored to URL params for server filtering.
   import { Icon, Toggle } from "@tbite/ui";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -92,7 +91,6 @@
 
 <section class="mb-5 rounded-tb-2xl border border-tb-slate-200 bg-white p-4 shadow-tb-sm">
   <div class="flex flex-wrap items-end gap-3">
-    <!-- Keyword -->
     <label class="flex min-w-[12rem] flex-1 flex-col gap-1.5">
       <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">關鍵字</span>
       <div class="relative">
@@ -110,7 +108,6 @@
       </div>
     </label>
 
-    <!-- Price range -->
     <div class="flex flex-col gap-1.5">
       <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
         >價格區間</span
@@ -138,7 +135,6 @@
       </div>
     </div>
 
-    <!-- Sort -->
     <label class="flex flex-col gap-1.5">
       <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">排序</span>
       <select
@@ -152,7 +148,6 @@
       </select>
     </label>
 
-    <!-- In-stock toggle -->
     <div class="flex flex-col gap-1.5">
       <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
         >供應狀態</span
@@ -162,7 +157,6 @@
       </div>
     </div>
 
-    <!-- Apply / clear -->
     <div class="flex items-center gap-2">
       <button
         type="button"
@@ -183,7 +177,6 @@
     </div>
   </div>
 
-  <!-- Health-tag chips -->
   {#if tags.length > 0}
     <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-tb-slate-100 pt-3">
       <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"

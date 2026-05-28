@@ -1,7 +1,5 @@
-// Status label + tone catalogue. Audited from ~10 svelte files across the three
-// apps. When two apps disagreed on a label, the admin (treasury-side) wording
-// wins. The `<StatusTag>` component below renders these via `@tbite/ui`'s
-// `StateTag`.
+// Status label + tone catalogue. When apps disagree on a label, admin
+// (treasury-side) wording wins.
 
 export type Tone = "success" | "warning" | "danger" | "info" | "pending" | "neutral";
 
@@ -23,8 +21,7 @@ const order: Table = {
   refunded: { label: "已退款", tone: "warning" },
 };
 
-// Conflict note: employee/disputes labels "open" as 處理中; admin labels it 待處理.
-// We pick admin wording — disputes flow from employee → admin.
+// Admin wording wins: disputes flow employee → admin.
 const dispute: Table = {
   open: { label: "待處理", tone: "warning" },
   resolved_refund: { label: "已退款", tone: "success" },
@@ -32,8 +29,7 @@ const dispute: Table = {
   cancelled: { label: "已取消", tone: "neutral" },
 };
 
-// Conflict note: employee/complaints labels "open" as 處理中; admin doesn't list it.
-// We keep employee wording since admin treats only the "escalated" subset.
+// Employee wording wins: admin only sees the "escalated" subset.
 const complaint: Table = {
   open: { label: "處理中", tone: "warning" },
   vendor_responded: { label: "商家已回覆", tone: "info" },

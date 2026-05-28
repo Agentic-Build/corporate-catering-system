@@ -154,7 +154,7 @@ func backdateComplaint(t *testing.T, pool *pgxpool.Pool, complaintID string, age
 	require.NoError(t, err)
 }
 
-// ---------- RateOrder ----------
+// === RateOrder ===
 
 func TestService_RateOrder_Happy(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -235,7 +235,7 @@ func TestService_RateOrder_InvalidScore(t *testing.T) {
 	assert.ErrorIs(t, err, feedback.ErrValidation)
 }
 
-// ---------- FileComplaint ----------
+// === FileComplaint ===
 
 func TestService_FileComplaint_Happy(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -309,7 +309,7 @@ func TestService_FileComplaint_DuplicateUnresolvedRejected(t *testing.T) {
 	assert.ErrorIs(t, err, feedback.ErrComplaintExists)
 }
 
-// ---------- Workflow transitions ----------
+// === Workflow transitions ===
 
 func fileComplaint(t *testing.T, ctx context.Context, svc *feedback.Service, user, orderID string) *feedback.Complaint {
 	t.Helper()
@@ -642,7 +642,7 @@ func TestService_AdminResolveComplaint_CompensateTrue_NilReverser_Errors(t *test
 	assert.Equal(t, feedback.StatusEscalated, got.Status, "complaint state must not change when reverser is missing")
 }
 
-// ---------- Queries ----------
+// === Queries ===
 
 func TestService_ListMyAndVendorComplaints(t *testing.T) {
 	pool, svc, cleanup := setup(t)

@@ -1,5 +1,4 @@
 <script lang="ts" generics="T extends { key: string }">
-  // Horizontal featured scroller; caller supplies the `card` snippet.
   import type { Snippet } from "svelte";
   import { Icon } from "@tbite/ui";
 

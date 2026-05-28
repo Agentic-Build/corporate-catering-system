@@ -32,7 +32,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const knownPlants: PlantDTO[] =
     plantsRes.status === "fulfilled" ? (plantsRes.value.data?.items ?? []) : [];
 
-  // Latest batch (most recent period_start) + its entries.
   const latestBatch: BatchDTO | null =
     [...batches].sort((a, b) => String(b.period_start).localeCompare(String(a.period_start)))[0] ??
     null;

@@ -17,7 +17,7 @@ import (
 	vendor "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors"
 )
 
-// ----- Fakes (fake-injection style; no DB needed) -----
+// === Fakes (fake-injection style; no DB needed) ===
 
 // fakeBeginner stands in for *pgxpool.Pool. It hands the write closure a no-op
 // pgx.Tx; the repo fakes ignore the tx. Set beginErr to exercise tx-open failure.
@@ -202,9 +202,7 @@ func (c fixedClock) Now() time.Time { return c.t }
 
 var errBoom = errors.New("boom")
 
-// =========================================================================
-// UploadDocument
-// =========================================================================
+// === UploadDocument ===
 
 func TestUploadDocument_Success(t *testing.T) {
 	docs := &fakeDocRepo{}
@@ -350,9 +348,7 @@ func TestUploadDocument_Resupply_InvalidTarget(t *testing.T) {
 	assert.ErrorIs(t, err, compliance.ErrInvalidResupply)
 }
 
-// =========================================================================
-// ReviewDocument
-// =========================================================================
+// === ReviewDocument ===
 
 func TestReviewDocument_Approved(t *testing.T) {
 	docs := &fakeDocRepo{}
@@ -410,9 +406,7 @@ func TestReviewDocument_BeginError(t *testing.T) {
 	assert.ErrorIs(t, err, errBoom)
 }
 
-// =========================================================================
-// ListVendorDocuments
-// =========================================================================
+// === ListVendorDocuments ===
 
 func TestListVendorDocuments(t *testing.T) {
 	want := []*compliance.Document{{ID: "d1"}, {ID: "d2"}}
@@ -428,9 +422,7 @@ func TestListVendorDocuments_Error(t *testing.T) {
 	assert.ErrorIs(t, err, errBoom)
 }
 
-// =========================================================================
-// OpenAnomaly
-// =========================================================================
+// === OpenAnomaly ===
 
 func TestOpenAnomaly_Success(t *testing.T) {
 	repo := &fakeAnomalyRepo{}
@@ -453,9 +445,7 @@ func TestOpenAnomaly_Error(t *testing.T) {
 	assert.ErrorIs(t, err, errBoom)
 }
 
-// =========================================================================
-// CloseAnomaly
-// =========================================================================
+// === CloseAnomaly ===
 
 func TestCloseAnomaly_Success(t *testing.T) {
 	audit := &recordingAudit{}
@@ -476,9 +466,7 @@ func TestCloseAnomaly_AuditError(t *testing.T) {
 	assert.ErrorIs(t, err, errBoom)
 }
 
-// =========================================================================
-// ListAnomalies / GetAnomaly
-// =========================================================================
+// === ListAnomalies / GetAnomaly ===
 
 func TestListAnomalies(t *testing.T) {
 	want := []*compliance.Anomaly{{ID: "a1"}}
@@ -494,9 +482,7 @@ func TestListAnomalies_Error(t *testing.T) {
 	assert.ErrorIs(t, err, errBoom)
 }
 
-// =========================================================================
-// QueryAudit
-// =========================================================================
+// === QueryAudit ===
 
 func TestQueryAudit_NotWired(t *testing.T) {
 	svc := &compliance.Service{}
@@ -519,9 +505,7 @@ func TestQueryAudit_Error(t *testing.T) {
 	assert.ErrorIs(t, err, errBoom)
 }
 
-// =========================================================================
-// MerchantCompliance
-// =========================================================================
+// === MerchantCompliance ===
 
 func TestMerchantCompliance_Success(t *testing.T) {
 	now := time.Date(2026, 5, 17, 12, 0, 0, 0, time.UTC)

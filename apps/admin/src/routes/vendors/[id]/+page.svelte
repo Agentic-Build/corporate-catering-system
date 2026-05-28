@@ -30,11 +30,9 @@
     vendor_suspended: "商家停權",
   } as Record<string, string>;
 
-  // Confirm suspend modal
   let confirmSuspend = $state(false);
   let suspendFormEl = $state<HTMLFormElement | null>(null);
 
-  // Loading states
   let submittingApprove = $state(false);
   let submittingReinstate = $state(false);
   let submittingUpdate = $state(false);
@@ -338,7 +336,6 @@
   {/if}
 </div>
 
-<!-- Confirm suspend modal -->
 <Modal open={confirmSuspend} onClose={() => (confirmSuspend = false)} title="確認停權商家">
   <p class="text-sm text-tb-slate-700">
     停權後商家將無法接單，操作員無法登入系統。此操作可於日後復權，但期間所有在途訂單將受影響。

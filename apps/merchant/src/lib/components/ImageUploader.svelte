@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 餐點圖片上傳: POSTs picks to /api/uploads proxy; bindable URL list.
   import { Icon } from "@tbite/ui";
 
   interface Props {

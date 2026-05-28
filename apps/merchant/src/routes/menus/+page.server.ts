@@ -20,7 +20,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  // Duplicate a menu item into a fresh draft and open it for editing.
   copy: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const id = String((await request.formData()).get("id") ?? "");
@@ -34,7 +33,7 @@ export const actions: Actions = {
     throw redirect(303, newId ? `/menus/${newId}` : "/menus");
   },
 
-  // Soft-delete (archive) a menu item; it disappears from the default list.
+  // Soft-delete (archive); hidden from the default list.
   delete: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const id = String((await request.formData()).get("id") ?? "");

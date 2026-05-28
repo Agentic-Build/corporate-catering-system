@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 我的訂單
   import { PageHeader, Tabs, StateTag, EmptyState, Icon } from "@tbite/ui";
 
   type Order = {

@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 全部餐點檢視切換: 依餐點 (flat grid) vs 依店家 (grouped).
   interface Props {
     view: "meal" | "vendor";
     onChange: (next: "meal" | "vendor") => void;

@@ -3,7 +3,6 @@
   import { PageHeader, Card, StateTag, Button, Icon, EmptyState, Modal } from "@tbite/ui";
   let { data, form } = $props();
 
-  /** Minor units → NT$ display, e.g. 12000 → "NT$120". */
   const ntd = (minor: number) => "NT$" + Math.round(minor).toLocaleString();
 
   const statusTone = {
@@ -26,7 +25,6 @@
     closed.reduce((sum: number, s: any) => sum + Number(s.portion_count ?? 0), 0),
   );
 
-  // Confirm void modal
   let confirmVoidTarget = $state<{ id: string; vendorId: string } | null>(null);
   let voidFormEl = $state<HTMLFormElement | null>(null);
   let submittingVoid = $state(false);
@@ -42,7 +40,6 @@
   <p class="rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">{form.error}</p>
 {/if}
 
-<!-- Period picker -->
 <Card title="結算期間">
   <form method="GET" class="flex flex-wrap items-end gap-3">
     <label class="flex flex-col gap-1">
@@ -60,7 +57,6 @@
   </form>
 </Card>
 
-<!-- Close period -->
 <Card
   tone="info"
   title="關帳 · {data.period}"
@@ -76,7 +72,6 @@
   {/snippet}
 </Card>
 
-<!-- Overview table -->
 <Card
   title="結算總覽 · {data.period}"
   description={closed.length > 0
@@ -126,7 +121,6 @@
               </td>
               <td class="px-4 py-3 text-right">
                 {#if s.status === "closed"}
-                  <!-- Hidden form — submitted programmatically after confirmation -->
                   <form
                     method="POST"
                     action="?/voidSettlement"
@@ -161,7 +155,6 @@
   {/if}
 </Card>
 
-<!-- Confirm void modal -->
 <Modal
   open={confirmVoidTarget !== null}
   onClose={() => (confirmVoidTarget = null)}

@@ -13,7 +13,7 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
 )
 
-// ----- Mocks -----
+// === Mocks ===
 
 type fakeCategoryRepo struct {
 	mu     sync.Mutex
@@ -217,7 +217,7 @@ func (r *fakeImageRepo) ReplaceForItem(_ context.Context, itemID string, uris []
 	return nil
 }
 
-// ----- Helpers -----
+// === Helpers ===
 
 func newSvc() (*menu.Service, *fakeCategoryRepo, *fakeItemRepo, *fakeImageRepo) {
 	cr := newFakeCategoryRepo()
@@ -226,7 +226,7 @@ func newSvc() (*menu.Service, *fakeCategoryRepo, *fakeItemRepo, *fakeImageRepo) 
 	return &menu.Service{Categories: cr, Items: ir, Images: gr}, cr, ir, gr
 }
 
-// ----- Tests -----
+// === Tests ===
 
 func TestService_CreateItem_DefaultsToActiveAndNormalizesSlices(t *testing.T) {
 	svc, _, _, _ := newSvc()

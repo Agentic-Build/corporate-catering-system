@@ -10,7 +10,7 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/oidc"
 )
 
-// ---- User ----
+// === User ===
 type fakeUserRepo struct {
 	mu     sync.Mutex
 	users  map[string]*identity.User // by email
@@ -77,7 +77,7 @@ func (r *fakeUserRepo) UpdateProfile(ctx context.Context, u *identity.User) erro
 	return nil
 }
 
-// ---- Identity ----
+// === Identity ===
 type fakeIdentityRepo struct {
 	mu    sync.Mutex
 	bySub map[string]*identity.UserIdentity // key = provider+":"+sub
@@ -117,7 +117,7 @@ func (r *fakeIdentityRepo) ListByUser(ctx context.Context, userID string) ([]*id
 	return out, nil
 }
 
-// ---- Session ----
+// === Session ===
 type fakeSessions struct {
 	mu      sync.Mutex
 	byToken map[string]*identity.Session
@@ -172,7 +172,7 @@ func (r *fakeSessions) RevokeAllForUser(ctx context.Context, userID string) erro
 	return nil
 }
 
-// ---- State store ----
+// === State store ===
 type fakeStates struct {
 	mu       sync.Mutex
 	m        map[string]*oidc.StatePayload
@@ -215,7 +215,7 @@ func (s *fakeStates) Consume(ctx context.Context, state string) error {
 	return nil
 }
 
-// ---- Provider ----
+// === Provider ===
 type fakeProvider struct {
 	name      string
 	userinfo  *oidc.Userinfo
@@ -239,5 +239,5 @@ func (p *fakeProvider) Exchange(ctx context.Context, code, _v, _n string) (*oidc
 	return p.userinfo, nil
 }
 
-// ---- helpers ----
+// === helpers ===
 func fmtInt(n int) string { return strconv.Itoa(n) }

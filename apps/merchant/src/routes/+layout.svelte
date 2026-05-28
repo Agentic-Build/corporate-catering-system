@@ -19,7 +19,6 @@
     { href: "/settings", label: "營運設定", icon: "cog" },
   ];
 
-  /** A nav item is active when the path matches it or sits beneath it. */
   function isActive(href: string, path: string): boolean {
     if (href === "/") return path === "/";
     return path === href || path.startsWith(href + "/");

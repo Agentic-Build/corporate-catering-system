@@ -32,9 +32,7 @@ const (
 	plant    = "F12B-3F"
 )
 
-// ============================================================================
-// Fakes — menu CRUD repositories (menu.Service)
-// ============================================================================
+// === Fakes — menu CRUD repositories (menu.Service) ===
 
 type fakeCategoryRepo struct {
 	cats      []*menu.Category
@@ -144,9 +142,7 @@ func (r *fakeImageRepo) ReplaceForItem(context.Context, string, []string) error 
 	return r.replaceErr
 }
 
-// ============================================================================
-// Fakes — favorites
-// ============================================================================
+// === Fakes — favorites ===
 
 type fakeFavoritesRepo struct {
 	chips   []menu.FavoriteChip
@@ -165,9 +161,7 @@ func (r *fakeFavoritesRepo) ListByUser(_ context.Context, _, _, _ string, _ int,
 	return r.chips, r.next, nil
 }
 
-// ============================================================================
-// Fakes — home service ports
-// ============================================================================
+// === Fakes — home service ports ===
 
 type fakeRecentOrders struct {
 	recent     []menu.RecentOrderRow
@@ -277,9 +271,7 @@ func (c *fakeCache) Set(_ context.Context, key string, value []byte, _ time.Dura
 }
 func (c *fakeCache) Invalidate(context.Context, string) error { return nil }
 
-// ============================================================================
-// Harness
-// ============================================================================
+// === Harness ===
 
 func vendorUser() *identity.User {
 	v := vendorID
@@ -408,9 +400,7 @@ func do(t *testing.T, method, url, body string) *http.Response {
 
 func fkError() *pgconn.PgError { return &pgconn.PgError{Code: "23503"} }
 
-// ============================================================================
-// GET /api/merchant/categories
-// ============================================================================
+// === GET /api/merchant/categories ===
 
 func TestListCategories_Unauthenticated(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, nil)
@@ -462,9 +452,7 @@ func TestListCategories_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ============================================================================
-// POST /api/merchant/categories
-// ============================================================================
+// === POST /api/merchant/categories ===
 
 func TestCreateCategory_Unauthenticated(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, nil)
@@ -507,9 +495,7 @@ func TestCreateCategory_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ============================================================================
-// GET /api/merchant/menu-items
-// ============================================================================
+// === GET /api/merchant/menu-items ===
 
 func TestListItems_Unauthenticated(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, nil)
@@ -576,9 +562,7 @@ func TestListItems_ImagesRepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ============================================================================
-// POST /api/merchant/menu-items
-// ============================================================================
+// === POST /api/merchant/menu-items ===
 
 func TestCreateItem_Unauthenticated(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, nil)
@@ -640,9 +624,7 @@ func TestCreateItem_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ============================================================================
-// PATCH /api/merchant/menu-items/{id}
-// ============================================================================
+// === PATCH /api/merchant/menu-items/{id} ===
 
 func TestUpdateItem_Unauthenticated(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, nil)
@@ -700,9 +682,7 @@ func TestUpdateItem_OK(t *testing.T) {
 	assert.Equal(t, []string{"s3://b/x.jpg"}, out.Item.Images)
 }
 
-// ============================================================================
-// POST /api/merchant/menu-items/{id}/publish
-// ============================================================================
+// === POST /api/merchant/menu-items/{id}/publish ===
 
 func TestPublishItem_Unauthenticated(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, nil)
@@ -741,9 +721,7 @@ func TestPublishItem_OK_204(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-// ============================================================================
-// POST /api/merchant/menu-items/{id}/archive
-// ============================================================================
+// === POST /api/merchant/menu-items/{id}/archive ===
 
 func TestArchiveItem_Unauthenticated(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, nil)
@@ -775,9 +753,7 @@ func TestArchiveItem_OK_204(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-// ============================================================================
-// POST /api/merchant/menu-items/{id}/copy
-// ============================================================================
+// === POST /api/merchant/menu-items/{id}/copy ===
 
 func TestCopyItem_Unauthenticated(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, nil)
@@ -822,9 +798,7 @@ func TestCopyItem_OK_201(t *testing.T) {
 	assert.Equal(t, int64(11000), out.Item.PriceMinor)
 }
 
-// ============================================================================
-// GET /api/employee/menu
-// ============================================================================
+// === GET /api/employee/menu ===
 
 func TestListEmployeeMenu_Unauthenticated(t *testing.T) {
 	srv, _, _, _ := buildMenu(t, nil)
@@ -920,9 +894,7 @@ func TestListEmployeeMenu_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ============================================================================
-// POST /api/employee/favorites
-// ============================================================================
+// === POST /api/employee/favorites ===
 
 func TestAddFavorite_Unauthenticated(t *testing.T) {
 	srv, _ := buildFavorites(t, nil)
@@ -968,9 +940,7 @@ func TestAddFavorite_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ============================================================================
-// DELETE /api/employee/favorites/{menu_item_id}
-// ============================================================================
+// === DELETE /api/employee/favorites/{menu_item_id} ===
 
 func TestRemoveFavorite_Unauthenticated(t *testing.T) {
 	srv, _ := buildFavorites(t, nil)
@@ -1001,9 +971,7 @@ func TestRemoveFavorite_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ============================================================================
-// GET /api/employee/favorites
-// ============================================================================
+// === GET /api/employee/favorites ===
 
 func TestListFavorites_Unauthenticated(t *testing.T) {
 	srv, _ := buildFavorites(t, nil)
@@ -1078,9 +1046,7 @@ func TestListFavorites_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ============================================================================
-// GET /api/employee/home
-// ============================================================================
+// === GET /api/employee/home ===
 
 func TestGetHome_Unauthenticated(t *testing.T) {
 	srv, _, _, _, _, _ := buildHome(t, nil)
@@ -1243,9 +1209,7 @@ func TestGetHome_WithCache(t *testing.T) {
 	}
 }
 
-// ============================================================================
-// GET /api/employee/reorders
-// ============================================================================
+// === GET /api/employee/reorders ===
 
 func TestListReorders_Unauthenticated(t *testing.T) {
 	srv, _, _, _, _, _ := buildHome(t, nil)
@@ -1334,9 +1298,7 @@ func TestListReorders_NilPreviewNormalised(t *testing.T) {
 	assert.Equal(t, []string{}, out.Chips[0].ItemsPreview)
 }
 
-// ============================================================================
-// GET /api/employee/recommendations
-// ============================================================================
+// === GET /api/employee/recommendations ===
 
 func TestListRecommendations_Unauthenticated(t *testing.T) {
 	srv, _, _, _, _, _ := buildHome(t, nil)
@@ -1444,9 +1406,7 @@ func TestListRecommendations_MetaError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ============================================================================
-// POST /api/merchant/uploads/presigned  (non-storage branches only)
-// ============================================================================
+// === POST /api/merchant/uploads/presigned  (non-storage branches only) ===
 
 func TestPresignUpload_Unauthenticated(t *testing.T) {
 	srv := buildPresign(t, nil, nil)
@@ -1488,9 +1448,7 @@ func TestPresignUpload_NoStorage_503(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 }
 
-// ============================================================================
-// GET /api/menu/uploads/presigned  (non-storage branches only)
-// ============================================================================
+// === GET /api/menu/uploads/presigned  (non-storage branches only) ===
 
 func TestPresignDownload_NoStorage_503(t *testing.T) {
 	srv := buildPresign(t, employeeUser(), nil)

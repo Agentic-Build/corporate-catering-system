@@ -51,7 +51,6 @@
   subtitle="當月為即時推導的暫估金額（未關帳）；下方為福委會已關帳的歷史對帳單。"
 />
 
-<!-- Live current-month summary -->
 <section class="mb-8">
   <div class="mb-3 flex items-baseline justify-between">
     <h2 class="text-lg font-bold text-tb-slate-900">本月即時摘要</h2>
@@ -91,13 +90,11 @@
   {/if}
 </section>
 
-<!-- Historical closed settlements -->
 <section>
   <h2 class="mb-3 text-lg font-bold text-tb-slate-900">歷史對帳單</h2>
   {#if data.settlements.length === 0}
     <EmptyState icon="doc" title="尚無已關帳對帳單" hint="福委會關帳後，每月對帳單會列於此。" />
   {:else}
-    <!-- Mobile: stacked cards -->
     <div class="space-y-3 md:hidden">
       {#each data.settlements as s (s.id)}
         {@const meta = settlementStatusMeta[s.status] ?? { tone: "neutral", label: s.status }}
@@ -143,7 +140,6 @@
       {/each}
     </div>
 
-    <!-- Desktop: table -->
     <div
       class="hidden overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm md:block"
     >

@@ -28,7 +28,7 @@ const (
 	otherMsg = "22222222-2222-2222-2222-222222222222"
 )
 
-// ----- Fakes -----
+// === Fakes ===
 
 // fakeRepo is an in-memory dlq.Repository. Errors can be forced per-method.
 type fakeRepo struct {
@@ -116,7 +116,7 @@ func (j *fakeJS) Publish(_ context.Context, subject string, _ []byte, _ ...jetst
 	return &jetstream.PubAck{Stream: "S", Sequence: 1}, nil
 }
 
-// ----- Harness -----
+// === Harness ===
 
 func adminUser() *identity.User {
 	return &identity.User{ID: "admin-1", Role: identity.RoleWelfareAdmin}
@@ -156,7 +156,7 @@ func do(t *testing.T, method, url, body string) *http.Response {
 	return resp
 }
 
-// ----- list: auth -----
+// === list: auth ===
 
 func TestList_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil, nil)
@@ -172,7 +172,7 @@ func TestList_WrongRole(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
-// ----- list: happy / filters / errors -----
+// === list: happy / filters / errors ===
 
 func TestList_OK(t *testing.T) {
 	srv, repo := buildHandler(t, adminUser(), nil)
@@ -264,7 +264,7 @@ func TestList_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ----- replay -----
+// === replay ===
 
 func TestReplay_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil, &fakeJS{})
@@ -384,7 +384,7 @@ func TestReplay_MarkReplayedAlreadyResolved_409(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, resp.StatusCode)
 }
 
-// ----- resolve -----
+// === resolve ===
 
 func TestResolve_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil, nil)

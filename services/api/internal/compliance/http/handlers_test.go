@@ -33,8 +33,6 @@ const (
 	anomID   = "33333333-3333-3333-3333-333333333333"
 )
 
-// ----- Fakes (chttp_test cannot import the compliance_test package's fakes) -----
-
 // fakeDocs implements compliance.DocumentRepository. Only the methods the
 // handler paths reach (ListByVendor, GetByID) carry behaviour; the rest exist
 // to satisfy the interface and are never hit by the DB-free handler tests.
@@ -177,8 +175,6 @@ func (f *fakeSuspender) Suspend(context.Context, string, string) error {
 	return f.err
 }
 
-// ----- Harness -----
-
 func adminUser() *identity.User {
 	return &identity.User{ID: "admin-1", Role: identity.RoleWelfareAdmin}
 }
@@ -225,9 +221,7 @@ func do(t *testing.T, method, url, body string) *http.Response {
 // genericErr is a non-sentinel error: it must map to 500.
 var genericErr = errors.New("db down")
 
-// =====================================================================
-// listVendorDocuments — GET /api/admin/vendors/{vendor_id}/documents
-// =====================================================================
+// === listVendorDocuments — GET /api/admin/vendors/{vendor_id}/documents ===
 
 func TestListDocuments_Unauthenticated(t *testing.T) {
 	srv := buildHandler(t, nil, &compliance.Service{Docs: &fakeDocs{}})
@@ -298,11 +292,9 @@ func TestListDocuments_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =====================================================================
-// uploadVendorDocument — POST /api/admin/vendors/{vendor_id}/documents
+// === uploadVendorDocument — POST /api/admin/vendors/{vendor_id}/documents ===
 // (admin). Pre-service branches only: auth, base64, expires_at, and the
 // resupply GetByID path, which run before the nil Pool/Storage is touched.
-// =====================================================================
 
 func TestUploadDocument_Unauthenticated(t *testing.T) {
 	srv := buildHandler(t, nil, &compliance.Service{Docs: &fakeDocs{}})
@@ -336,10 +328,8 @@ func TestUploadDocument_InvalidExpiresAt_400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-// =====================================================================
-// reviewVendorDocument — POST /api/admin/documents/{id}/review.
+// === reviewVendorDocument — POST /api/admin/documents/{id}/review. ===
 // Happy path runs pgx.BeginFunc on a nil Pool, so only auth is covered.
-// =====================================================================
 
 func TestReviewDocument_Unauthenticated(t *testing.T) {
 	srv := buildHandler(t, nil, &compliance.Service{Docs: &fakeDocs{}})
@@ -357,9 +347,7 @@ func TestReviewDocument_WrongRole(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
-// =====================================================================
-// listAnomalies — GET /api/admin/anomalies
-// =====================================================================
+// === listAnomalies — GET /api/admin/anomalies ===
 
 func TestListAnomalies_Unauthenticated(t *testing.T) {
 	srv := buildHandler(t, nil, &compliance.Service{Anomaly: &fakeAnomaly{}})
@@ -440,11 +428,9 @@ func TestListAnomalies_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =====================================================================
-// triageAnomaly — POST /api/admin/anomalies/{id}/triage.
+// === triageAnomaly — POST /api/admin/anomalies/{id}/triage. ===
 // GetByID runs before the nil-Pool BeginFunc, so not-found / generic error
 // branches are reachable; the success path is not (it hits the nil Pool).
-// =====================================================================
 
 func TestTriageAnomaly_Unauthenticated(t *testing.T) {
 	srv := buildHandler(t, nil, &compliance.Service{Anomaly: &fakeAnomaly{}})
@@ -484,10 +470,8 @@ func TestTriageAnomaly_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =====================================================================
-// closeAnomaly — POST /api/admin/anomalies/{id}/close.
+// === closeAnomaly — POST /api/admin/anomalies/{id}/close. ===
 // Happy path runs pgx.BeginFunc on a nil Pool, so only auth is covered.
-// =====================================================================
 
 func TestCloseAnomaly_Unauthenticated(t *testing.T) {
 	srv := buildHandler(t, nil, &compliance.Service{Anomaly: &fakeAnomaly{}})
@@ -503,9 +487,7 @@ func TestCloseAnomaly_WrongRole(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
-// =====================================================================
-// listAuditEvents — GET /api/admin/audit
-// =====================================================================
+// === listAuditEvents — GET /api/admin/audit ===
 
 func TestAudit_Unauthenticated(t *testing.T) {
 	srv := buildHandler(t, nil, &compliance.Service{AuditQry: &fakeAuditQry{}})
@@ -595,9 +577,7 @@ func TestAudit_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =====================================================================
-// getMerchantCompliance — GET /api/merchant/compliance
-// =====================================================================
+// === getMerchantCompliance — GET /api/merchant/compliance ===
 
 func TestMerchantCompliance_Unauthenticated(t *testing.T) {
 	srv := buildHandler(t, nil, &compliance.Service{})
@@ -707,11 +687,9 @@ func TestMerchantCompliance_DocsError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =====================================================================
-// uploadMerchantDocument — POST /api/merchant/documents.
+// === uploadMerchantDocument — POST /api/merchant/documents. ===
 // Pre-service branches: auth, base64, expires_at, and the resupply GetByID
 // path (which runs before the nil Pool/Storage is touched).
-// =====================================================================
 
 func TestMerchantUpload_Unauthenticated(t *testing.T) {
 	srv := buildHandler(t, nil, &compliance.Service{Docs: &fakeDocs{}})
@@ -782,11 +760,9 @@ func TestMerchantUpload_ResupplyTargetNotFound_404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
-// =====================================================================
-// Write-path success (2xx). Pool is a fakeBeginner and Storage a fakeStore,
-// so upload/review/triage/close run their full pgx.BeginFunc closures (and,
-// for upload, the S3 PutObject) end-to-end without a DB or S3.
-// =====================================================================
+// === Write-path success (2xx) ===
+// Pool=fakeBeginner, Storage=fakeStore so upload/review/triage/close run their
+// full pgx.BeginFunc closures (and S3 PutObject) end-to-end without DB or S3.
 
 // uploadFakes returns a Service wired for the upload write path: a docs repo
 // whose CreateTx stamps an ID (so the returned DTO carries it), plus the

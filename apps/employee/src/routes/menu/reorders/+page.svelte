@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 再點一次: chips are past orders, render as reorder cards (not MealCards).
   import { onMount } from "svelte";
   import { deserialize } from "$app/forms";
   import { PageHeader, EmptyState } from "@tbite/ui";

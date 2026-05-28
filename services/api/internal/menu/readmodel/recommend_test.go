@@ -93,7 +93,7 @@ func (s *stubAffinity) UserVendorAffinity(_ context.Context, _ string) (map[stri
 
 var testDay = time.Date(2026, 5, 26, 0, 0, 0, 0, time.UTC)
 
-// ---------- CachedPopularity ----------
+// === CachedPopularity ===
 
 func TestCachedPopularityNilCacheBypasses(t *testing.T) {
 	inner := &stubPopularity{ret: map[string]float64{"a": 1}}
@@ -176,7 +176,7 @@ func TestPopularityKeyPattern(t *testing.T) {
 	}
 }
 
-// ---------- CachedAffinity ----------
+// === CachedAffinity ===
 
 func TestCachedAffinityNilCacheBypasses(t *testing.T) {
 	inner := &stubAffinity{ret: map[string]float64{"v1": 2}}

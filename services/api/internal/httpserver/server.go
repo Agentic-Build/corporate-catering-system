@@ -83,7 +83,7 @@ func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(c
 	}
 
 	if mcp != nil {
-		// MCP Streamable HTTP transport at /mcp (POST/GET/DELETE) per spec 2025-03-26.
+		// MCP Streamable HTTP transport at /mcp per spec 2025-03-26.
 		streamOpts := []mcpsrv.StreamableHTTPOption{
 			mcpsrv.WithEndpointPath("/mcp"),
 			mcpsrv.WithStateLess(true),

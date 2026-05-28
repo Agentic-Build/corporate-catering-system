@@ -95,8 +95,7 @@ func (v *AccessTokenVerifier) Verify(ctx context.Context, raw string) (*AccessTo
 		return nil, err
 	}
 
-	// Pull extra claims; ignore decoder errors so unrelated fields don't
-	// break otherwise-valid tokens.
+	// Ignore decoder errors so unrelated fields don't break otherwise-valid tokens.
 	var raw_claims struct {
 		Audience any    `json:"aud"`
 		Scope    string `json:"scope"`

@@ -13,10 +13,9 @@
     { id: "other", label: "其他" },
   ];
 
-  // When set, the upload form is locked to resupplying this document.
   let resupplyDoc = $state<{ id: string; kind: string } | null>(null);
 
-  // Resupply is allowed for rejected/expired (fix) or approved (renew).
+  // Resupply allowed for rejected/expired (fix) or approved (renew).
   function canResupply(status: string): boolean {
     return status === "rejected" || status === "expired" || status === "approved";
   }
@@ -116,7 +115,6 @@
   subtitle="查看您的商家審核狀態、合規文件與系統警示，並可自行上傳或補件。"
 />
 
-<!-- Status banner -->
 <div class="mb-6 rounded-tb-2xl border p-5 {banner.tone}">
   <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-eyebrow">
     <span class="h-2 w-2 rounded-full {banner.dot}" aria-hidden="true"></span>
@@ -129,7 +127,6 @@
   {/if}
 </div>
 
-<!-- Warnings -->
 <section class="mb-8">
   <h2 class="mb-3 text-lg font-bold text-tb-slate-900">合規警示</h2>
   {#if data.warnings.length === 0}
@@ -162,7 +159,6 @@
   {/if}
 </section>
 
-<!-- Documents -->
 <section>
   <h2 class="mb-3 text-lg font-bold text-tb-slate-900">合規文件</h2>
   {#if data.documents.length === 0}
@@ -172,7 +168,6 @@
       hint="您的商家目前沒有任何已上傳文件，請聯繫福委會協助補件。"
     />
   {:else}
-    <!-- Mobile: stacked cards -->
     <div class="space-y-3 md:hidden">
       {#each data.documents as doc (doc.id)}
         {@const meta = docStatusMeta[doc.status] ?? { tone: "neutral", label: doc.status }}
@@ -212,7 +207,6 @@
       {/each}
     </div>
 
-    <!-- Desktop: table -->
     <div
       class="hidden overflow-hidden rounded-tb-2xl border border-tb-slate-200 bg-white shadow-tb-sm md:block"
     >
@@ -267,7 +261,6 @@
   {/if}
 </section>
 
-<!-- Upload / resupply -->
 <section class="mt-8" id="doc-upload-card">
   <h2 class="mb-3 text-lg font-bold text-tb-slate-900">
     {resupplyDoc ? "補件 · 重新上傳文件" : "上傳合規文件"}

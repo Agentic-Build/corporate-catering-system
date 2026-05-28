@@ -43,7 +43,7 @@ const (
 	vendorID      = "vend-1"
 )
 
-// ----- Fakes (feedbackhttp_test can't import the feedback_test package's helpers) -----
+// === Fakes (feedbackhttp_test can't import the feedback_test package's helpers) ===
 
 type fakeRatingRepo struct {
 	byOrder map[string]*feedback.Rating
@@ -179,7 +179,7 @@ func (fakeAudit) WriteTx(context.Context, pgx.Tx, *string, *string, string, stri
 	return nil
 }
 
-// ----- Harness -----
+// === Harness ===
 
 type fakes struct {
 	ratings    *fakeRatingRepo
@@ -262,7 +262,7 @@ func do(t *testing.T, method, url, body string) *http.Response {
 	return resp
 }
 
-// ===================== rateOrder =====================
+// === rateOrder ===
 
 func TestRateOrder_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -358,7 +358,7 @@ func TestRateOrder_OK_201(t *testing.T) {
 	assert.Equal(t, "tasty", out.Rating.Comment)
 }
 
-// ===================== getMyRating (read-only: happy path covered) =====================
+// === getMyRating (read-only: happy path covered) ===
 
 func TestGetMyRating_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -419,7 +419,7 @@ func TestGetMyRating_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================== fileComplaint =====================
+// === fileComplaint ===
 
 func TestFileComplaint_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -517,7 +517,7 @@ func TestFileComplaint_OK_201(t *testing.T) {
 	assert.Equal(t, "open", out.Complaint.Status)
 }
 
-// ===================== listMyComplaints (read-only: happy path covered) =====================
+// === listMyComplaints (read-only: happy path covered) ===
 
 func TestListMyComplaints_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -577,7 +577,7 @@ func TestListMyComplaints_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================== escalateComplaint =====================
+// === escalateComplaint ===
 
 func TestEscalateComplaint_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -642,7 +642,7 @@ func TestEscalateComplaint_OK_204(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-// ===================== resolveMyComplaint =====================
+// === resolveMyComplaint ===
 
 func TestResolveMyComplaint_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -689,7 +689,7 @@ func TestResolveMyComplaint_OK_204(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-// ===================== listVendorComplaints (read-only: happy path covered) =====================
+// === listVendorComplaints (read-only: happy path covered) ===
 
 func TestListVendorComplaints_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -766,7 +766,7 @@ func TestListVendorComplaints_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================== respondToComplaint =====================
+// === respondToComplaint ===
 
 func TestRespondToComplaint_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -846,7 +846,7 @@ func TestRespondToComplaint_OK_204(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-// ===================== listEscalatedComplaints (read-only: happy path covered) =====================
+// === listEscalatedComplaints (read-only: happy path covered) ===
 
 func TestListEscalatedComplaints_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -891,7 +891,7 @@ func TestListEscalatedComplaints_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ===================== adminResolveComplaint =====================
+// === adminResolveComplaint ===
 
 func TestAdminResolveComplaint_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)

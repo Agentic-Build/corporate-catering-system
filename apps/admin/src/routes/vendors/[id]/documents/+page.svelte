@@ -57,10 +57,8 @@
     }
   }
 
-  // Confirm reject modal
   type Doc = (typeof data.documents)[number];
   let confirmRejectTarget = $state<Doc | null>(null);
-  // Record of doc.id → reject form element
   const rejectFormEls: Record<string, HTMLFormElement> = {};
 </script>
 
@@ -189,7 +187,6 @@
                           核准
                         </Button>
                       </form>
-                      <!-- Reject requires confirm modal -->
                       <form method="POST" action="?/review" bind:this={rejectFormEls[d.id]}>
                         <input type="hidden" name="id" value={d.id} />
                         <input type="hidden" name="status" value="rejected" />
@@ -217,7 +214,6 @@
   {/if}
 </div>
 
-<!-- Confirm reject modal -->
 <Modal
   open={confirmRejectTarget !== null}
   onClose={() => (confirmRejectTarget = null)}

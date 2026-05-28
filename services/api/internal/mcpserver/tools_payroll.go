@@ -17,7 +17,7 @@ import (
 )
 
 func registerPayrollTools(s *server.MCPServer, deps Deps) {
-	// -------- payroll.list_batches --------
+	// === payroll.list_batches ===
 	s.AddTool(
 		mcp.NewTool("payroll.list_batches",
 			mcp.WithDescription("List payroll batches (welfare_admin only)"),
@@ -51,7 +51,7 @@ func registerPayrollTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- payroll.lock_batch --------
+	// === payroll.lock_batch ===
 	s.AddTool(
 		mcp.NewTool("payroll.lock_batch",
 			mcp.WithDescription("Lock a draft payroll batch (welfare_admin only)"),
@@ -84,7 +84,7 @@ func registerPayrollTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- payroll.resolve_dispute (high-risk on refund path) --------
+	// === payroll.resolve_dispute (high-risk on refund path) ===
 	s.AddTool(
 		mcp.NewTool("payroll.resolve_dispute",
 			mcp.WithDescription("Resolve a payroll dispute (welfare_admin only; high-risk on refund)"),

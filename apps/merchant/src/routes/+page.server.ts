@@ -19,7 +19,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const client = apiFor(locals.apiToken);
   const today = dayId(0);
 
-  // 7-day window for the schedule planner.
   const days = Array.from({ length: 7 }, (_, i) => {
     const id = dayId(i);
     const d = new Date(id + "T00:00:00");
@@ -27,7 +26,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     return { id, head, weekday: WEEKDAY[d.getDay()] ?? "", offset: i };
   });
 
-  // Library = all menu items incl. archived (drawer + name lookups).
+  // include_archived so the library drawer and name lookups see everything.
   let items: MerchantItemDTO[] = [];
   try {
     const r = await client.GET("/api/merchant/menu-items", {
@@ -82,7 +81,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  /** Set or update a day's capacity for one menu item. */
   setSupply: async ({ request, locals }) => {
     const fd = await request.formData();
     const itemId = String(fd.get("item_id") ?? "");
@@ -108,7 +106,6 @@ export const actions: Actions = {
     return { success: true };
   },
 
-  /** Toggle a supply's temporary sold-out flag for the given day. */
   toggleSoldOut: async ({ request, locals }) => {
     const fd = await request.formData();
     const itemId = String(fd.get("item_id") ?? "");
@@ -124,7 +121,7 @@ export const actions: Actions = {
     return { success: true };
   },
 
-  /** Publish a menu item — used before adding an archived item to a day. */
+  // Called before adding an archived item to a day.
   publishItem: async ({ request, locals }) => {
     const fd = await request.formData();
     const id = String(fd.get("item_id") ?? "");

@@ -14,8 +14,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   try {
     const r = await client.GET("/api/employee/orders");
     if (r.data) orders = r.data.items ?? [];
-  } catch {
-    // surface no error — empty list is acceptable
-  }
+  } catch {}
   return { user: locals.user, orders };
 };

@@ -19,7 +19,7 @@ import (
 )
 
 func registerSettlementTools(s *server.MCPServer, deps Deps) {
-	// -------- settlement.close_period --------
+	// === settlement.close_period ===
 	s.AddTool(
 		mcp.NewTool("settlement.close_period",
 			mcp.WithDescription("Close a vendor settlement period: cut one settlement per vendor with orders (welfare_admin only)"),

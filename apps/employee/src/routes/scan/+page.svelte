@@ -1,6 +1,5 @@
 <script lang="ts">
-  // Self-service pickup: camera scan with manual order-number fallback.
-  // html5-qrcode is imported client-side (avoids SSR).
+  // html5-qrcode is imported dynamically to avoid SSR.
   import { PageHeader, Card, Button, Icon } from "@tbite/ui";
   import { enhance } from "$app/forms";
   import { onMount, onDestroy, tick } from "svelte";

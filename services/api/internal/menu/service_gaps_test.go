@@ -12,7 +12,7 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
 )
 
-// ----- Error-injecting fakes (only the methods the gap tests exercise) -----
+// === Error-injecting fakes (only the methods the gap tests exercise) ===
 
 type errCategoryRepo struct {
 	*fakeCategoryRepo
@@ -66,7 +66,7 @@ func (r *errImageRepo) ListByItem(ctx context.Context, itemID string) ([]*menu.I
 	return r.fakeImageRepo.ListByItem(ctx, itemID)
 }
 
-// ----- CreateCategory -----
+// === CreateCategory ===
 
 func TestService_CreateCategory_PropagatesRepoError(t *testing.T) {
 	cr := &errCategoryRepo{fakeCategoryRepo: newFakeCategoryRepo(), createErr: errors.New("boom")}
@@ -75,7 +75,7 @@ func TestService_CreateCategory_PropagatesRepoError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// ----- CreateItem error branches -----
+// === CreateItem error branches ===
 
 func TestService_CreateItem_PropagatesCreateError(t *testing.T) {
 	ir := &errItemRepo{fakeItemRepo: newFakeItemRepo(), createErr: errors.New("boom")}
@@ -93,7 +93,7 @@ func TestService_CreateItem_PropagatesImageReplaceError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// ----- Archive not-found -----
+// === Archive not-found ===
 
 func TestService_Archive_NotFound(t *testing.T) {
 	svc, _, _, _ := newSvc()
@@ -109,7 +109,7 @@ func TestService_Archive_WrongVendorIsForbidden(t *testing.T) {
 	assert.ErrorIs(t, err, menu.ErrForbidden)
 }
 
-// ----- ListByVendor -----
+// === ListByVendor ===
 
 func TestService_ListByVendor_ReturnsRows(t *testing.T) {
 	svc, _, _, _ := newSvc()
@@ -136,7 +136,7 @@ func TestService_ListByVendor_PropagatesError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// ----- ListImagesByItem -----
+// === ListImagesByItem ===
 
 func TestService_ListImagesByItem_ReturnsImages(t *testing.T) {
 	svc, _, _, gr := newSvc()

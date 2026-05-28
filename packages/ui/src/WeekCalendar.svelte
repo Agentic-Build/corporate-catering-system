@@ -1,9 +1,8 @@
 <script lang="ts">
-  // 7-day week view for picking a preorder date.
   interface WeekDay {
-    id: string; // YYYY-MM-DD
-    weekday: string; // 日 一 二 …
-    dom: string; // day-of-month
+    id: string;
+    weekday: string;
+    dom: string;
     isToday: boolean;
   }
   interface Props {

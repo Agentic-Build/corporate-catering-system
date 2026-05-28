@@ -14,8 +14,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   try {
     const r = await client.GET("/api/employee/disputes");
     if (r.data) disputes = r.data.items ?? [];
-  } catch {
-    // empty list acceptable
-  }
+  } catch {}
   return { user: locals.user, disputes };
 };

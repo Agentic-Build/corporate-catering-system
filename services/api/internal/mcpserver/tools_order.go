@@ -21,7 +21,7 @@ import (
 )
 
 func registerOrderTools(s *server.MCPServer, deps Deps) {
-	// -------- order.list_mine --------
+	// === order.list_mine ===
 	s.AddTool(
 		mcp.NewTool("order.list_mine",
 			mcp.WithDescription("List the authenticated employee's recent orders (last 30 days)"),
@@ -51,7 +51,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- order.get --------
+	// === order.get ===
 	s.AddTool(
 		mcp.NewTool("order.get",
 			mcp.WithDescription("Get an order by ID (owner only)"),
@@ -86,7 +86,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- order.place --------
+	// === order.place ===
 	s.AddTool(
 		mcp.NewTool("order.place",
 			mcp.WithDescription("Place a new order for the authenticated employee"),
@@ -177,7 +177,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- order.cancel --------
+	// === order.cancel ===
 	s.AddTool(
 		mcp.NewTool("order.cancel",
 			mcp.WithDescription("Cancel an order owned by the authenticated employee"),
@@ -210,7 +210,7 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- order.modify --------
+	// === order.modify ===
 	s.AddTool(
 		mcp.NewTool("order.modify",
 			mcp.WithDescription("Replace the items of a PLACED order owned by the authenticated employee (before cutoff)"),

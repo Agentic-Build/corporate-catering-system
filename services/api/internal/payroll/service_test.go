@@ -173,7 +173,7 @@ func aprilPeriod() (time.Time, time.Time) {
 	return start, end
 }
 
-// ---------- BuildDraft tests ----------
+// === BuildDraft tests ===
 
 func TestService_BuildDraft_AggregatesByUser(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -239,7 +239,7 @@ func TestService_BuildDraft_DuplicatePeriod_Rejected(t *testing.T) {
 	assert.ErrorIs(t, err, payroll.ErrBatchPeriodExists)
 }
 
-// ---------- Lock tests ----------
+// === Lock tests ===
 
 func TestService_Lock_HappyPath(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -286,7 +286,7 @@ func TestService_Lock_AlreadyLocked(t *testing.T) {
 	assert.ErrorIs(t, err, payroll.ErrBatchLocked)
 }
 
-// ---------- OpenDispute tests ----------
+// === OpenDispute tests ===
 
 func TestService_OpenDispute_Happy(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -422,7 +422,7 @@ func TestService_OpenDisputeByOrder_NotDisputableStatus(t *testing.T) {
 	assert.ErrorIs(t, err, payroll.ErrOrderNotDisputable)
 }
 
-// ---------- ResolveDispute tests ----------
+// === ResolveDispute tests ===
 
 func TestService_ResolveDispute_Refund(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -581,7 +581,7 @@ func TestService_ResolveDispute_RefundExceedsOrder_Rejected(t *testing.T) {
 	assert.Equal(t, int64(0), refunded)
 }
 
-// ---------- Exception list tests ----------
+// === Exception list tests ===
 
 func TestService_Exceptions_DetectFlagResolve(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -657,7 +657,7 @@ func TestService_Exceptions_DetectFlagResolve(t *testing.T) {
 	require.Error(t, err)
 }
 
-// ---------- ReverseOrder tests ----------
+// === ReverseOrder tests ===
 
 // A charged order that is already part of a locked-batch entry, when reversed,
 // transitions to refunded and bumps the entry's refunded_minor by the order's

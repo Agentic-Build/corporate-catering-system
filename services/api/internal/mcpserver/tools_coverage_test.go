@@ -25,10 +25,6 @@ import (
 
 func sp(s string) *string { return &s }
 
-// ---------------------------------------------------------------------------
-// shared audit-path fakes (mirrors settlement/http/handlers_test.go precedent)
-// ---------------------------------------------------------------------------
-
 // fakeBeginner stands in for *pgxpool.Pool. It hands the write closure a no-op
 // pgx.Tx; the audit fake ignores the tx so auditAfter runs DB-free.
 type fakeBeginner struct{ beginErr error }
@@ -82,10 +78,6 @@ func auditDeps() (*fakeAuditTx, fakeBeginner) {
 	return &fakeAuditTx{}, fakeBeginner{}
 }
 
-// ---------------------------------------------------------------------------
-// ctx helpers
-// ---------------------------------------------------------------------------
-
 func adminCtx() context.Context {
 	u := &identity.User{
 		ID:           "admin-1",
@@ -105,9 +97,7 @@ func vendorOpCtx() context.Context {
 	return idhttp.ContextWithUser(context.Background(), u)
 }
 
-// ---------------------------------------------------------------------------
-// menu fakes
-// ---------------------------------------------------------------------------
+// === menu fakes ===
 
 type fakeItemRepo struct {
 	rows       []*menu.ActiveItemRow
@@ -172,9 +162,7 @@ func seedMenuRow(id, name string, price int64) *menu.ActiveItemRow {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// vendor fakes
-// ---------------------------------------------------------------------------
+// === vendor fakes ===
 
 type fakeVendorRepo struct {
 	vendors  []*vendor.Vendor
@@ -247,9 +235,7 @@ func (fakeOperatorRepo) SetStatuses(context.Context, string, []vendor.OperatorSt
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// order fakes
-// ---------------------------------------------------------------------------
+// === order fakes ===
 
 type fakeOrderRepo struct {
 	byUser  []*order.Order
@@ -308,9 +294,7 @@ func seedOrder(id, userID string) *order.Order {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// payroll fakes
-// ---------------------------------------------------------------------------
+// === payroll fakes ===
 
 type fakeBatchRepo struct {
 	batches []*payroll.Batch
@@ -390,9 +374,7 @@ func (noopOrderTx) UpdateStatusTx(context.Context, pgx.Tx, string, order.Status,
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// compliance fakes
-// ---------------------------------------------------------------------------
+// === compliance fakes ===
 
 type fakeDocRepo struct {
 	docs    []*compliance.Document
@@ -465,9 +447,7 @@ func complianceService(docs *fakeDocRepo, anom *fakeAnomalyRepo, audq *fakeAudit
 	}
 }
 
-// ---------------------------------------------------------------------------
-// feedback fakes
-// ---------------------------------------------------------------------------
+// === feedback fakes ===
 
 type fakeFeedbackOrders struct {
 	info map[string]*feedback.OrderInfo
@@ -536,9 +516,7 @@ func feedbackService(orders *fakeFeedbackOrders, ratings *fakeRatingRepo, compla
 	}
 }
 
-// ---------------------------------------------------------------------------
-// settlement fakes
-// ---------------------------------------------------------------------------
+// === settlement fakes ===
 
 type fakeSettlementRepo struct{}
 
@@ -581,9 +559,7 @@ func settlementService(aggs []*settlement.VendorAggregate, aggErr error, audit *
 	}
 }
 
-// ===========================================================================
-// MENU TOOLS
-// ===========================================================================
+// === MENU TOOLS ===
 
 func TestMenuListForDay_Success(t *testing.T) {
 	audit, pool := auditDeps()
@@ -738,9 +714,7 @@ func TestVendorListOpen_RoleGate(t *testing.T) {
 	assert.Contains(t, toolText(t, resp), "cannot list vendors")
 }
 
-// ===========================================================================
-// ORDER TOOLS
-// ===========================================================================
+// === ORDER TOOLS ===
 
 func TestOrderListMine_Success(t *testing.T) {
 	audit, pool := auditDeps()
@@ -914,9 +888,7 @@ func TestOrderModify_MissingArg(t *testing.T) {
 	assert.True(t, toolResult(t, resp).IsError)
 }
 
-// ===========================================================================
-// VENDOR ADMIN TOOLS
-// ===========================================================================
+// === VENDOR ADMIN TOOLS ===
 
 func TestVendorList_Success(t *testing.T) {
 	audit, pool := auditDeps()
@@ -1017,9 +989,7 @@ func TestVendorReinstate_RoleGate(t *testing.T) {
 	assert.Contains(t, toolText(t, resp), "only welfare_admin")
 }
 
-// ===========================================================================
-// PAYROLL TOOLS
-// ===========================================================================
+// === PAYROLL TOOLS ===
 
 func TestPayrollListBatches_Success(t *testing.T) {
 	audit, pool := auditDeps()
@@ -1121,9 +1091,7 @@ func TestPayrollResolveDispute_RoleGate(t *testing.T) {
 	assert.Contains(t, toolText(t, resp), "only welfare_admin")
 }
 
-// ===========================================================================
-// AUDIT TOOL
-// ===========================================================================
+// === AUDIT TOOL ===
 
 func TestAuditQuery_Success(t *testing.T) {
 	audit, pool := auditDeps()
@@ -1166,9 +1134,7 @@ func TestAuditQuery_NotConfigured(t *testing.T) {
 	assert.Contains(t, toolText(t, resp), "compliance service not configured")
 }
 
-// ===========================================================================
-// FEEDBACK TOOLS
-// ===========================================================================
+// === FEEDBACK TOOLS ===
 
 func TestFeedbackRateOrder_Success(t *testing.T) {
 	audit, pool := auditDeps()
@@ -1272,9 +1238,7 @@ func TestFeedbackFileComplaint_RoleGate(t *testing.T) {
 	assert.Contains(t, toolText(t, resp), "only employee")
 }
 
-// ===========================================================================
-// SETTLEMENT TOOL
-// ===========================================================================
+// === SETTLEMENT TOOL ===
 
 func TestSettlementClosePeriod_Success(t *testing.T) {
 	audit, pool := auditDeps()
@@ -1341,9 +1305,7 @@ func TestSettlementClosePeriod_MissingArgs(t *testing.T) {
 	assert.True(t, toolResult(t, resp).IsError)
 }
 
-// ===========================================================================
-// COMPLIANCE TOOLS
-// ===========================================================================
+// === COMPLIANCE TOOLS ===
 
 func TestDocumentList_Success(t *testing.T) {
 	audit, pool := auditDeps()
@@ -1510,9 +1472,7 @@ func TestAnomalyClose_NotConfigured(t *testing.T) {
 	assert.Contains(t, toolText(t, resp), "compliance service not configured")
 }
 
-// ===========================================================================
-// CHATGPT search / fetch tools
-// ===========================================================================
+// === CHATGPT search / fetch tools ===
 
 func TestSearch_WithMenuAndOrders(t *testing.T) {
 	menuSvc := menuServiceWith([]*menu.ActiveItemRow{seedMenuRow("m-1", "Vegan Bowl", 12000)}, nil)
@@ -1607,9 +1567,7 @@ func TestFetch_MissingID(t *testing.T) {
 	assert.True(t, toolResult(t, resp).IsError)
 }
 
-// ---------------------------------------------------------------------------
-// full order.Service wiring (covers order.place / cancel / modify success)
-// ---------------------------------------------------------------------------
+// === full order.Service wiring (covers order.place / cancel / modify success) ===
 
 type fakeOrderTx struct{}
 
@@ -1734,9 +1692,7 @@ func TestOrderModify_ServiceError(t *testing.T) {
 	assert.True(t, toolResult(t, resp).IsError)
 }
 
-// ---------------------------------------------------------------------------
-// "service not configured" branches for write handlers (deps with nil service)
-// ---------------------------------------------------------------------------
+// === "service not configured" branches for write handlers (deps with nil service) ===
 
 func TestWriteHandlers_ServiceNotConfigured(t *testing.T) {
 	srv := mcpserver.New(mcpserver.Deps{})
@@ -1771,9 +1727,7 @@ func TestWriteHandlers_ServiceNotConfigured(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// "not authenticated" branches for the write handlers (anonymous ctx)
-// ---------------------------------------------------------------------------
+// === "not authenticated" branches for the write handlers (anonymous ctx) ===
 
 func TestWriteHandlers_Anonymous(t *testing.T) {
 	srv := mcpserver.New(mcpserver.Deps{})
@@ -1794,9 +1748,7 @@ func TestWriteHandlers_Anonymous(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// chatgpt fetch / format-helper coverage (sold-out, full metadata, short id)
-// ---------------------------------------------------------------------------
+// === chatgpt fetch / format-helper coverage (sold-out, full metadata, short id) ===
 
 func seedRichMenuRow(id string) *menu.ActiveItemRow {
 	return &menu.ActiveItemRow{

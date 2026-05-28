@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 員工登入
   import { Card, ProviderButton, TBiteLogo } from "@tbite/ui";
   let { data } = $props();
   const returnTo = $derived(encodeURIComponent(data.returnTo));

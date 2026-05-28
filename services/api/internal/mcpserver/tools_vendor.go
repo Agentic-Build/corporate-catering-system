@@ -18,7 +18,7 @@ import (
 )
 
 func registerVendorTools(s *server.MCPServer, deps Deps) {
-	// -------- vendor.list --------
+	// === vendor.list ===
 	s.AddTool(
 		mcp.NewTool("vendor.list",
 			mcp.WithDescription("List vendors with optional status filter (welfare_admin only)"),
@@ -52,7 +52,7 @@ func registerVendorTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- vendor.suspend (high-risk) --------
+	// === vendor.suspend (high-risk) ===
 	s.AddTool(
 		mcp.NewTool("vendor.suspend",
 			mcp.WithDescription("Suspend an approved vendor (welfare_admin only, high-risk)"),
@@ -93,7 +93,7 @@ func registerVendorTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- vendor.reinstate --------
+	// === vendor.reinstate ===
 	s.AddTool(
 		mcp.NewTool("vendor.reinstate",
 			mcp.WithDescription("Reinstate a suspended vendor (welfare_admin only)"),

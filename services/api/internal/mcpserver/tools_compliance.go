@@ -19,7 +19,7 @@ import (
 )
 
 func registerComplianceTools(s *server.MCPServer, deps Deps) {
-	// -------- document.list --------
+	// === document.list ===
 	s.AddTool(
 		mcp.NewTool("document.list",
 			mcp.WithDescription("List a vendor's compliance documents (welfare_admin only)"),
@@ -52,7 +52,7 @@ func registerComplianceTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- document.review --------
+	// === document.review ===
 	s.AddTool(
 		mcp.NewTool("document.review",
 			mcp.WithDescription("Approve or reject a pending vendor document (welfare_admin only)"),
@@ -89,7 +89,7 @@ func registerComplianceTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- anomaly.list --------
+	// === anomaly.list ===
 	s.AddTool(
 		mcp.NewTool("anomaly.list",
 			mcp.WithDescription("List anomaly alerts filtered by status/severity (welfare_admin only)"),
@@ -126,7 +126,7 @@ func registerComplianceTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- anomaly.triage --------
+	// === anomaly.triage ===
 	s.AddTool(
 		mcp.NewTool("anomaly.triage",
 			mcp.WithDescription("Triage an open anomaly, optionally warning or suspending the target vendor (welfare_admin only)"),
@@ -159,7 +159,7 @@ func registerComplianceTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- anomaly.close --------
+	// === anomaly.close ===
 	s.AddTool(
 		mcp.NewTool("anomaly.close",
 			mcp.WithDescription("Close an open or triaged anomaly (welfare_admin only)"),

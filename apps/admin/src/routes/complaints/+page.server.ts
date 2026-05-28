@@ -21,7 +21,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  // Welfare committee closes an escalated complaint with a resolution note.
   resolve: async ({ request, locals }) => {
     const fd = await request.formData();
     const id = String(fd.get("id") ?? "");
