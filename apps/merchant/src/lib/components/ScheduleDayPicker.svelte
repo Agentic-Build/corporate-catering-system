@@ -1,6 +1,5 @@
 <script lang="ts">
-  // Day picker strip with per-day status pip — ported from
-  // MerchantView.jsx ScheduleDayPicker.
+  // Day picker strip with per-day status pip.
   interface Day {
     id: string;
     head: string;

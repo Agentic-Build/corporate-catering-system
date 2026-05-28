@@ -1,6 +1,5 @@
 <script lang="ts">
-  // Mobile bottom navigation (<lg). Mirrors the design mockup's tab bar and is
-  // hidden at lg+ where the Sidebar takes over. Tabs map 1:1 to real routes.
+  // Mobile bottom navigation; hidden at lg+ where the Sidebar takes over.
   import { Icon, type IconName } from "@tbite/ui";
   import { page } from "$app/stores";
 

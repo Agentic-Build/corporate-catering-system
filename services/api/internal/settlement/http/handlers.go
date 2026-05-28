@@ -20,8 +20,6 @@ type API struct {
 	Svc *settlement.Service
 }
 
-// ----- DTOs -----
-
 type settlementDTO struct {
 	ID           string  `json:"id"`
 	VendorID     string  `json:"vendor_id"`
@@ -106,8 +104,6 @@ func toReconciliationDTO(r *settlement.Reconciliation) reconciliationDTO {
 	}
 }
 
-// ----- Inputs / Outputs -----
-
 type periodQueryInput struct {
 	Period string `query:"period" doc:"Month to summarise, YYYY-MM" example:"2026-04"`
 }
@@ -147,8 +143,6 @@ type closeSettlementOutput struct {
 		Items []settlementDTO `json:"items"`
 	}
 }
-
-// ----- Registration -----
 
 // Register wires every settlement endpoint onto the huma API. main.go calls
 // (&API{Svc: svc}).Register as one of its apiBuilders.
@@ -210,8 +204,6 @@ func (a *API) Register(api huma.API) {
 	}, a.voidSettlement)
 }
 
-// ----- Auth helpers -----
-
 func (a *API) requireVendor(ctx context.Context) (*identity.User, string, error) {
 	return idhttp.RequireVendor(ctx)
 }
@@ -234,8 +226,6 @@ func parseMonth(s string) (time.Time, time.Time, error) {
 func parseDay(s string) (time.Time, error) {
 	return time.ParseInLocation("2006-01-02", s, time.UTC)
 }
-
-// ----- Handlers -----
 
 func (a *API) getReconciliation(ctx context.Context, in *periodQueryInput) (*reconciliationOutput, error) {
 	_, vendorID, err := a.requireVendor(ctx)

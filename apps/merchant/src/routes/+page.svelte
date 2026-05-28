@@ -18,7 +18,6 @@
       : 0,
   );
 
-  // ── Schedule planner state ──
   // Default to tomorrow when present, else today.
   let selectedDay = $state(data.days[1]?.id ?? data.days[0].id);
   let libraryOpen = $state(false);
@@ -51,7 +50,6 @@
   const selectedSlots = $derived(slotsFor(selectedDay));
   const scheduledIds = $derived(new Set(selectedSlots.map((s) => s.itemId)));
 
-  // ── Hidden-form plumbing for schedule edits ──
   let capForm = $state<HTMLFormElement>();
   let capItemId = $state("");
   let capDate = $state("");
@@ -60,8 +58,7 @@
 
   let publishForm = $state<HTMLFormElement>();
   let publishItemId = $state("");
-  // When set, run this capacity submit only after the publish action resolves
-  // (see addFromLibrary): setSupply on a still-archived item would otherwise race.
+  // Deferred until publish resolves: setSupply on archived item would race.
   let pendingCap = $state<{ itemId: string; capacity: number; pickupWindow: string } | null>(null);
 
   function submitCap(itemId: string, capacity: number, pickupWindow: string) {
@@ -90,7 +87,6 @@
     };
   };
 
-  // ── Hidden-form plumbing for the sold-out toggle ──
   let soldOutForm = $state<HTMLFormElement>();
   let soldOutItemId = $state("");
   let soldOutDate = $state("");
@@ -106,8 +102,7 @@
   /** Library "加入此日" — publish if archived, then schedule a default cap. */
   function addFromLibrary(item: any) {
     if (item.status === "archived") {
-      // Publish first; the default capacity is submitted from publishEnhance
-      // once publish succeeds, so setSupply never races a still-archived item.
+      // Publish first; capacity is submitted from publishEnhance after success.
       pendingCap = { itemId: item.id, capacity: 50, pickupWindow: "11:50-12:10" };
       publishItemId = item.id;
       queueMicrotask(() => publishForm?.requestSubmit());

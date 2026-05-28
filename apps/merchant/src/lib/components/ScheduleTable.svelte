@@ -1,8 +1,5 @@
 <script lang="ts">
-  // Single-day schedule table — ported from MerchantView.jsx ScheduleTable.
-  // Cap edits post the `setSupply` action; "移除" sets capacity to 0.
-  // Today's row is read-only. There is no per-day on/off control: publish/
-  // archive are global to the menu item and live on /menus + the library.
+  // Single-day schedule table. Today is read-only; "移除" sets capacity to 0.
   import { Button, Icon } from "@tbite/ui";
   import OrderProgress from "./OrderProgress.svelte";
 
@@ -39,10 +36,7 @@
   const canEdit = $derived(!isToday);
   const empty = $derived(slots.length === 0);
 
-  // Optimistic cap overrides keyed by itemId — updated immediately on each
-  // click so consecutive edits compound (server data only refreshes after
-  // the enhanced form resolves). Reconciled to server values once `slots`
-  // reloads with the committed capacity.
+  // Optimistic overrides so consecutive edits compound before server refresh.
   let capOverride = $state<Record<string, number>>({});
   $effect(() => {
     const next = { ...capOverride };
@@ -73,7 +67,6 @@
     setCap(slot, Math.max(slot.ordered, Math.max(5, parseInt(value, 10) || 0)));
   }
   function remove(slot: Slot) {
-    // "移除" delists the item for this day — capacity 0.
     setCap(slot, 0);
   }
 </script>

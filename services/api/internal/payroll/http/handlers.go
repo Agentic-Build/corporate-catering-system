@@ -21,8 +21,6 @@ type API struct {
 	Svc *payroll.Service
 }
 
-// ----- DTOs -----
-
 type batchDTO struct {
 	ID          string  `json:"id"`
 	PeriodStart string  `json:"period_start"`
@@ -156,8 +154,6 @@ func toExceptionDTO(e *payroll.Exception) exceptionDTO {
 	return out
 }
 
-// ----- Inputs / Outputs -----
-
 type createBatchInput struct {
 	Body struct {
 		PeriodStart string `json:"period_start"`
@@ -288,8 +284,6 @@ type currentPayrollOutput struct {
 	}
 }
 
-// ----- Registration -----
-
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "createPayrollBatch",
@@ -415,8 +409,6 @@ func (a *API) Register(api huma.API) {
 	}, a.resolveException)
 }
 
-// ----- Auth helpers -----
-
 func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
 	return idhttp.RequireAdmin(ctx)
 }
@@ -429,8 +421,6 @@ func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
 func parseDay(s string) (time.Time, error) {
 	return time.ParseInLocation("2006-01-02", s, time.UTC)
 }
-
-// ----- Handlers -----
 
 func (a *API) createBatch(ctx context.Context, in *createBatchInput) (*batchOutput, error) {
 	if _, err := a.requireAdmin(ctx); err != nil {

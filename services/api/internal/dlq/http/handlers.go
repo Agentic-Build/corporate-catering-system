@@ -30,8 +30,6 @@ type API struct {
 	JS   jetstream.JetStream
 }
 
-// ----- DTOs -----
-
 type messageDTO struct {
 	ID             string         `json:"id"`
 	SourceStream   string         `json:"source_stream"`
@@ -74,8 +72,6 @@ type resolveInput struct {
 	}
 }
 
-// ----- Registration -----
-
 // Register wires the DLQ operations onto the given huma API.
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
@@ -105,13 +101,9 @@ func (a *API) Register(api huma.API) {
 	}, a.resolve)
 }
 
-// ----- Auth -----
-
 func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
 	return idhttp.RequireAdmin(ctx)
 }
-
-// ----- Handlers -----
 
 func (a *API) list(ctx context.Context, in *listInput) (*listOutput, error) {
 	if _, err := a.requireAdmin(ctx); err != nil {
@@ -177,8 +169,6 @@ func (a *API) resolve(ctx context.Context, in *resolveInput) (*struct{}, error) 
 	}
 	return &struct{}{}, nil
 }
-
-// ----- Helpers -----
 
 func toDTO(m *dlq.Message) messageDTO {
 	payload := m.Payload

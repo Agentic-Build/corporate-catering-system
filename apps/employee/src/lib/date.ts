@@ -1,10 +1,5 @@
-// Shared Asia/Taipei date helpers.
-//
-// Asia/Taipei is UTC+8 year-round (no DST), so a fixed offset yields the
-// correct local calendar date regardless of where the code runs — the UTC
-// SvelteKit server or the user's browser. `Date#toISOString().slice(0,10)`
-// returns the UTC date, which is the *previous* day during the 00:00–08:00
-// Taipei window; this helper exists to avoid that off-by-one.
+// Asia/Taipei date helpers. Fixed UTC+8 offset (no DST) avoids the off-by-one
+// during 00:00–08:00 Taipei when running on a UTC server.
 
 const TAIPEI_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;

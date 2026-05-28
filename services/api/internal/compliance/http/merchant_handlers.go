@@ -16,8 +16,6 @@ import (
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 )
 
-// ----- DTOs -----
-
 type vendorInfoDTO struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
@@ -46,16 +44,12 @@ func warningToDTO(w compliance.Warning) warningDTO {
 	}
 }
 
-// ----- Auth -----
-
 // requireVendor enforces a vendor_operator bound to a vendor and returns the
 // resolved vendor_id from the session (never a path param).
 func (a *API) requireVendor(ctx context.Context) (string, error) {
 	_, vendorID, err := idhttp.RequireVendor(ctx)
 	return vendorID, err
 }
-
-// ----- Registration -----
 
 // registerMerchant attaches the merchant compliance self-view + self-service
 // document upload routes. Called from API.Register so main.go needs no extra
@@ -93,8 +87,6 @@ type merchantUploadDocumentInput struct {
 		Supersedes    *string `json:"supersedes,omitempty" format:"uuid" doc:"ID of the document this upload replaces (resupply)"`
 	}
 }
-
-// ----- Handlers -----
 
 func (a *API) merchantCompliance(ctx context.Context, _ *struct{}) (*merchantComplianceOutput, error) {
 	vendorID, err := a.requireVendor(ctx)

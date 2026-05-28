@@ -1,6 +1,5 @@
 <script lang="ts">
-  // A 7-day week view for picking a preorder date. Renders the coming week as
-  // a calendar row of day cards rather than a horizontal scroll strip.
+  // 7-day week view for picking a preorder date.
   interface WeekDay {
     id: string; // YYYY-MM-DD
     weekday: string; // 日 一 二 …

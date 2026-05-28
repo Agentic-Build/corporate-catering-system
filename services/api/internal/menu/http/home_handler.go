@@ -13,37 +13,23 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu/readmodel"
 )
 
-// HomeAPI exposes the employee landing-page aggregate endpoint plus the two
-// "see more" pagination endpoints for reorder + recommendation chips. The
-// favorites pagination endpoint is owned by the existing menu API (Task 2).
-//
-// Constructor wiring (in cmd/tbite/main.go):
-//
-//	homeAPI := &mhttp.HomeAPI{
-//	    Home:    homeService,
-//	    MenuSvc: menuService, // for day_menu
-//	}
-//	homeAPI.Register(api)
+// HomeAPI exposes the employee landing-page aggregate endpoint plus "see more"
+// pagination for reorder + recommendation chips (favorites pagination lives in
+// the menu API).
 type HomeAPI struct {
-	// Home is the personalisation orchestrator (target_day + chips).
-	Home *menu.HomeService
-	// MenuSvc is the existing menu service used to fetch the day_menu list.
-	// Reused as-is so the home page returns the same shape that
-	// GET /api/employee/menu does for "today".
-	MenuSvc *menu.Service
+	Home    *menu.HomeService
+	MenuSvc *menu.Service // reused so /home and /menu return the same day_menu shape
 
-	// Read-model cache for employee home. Compute() results are
-	// memoised by (user, plant, day) under a short TTL, and the
-	// outbox-driven invalidator drops affected keys on order events.
+	// Cache memoises Compute() by (user, plant, day); the outbox invalidator
+	// drops affected keys on order events.
 	Cache       readmodel.Cache
 	CacheTTL    time.Duration
 	CacheMetric readmodel.Metrics
 }
 
-// computeHome consults the read-model cache when wired. The wrapper
-// exists in this package (not menu/readmodel) so the only call site
-// is the home aggregate endpoint; the chip endpoints recompute
-// because their pagination key would push cache cardinality high.
+// computeHome consults the read-model cache when wired. Only the home
+// aggregate endpoint caches; chip endpoints recompute (paging keys would
+// push cardinality high).
 func (a *HomeAPI) computeHome(ctx context.Context, userID, plant, day string) (menu.HomeState, error) {
 	if a.Cache == nil {
 		return a.Home.Compute(ctx, userID, plant, day)
@@ -56,8 +42,6 @@ func (a *HomeAPI) computeHome(ctx context.Context, userID, plant, day string) (m
 	}
 	return w.Compute(ctx, userID, plant, day)
 }
-
-// ---------- DTOs ----------
 
 type orderSummaryDTO struct {
 	OrderID         string `json:"order_id"`
@@ -77,9 +61,8 @@ type reorderChipDTO struct {
 	AvailableToday  bool     `json:"available_today"`
 }
 
-// favoriteChipDTO is reused from favorites_handler.go (same package). Keeping
-// a single shape ensures /home, /favorites, and the see-more endpoint all
-// emit identical JSON for a favorite chip.
+// favoriteChipDTO is defined in favorites_handler.go (same shape across
+// /home, /favorites, and the see-more endpoint).
 
 type recommendChipDTO struct {
 	MenuItemID string  `json:"menu_item_id"`
@@ -131,8 +114,6 @@ type recommendationsOutput struct {
 	}
 }
 
-// ---------- Registration ----------
-
 func (a *HomeAPI) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "getEmployeeHome",
@@ -161,8 +142,6 @@ func (a *HomeAPI) Register(api huma.API) {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.listRecommendations)
 }
-
-// ---------- Handlers ----------
 
 func (a *HomeAPI) getHome(ctx context.Context, in *homeInput) (*homeOutput, error) {
 	user, ok := idhttp.UserFromContext(ctx)
@@ -246,8 +225,7 @@ func (a *HomeAPI) listReorders(ctx context.Context, in *reordersInput) (*reorder
 	if err != nil {
 		return nil, err
 	}
-	// We need a target day to compute available_today; reuse Compute() with no
-	// day override so the cursor-based paging stays consistent with /home.
+	// Reuse Compute() with no day override so cursor paging stays consistent with /home.
 	state, err := a.computeHome(ctx, user.ID, plant, "")
 	if err != nil {
 		return nil, huma.Error500InternalServerError("compute target day", err)
@@ -306,12 +284,8 @@ func (a *HomeAPI) listRecommendations(ctx context.Context, in *recommendationsIn
 	return &resp, nil
 }
 
-// ---------- Helpers ----------
-
 // requireEmployeePlant returns the user's plant string or a 4xx huma error.
-// Role enforcement is delegated to upstream auth middleware — the home
-// endpoints are mounted at /api/employee/* which already requires an
-// authenticated employee.
+// Role enforcement is upstream (/api/employee/* requires an authed employee).
 func requireEmployeePlant(u *identity.User) (string, error) {
 	if u.Plant == nil || *u.Plant == "" {
 		return "", huma.Error400BadRequest("plant is required (user has no plant assignment)")

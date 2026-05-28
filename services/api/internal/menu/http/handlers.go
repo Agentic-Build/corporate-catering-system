@@ -29,8 +29,6 @@ type API struct {
 	StorageBucket        string
 }
 
-// ----- DTOs -----
-
 type categoryDTO struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -80,8 +78,6 @@ type employeeMenuItemDTO struct {
 	ETALabel     string   `json:"eta_label"`
 	SoldOut      bool     `json:"sold_out"`
 }
-
-// ----- Inputs / Outputs -----
 
 type listCategoriesOutput struct {
 	Body struct {
@@ -161,8 +157,6 @@ type listEmployeeMenuOutput struct {
 		Items []employeeMenuItemDTO `json:"items"`
 	}
 }
-
-// ----- Registration -----
 
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
@@ -256,8 +250,6 @@ func (a *API) Register(api huma.API) {
 	// endpoints.
 }
 
-// ----- Auth helpers -----
-
 // requireVendor enforces vendor_operator role + a non-empty vendor binding.
 func (a *API) requireVendor(ctx context.Context) (*identity.User, string, error) {
 	return idhttp.RequireVendor(ctx)
@@ -267,8 +259,6 @@ func (a *API) requireVendor(ctx context.Context) (*identity.User, string, error)
 func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
 	return idhttp.RequireEmployee(ctx)
 }
-
-// ----- Handlers -----
 
 func (a *API) listCategories(ctx context.Context, _ *struct{}) (*listCategoriesOutput, error) {
 	_, vendorID, err := a.requireVendor(ctx)
@@ -485,8 +475,6 @@ func (a *API) listEmployeeMenu(ctx context.Context, in *listEmployeeMenuInput) (
 	}
 	return &resp, nil
 }
-
-// ----- helpers -----
 
 func toItemDTO(i *menu.Item) itemDTO {
 	tags := i.Tags

@@ -18,8 +18,6 @@ type API struct {
 	Svc *vendor.Service
 }
 
-// ----- DTOs -----
-
 type plantMappingDTO struct {
 	Plant         string `json:"plant"`
 	ServiceWindow string `json:"service_window"`
@@ -147,8 +145,6 @@ type createOperatorOutput struct {
 		Operator operatorDTO `json:"operator"`
 	}
 }
-
-// ----- Registration -----
 
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
@@ -284,13 +280,9 @@ func (a *API) requireVendor(ctx context.Context) (string, error) {
 	return vendorID, err
 }
 
-// ----- Auth guard -----
-
 func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
 	return idhttp.RequireAdmin(ctx)
 }
-
-// ----- Handlers -----
 
 func (a *API) setPlantWindow(ctx context.Context, in *setPlantWindowInput) (*struct{}, error) {
 	if _, err := a.requireAdmin(ctx); err != nil {
@@ -486,8 +478,6 @@ func (a *API) reinstateOperator(ctx context.Context, in *operatorIDInput) (*stru
 	}
 	return &struct{}{}, nil
 }
-
-// ----- Helpers -----
 
 func toDTO(v *vendor.Vendor) vendorDTO {
 	d := vendorDTO{

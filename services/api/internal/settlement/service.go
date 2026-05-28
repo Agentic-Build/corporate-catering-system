@@ -11,17 +11,14 @@ import (
 
 const auditActorRole = "welfare_admin"
 
-// txBeginner is the transaction-starting surface of *pgxpool.Pool. The service
-// depends on this interface (not the concrete pool) so tests can inject a fake
-// that hands the write closure a no-op pgx.Tx; the repo fakes ignore the tx.
+// txBeginner is the transaction-starting surface of *pgxpool.Pool.
 type txBeginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-// Service orchestrates vendor settlement: admin period close / void plus the
-// merchant-facing reconciliation and settlement reads. Close is a multi-row
-// write (one vendor_settlement per vendor + audit_event) so it runs inside
-// pgx.BeginFunc to keep a half-closed period from surviving a crash.
+// Service orchestrates vendor settlement (admin period close/void + merchant
+// reconciliation/settlement reads). Close runs inside pgx.BeginFunc so a
+// half-closed period can't survive a crash.
 type Service struct {
 	Pool        txBeginner
 	Settlements SettlementRepository
@@ -37,10 +34,9 @@ type CloseSettlementInput struct {
 }
 
 // CloseSettlement aggregates every vendor's picked_up/no_show orders in the
-// period and writes one vendor_settlement row per vendor that has orders. All
-// rows plus the audit_event commit in a single transaction. Re-closing a period
-// that already has an active (status='closed') row for any of those vendors is
-// rejected with ErrPeriodAlreadyClosed — void the prior settlement first.
+// period and writes one vendor_settlement row per vendor. Rows + audit_event
+// commit in one tx. Re-closing a period with any active (status='closed') row
+// is rejected (ErrPeriodAlreadyClosed) — void the prior settlement first.
 func (s *Service) CloseSettlement(ctx context.Context, in CloseSettlementInput) ([]*Settlement, error) {
 	startedAt := time.Now()
 	if in.PeriodStart.After(in.PeriodEnd) {
@@ -118,10 +114,9 @@ func (s *Service) VoidSettlement(ctx context.Context, id, voidedBy string) error
 	})
 }
 
-// Reconciliation computes a vendor's live monthly summary straight from the
-// order table — used before a period is closed. gross_minor / portion_count use
-// the same picked_up/no_show inclusion as CloseSettlement; the breakdown also
-// surfaces cancelled/refunded counts for transparency.
+// Reconciliation computes a vendor's live monthly summary from the order
+// table (pre-close view). Inclusion matches CloseSettlement; breakdown also
+// surfaces cancelled/refunded counts.
 func (s *Service) Reconciliation(ctx context.Context, vendorID string, start, end time.Time) (*Reconciliation, error) {
 	if start.After(end) {
 		return nil, ErrInvalidPeriod
@@ -150,9 +145,8 @@ func (s *Service) ListVendorSettlements(ctx context.Context, vendorID string) ([
 	return s.Settlements.ListByVendor(ctx, vendorID)
 }
 
-// GetVendorSettlement fetches one settlement and verifies it belongs to the
-// calling vendor. A mismatch is reported as ErrSettlementNotFound so a merchant
-// cannot probe other vendors' settlement ids.
+// GetVendorSettlement fetches one settlement and verifies vendor ownership.
+// Mismatch → ErrSettlementNotFound (avoid cross-vendor id probing).
 func (s *Service) GetVendorSettlement(ctx context.Context, vendorID, id string) (*Settlement, []*SettlementOrderLine, error) {
 	st, err := s.Settlements.GetByID(ctx, id)
 	if err != nil {

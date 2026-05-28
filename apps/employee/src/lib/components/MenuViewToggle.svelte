@@ -1,6 +1,5 @@
 <script lang="ts">
-  // 全部餐點檢視切換 — 依餐點（flat MealCard grid）/ 依店家（grouped by
-  // vendor）. Purely a presentation switch on the home page; no new route.
+  // 全部餐點檢視切換: 依餐點 (flat grid) vs 依店家 (grouped).
   interface Props {
     view: "meal" | "vendor";
     onChange: (next: "meal" | "vendor") => void;

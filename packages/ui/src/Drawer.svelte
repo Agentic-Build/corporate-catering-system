@@ -1,6 +1,4 @@
 <script lang="ts">
-  // Slide-in panel — ported from the drawer shells in EmployeeView.jsx
-  // (TbCartDrawer) and MerchantView.jsx (MealLibraryDrawer).
   import type { Snippet } from "svelte";
 
   interface Props {
@@ -31,7 +29,7 @@
   const sideClass = $derived(side === "left" ? "left-0" : "right-0");
   const hiddenTransform = $derived(side === "left" ? "-translate-x-full" : "translate-x-full");
 
-  // Focus management — move focus into the panel on open, restore it on close.
+  // Move focus into the panel on open; restore on close.
   $effect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -47,9 +45,8 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<!-- inert when closed: keeps the slide transition (stays mounted) but removes
-     the backdrop + panel from the tab order and the accessibility tree, so a
-     closed drawer is not a phantom modal for keyboard / screen-reader users. -->
+<!-- inert when closed: stays mounted for the slide transition, but is removed
+     from tab order + a11y tree so it isn't a phantom modal. -->
 <div
   class="fixed inset-0 z-[70] transition {open ? 'pointer-events-auto' : 'pointer-events-none'}"
   inert={!open}

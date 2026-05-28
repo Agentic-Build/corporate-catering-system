@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Ported from EmployeePages.jsx PageHeader — shared page header.
   import type { Snippet } from "svelte";
 
   interface Props {

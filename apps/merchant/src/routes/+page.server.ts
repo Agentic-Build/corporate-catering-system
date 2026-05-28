@@ -21,7 +21,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     return { id, head, weekday: WEEKDAY[d.getDay()], offset: i };
   });
 
-  // Meal library — all menu items incl. archived (drawer + name lookups).
+  // Library = all menu items incl. archived (drawer + name lookups).
   let items: any[] = [];
   try {
     const r = await client.GET("/api/merchant/menu-items", {
@@ -29,7 +29,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     });
     if (r.data) items = (r.data as any).items ?? [];
   } catch {}
-  // Today's orders — used for KPI stats only.
   let todayOrders: any[] = [];
   try {
     const r = await client.GET("/api/merchant/orders", {
@@ -38,7 +37,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     if (r.data) todayOrders = (r.data as any).items ?? [];
   } catch {}
 
-  // 7-day supply, fetched in parallel — one request per day.
   const supplyResults = await Promise.all(
     days.map(async (d) => {
       try {
@@ -55,7 +53,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     supplyResults.map((s) => [s.date, s.items]),
   );
 
-  // Today's totals for the StatCard row.
   const todaySupply: any[] = supplyByDate[today] ?? [];
   const totalCapacity = todaySupply.reduce((a: number, s: any) => a + s.capacity, 0);
   const totalSold = todaySupply.reduce((a: number, s: any) => a + (s.capacity - s.remain), 0);

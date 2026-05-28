@@ -1,8 +1,5 @@
 <script lang="ts">
-  // 訂單詳情 — design-language pass. PageHeader + Card + StateTag, with the
-  // detail card mirroring the reference OrderCard footer. For picked_up
-  // orders this page also hosts the F1 員工回饋 forms: a meal rating and a
-  // 回報問題 (complaint) form.
+  // 訂單詳情: details, modify form, and F1 員工回饋 forms for picked_up orders.
   import { PageHeader, Card, StateTag, Button, Icon } from "@tbite/ui";
 
   let { data, form } = $props();
@@ -31,7 +28,6 @@
     refunded: "已退款",
   };
 
-  // ── F1 feedback labels ──
   const complaintCategories = [
     { id: "wrong_item", label: "送錯餐點" },
     { id: "missing_item", label: "餐點短缺" },
@@ -61,23 +57,17 @@
     return iso ? iso.slice(0, 16).replace("T", " ") : "-";
   }
 
-  // ── existing / freshly-submitted complaint ──
   const complaint = $derived(form?.complaint ?? data.complaint);
 
-  // ── rating form local state ──
   let starValue = $state(0);
-  // Show a freshly-submitted rating, or the one loaded on revisit.
   const submittedRating = $derived(form?.rating ?? data.rating);
 
-  // ── modify (edit order items) state ──
   let editing = $state(false);
   let draft = $state<Record<string, number>>({});
 
-  // qty this order currently holds, keyed by menu_item_id.
   const origQty = $derived(Object.fromEntries(items.map((it) => [it.menu_item_id, it.qty])));
 
-  // Rows for the edit form: the vendor's menu on the supply date, plus any
-  // item already on the order that is no longer listed that day.
+  // Edit rows: vendor's menu for supply_date plus any order items no longer listed.
   const editRows = $derived.by(() => {
     const rows = new Map<string, { id: string; name: string; price: number; remain: number }>();
     for (const m of data.menu ?? []) {
@@ -96,7 +86,7 @@
     return [...rows.values()];
   });
 
-  // Effective max for a row = quota still free + qty this order already holds.
+  // Effective max = quota still free + qty already held by this order.
   function maxQty(row: { id: string; remain: number }): number {
     return row.remain + (origQty[row.id] ?? 0);
   }
@@ -291,7 +281,7 @@
     {/if}
   </div>
 
-  <!-- ── F1 員工回饋 — only for picked_up orders ── -->
+  <!-- F1 員工回饋 — only for picked_up orders -->
   {#if o.status === "picked_up"}
     <!-- Meal rating -->
     <Card title="餐點評分" description="為這份餐點打個分數，協助我們追蹤商家品質。">

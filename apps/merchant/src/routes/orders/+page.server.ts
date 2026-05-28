@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     if (r.data) items = (r.data as any).items ?? [];
   } catch {}
 
-  // Load menu items for name lookup (include archived so old orders still resolve)
+  // Menu items for name lookup; include_archived so old orders still resolve.
   let menuItems: any[] = [];
   try {
     const r = await client.GET("/api/merchant/menu-items", {
@@ -29,13 +29,11 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     menuItems.map((i: any) => [i.id, { name: i.name }]),
   );
 
-  // Group by plant
   const byPlant: Record<string, any[]> = {};
   for (const o of items) {
     (byPlant[o.plant] ??= []).push(o);
   }
 
-  // 7-day picker (today + next 6), in Asia/Taipei.
   const days: { id: string; label: string }[] = [];
   for (let i = 0; i < 7; i++) {
     const id = dayId(i);

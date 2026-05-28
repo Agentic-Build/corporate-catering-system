@@ -24,8 +24,6 @@ type API struct {
 	Svc *compliance.Service
 }
 
-// ----- DTOs -----
-
 type documentDTO struct {
 	ID         string  `json:"id"`
 	VendorID   string  `json:"vendor_id"`
@@ -150,8 +148,6 @@ func auditRowToDTO(r compliance.AuditRow) auditRowDTO {
 	}
 }
 
-// ----- Inputs / Outputs -----
-
 type listDocumentsInput struct {
 	VendorID   string `path:"vendor_id" format:"uuid"`
 	IncludeAll bool   `query:"include_all"`
@@ -228,8 +224,6 @@ type listAuditOutput struct {
 	}
 }
 
-// ----- Registration -----
-
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "uploadVendorDocument",
@@ -302,13 +296,9 @@ func (a *API) Register(api huma.API) {
 	a.registerMerchant(api)
 }
 
-// ----- Auth -----
-
 func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
 	return idhttp.RequireAdmin(ctx)
 }
-
-// ----- Handlers -----
 
 func (a *API) upload(ctx context.Context, in *uploadDocumentInput) (*uploadDocumentOutput, error) {
 	u, err := a.requireAdmin(ctx)

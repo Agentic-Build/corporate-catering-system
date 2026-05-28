@@ -14,14 +14,12 @@ import (
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
-// defaultMealWindow tags every order/quota metric with the single-meal-per-day
-// window this system currently supports. When multi-window support lands the
-// constant becomes a derived field on Order/Supply (PickupWindow).
+// defaultMealWindow tags order/quota metrics; this system supports one meal
+// per day. When multi-window support lands it becomes a field on Order/Supply.
 const defaultMealWindow = "lunch"
 
-// txBeginner is the transaction-starting surface of *pgxpool.Pool. The service
-// depends on this interface (not the concrete pool) so tests can inject a fake
-// that hands the write closure a no-op pgx.Tx; the repo fakes ignore the tx.
+// txBeginner is the transaction-starting surface of *pgxpool.Pool, taken as
+// an interface so tests can inject a fake.
 type txBeginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
@@ -66,10 +64,9 @@ type VendorReader interface {
 	GetByID(ctx context.Context, id string) (*vendor.Vendor, error)
 }
 
-// Service orchestrates Place / Cancel across order, state-event, outbox, audit,
-// and quota repos. All multi-table writes are wrapped in pgx.BeginFunc so a
-// failure at any step (including ErrOutOfStock) rolls the entire transaction
-// back atomically.
+// Service orchestrates Place / Cancel across order, state-event, outbox,
+// audit, and quota repos. All multi-table writes run inside pgx.BeginFunc so
+// any failure (including ErrOutOfStock) rolls back atomically.
 type Service struct {
 	Pool        txBeginner
 	Orders      Repository
@@ -103,16 +100,13 @@ type PlaceOrderInput struct {
 	Notes      string
 }
 
-// Place creates an order in PLACED state inside a single transaction.
-// On any failure (including ErrOutOfStock) the entire transaction rolls back,
-// so quota decrements are released and no order / state / outbox / audit row
-// is left behind.
+// Place creates an order in PLACED state inside a single transaction. On any
+// failure (including ErrOutOfStock) everything rolls back, so quota decrements
+// are released and no order / state / outbox / audit row is left behind.
 func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error) {
 	startedAt := time.Now()
-	// outcome / vendorIDRef are mutated along the function and read by the
-	// deferred emitter so dashboards can attribute every termination — empty,
-	// multi_vendor, vendor_plant_mismatch, cutoff_passed, quota_exhausted,
-	// concurrent_modification, tx_error, success — to (plant, vendor) labels.
+	// outcome / vendorIDRef are mutated below and read by the deferred emitter
+	// so dashboards can attribute every termination to (plant, vendor).
 	outcome := "success"
 	vendorIDRef := ""
 	defer func() {
@@ -125,8 +119,7 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 	}
 
 	// Resolve menu items, verify a single vendor, and compute total price.
-	// Read-only lookups happen outside the tx so we don't hold row locks on
-	// menu_item rows that we never mutate.
+	// Read-only lookups outside the tx avoid row locks on unmutated menu rows.
 	var vendorID string
 	var totalPrice int64
 	domainItems := make([]Item, 0, len(in.Items))
@@ -216,7 +209,6 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 	// ErrOutOfStock so the post-commit emit can include the offending item.
 	var quotaExhaustedItem string
 	err = MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		// 1. Decrement quota for each item — conditional UPDATE per row.
 		for _, it := range o.Items {
 			if _, err := s.QuotaTx.DecrementTx(ctx, tx, it.MenuItemID, in.SupplyDate, it.Qty); err != nil {
 				if errors.Is(err, quota.ErrOutOfStock) {
@@ -225,11 +217,9 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 				return err
 			}
 		}
-		// 2. Insert order + items (assigns o.ID).
 		if err := s.OrdersTx.CreateTx(ctx, tx, o); err != nil {
 			return err
 		}
-		// 3. State event: nil → placed.
 		role := "employee"
 		if err := s.StateTx.AppendTx(ctx, tx, &StateEvent{
 			OrderID:   o.ID,
@@ -242,12 +232,10 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		}); err != nil {
 			return err
 		}
-		// 4. Outbox event for downstream consumers.
 		payload := buildOrderPayload(o)
 		if err := s.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.placed.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
-		// 5. Audit trail.
 		return s.AuditTx.WriteTx(ctx, tx, &in.UserID, &role, "order.place", "order", o.ID, payload, "")
 	}))
 	if err != nil {
@@ -261,8 +249,6 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		}
 		return nil, err
 	}
-	// outcome stays "success"; deferred RecordOrderPlaced fires. Emit the
-	// success-only price histogram.
 	observability.RecordOrderPrice(ctx, totalPrice, in.Plant, vendorID)
 	return o, nil
 }
@@ -329,12 +315,9 @@ type ModifyOrderInput struct {
 }
 
 // Modify replaces the items of a user-owned PLACED order before its cutoff.
-// The new item set fully supersedes the old one. Quota is adjusted by the
-// per-menu-item delta (desired qty minus currently-held qty) inside a single
-// transaction, so a failure at any step (including ErrOutOfStock) rolls back
-// without leaking quota. The order keeps its ID and status — only items +
-// total change — so no state event is written, only an audit row and an
-// order.modified.v1 outbox entry.
+// Quota is adjusted by per-menu-item delta inside one transaction so failures
+// don't leak quota. Order ID and status are unchanged — only items + total —
+// so no state event is written, only an audit row + order.modified.v1 outbox.
 func (s *Service) Modify(ctx context.Context, in ModifyOrderInput) (*Order, error) {
 	if len(in.Items) == 0 {
 		return nil, ErrEmptyOrder
@@ -493,10 +476,9 @@ func (s *Service) MarkReady(ctx context.Context, vendorID string, orderIDs []str
 }
 
 // Pickup atomically transitions READY → PICKED_UP for the order's OWNER.
-// Employee self-service: the scanned QR carries only the order id; ownership
-// is enforced here (o.UserID != employeeID → ErrForbidden). The conditional
-// UPDATE inside MarkPickedUpTx guarantees one-time idempotency — exactly one
-// concurrent call wins, all others see ErrInvalidTransition.
+// The scanned QR carries only the order id; ownership is enforced here.
+// MarkPickedUpTx's conditional UPDATE guarantees one-time idempotency —
+// exactly one concurrent caller wins, others see ErrInvalidTransition.
 func (s *Service) Pickup(ctx context.Context, orderID, employeeID string) (err error) {
 	var plant, vendor string
 	outcome := "tx_error"
@@ -547,11 +529,8 @@ func (s *Service) Pickup(ctx context.Context, orderID, employeeID string) (err e
 		case errors.Is(err, ErrConcurrentModification):
 			outcome = "concurrent_modification"
 		case errors.Is(err, ErrInvalidTransition):
-			// Lost the in-tx race: another caller flipped the row out of READY
-			// between our pre-check and MarkPickedUpTx. Same root cause as the
-			// pre-check wrong_state branch, so report identically — keeps the
-			// dashboard from showing a phantom "tx_error" spike on the
-			// pickup-floor when really it's contention.
+			// Lost the in-tx race (another caller flipped READY between our
+			// pre-check and MarkPickedUpTx). Report as wrong_state, not tx_error.
 			outcome = "wrong_state"
 		}
 		return err

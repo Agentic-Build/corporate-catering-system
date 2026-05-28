@@ -26,9 +26,7 @@ const (
 // Clock lets tests pin "now".
 type Clock interface{ Now() time.Time }
 
-// txBeginner is the transaction-starting surface of *pgxpool.Pool. The service
-// depends on this interface (not the concrete pool) so tests can inject a fake
-// that hands the write closure a no-op pgx.Tx; the repo fakes ignore the tx.
+// txBeginner is the transaction-starting surface of *pgxpool.Pool.
 type txBeginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
@@ -42,16 +40,11 @@ type Service struct {
 	Orders     OrderReader
 	Audit      AuditTx
 	Clock      Clock
-	// Reverser is the payroll-reversal hook used by AdminResolveComplaint
-	// when the welfare admin resolves a complaint with compensation. It is
-	// optional at construction time and wired by the orchestrator (typically
-	// to payroll.Service). When AdminResolveComplaint is called with
-	// compensate=true and Reverser is nil, the call fails — silently
-	// no-opping a money-movement request would mask a misconfiguration.
+	// Reverser is the payroll-reversal hook used by AdminResolveComplaint when
+	// resolving with compensation. compensate=true with Reverser=nil fails —
+	// silently skipping a money movement would mask a misconfiguration.
 	Reverser OrderReverser
 }
-
-// ----- Rating -----
 
 // RateOrderInput captures an employee's meal rating for one picked-up order.
 type RateOrderInput struct {
@@ -118,8 +111,6 @@ func (s *Service) GetRating(ctx context.Context, orderID string) (*Rating, error
 	return s.Ratings.GetByOrder(ctx, orderID)
 }
 
-// ----- Complaint: creation -----
-
 // FileComplaintInput captures an employee's complaint about one picked-up order.
 type FileComplaintInput struct {
 	OrderID     string
@@ -174,8 +165,6 @@ func (s *Service) FileComplaint(ctx context.Context, in FileComplaintInput) (*Co
 	}
 	return c, nil
 }
-
-// ----- Complaint: workflow transitions -----
 
 // RespondToComplaint is the vendor action: open → vendor_responded. The vendor
 // must own the complaint's vendor; response text must be at least 5 chars.
@@ -241,15 +230,9 @@ func (s *Service) EmployeeResolveComplaint(ctx context.Context, complaintID, use
 		map[string]any{"resolved_by_role": "employee", "from": string(c.Status)})
 }
 
-// AdminResolveComplaint is the welfare-committee close of an escalated
-// complaint: escalated → resolved. Resolution text must be at least 5 chars.
-//
-// When compensate is true, after the complaint state transition succeeds the
-// payroll deduction for the complaint's order is reversed (full refund) via
-// Service.Reverser. ReverseOrder is idempotent, so a replay of this call with
-// compensate=true does not double-refund. A nil Reverser combined with
-// compensate=true is a configuration error and returns an error rather than
-// silently skipping the money movement.
+// AdminResolveComplaint closes an escalated complaint: escalated → resolved.
+// When compensate=true, the order's payroll deduction is reversed via
+// Service.Reverser (idempotent — safe to replay).
 func (s *Service) AdminResolveComplaint(ctx context.Context, complaintID, adminUserID, resolution string, compensate bool) error {
 	c, err := s.Complaints.GetByID(ctx, complaintID)
 	if err != nil {
@@ -295,8 +278,6 @@ func (s *Service) transition(ctx context.Context, c *Complaint, from, to Complai
 	})
 }
 
-// ----- Queries -----
-
 // ListMyComplaints returns complaints filed by an employee.
 func (s *Service) ListMyComplaints(ctx context.Context, userID string) ([]*Complaint, error) {
 	return s.Complaints.ListByUser(ctx, userID)
@@ -317,8 +298,6 @@ func (s *Service) ListEscalatedComplaints(ctx context.Context) ([]*Complaint, er
 func (s *Service) GetComplaint(ctx context.Context, id string) (*Complaint, error) {
 	return s.Complaints.GetByID(ctx, id)
 }
-
-// ----- helpers -----
 
 func (s *Service) writeAudit(ctx context.Context, tx pgx.Tx, actorID, actorRole, action, targetKind, targetID string, payload map[string]any) error {
 	aID := actorID

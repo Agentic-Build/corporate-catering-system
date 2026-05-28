@@ -30,8 +30,6 @@ type API struct {
 	MenuHub *order.MenuHub
 }
 
-// ----- DTOs -----
-
 type orderItemDTO struct {
 	ID             string `json:"id"`
 	MenuItemID     string `json:"menu_item_id"`
@@ -87,8 +85,6 @@ func toDTO(o *order.Order) orderDTO {
 	}
 	return d
 }
-
-// ----- Inputs / Outputs -----
 
 type placeOrderInput struct {
 	Body struct {
@@ -244,8 +240,6 @@ func prepItemDTOs(items []order.PrepSheetItem) []prepSheetItemDTO {
 	return out
 }
 
-// ----- Registration -----
-
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "placeOrder",
@@ -355,8 +349,6 @@ func (a *API) Register(api huma.API) {
 	}, a.streamEmployeeMenuEvents)
 }
 
-// ----- Auth helper -----
-
 func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
 	return idhttp.RequireEmployee(ctx)
 }
@@ -364,8 +356,6 @@ func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
 func (a *API) requireVendor(ctx context.Context) (*identity.User, string, error) {
 	return idhttp.RequireVendor(ctx)
 }
-
-// ----- Handlers -----
 
 func (a *API) place(ctx context.Context, in *placeOrderInput) (*placeOrderOutput, error) {
 	u, err := a.requireEmployee(ctx)

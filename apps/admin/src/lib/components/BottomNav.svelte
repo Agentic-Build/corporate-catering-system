@@ -1,12 +1,9 @@
 <script lang="ts">
-  // Mobile bottom navigation (<md). Mirrors the design mockup's tab bar (top row
-  // of 4 + bottom row of 3) and is hidden at md+ where the top tab bar takes
-  // over. Tabs map 1:1 to real admin routes; /dlq is intentionally excluded.
+  // Mobile bottom navigation; hidden at md+ where the top tab bar takes over.
   import { Icon, type IconName } from "@tbite/ui";
   import { page } from "$app/stores";
 
   type Tab = { href: string; label: string; icon: IconName };
-  // Top row 4, bottom row 3 — same labels/icons as the layout's navItems.
   const topRow: Tab[] = [
     { href: "/", label: "治理總覽", icon: "home" },
     { href: "/vendors", label: "商家", icon: "doc" },

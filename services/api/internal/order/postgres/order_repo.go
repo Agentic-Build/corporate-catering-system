@@ -37,16 +37,14 @@ func scanOrder(row pgx.Row, o *order.Order) error {
 	return nil
 }
 
-// CreateTx inserts the order + items inside the provided transaction. Service
-// callers wrap this in a larger tx that also touches quota, state events, and
-// outbox; pass nil tx via Create() if a standalone insert is desired.
+// CreateTx inserts the order + items inside the provided transaction.
+// Use Create() for a standalone insert.
 func (r *OrderRepo) CreateTx(ctx context.Context, tx pgx.Tx, o *order.Order) error {
 	if tx == nil {
 		return errors.New("OrderRepo.CreateTx requires a tx")
 	}
-	// totp_secret is intentionally omitted: the TOTP pickup mechanism was
-	// removed (employees now self-serve via QR scan). The column is retained
-	// but disabled — its NOT NULL DEFAULT fills the unused value.
+	// totp_secret intentionally omitted (legacy TOTP pickup removed; NOT NULL
+	// DEFAULT covers the unused column).
 	err := tx.QueryRow(ctx, `
 INSERT INTO "order"
   (user_id, vendor_id, plant, supply_date, status, total_price_minor, notes, placed_at, cutoff_at)
@@ -136,9 +134,7 @@ func (r *OrderRepo) UpdateStatus(ctx context.Context, id string, from, to order.
 }
 
 // ReplaceItemsTx swaps the order's item rows for a new set and updates the
-// stored total + notes, all inside the caller's transaction. order_item has
-// no append-only guard, so deleting and re-inserting is the simplest correct
-// way to apply a full-replacement edit. Callers must adjust quota separately.
+// stored total + notes. Callers must adjust quota separately.
 func (r *OrderRepo) ReplaceItemsTx(ctx context.Context, tx pgx.Tx, orderID string, items []order.Item, totalMinor int64, notes string) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM order_item WHERE order_id=$1`, orderID); err != nil {
 		return fmt.Errorf("delete order_items: %w", err)
@@ -331,10 +327,8 @@ func collectOrders(rows pgx.Rows) ([]*order.Order, error) {
 	return out, rows.Err()
 }
 
-// hydrateItems loads order_item rows for every order in orders and attaches them
-// to o.Items, keyed by order_id, in a single query (no N+1). Callers that need
-// line items — the merchant board, prep sheet, payroll — must run this; the bare
-// "order" projection in collectOrders carries none.
+// hydrateItems loads order_item rows for every order in one query (no N+1).
+// collectOrders by itself returns the bare projection without items.
 func (r *OrderRepo) hydrateItems(ctx context.Context, orders []*order.Order) error {
 	if len(orders) == 0 {
 		return nil

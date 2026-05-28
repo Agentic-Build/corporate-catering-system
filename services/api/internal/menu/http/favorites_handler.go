@@ -21,8 +21,6 @@ type FavoritesAPI struct {
 	Svc *menu.FavoritesService
 }
 
-// ----- DTOs -----
-
 type favoriteChipDTO struct {
 	MenuItemID     string `json:"menu_item_id"`
 	Name           string `json:"name"`
@@ -30,8 +28,6 @@ type favoriteChipDTO struct {
 	VendorID       string `json:"vendor_id"`
 	AvailableToday bool   `json:"available_today"`
 }
-
-// ----- Inputs / Outputs -----
 
 type addFavoriteInput struct {
 	Body struct {
@@ -55,8 +51,6 @@ type listFavoritesOutput struct {
 		NextCursor *string           `json:"next_cursor,omitempty"`
 	}
 }
-
-// ----- Registration -----
 
 func (a *FavoritesAPI) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
@@ -88,8 +82,6 @@ func (a *FavoritesAPI) Register(api huma.API) {
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, a.listFavorites)
 }
-
-// ----- Handlers -----
 
 func (a *FavoritesAPI) addFavorite(ctx context.Context, in *addFavoriteInput) (*struct{}, error) {
 	user, err := requireEmployeeUser(ctx)
@@ -164,8 +156,6 @@ func (a *FavoritesAPI) listFavorites(ctx context.Context, in *listFavoritesInput
 	}
 	return &resp, nil
 }
-
-// ----- helpers -----
 
 // requireEmployeeUser is a local clone of API.requireEmployee that doesn't
 // require an API receiver; defined here to keep this file self-contained per

@@ -1,6 +1,4 @@
 <script lang="ts">
-  // Floating cart pill — ported from EmployeeView.jsx. Dark rounded bar fixed
-  // at the bottom; shows the cart count + total and opens the cart drawer.
   import { Icon } from "@tbite/ui";
   import { cart } from "$lib/cart.svelte";
 

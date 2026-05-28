@@ -1,6 +1,4 @@
 <script lang="ts">
-  // Dashed-border empty card — modelled on the empty-state pattern in
-  // EmployeePages.jsx (OrdersPage).
   import Icon, { type IconName } from "./Icon.svelte";
 
   interface Props {

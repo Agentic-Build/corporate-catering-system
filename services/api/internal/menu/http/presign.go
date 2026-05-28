@@ -1,8 +1,7 @@
 package mhttp
 
-// Presigned upload path for menu-item images. The API authorises the
-// operation and returns a time-bounded URL the client uses to PUT bytes
-// directly to object storage.
+// Presigned upload/download for menu-item images: API authorises, client
+// PUTs bytes directly to object storage with a time-bounded URL.
 
 import (
 	"context"
@@ -20,22 +19,18 @@ import (
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 )
 
-// maxImageBytes caps a single uploaded image at 2 MB. Enforced via the
-// presigned URL's ContentLength so the storage backend rejects writes
-// larger than the signed bound.
+// maxImageBytes caps a single uploaded image at 2 MB; enforced via the
+// presigned URL's ContentLength so the storage backend rejects oversize writes.
 const maxImageBytes int64 = 2 << 20
 
-// imageExtByContentType maps the accepted image content-types to the
-// extension used in the generated object key.
+// imageExtByContentType maps accepted content-types to the object-key extension.
 var imageExtByContentType = map[string]string{
 	"image/jpeg": "jpg",
 	"image/png":  "png",
 	"image/webp": "webp",
 }
 
-// validateImageUpload checks the content-type is an accepted image
-// format and the size is within maxImageBytes, returning the
-// extension for the object key.
+// validateImageUpload checks content-type + size, returning the key extension.
 func validateImageUpload(contentType string, size int64) (string, error) {
 	ext, ok := imageExtByContentType[contentType]
 	if !ok {
@@ -69,10 +64,8 @@ func validateMenuImageKey(key string) error {
 	return nil
 }
 
-// presignedUploadInput carries the client's declared content-type and
-// byte size. The handler validates both via validateImageUpload so
-// the storage-side ContentLength signed into the presigned URL cannot
-// be inflated past the image-policy ceiling.
+// presignedUploadInput carries the client's declared content-type + size.
+// validateImageUpload bounds both so the signed ContentLength can't be inflated.
 type presignedUploadInput struct {
 	Body struct {
 		ContentType string `json:"content_type" doc:"image/jpeg, image/png, or image/webp" required:"true"`
@@ -82,12 +75,9 @@ type presignedUploadInput struct {
 
 type presignedUploadOutput struct {
 	Body struct {
-		// URL is the presigned PUT target. Client must use HTTP PUT
-		// with Content-Type matching the request body.
+		// URL is the presigned PUT target (PUT with matching Content-Type).
 		URL string `json:"url"`
-		// Key is the object key the URL writes to. Returned so the
-		// client can echo it back to the application when persisting
-		// the image reference on the menu item.
+		// Key is the object key the URL writes to; echoed back when persisting.
 		Key string `json:"key"`
 		// ExpiresIn is the URL lifetime in seconds.
 		ExpiresIn int `json:"expires_in"`
@@ -114,10 +104,9 @@ func initSignCounters() {
 	signCounterOnce = true
 }
 
-// presignedMenuImageUpload issues a presigned PUT URL for a menu-item
-// image. The caller must be a vendor operator. The object key is
-// scoped to the caller's vendor so cross-vendor writes are
-// impossible at the storage layer even if the URL is leaked.
+// presignedMenuImageUpload issues a presigned PUT URL for a menu-item image.
+// Caller must be a vendor operator; the key is vendor-scoped so a leaked URL
+// can't write cross-vendor at the storage layer.
 func (a *API) presignedMenuImageUpload(ctx context.Context, in *presignedUploadInput) (*presignedUploadOutput, error) {
 	initSignCounters()
 	surfaceAttr := metric.WithAttributes(attribute.String("surface", "menu-image"))
@@ -152,10 +141,8 @@ func (a *API) presignedMenuImageUpload(ctx context.Context, in *presignedUploadI
 	return &resp, nil
 }
 
-// presignedMenuImageDownload returns a presigned GET URL for an
-// already-stored menu image. Public read of menu-images/* is allowed
-// through ServeUpload too, but signed URLs keep the API host off the
-// bulk path.
+// presignedMenuImageDownload returns a presigned GET URL for a stored menu
+// image — signed URLs keep the API host off the bulk read path.
 func (a *API) presignedMenuImageDownload(ctx context.Context, in *struct {
 	Key string `query:"key" required:"true"`
 }) (*presignedUploadOutput, error) {
@@ -165,8 +152,7 @@ func (a *API) presignedMenuImageDownload(ctx context.Context, in *struct {
 	if a.Storage == nil {
 		return nil, huma.Error503ServiceUnavailable("object storage not configured")
 	}
-	// Require auth; we deliberately do not require vendor since
-	// employees view menu images.
+	// Require auth, but not vendor — employees also view menu images.
 	if _, err := requireAuthed(ctx); err != nil {
 		return nil, err
 	}
@@ -192,8 +178,6 @@ func (a *API) presignedMenuImageDownload(ctx context.Context, in *struct {
 }
 
 // RegisterPresigned mounts the presigned upload/download operations.
-// Wired separately from Register() so wiring stays parallel between
-// the menu API's small per-area registrars.
 func (a *API) RegisterPresigned(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "presignedMenuImageUpload",
@@ -216,10 +200,8 @@ func (a *API) RegisterPresigned(api huma.API) {
 	}, a.presignedMenuImageDownload)
 }
 
-// requireAuthed is a thin helper that fails when the request has no
-// authenticated user. The vendor/employee specialisations live in
-// handlers.go; this one is shared by the presigned download path
-// because both roles legitimately read menu images.
+// requireAuthed fails when the request has no authenticated user.
+// Shared by the presigned download path (both roles read menu images).
 func requireAuthed(ctx context.Context) (struct{}, error) {
 	if _, ok := idhttp.UserFromContext(ctx); !ok {
 		return struct{}{}, huma.Error401Unauthorized("not authenticated")
