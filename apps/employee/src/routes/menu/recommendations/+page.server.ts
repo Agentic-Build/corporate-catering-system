@@ -54,10 +54,10 @@ export const actions: Actions = {
         plant,
         supply_date: supplyDate,
         items: [{ menu_item_id: menuItemId, qty: 1 }],
-      } as never,
+      },
     });
     if (r.error) return fail(400, { error: JSON.stringify(r.error) });
-    const orderID = (r.data as { order?: { id?: string } } | undefined)?.order?.id;
+    const orderID = r.data?.order.id;
     if (!orderID) return fail(500, { error: "no order id in response" });
     throw redirect(303, `/orders/${orderID}`);
   },

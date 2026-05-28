@@ -51,7 +51,7 @@ export const actions: Actions = {
       return fail(400, { error: "source_order_id and supply_date required" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.POST("/api/employee/orders/reorder", {
-      body: { source_order_id: sourceOrderId, supply_date: supplyDate } as never,
+      body: { source_order_id: sourceOrderId, supply_date: supplyDate },
     });
     if (r.error) {
       const err = r.error as { unavailable_items?: Array<{ name: string }>; detail?: string };
@@ -62,12 +62,9 @@ export const actions: Actions = {
         reorderToast: names ? `今日皆無供應：${names}` : (err.detail ?? "今日皆無供應"),
       });
     }
-    const data = r.data as
-      | { new_order_id?: string; unavailable_items?: Array<{ name: string }> | null }
-      | undefined;
-    const newOrderId = data?.new_order_id;
+    const newOrderId = r.data?.new_order_id;
     if (!newOrderId) return fail(500, { error: "no new_order_id in response" });
-    const unavailable = data?.unavailable_items ?? [];
+    const unavailable = r.data?.unavailable_items ?? [];
     if (unavailable.length > 0) {
       const names = unavailable.map((i) => i.name).join("、");
       const qs = new URLSearchParams({
