@@ -36,6 +36,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # svelte-kit sync generates .svelte-kit/tsconfig.json, which the app
+      # tsconfigs extend; without it vitest --coverage aborts ("Tsconfig not found").
+      - run: pnpm -r --filter "./apps/*" exec svelte-kit sync
+
       - name: Frontend coverage
         run: |
           pnpm --filter @tbite/merchant exec vitest run --coverage || true
