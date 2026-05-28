@@ -50,6 +50,7 @@ describe("problemMessage", () => {
     expect(problemMessage("plain string")).toBe("plain string");
     expect(problemMessage(null)).toBe("未知錯誤");
     expect(problemMessage({})).toBe("未知錯誤");
+    expect(problemMessage(42)).toBe("42");
   });
 });
 
