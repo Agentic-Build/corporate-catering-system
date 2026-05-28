@@ -240,6 +240,24 @@ const (
 	ActionSuspend = "suspend"
 )
 
+// applyTriageTx writes the triage row + audit + optional warning row inside the
+// caller's tx. Split out so TriageAnomaly stays under the cognitive-complexity
+// threshold.
+func (s *Service) applyTriageTx(ctx context.Context, tx pgx.Tx, a *Anomaly, id, by, notes, action, role string) error {
+	if err := s.Anomaly.TriageTx(ctx, tx, id, by, notes); err != nil {
+		return err
+	}
+	payload := map[string]any{"anomaly_id": id, "notes": notes, "action": action}
+	if err := s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.triage", "anomaly_alert", id, payload, ""); err != nil {
+		return err
+	}
+	if action == ActionWarn && a.TargetKind == "vendor" {
+		wp := map[string]any{"anomaly_id": id, "anomaly_kind": a.Kind, "notes": notes}
+		return s.Audit.WriteTx(ctx, tx, &by, &role, "vendor.warning", "vendor", a.TargetID, wp, "")
+	}
+	return nil
+}
+
 // TriageAnomaly marks an open anomaly as triaged, writes an audit row, and
 // optionally carries out a governance action against the anomaly's target
 // vendor: "warn" records a warning, "suspend" suspends the vendor. Suspending
@@ -253,22 +271,10 @@ func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes, action strin
 		return err
 	}
 	role := "welfare_admin"
-	auditErr := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		if err := s.Anomaly.TriageTx(ctx, tx, id, by, notes); err != nil {
-			return err
-		}
-		payload := map[string]any{"anomaly_id": id, "notes": notes, "action": action}
-		if werr := s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.triage", "anomaly_alert", id, payload, ""); werr != nil {
-			return werr
-		}
-		if action == ActionWarn && a.TargetKind == "vendor" {
-			wp := map[string]any{"anomaly_id": id, "anomaly_kind": a.Kind, "notes": notes}
-			return s.Audit.WriteTx(ctx, tx, &by, &role, "vendor.warning", "vendor", a.TargetID, wp, "")
-		}
-		return nil
-	})
-	if auditErr != nil {
-		return auditErr
+	if err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		return s.applyTriageTx(ctx, tx, a, id, by, notes, action, role)
+	}); err != nil {
+		return err
 	}
 	if action == ActionSuspend && a.TargetKind == "vendor" && s.VendorGov != nil {
 		// Already-suspended/terminated vendor → ErrInvalidStatus is a no-op success.

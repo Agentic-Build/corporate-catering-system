@@ -67,6 +67,53 @@ type BuildDraftInput struct {
 	PeriodEnd   time.Time
 }
 
+// payrollUserAcc accumulates a user's order ids + total amount for batch entry
+// aggregation.
+type payrollUserAcc struct {
+	orderIDs []string
+	amount   int64
+}
+
+// aggregateOrdersByUser groups the orders into per-user (orderIDs, amount).
+func aggregateOrdersByUser(orders []*order.Order) map[string]*payrollUserAcc {
+	byUser := map[string]*payrollUserAcc{}
+	for _, o := range orders {
+		a, ok := byUser[o.UserID]
+		if !ok {
+			a = &payrollUserAcc{}
+			byUser[o.UserID] = a
+		}
+		a.orderIDs = append(a.orderIDs, o.ID)
+		a.amount += o.TotalPriceMinor
+	}
+	return byUser
+}
+
+// persistDraftBatch writes the batch row + per-user entry rows inside the
+// caller's tx, then runs the departed-employee exception pass when wired.
+func (s *Service) persistDraftBatch(ctx context.Context, tx pgx.Tx, batch *Batch, byUser map[string]*payrollUserAcc) error {
+	if err := s.Batches.CreateTx(ctx, tx, batch); err != nil {
+		return err
+	}
+	for userID, a := range byUser {
+		entry := &Entry{
+			BatchID:     batch.ID,
+			UserID:      userID,
+			OrderIDs:    a.orderIDs,
+			AmountMinor: a.amount,
+		}
+		if err := s.Entries.CreateTx(ctx, tx, entry); err != nil {
+			return err
+		}
+	}
+	if s.Exceptions != nil {
+		if err := s.Exceptions.UpsertDepartedTx(ctx, tx, batch.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // BuildDraft aggregates every picked_up / no_show order in [PeriodStart,
 // PeriodEnd] into per-user entries under a fresh draft batch. Batch + entries
 // commit in one transaction so a half-built batch cannot survive a crash.
@@ -89,51 +136,15 @@ func (s *Service) BuildDraft(ctx context.Context, in BuildDraftInput) (*Batch, e
 		return nil, err
 	}
 
-	type acc struct {
-		orderIDs []string
-		amount   int64
-	}
-	byUser := map[string]*acc{}
-	for _, o := range orders {
-		a, ok := byUser[o.UserID]
-		if !ok {
-			a = &acc{}
-			byUser[o.UserID] = a
-		}
-		a.orderIDs = append(a.orderIDs, o.ID)
-		a.amount += o.TotalPriceMinor
-	}
-
+	byUser := aggregateOrdersByUser(orders)
 	batch := &Batch{
 		PeriodStart: in.PeriodStart,
 		PeriodEnd:   in.PeriodEnd,
 		Status:      BatchStatusDraft,
 	}
-
-	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		if err := s.Batches.CreateTx(ctx, tx, batch); err != nil {
-			return err
-		}
-		for userID, a := range byUser {
-			entry := &Entry{
-				BatchID:     batch.ID,
-				UserID:      userID,
-				OrderIDs:    a.orderIDs,
-				AmountMinor: a.amount,
-			}
-			if err := s.Entries.CreateTx(ctx, tx, entry); err != nil {
-				return err
-			}
-		}
-		// Flag entries whose employee is no longer active.
-		if s.Exceptions != nil {
-			if err := s.Exceptions.UpsertDepartedTx(ctx, tx, batch.ID); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
+	if err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		return s.persistDraftBatch(ctx, tx, batch, byUser)
+	}); err != nil {
 		return nil, err
 	}
 	period := batch.PeriodStart.Format("2006-01")

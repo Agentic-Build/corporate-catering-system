@@ -51,58 +51,76 @@ func RegisterSupplyGauges(pool *pgxpool.Pool) error {
 	}
 
 	_, err = meter.RegisterCallback(func(ctx context.Context, o metric.Observer) error {
-		rows, err := pool.Query(ctx, supplyMetricsQuery)
-		if err != nil {
-			return fmt.Errorf("supply gauges query: %w", err)
-		}
-		defer rows.Close()
-
-		type vendorDate struct {
-			date     string
-			vendorID string
-		}
-		capByVD := map[vendorDate]int64{}
-		remByVD := map[vendorDate]int64{}
-
-		for rows.Next() {
-			var (
-				supplyDate           string
-				vendorID, itemID     string
-				itemName, vendorName string
-				capacity, remain     int64
-			)
-			if err := rows.Scan(&supplyDate, &vendorID, &itemID, &itemName, &vendorName, &capacity, &remain); err != nil {
-				return fmt.Errorf("supply gauges scan: %w", err)
-			}
-			vd := vendorDate{date: supplyDate, vendorID: vendorID}
-			capByVD[vd] += capacity
-			remByVD[vd] += remain
-
-			o.ObserveInt64(itemCapacityGauge, capacity, metric.WithAttributes(
-				attribute.String("menu_item_id", itemID),
-				attribute.String("item_name", itemName),
-				attribute.String("vendor_name", vendorName),
-				attribute.String("vendor_id", vendorID),
-			))
-		}
-		if err := rows.Err(); err != nil {
-			return fmt.Errorf("supply gauges rows: %w", err)
-		}
-
-		for vd, total := range capByVD {
-			o.ObserveInt64(capacityGauge, total, metric.WithAttributes(
-				attribute.String("supply_date", vd.date),
-				attribute.String("vendor_id", vd.vendorID),
-			))
-		}
-		for vd, total := range remByVD {
-			o.ObserveInt64(remainGauge, total, metric.WithAttributes(
-				attribute.String("supply_date", vd.date),
-				attribute.String("vendor_id", vd.vendorID),
-			))
-		}
-		return nil
+		return observeSupplyGauges(ctx, pool, o, capacityGauge, remainGauge, itemCapacityGauge)
 	}, capacityGauge, remainGauge, itemCapacityGauge)
 
 	return err
+}
+
+// supplyVendorDate keys the per-vendor-per-date roll-up maps.
+type supplyVendorDate struct {
+	date     string
+	vendorID string
+}
+
+// scanSupplyRows reads the supply rows, emits per-item observations to
+// itemGauge, and accumulates capacity/remain totals per (date, vendor).
+func scanSupplyRows(rows interface {
+	Next() bool
+	Scan(...any) error
+	Err() error
+}, o metric.Observer, itemGauge metric.Int64ObservableGauge) (map[supplyVendorDate]int64, map[supplyVendorDate]int64, error) {
+	capByVD := map[supplyVendorDate]int64{}
+	remByVD := map[supplyVendorDate]int64{}
+	for rows.Next() {
+		var (
+			supplyDate           string
+			vendorID, itemID     string
+			itemName, vendorName string
+			capacity, remain     int64
+		)
+		if err := rows.Scan(&supplyDate, &vendorID, &itemID, &itemName, &vendorName, &capacity, &remain); err != nil {
+			return nil, nil, fmt.Errorf("supply gauges scan: %w", err)
+		}
+		vd := supplyVendorDate{date: supplyDate, vendorID: vendorID}
+		capByVD[vd] += capacity
+		remByVD[vd] += remain
+		o.ObserveInt64(itemGauge, capacity, metric.WithAttributes(
+			attribute.String("menu_item_id", itemID),
+			attribute.String("item_name", itemName),
+			attribute.String("vendor_name", vendorName),
+			attribute.String("vendor_id", vendorID),
+		))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("supply gauges rows: %w", err)
+	}
+	return capByVD, remByVD, nil
+}
+
+// observeSupplyGauges runs the bounded query and emits one observation per row
+// (item gauge) plus one per (date, vendor) aggregate (capacity + remain).
+func observeSupplyGauges(ctx context.Context, pool *pgxpool.Pool, o metric.Observer, capacityGauge, remainGauge, itemCapacityGauge metric.Int64ObservableGauge) error {
+	rows, err := pool.Query(ctx, supplyMetricsQuery)
+	if err != nil {
+		return fmt.Errorf("supply gauges query: %w", err)
+	}
+	defer rows.Close()
+	capByVD, remByVD, err := scanSupplyRows(rows, o, itemCapacityGauge)
+	if err != nil {
+		return err
+	}
+	for vd, total := range capByVD {
+		o.ObserveInt64(capacityGauge, total, metric.WithAttributes(
+			attribute.String("supply_date", vd.date),
+			attribute.String("vendor_id", vd.vendorID),
+		))
+	}
+	for vd, total := range remByVD {
+		o.ObserveInt64(remainGauge, total, metric.WithAttributes(
+			attribute.String("supply_date", vd.date),
+			attribute.String("vendor_id", vd.vendorID),
+		))
+	}
+	return nil
 }

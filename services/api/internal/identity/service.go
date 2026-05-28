@@ -79,6 +79,70 @@ func (s *Service) StartLogin(ctx context.Context, in StartLoginInput) (*StartLog
 	return &StartLoginOutput{AuthURL: au.URL, State: state}, nil
 }
 
+// exchangeAndValidate performs the OIDC code exchange and the minimal claim
+// gate, returning the verified UserInfo + the derived User claims.
+func (s *Service) exchangeAndValidate(ctx context.Context, in CompleteLoginInput, sp *oidc.StatePayload) (*oidc.Userinfo, *User, error) {
+	p, ok := s.Providers[sp.Provider]
+	if !ok {
+		return nil, nil, ErrInvalidProvider
+	}
+	ui, err := p.Exchange(ctx, in.Code, sp.PKCEVerifier, sp.Nonce)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !ui.EmailVerified {
+		return nil, nil, fmt.Errorf("%w: email not verified", ErrInvalidClaims)
+	}
+	if ui.Email == "" || ui.ExternalSubject == "" {
+		return nil, nil, fmt.Errorf("%w: missing subject or email", ErrInvalidClaims)
+	}
+	claims, err := userFromClaims(sp.App, ui)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ui, claims, nil
+}
+
+// upsertUserForLogin returns the persisted User row, creating it when no
+// matching identity/email exists and refreshing the profile otherwise.
+func (s *Service) upsertUserForLogin(ctx context.Context, provider Provider, ui *oidc.Userinfo, claims *User) (*User, error) {
+	user, err := s.userForIdentity(ctx, provider, ui.ExternalSubject, claims.PrimaryEmail)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		if err := s.Users.Create(ctx, claims); err != nil {
+			return nil, err
+		}
+		return claims, nil
+	}
+	if user.Status != StatusActive {
+		return nil, ErrAccountSuspended
+	}
+	claims.ID = user.ID
+	if err := s.Users.UpdateProfile(ctx, claims); err != nil {
+		return nil, err
+	}
+	return claims, nil
+}
+
+// linkIdentityIfMissing inserts a UserIdentity row when none exists for the
+// (provider, subject) pair. Idempotent.
+func (s *Service) linkIdentityIfMissing(ctx context.Context, provider Provider, ui *oidc.Userinfo, userID string) error {
+	if _, err := s.Identities.GetByProviderSubject(ctx, provider, ui.ExternalSubject); err != nil {
+		if !errors.Is(err, ErrIdentityNotFound) {
+			return err
+		}
+		return s.Identities.Link(ctx, &UserIdentity{
+			UserID:          userID,
+			Provider:        provider,
+			ExternalSubject: ui.ExternalSubject,
+			RawClaims:       ui.Raw,
+		})
+	}
+	return nil
+}
+
 func (s *Service) CompleteLogin(ctx context.Context, in CompleteLoginInput) (out *CompleteLoginOutput, err error) {
 	sp, err := s.States.Get(ctx, in.State)
 	if err != nil {
@@ -100,60 +164,17 @@ func (s *Service) CompleteLogin(ctx context.Context, in CompleteLoginInput) (out
 	}
 	_ = s.States.Consume(ctx, in.State)
 
-	p, ok := s.Providers[sp.Provider]
-	if !ok {
-		return nil, ErrInvalidProvider
-	}
-	ui, err := p.Exchange(ctx, in.Code, sp.PKCEVerifier, sp.Nonce)
+	ui, claims, err := s.exchangeAndValidate(ctx, in, sp)
 	if err != nil {
 		return nil, err
 	}
-	if !ui.EmailVerified {
-		return nil, fmt.Errorf("%w: email not verified", ErrInvalidClaims)
-	}
-	if ui.Email == "" || ui.ExternalSubject == "" {
-		return nil, fmt.Errorf("%w: missing subject or email", ErrInvalidClaims)
-	}
-
-	claims, err := userFromClaims(sp.App, ui)
+	user, err := s.upsertUserForLogin(ctx, Provider(sp.Provider), ui, claims)
 	if err != nil {
 		return nil, err
 	}
-
-	user, err := s.userForIdentity(ctx, Provider(sp.Provider), ui.ExternalSubject, claims.PrimaryEmail)
-	if err != nil {
+	if err := s.linkIdentityIfMissing(ctx, Provider(sp.Provider), ui, user.ID); err != nil {
 		return nil, err
 	}
-	if user == nil {
-		user = claims
-		if err := s.Users.Create(ctx, user); err != nil {
-			return nil, err
-		}
-	} else {
-		if user.Status != StatusActive {
-			return nil, ErrAccountSuspended
-		}
-		claims.ID = user.ID
-		user = claims
-		if err := s.Users.UpdateProfile(ctx, user); err != nil {
-			return nil, err
-		}
-	}
-
-	if _, err := s.Identities.GetByProviderSubject(ctx, Provider(sp.Provider), ui.ExternalSubject); err != nil {
-		if !errors.Is(err, ErrIdentityNotFound) {
-			return nil, err
-		}
-		if err := s.Identities.Link(ctx, &UserIdentity{
-			UserID:          user.ID,
-			Provider:        Provider(sp.Provider),
-			ExternalSubject: ui.ExternalSubject,
-			RawClaims:       ui.Raw,
-		}); err != nil {
-			return nil, err
-		}
-	}
-
 	sess, err := s.Sessions.Create(ctx, user.ID, user.Role)
 	if err != nil {
 		return nil, err

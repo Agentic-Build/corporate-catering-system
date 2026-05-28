@@ -274,26 +274,10 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 	return o, nil
 }
 
-// Cancel transitions a user-owned PLACED order to CANCELLED, restoring quota
-// and emitting state-event + audit + outbox entries atomically.
-func (s *Service) Cancel(ctx context.Context, orderID, userID string) error {
-	o, err := s.Orders.GetByID(ctx, orderID)
-	if err != nil {
-		return err
-	}
-	if o.UserID != userID {
-		return ErrForbidden
-	}
-	// Users may only cancel orders that are still in PLACED state;
-	// CUTOFF / READY etc. require admin intervention.
-	if o.Status != StatusPlaced {
-		return ErrInvalidTransition
-	}
-	if !CanTransition(o.Status, StatusCancelled) {
-		return ErrInvalidTransition
-	}
-
-	err = MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+// persistCancelOrder applies the status flip + quota restore + state/outbox/
+// audit writes inside one tx.
+func (s *Service) persistCancelOrder(ctx context.Context, o *Order, userID string) error {
+	return MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		if err := s.OrdersTx.UpdateStatusTx(ctx, tx, o.ID, StatusPlaced, StatusCancelled); err != nil {
 			return err
 		}
@@ -321,7 +305,27 @@ func (s *Service) Cancel(ctx context.Context, orderID, userID string) error {
 		}
 		return s.AuditTx.WriteTx(ctx, tx, &userID, &role, "order.cancel", "order", o.ID, payload, "")
 	}))
+}
+
+// Cancel transitions a user-owned PLACED order to CANCELLED, restoring quota
+// and emitting state-event + audit + outbox entries atomically.
+func (s *Service) Cancel(ctx context.Context, orderID, userID string) error {
+	o, err := s.Orders.GetByID(ctx, orderID)
 	if err != nil {
+		return err
+	}
+	if o.UserID != userID {
+		return ErrForbidden
+	}
+	// Users may only cancel orders that are still in PLACED state;
+	// CUTOFF / READY etc. require admin intervention.
+	if o.Status != StatusPlaced {
+		return ErrInvalidTransition
+	}
+	if !CanTransition(o.Status, StatusCancelled) {
+		return ErrInvalidTransition
+	}
+	if err := s.persistCancelOrder(ctx, o, userID); err != nil {
 		return err
 	}
 	observability.RecordOrderCancelled(ctx, o.Plant, o.VendorID, "user_cancel", "employee")
@@ -460,43 +464,49 @@ func (s *Service) ListByVendorDay(ctx context.Context, vendorID string, day time
 	return s.Orders.ListByVendorDay(ctx, vendorID, day, statuses)
 }
 
+// markOneReady runs the lookup + ownership/transition check + persist for one
+// order id inside the caller's tx.
+func (s *Service) markOneReady(ctx context.Context, tx pgx.Tx, id, vendorID, actorID string) error {
+	o, err := s.Orders.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if o.VendorID != vendorID {
+		return ErrForbidden
+	}
+	if !CanTransition(o.Status, StatusReady) {
+		return ErrInvalidTransition
+	}
+	if err := s.OrdersTx.MarkReadyTx(ctx, tx, id); err != nil {
+		return err
+	}
+	from := o.Status
+	evRole := "vendor_operator"
+	if err := s.StateTx.AppendTx(ctx, tx, &StateEvent{
+		OrderID:   id,
+		FromState: &from,
+		ToState:   StatusReady,
+		ActorID:   &actorID,
+		ActorRole: &evRole,
+		Reason:    "vendor_ready",
+		Payload:   map[string]any{},
+	}); err != nil {
+		return err
+	}
+	payload := map[string]any{"order_id": id, "vendor_id": vendorID}
+	if err := s.OutboxTx.AppendTx(ctx, tx, "order", id, "order.ready.v1", payload, map[string]any{}); err != nil {
+		return err
+	}
+	return s.AuditTx.WriteTx(ctx, tx, &actorID, &evRole, "order.ready", "order", id, payload, "")
+}
+
 // MarkReady transitions orders from cutoff/placed → ready (vendor side).
 // All orders must belong to vendorID; any forbidden / invalid-state order
 // aborts the whole batch (transaction rolls back).
 func (s *Service) MarkReady(ctx context.Context, vendorID string, orderIDs []string, actorID string) error {
 	err := MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		for _, id := range orderIDs {
-			o, err := s.Orders.GetByID(ctx, id)
-			if err != nil {
-				return err
-			}
-			if o.VendorID != vendorID {
-				return ErrForbidden
-			}
-			if !CanTransition(o.Status, StatusReady) {
-				return ErrInvalidTransition
-			}
-			if err := s.OrdersTx.MarkReadyTx(ctx, tx, id); err != nil {
-				return err
-			}
-			from := o.Status
-			evRole := "vendor_operator"
-			if err := s.StateTx.AppendTx(ctx, tx, &StateEvent{
-				OrderID:   id,
-				FromState: &from,
-				ToState:   StatusReady,
-				ActorID:   &actorID,
-				ActorRole: &evRole,
-				Reason:    "vendor_ready",
-				Payload:   map[string]any{},
-			}); err != nil {
-				return err
-			}
-			payload := map[string]any{"order_id": id, "vendor_id": vendorID}
-			if err := s.OutboxTx.AppendTx(ctx, tx, "order", id, "order.ready.v1", payload, map[string]any{}); err != nil {
-				return err
-			}
-			if err := s.AuditTx.WriteTx(ctx, tx, &actorID, &evRole, "order.ready", "order", id, payload, ""); err != nil {
+			if err := s.markOneReady(ctx, tx, id, vendorID, actorID); err != nil {
 				return err
 			}
 		}

@@ -49,28 +49,12 @@ type FeedbackScanner struct {
 	Window time.Duration
 }
 
-// RunOnce executes a single scan pass. Returns the number of anomalies opened
-// (or refreshed) across both signals.
-func (s *FeedbackScanner) RunOnce(ctx context.Context) (int, error) {
-	window := s.Window
-	if window <= 0 {
-		window = defaultScanWindow
-	}
-	now := s.Clock.Now().UTC()
-	since := now.Add(-window)
-	windowDays := int(window.Hours() / 24)
-
+// openRatingAnomalies opens satisfaction_drop anomalies for vendors whose
+// sample-count is above floor AND avg_score is below the warn threshold.
+func (s *FeedbackScanner) openRatingAnomalies(ctx context.Context, stats []VendorRatingStat, windowDays int) int {
 	opened := 0
-
-	ratingStats, err := s.Ratings.AggregateByVendorSince(ctx, since)
-	if err != nil {
-		return opened, fmt.Errorf("aggregate ratings: %w", err)
-	}
-	for _, st := range ratingStats {
-		if st.SampleCount < minRatingSamples {
-			continue
-		}
-		if st.AvgScore >= satWarnThreshold {
+	for _, st := range stats {
+		if st.SampleCount < minRatingSamples || st.AvgScore >= satWarnThreshold {
 			continue
 		}
 		sev := compliance.SeverityMedium
@@ -95,12 +79,14 @@ func (s *FeedbackScanner) RunOnce(ctx context.Context) (int, error) {
 		}
 		opened++
 	}
+	return opened
+}
 
-	complaintStats, err := s.Complaints.CountByVendorSince(ctx, since)
-	if err != nil {
-		return opened, fmt.Errorf("count complaints: %w", err)
-	}
-	for _, st := range complaintStats {
+// openComplaintAnomalies opens complaint_spike anomalies for vendors whose
+// complaint count exceeds the warn threshold.
+func (s *FeedbackScanner) openComplaintAnomalies(ctx context.Context, stats []VendorComplaintStat, windowDays int) int {
+	opened := 0
+	for _, st := range stats {
 		if st.Count < complaintWarnThreshold {
 			continue
 		}
@@ -125,6 +111,31 @@ func (s *FeedbackScanner) RunOnce(ctx context.Context) (int, error) {
 		}
 		opened++
 	}
+	return opened
+}
+
+// RunOnce executes a single scan pass. Returns the number of anomalies opened
+// (or refreshed) across both signals.
+func (s *FeedbackScanner) RunOnce(ctx context.Context) (int, error) {
+	window := s.Window
+	if window <= 0 {
+		window = defaultScanWindow
+	}
+	now := s.Clock.Now().UTC()
+	since := now.Add(-window)
+	windowDays := int(window.Hours() / 24)
+
+	ratingStats, err := s.Ratings.AggregateByVendorSince(ctx, since)
+	if err != nil {
+		return 0, fmt.Errorf("aggregate ratings: %w", err)
+	}
+	opened := s.openRatingAnomalies(ctx, ratingStats, windowDays)
+
+	complaintStats, err := s.Complaints.CountByVendorSince(ctx, since)
+	if err != nil {
+		return opened, fmt.Errorf("count complaints: %w", err)
+	}
+	opened += s.openComplaintAnomalies(ctx, complaintStats, windowDays)
 
 	if opened > 0 {
 		s.logInfo("feedback scan",
