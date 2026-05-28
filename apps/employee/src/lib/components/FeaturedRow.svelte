@@ -30,7 +30,7 @@
         <a href={moreHref} class="text-xs font-bold text-tb-red-700 hover:underline">查看全部</a>
       {/if}
       {#if items.length > 0}
-        <div class="flex gap-1">
+        <div class="hidden gap-1 md:flex">
           <button
             type="button"
             onclick={() => scroll(-1)}

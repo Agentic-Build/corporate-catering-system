@@ -488,7 +488,7 @@
       <div
         class="rounded-tb-2xl border border-dashed border-tb-slate-200 bg-tb-slate-50 p-6 text-center text-xs text-tb-slate-500"
       >
-        點 ⭐ 收藏喜歡的菜色
+        點 <span aria-hidden="true">⭐</span> 收藏喜歡的菜色
       </div>
     {/snippet}
   </FeaturedRow>
@@ -587,7 +587,7 @@
     <div
       role="alert"
       aria-live="polite"
-      class="fixed left-1/2 top-24 z-[90] -translate-x-1/2 rounded-full px-4 py-2 text-sm font-bold shadow-tb-md fade-up
+      class="fixed top-32 left-1/2 z-[90] -translate-x-1/2 rounded-full px-4 py-2 text-sm font-bold shadow-tb-md fade-up lg:top-24
         {toast.tone === 'danger'
         ? 'bg-tb-rose-700 text-white'
         : toast.tone === 'warning'

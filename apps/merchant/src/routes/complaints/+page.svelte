@@ -1,7 +1,9 @@
 <script lang="ts">
   import { PageHeader, Card, Button, StateTag, EmptyState, Icon } from "@tbite/ui";
+  import { enhance } from "$app/forms";
 
   let { data, form } = $props();
+  let submitting = $state(false);
 
   const statusMeta = {
     open: { tone: "warning", label: "待回覆" },
@@ -126,7 +128,18 @@
         {/if}
 
         {#if canRespond && replyingID === c.id}
-          <form method="POST" action="?/respond" class="mt-3 space-y-2">
+          <form
+            method="POST"
+            action="?/respond"
+            class="mt-3 space-y-2"
+            use:enhance={() => {
+              submitting = true;
+              return async ({ update }) => {
+                await update();
+                submitting = false;
+              };
+            }}
+          >
             <input type="hidden" name="complaint_id" value={c.id} />
             <label class="block text-sm font-semibold text-tb-slate-800">
               回覆內容（至少 5 個字）
@@ -140,7 +153,9 @@
             </label>
             <div class="flex justify-end gap-2">
               <Button variant="ghost" size="sm" onclick={() => (replyingID = "")}>取消</Button>
-              <Button variant="primary" size="sm" type="submit">送出回覆</Button>
+              <Button variant="primary" size="sm" type="submit" disabled={submitting}>
+                {submitting ? "處理中…" : "送出回覆"}
+              </Button>
             </div>
           </form>
         {/if}

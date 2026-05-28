@@ -34,15 +34,15 @@
       <a
         href={tab.href}
         aria-current={on ? "page" : undefined}
-        class="relative flex min-w-0 flex-1 flex-col items-center gap-0.5 px-2 py-1.5 {on
-          ? 'text-tb-red-600'
-          : 'text-tb-slate-400'}"
+        class="relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-full px-2 py-1.5 {on
+          ? 'bg-tb-red-50 text-tb-red-600'
+          : 'text-tb-slate-500'}"
       >
         <Icon name={tab.icon} class="h-6 w-6" />
         <span class="text-[10px] font-bold leading-none">{tab.label}</span>
         {#if tab.id === "orders" && ordersBadge > 0}
           <span
-            class="absolute top-0 left-1/2 grid h-4 min-w-[16px] translate-x-1.5 place-items-center rounded-full bg-tb-rose-600 px-1 text-[9px] font-bold tabular-nums text-white"
+            class="absolute top-0 left-1/2 grid h-4 min-w-[16px] translate-x-1.5 place-items-center rounded-full bg-tb-rose-600 px-1 text-[10px] font-bold tabular-nums text-white"
             >{ordersBadge}</span
           >
         {/if}

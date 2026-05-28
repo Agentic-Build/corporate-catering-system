@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { PageHeader, Card, StateTag, Button, Icon, EmptyState } from "@tbite/ui";
+  import { enhance } from "$app/forms";
+  import { PageHeader, Card, StateTag, Button, Icon, EmptyState, Modal } from "@tbite/ui";
   let { data, form } = $props();
 
   /** Minor units → NT$ display, e.g. 12000 → "NT$120". */
@@ -24,6 +25,11 @@
   const totalPortions = $derived(
     closed.reduce((sum: number, s: any) => sum + Number(s.portion_count ?? 0), 0),
   );
+
+  // Confirm void modal
+  let confirmVoidTarget = $state<{ id: string; vendorId: string } | null>(null);
+  let voidFormEl = $state<HTMLFormElement | null>(null);
+  let submittingVoid = $state(false);
 </script>
 
 <PageHeader
@@ -86,20 +92,20 @@
           class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
         >
           <tr>
-            <th class="px-4 py-2.5">商家</th>
-            <th class="px-4 py-2.5">期間</th>
-            <th class="px-4 py-2.5 text-right">訂單數</th>
-            <th class="px-4 py-2.5 text-right">份數</th>
-            <th class="px-4 py-2.5 text-right">應付金額</th>
-            <th class="px-4 py-2.5">狀態</th>
-            <th class="px-4 py-2.5"></th>
+            <th scope="col" class="px-4 py-2.5">商家</th>
+            <th scope="col" class="px-4 py-2.5">期間</th>
+            <th scope="col" class="px-4 py-2.5 text-right">訂單數</th>
+            <th scope="col" class="px-4 py-2.5 text-right">份數</th>
+            <th scope="col" class="px-4 py-2.5 text-right">應付金額</th>
+            <th scope="col" class="px-4 py-2.5">狀態</th>
+            <th scope="col" class="px-4 py-2.5"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-tb-slate-100">
           {#each data.settlements as s (s.id)}
             <tr class="hover:bg-tb-slate-50/60">
               <td class="px-4 py-3 font-jetbrains-mono text-xs text-tb-slate-700">
-                {s.vendor_id.slice(0, 8)}
+                <span title={s.vendor_id}>{s.vendor_id.slice(0, 8)}</span>
               </td>
               <td class="px-4 py-3 font-jetbrains-mono text-xs text-tb-slate-500">
                 {s.period_start} — {s.period_end}
@@ -120,17 +126,31 @@
               </td>
               <td class="px-4 py-3 text-right">
                 {#if s.status === "closed"}
-                  <form method="POST" action="?/voidSettlement">
+                  <!-- Hidden form — submitted programmatically after confirmation -->
+                  <form
+                    method="POST"
+                    action="?/voidSettlement"
+                    use:enhance={() => {
+                      submittingVoid = true;
+                      return async ({ update }) => {
+                        await update();
+                        submittingVoid = false;
+                        confirmVoidTarget = null;
+                      };
+                    }}
+                    bind:this={voidFormEl}
+                  >
                     <input type="hidden" name="id" value={s.id} />
                     <button
+                      type="button"
                       class="text-xs font-semibold text-tb-rose-600 hover:text-tb-rose-700"
-                      type="submit"
+                      onclick={() => (confirmVoidTarget = { id: s.id, vendorId: s.vendor_id })}
                     >
                       作廢
                     </button>
                   </form>
                 {:else}
-                  <span class="text-xs text-tb-slate-400">—</span>
+                  <span class="text-xs text-tb-slate-500">—</span>
                 {/if}
               </td>
             </tr>
@@ -140,3 +160,33 @@
     </div>
   {/if}
 </Card>
+
+<!-- Confirm void modal -->
+<Modal
+  open={confirmVoidTarget !== null}
+  onClose={() => (confirmVoidTarget = null)}
+  title="確認作廢結算單"
+>
+  <p class="text-sm text-tb-slate-700">
+    作廢後此結算單將標記為「已作廢」，金額不會入帳。此操作<strong>不可復原</strong
+    >，如需重新關帳請先確認期間正確。
+  </p>
+  {#if confirmVoidTarget}
+    <p class="mt-2 font-jetbrains-mono text-xs text-tb-slate-500">
+      商家 ID：{confirmVoidTarget.vendorId}
+    </p>
+  {/if}
+  {#snippet footer()}
+    <Button variant="secondary" size="md" onclick={() => (confirmVoidTarget = null)}>取消</Button>
+    <Button
+      variant="danger"
+      size="md"
+      disabled={submittingVoid}
+      onclick={() => {
+        voidFormEl?.requestSubmit();
+      }}
+    >
+      {submittingVoid ? "處理中…" : "確認作廢"}
+    </Button>
+  {/snippet}
+</Modal>

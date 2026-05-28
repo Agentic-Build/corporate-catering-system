@@ -99,6 +99,12 @@
         <!-- 廠區分區表 — aggregated item counts -->
         <h3 class="mb-1 text-xs font-bold uppercase tracking-eyebrow text-tb-red-600">分區彙總</h3>
         <table class="mb-4 w-full text-sm">
+          <thead class="sr-only">
+            <tr>
+              <th scope="col">品項名稱</th>
+              <th scope="col">份數</th>
+            </tr>
+          </thead>
           <tbody class="divide-y divide-tb-slate-100">
             {#each p.items as it (it.menu_item_id)}
               <tr>
@@ -116,9 +122,9 @@
         <table class="w-full text-sm">
           <thead class="text-left text-[11px] font-bold uppercase text-tb-slate-500">
             <tr>
-              <th class="py-1.5">訂單</th>
-              <th class="py-1.5">品項</th>
-              <th class="py-1.5">備註</th>
+              <th scope="col" class="py-1.5">訂單</th>
+              <th scope="col" class="py-1.5">品項</th>
+              <th scope="col" class="py-1.5">備註</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-tb-slate-100">

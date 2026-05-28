@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { PageHeader, Card, Button } from "@tbite/ui";
   let { data } = $props();
 
@@ -11,6 +12,26 @@
       return "{}";
     }
   }
+
+  // Convert datetime-local value (YYYY-MM-DDTHH:MM) to RFC3339 for the server.
+  // We append ":00Z" — treating the input as UTC, which is consistent with server-side filtering.
+  function toRfc3339(localVal: string): string {
+    if (!localVal) return "";
+    // datetime-local gives "YYYY-MM-DDTHH:MM" (no seconds, no TZ)
+    return localVal.length === 16 ? localVal + ":00Z" : localVal;
+  }
+
+  // Initialize the datetime-local input from the existing since value.
+  // Strip trailing "Z" / seconds so the input shows "YYYY-MM-DDTHH:MM".
+  function fromRfc3339(since: string): string {
+    if (!since) return "";
+    // e.g. "2026-05-01T00:00:00Z" → "2026-05-01T00:00"
+    return since.slice(0, 16);
+  }
+
+  // sinceLocal is controlled by the user; initialised from URL param on mount only.
+  let sinceLocal = $state(untrack(() => fromRfc3339(data.since)));
+  let sinceHidden = $derived(toRfc3339(sinceLocal));
 </script>
 
 <PageHeader eyebrow="合規" title="稽核紀錄" subtitle="append-only 系統稽核日誌 · 最近的事件在上" />
@@ -18,20 +39,21 @@
 <Card title="篩選">
   <form method="GET" class="grid gap-3 sm:grid-cols-4">
     <label class="flex flex-col gap-1 text-sm">
-      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
-        >target_kind</span
-      >
+      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
+        目標類型
+      </span>
       <input
         type="text"
         name="target_kind"
         value={data.target_kind}
+        placeholder="如 vendor"
         class="rounded-lg border border-tb-slate-300 px-3 py-1.5 focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
       />
     </label>
     <label class="flex flex-col gap-1 text-sm">
-      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
-        >target_id</span
-      >
+      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
+        目標 ID
+      </span>
       <input
         type="text"
         name="target_id"
@@ -40,19 +62,21 @@
       />
     </label>
     <label class="flex flex-col gap-1 text-sm">
-      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
-        >since（RFC3339）</span
-      >
+      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
+        起始時間
+      </span>
+      <!-- datetime-local for usability; hidden field converts to RFC3339 for server -->
       <input
-        type="text"
-        name="since"
-        value={data.since}
-        placeholder="2026-05-01T00:00:00Z"
+        type="datetime-local"
+        bind:value={sinceLocal}
         class="rounded-lg border border-tb-slate-300 px-3 py-1.5 font-jetbrains-mono focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
       />
+      <input type="hidden" name="since" value={sinceHidden} />
     </label>
     <label class="flex flex-col gap-1 text-sm">
-      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">limit</span>
+      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
+        最多筆數
+      </span>
       <input
         type="number"
         name="limit"
@@ -96,10 +120,10 @@
           <span class="text-tb-slate-500">actor ·</span>
           <span class="font-jetbrains-mono">{e.actor_role || "system"}</span>
           {#if e.actor_id}
-            <span class="text-tb-slate-400"> · </span>
+            <span class="text-tb-slate-500"> · </span>
             <span class="font-jetbrains-mono">{e.actor_id.slice(0, 8)}</span>
           {/if}
-          <span class="text-tb-slate-400"> · target · </span>
+          <span class="text-tb-slate-500"> · target · </span>
           <span class="font-jetbrains-mono">{e.target_kind}/{(e.target_id ?? "").slice(0, 8)}</span>
         </p>
         {#if e.payload}
@@ -109,7 +133,7 @@
             )}</pre>
         {/if}
         {#if e.request_id}
-          <p class="mt-1 font-jetbrains-mono text-xs text-tb-slate-400">
+          <p class="mt-1 font-jetbrains-mono text-xs text-tb-slate-500">
             request_id · {e.request_id}
           </p>
         {/if}

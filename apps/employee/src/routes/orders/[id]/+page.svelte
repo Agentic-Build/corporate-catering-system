@@ -1,6 +1,9 @@
 <script lang="ts">
-  // 訂單詳情: details, modify form, and F1 員工回饋 forms for picked_up orders.
-  import { PageHeader, Card, StateTag, Button, Icon } from "@tbite/ui";
+  // 訂單詳情 — design-language pass. PageHeader + Card + StateTag, with the
+  // detail card mirroring the reference OrderCard footer. For picked_up
+  // orders this page also hosts the F1 員工回饋 forms: a meal rating and a
+  // 回報問題 (complaint) form.
+  import { PageHeader, Card, StateTag, Button, Icon, Modal } from "@tbite/ui";
 
   let { data, form } = $props();
   const o = $derived(data.order);
@@ -28,6 +31,7 @@
     refunded: "已退款",
   };
 
+  // ── F1 feedback labels ──
   const complaintCategories = [
     { id: "wrong_item", label: "送錯餐點" },
     { id: "missing_item", label: "餐點短缺" },
@@ -57,17 +61,23 @@
     return iso ? iso.slice(0, 16).replace("T", " ") : "-";
   }
 
+  // ── existing / freshly-submitted complaint ──
   const complaint = $derived(form?.complaint ?? data.complaint);
 
+  // ── rating form local state ──
   let starValue = $state(0);
+  // Show a freshly-submitted rating, or the one loaded on revisit.
   const submittedRating = $derived(form?.rating ?? data.rating);
 
+  // ── modify (edit order items) state ──
   let editing = $state(false);
   let draft = $state<Record<string, number>>({});
 
+  // qty this order currently holds, keyed by menu_item_id.
   const origQty = $derived(Object.fromEntries(items.map((it) => [it.menu_item_id, it.qty])));
 
-  // Edit rows: vendor's menu for supply_date plus any order items no longer listed.
+  // Rows for the edit form: the vendor's menu on the supply date, plus any
+  // item already on the order that is no longer listed that day.
   const editRows = $derived.by(() => {
     const rows = new Map<string, { id: string; name: string; price: number; remain: number }>();
     for (const m of data.menu ?? []) {
@@ -86,7 +96,7 @@
     return [...rows.values()];
   });
 
-  // Effective max = quota still free + qty already held by this order.
+  // Effective max for a row = quota still free + qty this order already holds.
   function maxQty(row: { id: string; remain: number }): number {
     return row.remain + (origQty[row.id] ?? 0);
   }
@@ -105,6 +115,10 @@
   function setQty(id: string, n: number) {
     draft = { ...draft, [id]: Math.max(0, n) };
   }
+
+  // ── cancel confirmation ──
+  let cancelOpen = $state(false);
+  let cancelFormEl = $state<HTMLFormElement | undefined>();
 </script>
 
 <a
@@ -265,9 +279,10 @@
       >
         <Icon name="doc" class="h-4 w-4" />編輯訂單
       </button>
-      <form method="POST" action="?/cancel">
-        <Button variant="danger" size="md" type="submit">取消訂單</Button>
-      </form>
+      <form method="POST" action="?/cancel" bind:this={cancelFormEl}></form>
+      <Button variant="danger" size="md" type="button" onclick={() => (cancelOpen = true)}
+        >取消訂單</Button
+      >
     {/if}
     {#if o.status === "ready" || o.status === "picked_up" || o.status === "no_show"}
       <a
@@ -281,7 +296,23 @@
     {/if}
   </div>
 
-  <!-- F1 員工回饋 — only for picked_up orders -->
+  <!-- ── cancel confirmation modal ── -->
+  <Modal open={cancelOpen} onClose={() => (cancelOpen = false)} title="取消訂單">
+    <p class="text-sm text-tb-slate-700">取消後無法復原，確定取消這筆訂單？</p>
+    {#snippet footer()}
+      <Button variant="secondary" size="md" onclick={() => (cancelOpen = false)}>返回</Button>
+      <Button
+        variant="danger"
+        size="md"
+        onclick={() => {
+          cancelOpen = false;
+          cancelFormEl?.requestSubmit();
+        }}>確認取消</Button
+      >
+    {/snippet}
+  </Modal>
+
+  <!-- ── F1 員工回饋 — only for picked_up orders ── -->
   {#if o.status === "picked_up"}
     <!-- Meal rating -->
     <Card title="餐點評分" description="為這份餐點打個分數，協助我們追蹤商家品質。">

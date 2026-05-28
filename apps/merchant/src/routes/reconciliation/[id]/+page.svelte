@@ -82,11 +82,11 @@
           class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
         >
           <tr>
-            <th class="px-5 py-3">訂單</th>
-            <th class="px-3 py-3">供餐日</th>
-            <th class="px-3 py-3 text-right">份數</th>
-            <th class="px-3 py-3 text-right">金額</th>
-            <th class="px-5 py-3">狀態</th>
+            <th scope="col" class="px-5 py-3">訂單</th>
+            <th scope="col" class="px-3 py-3">供餐日</th>
+            <th scope="col" class="px-3 py-3 text-right">份數</th>
+            <th scope="col" class="px-3 py-3 text-right">金額</th>
+            <th scope="col" class="px-5 py-3">狀態</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-tb-slate-100">

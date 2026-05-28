@@ -18,7 +18,14 @@
   );
 </script>
 
-<div class="flex items-center gap-2">
+<div
+  class="flex items-center gap-2"
+  role="progressbar"
+  aria-valuenow={pct}
+  aria-valuemin={0}
+  aria-valuemax={100}
+  aria-label="已訂購 {ordered} 份，上限 {cap} 份"
+>
   <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-tb-slate-100">
     <div class="h-full {barTone} transition-all" style="width: {pct}%"></div>
   </div>

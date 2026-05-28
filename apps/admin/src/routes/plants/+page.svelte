@@ -22,31 +22,43 @@
 
 <details class="mb-6 rounded-tb-2xl border border-tb-slate-200 bg-white p-4 shadow-tb-sm md:p-5">
   <summary class="cursor-pointer text-sm font-semibold text-tb-slate-900"> 新增廠區 </summary>
-  <form method="POST" action="?/create" class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
-    <input
-      name="code"
-      placeholder="代碼 (如 tn-a)"
-      required
-      class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm font-jetbrains-mono focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
-    />
-    <input
-      name="label"
-      placeholder="名稱 (如 台南廠 A 區)"
-      required
-      class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
-    />
-    <input
-      name="address"
-      placeholder="地址"
-      class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
-    />
-    <input
-      name="sort_order"
-      type="number"
-      placeholder="排序"
-      value="0"
-      class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
-    />
+  <form method="POST" action="?/create" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+    <label class="flex flex-col gap-1">
+      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">代碼</span>
+      <input
+        name="code"
+        placeholder="如 tn-a"
+        required
+        class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm font-jetbrains-mono focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
+      />
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">名稱</span>
+      <input
+        name="label"
+        placeholder="如 台南廠 A 區"
+        required
+        class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
+      />
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">地址</span>
+      <input
+        name="address"
+        placeholder="地址"
+        class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
+      />
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">排序</span>
+      <input
+        name="sort_order"
+        type="number"
+        placeholder="排序"
+        value="0"
+        class="rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-slate-500 focus:outline-none focus:ring-2 focus:ring-tb-slate-300"
+      />
+    </label>
     <div class="sm:col-span-4">
       <Button variant="primary" size="md" type="submit">
         <Icon name="plus" class="h-3.5 w-3.5" />建立廠區
@@ -62,12 +74,12 @@
         class="bg-tb-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
       >
         <tr>
-          <th class="px-4 py-2.5">代碼</th>
-          <th class="px-4 py-2.5">名稱</th>
-          <th class="px-4 py-2.5">地址</th>
-          <th class="px-4 py-2.5">排序</th>
-          <th class="px-4 py-2.5">狀態</th>
-          <th class="px-4 py-2.5"></th>
+          <th scope="col" class="px-4 py-2.5">代碼</th>
+          <th scope="col" class="px-4 py-2.5">名稱</th>
+          <th scope="col" class="px-4 py-2.5">地址</th>
+          <th scope="col" class="px-4 py-2.5">排序</th>
+          <th scope="col" class="px-4 py-2.5">狀態</th>
+          <th scope="col" class="px-4 py-2.5"></th>
         </tr>
       </thead>
       <tbody class="divide-y divide-tb-slate-100">
@@ -81,6 +93,7 @@
                   <input
                     name="label"
                     value={p.label}
+                    aria-label="名稱"
                     required
                     class="w-36 rounded-lg border border-tb-slate-300 px-2 py-1.5 text-sm focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
                   />
@@ -88,16 +101,19 @@
                     name="address"
                     value={p.address}
                     placeholder="地址"
+                    aria-label="地址"
                     class="flex-1 min-w-32 rounded-lg border border-tb-slate-300 px-2 py-1.5 text-sm focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
                   />
                   <input
                     name="sort_order"
                     type="number"
                     value={p.sort_order}
+                    aria-label="排序"
                     class="w-20 rounded-lg border border-tb-slate-300 px-2 py-1.5 text-sm focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
                   />
                   <select
                     name="active"
+                    aria-label="狀態"
                     class="rounded-lg border border-tb-slate-300 px-2 py-1.5 text-sm focus:border-tb-red-500 focus:outline-none"
                   >
                     <option value="true" selected={p.active}>啟用</option>

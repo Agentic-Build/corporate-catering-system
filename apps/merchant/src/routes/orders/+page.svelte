@@ -198,10 +198,10 @@
               class="text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
             >
               <tr>
-                <th class="pb-2">訂單</th>
-                <th class="pb-2">訂購明細</th>
-                <th class="pb-2 text-right">金額</th>
-                <th class="pb-2">狀態</th>
+                <th scope="col" class="pb-2">訂單</th>
+                <th scope="col" class="pb-2">訂購明細</th>
+                <th scope="col" class="pb-2 text-right">金額</th>
+                <th scope="col" class="pb-2">狀態</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-tb-slate-100">
@@ -209,8 +209,8 @@
                 <tr class="hover:bg-tb-slate-50/60">
                   <td class="py-2.5 pr-3 align-top">
                     <span
-                      class="font-jetbrains-mono text-[10px] text-tb-slate-400 break-all leading-tight"
-                      >{o.id}</span
+                      class="font-jetbrains-mono text-xs text-tb-slate-700 leading-tight"
+                      title={o.id}>#{o.order_number}</span
                     >
                   </td>
                   <td class="py-2.5 pr-3 align-top text-xs text-tb-slate-700">

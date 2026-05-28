@@ -1,6 +1,9 @@
 <script lang="ts">
-  // 薪資逐筆明細互動 sheet: ⭐評分 / 📣客訴 modes (?/rate, ?/complain actions).
-  import { Modal, Button } from "@tbite/ui";
+  // 薪資逐筆明細互動 sheet — opened when a 本月進行中 row is clicked. Mirrors
+  // the App's EntryDetailSheet: two modes ⭐評分 / 📣客訴, reusing the payroll
+  // page's ?/rate and ?/complain actions (same backend wiring as the order
+  // detail page). An already-rated order shows rating mode disabled.
+  import { Modal, Button, Icon } from "@tbite/ui";
   import { enhance } from "$app/forms";
   import { invalidateAll } from "$app/navigation";
 
@@ -37,6 +40,7 @@
   let complaintError = $state<string | null>(null);
   let done = $state<"rated" | "complained" | null>(null);
 
+  // Reset transient state whenever the sheet (re)opens for a row.
   $effect(() => {
     if (open) {
       mode = line?.rated ? "complain" : "rate";
@@ -62,21 +66,22 @@
       <button
         type="button"
         onclick={() => (mode = "rate")}
-        class="flex-1 rounded-tb-lg px-3 py-1.5 text-sm font-semibold transition {mode === 'rate'
+        class="flex items-center justify-center gap-1.5 flex-1 rounded-tb-lg px-3 py-1.5 text-sm font-semibold transition {mode ===
+        'rate'
           ? 'bg-tb-slate-900 text-white'
           : 'bg-tb-slate-100 text-tb-slate-700 hover:text-tb-slate-900'}"
       >
-        ⭐ 評分
+        <Icon name="heart" class="h-4 w-4" />評分
       </button>
       <button
         type="button"
         onclick={() => (mode = "complain")}
-        class="flex-1 rounded-tb-lg px-3 py-1.5 text-sm font-semibold transition {mode ===
+        class="flex items-center justify-center gap-1.5 flex-1 rounded-tb-lg px-3 py-1.5 text-sm font-semibold transition {mode ===
         'complain'
           ? 'bg-tb-slate-900 text-white'
           : 'bg-tb-slate-100 text-tb-slate-700 hover:text-tb-slate-900'}"
       >
-        📣 客訴
+        <Icon name="bell" class="h-4 w-4" />客訴
       </button>
     </div>
 

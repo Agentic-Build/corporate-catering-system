@@ -1,9 +1,11 @@
 <script lang="ts">
   import { PageHeader, Card, Button } from "@tbite/ui";
   import ImageUploader from "$lib/components/ImageUploader.svelte";
+  import { enhance } from "$app/forms";
   let { form } = $props();
 
   let images = $state<string[]>([]);
+  let submitting = $state(false);
 
   const fieldClass =
     "mt-1 w-full rounded-lg border border-tb-slate-300 px-3 py-2 text-sm focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100";
@@ -13,7 +15,17 @@
   <PageHeader eyebrow="Menu Library · 菜單管理" title="新增餐點" />
 
   <Card>
-    <form method="POST" class="space-y-3">
+    <form
+      method="POST"
+      class="space-y-3"
+      use:enhance={() => {
+        submitting = true;
+        return async ({ update }) => {
+          await update();
+          submitting = false;
+        };
+      }}
+    >
       <label class="block text-sm font-semibold text-tb-slate-800">
         名稱
         <input name="name" required class={fieldClass} />
@@ -51,7 +63,9 @@
       {/if}
 
       <div class="flex gap-2 pt-1">
-        <Button variant="primary" type="submit">建立</Button>
+        <Button variant="primary" type="submit" disabled={submitting}>
+          {submitting ? "處理中…" : "建立"}
+        </Button>
         <a href="/menus"><Button variant="secondary">取消</Button></a>
       </div>
     </form>

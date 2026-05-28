@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { enhance } from "$app/forms";
   import { invalidateAll } from "$app/navigation";
-  import { PageHeader, Card, StatCard, StateTag, Button, Icon } from "@tbite/ui";
+  import { PageHeader, Card, StatCard, StateTag, Button, Icon, Modal } from "@tbite/ui";
 
   let { data, form } = $props();
   const b = $derived(data.batch);
@@ -57,6 +58,15 @@
     return { amount, refunded, net: amount - refunded };
   });
   const ntd = (minor: number) => "$" + Math.round(minor).toLocaleString();
+
+  // Confirm exclude-from-CSV modal
+  let confirmExclude = $state<{ id: string; userId: string } | null>(null);
+  // Plain object used as record for form refs (keyed by exception id)
+  const excludeFormEls: Record<string, HTMLFormElement> = {};
+
+  // Loading states
+  let submittingLock = $state(false);
+  let submittingExclude = $state(false);
 </script>
 
 <a
@@ -97,8 +107,20 @@
 <Card title="批次操作">
   <div class="flex flex-wrap items-center gap-2">
     {#if b.status === "draft"}
-      <form method="POST" action="?/lock">
-        <Button variant="primary" size="md" type="submit">鎖定批次並排程匯出</Button>
+      <form
+        method="POST"
+        action="?/lock"
+        use:enhance={() => {
+          submittingLock = true;
+          return async ({ update }) => {
+            await update();
+            submittingLock = false;
+          };
+        }}
+      >
+        <Button variant="primary" size="md" type="submit" disabled={submittingLock}>
+          {submittingLock ? "處理中…" : "鎖定批次並排程匯出"}
+        </Button>
       </form>
     {/if}
     {#if b.status === "locked"}
@@ -142,7 +164,7 @@
                 {exKindLabel[ex.kind] ?? ex.kind}
               </span>
               <span class="font-jetbrains-mono text-xs text-tb-slate-500">
-                · 員工 {ex.user_id.slice(0, 8)}
+                · 員工 <span title={ex.user_id}>{ex.user_id.slice(0, 8)}</span>
               </span>
             </div>
             <StateTag tone={meta.tone}>{meta.label}</StateTag>
@@ -160,10 +182,31 @@
                 <input type="hidden" name="status" value="resolved" />
                 <Button variant="secondary" size="sm" type="submit">標記已處理</Button>
               </form>
-              <form method="POST" action="?/resolveException">
+              <!-- Exclude from CSV — requires confirmation modal (affects payroll) -->
+              <form
+                method="POST"
+                action="?/resolveException"
+                use:enhance={() => {
+                  submittingExclude = true;
+                  return async ({ update }) => {
+                    await update();
+                    submittingExclude = false;
+                    confirmExclude = null;
+                  };
+                }}
+                bind:this={excludeFormEls[ex.id]}
+              >
                 <input type="hidden" name="exception_id" value={ex.id} />
                 <input type="hidden" name="status" value="excluded" />
-                <Button variant="danger" size="sm" type="submit">排除出 CSV</Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  type="button"
+                  disabled={submittingExclude}
+                  onclick={() => (confirmExclude = { id: ex.id, userId: ex.user_id })}
+                >
+                  排除出 CSV
+                </Button>
               </form>
             </div>
           {/if}
@@ -196,6 +239,7 @@
         name="detail"
         maxlength="500"
         placeholder="原因（選填）"
+        aria-label="標記例外原因"
         class="flex-1 rounded-tb-lg border border-tb-slate-300 px-3 py-2 text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
       />
       <Button variant="secondary" size="sm" type="submit">標記例外</Button>
@@ -217,18 +261,18 @@
           class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-tb-slate-500"
         >
           <tr>
-            <th class="px-4 py-2.5">員工</th>
-            <th class="px-4 py-2.5 text-right">訂單數</th>
-            <th class="px-4 py-2.5 text-right">月結金額</th>
-            <th class="px-4 py-2.5 text-right">退款</th>
-            <th class="px-4 py-2.5 text-right">淨額</th>
+            <th scope="col" class="px-4 py-2.5">員工</th>
+            <th scope="col" class="px-4 py-2.5 text-right">訂單數</th>
+            <th scope="col" class="px-4 py-2.5 text-right">月結金額</th>
+            <th scope="col" class="px-4 py-2.5 text-right">退款</th>
+            <th scope="col" class="px-4 py-2.5 text-right">淨額</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-tb-slate-100">
           {#each entries as e (e.id)}
             <tr class="hover:bg-tb-slate-50/60">
               <td class="px-4 py-2.5 font-jetbrains-mono text-xs text-tb-slate-700">
-                {e.user_id.slice(0, 8)}
+                <span title={e.user_id}>{e.user_id.slice(0, 8)}</span>
               </td>
               <td class="px-4 py-2.5 text-right font-jetbrains-mono tabular-nums">
                 {(e.order_ids ?? []).length}
@@ -249,3 +293,36 @@
     </div>
   </Card>
 {/if}
+
+<!-- Confirm exclude-from-CSV modal -->
+<Modal
+  open={confirmExclude !== null}
+  onClose={() => (confirmExclude = null)}
+  title="確認排除出 HR CSV"
+>
+  <p class="text-sm text-tb-slate-700">
+    排除後此員工的月結明細將<strong>不會出現在 HR CSV</strong
+    >，薪資匯款系統將不會處理這筆扣款。此操作<strong>不可復原</strong
+    >，請確認已核實員工狀態後再執行。
+  </p>
+  {#if confirmExclude}
+    <p class="mt-2 font-jetbrains-mono text-xs text-tb-slate-500">
+      員工 ID：<span title={confirmExclude.userId}>{confirmExclude.userId.slice(0, 8)}</span>
+    </p>
+  {/if}
+  {#snippet footer()}
+    <Button variant="secondary" size="md" onclick={() => (confirmExclude = null)}>取消</Button>
+    <Button
+      variant="danger"
+      size="md"
+      disabled={submittingExclude}
+      onclick={() => {
+        if (confirmExclude) {
+          excludeFormEls[confirmExclude.id]?.requestSubmit();
+        }
+      }}
+    >
+      {submittingExclude ? "處理中…" : "確認排除出 CSV"}
+    </Button>
+  {/snippet}
+</Modal>

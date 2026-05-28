@@ -119,11 +119,11 @@
           class="bg-tb-slate-50/60 text-left text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500"
         >
           <tr>
-            <th class="px-5 py-3">品項</th>
-            <th class="px-3 py-3 text-right">售價</th>
-            <th class="px-3 py-3 text-right">上限</th>
-            <th class="px-3 py-3" style="min-width: 220px">已訂購</th>
-            <th class="px-5 py-3"></th>
+            <th scope="col" class="px-5 py-3">品項</th>
+            <th scope="col" class="px-3 py-3 text-right">售價</th>
+            <th scope="col" class="px-3 py-3 text-right">上限</th>
+            <th scope="col" class="px-3 py-3" style="min-width: 220px">已訂購</th>
+            <th scope="col" class="px-5 py-3"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-tb-slate-100">
@@ -186,7 +186,7 @@
                       value={cap}
                       min={slot.ordered}
                       onchange={(e) => onInput(slot, e.currentTarget.value)}
-                      class="w-14 border-l border-r border-tb-slate-200 bg-transparent py-1 text-center font-jetbrains-mono text-sm font-bold tabular-nums text-tb-slate-900 focus:bg-tb-red-50 focus:outline-none"
+                      class="w-14 border-l border-r border-tb-slate-200 bg-transparent py-1 text-center font-jetbrains-mono text-sm font-bold tabular-nums text-tb-slate-900 focus:bg-tb-red-50 focus:outline-none focus:ring-2 focus:ring-tb-red-500"
                     />
                     <button
                       type="button"
