@@ -178,11 +178,8 @@ func main() {
 		}
 		defer pool.Close()
 
-		// 1b. Read-only pool for the home/recommendation read-model paths
-		// (ADR-0007). newROPool targets DATABASE_RO_URL and falls back to the
-		// primary when no replica is configured, so single-DB deployments are
-		// unaffected while production offloads these eventual-consistency reads
-		// to a replica.
+		// Read-only pool for read-model paths (ADR-0007); falls back to primary
+		// when no replica is configured.
 		roPool, err := newROPool(ctx, cfg)
 		if err != nil {
 			logger.Error("pg ro pool", "err", err)
@@ -258,22 +255,15 @@ func main() {
 			},
 		}
 
-		// 7a-bis. Hydra OAuth bridge — only wired when HYDRA_PUBLIC_URL is
-		// set. We reverse-proxy Hydra's OAuth surface under our own host
-		// so MCP clients see a single issuer and CORS-clean origin. Hydra
-		// is configured with URLS_SELF_ISSUER=our_host so its discovery
-		// doc and the iss claim it signs into tokens line up with what
-		// clients fetch from our /.well-known/openid-configuration.
+		// Hydra OAuth bridge (only when HYDRA_PUBLIC_URL is set): we reverse-
+		// proxy Hydra under our host so MCP clients see one issuer (matches
+		// Hydra's URLS_SELF_ISSUER) and a CORS-clean origin.
 		var (
 			hydraBridge    *hydra.Bridge
 			hydraProxy     http.Handler
 			hydraDiscovery *hydra.DiscoveryShim
 		)
 		if cfg.HydraPublicURL != "" {
-			// JWT iss claim is OIDCCallbackBaseURL (our advertised host),
-			// but the verifier needs a reachable URL to fetch the
-			// discovery doc at boot — that's the Hydra container's
-			// directly-reachable URL.
 			publicIssuer := strings.TrimRight(cfg.OIDCCallbackBaseURL, "/") + "/"
 			mcpResource := strings.TrimRight(cfg.OIDCCallbackBaseURL, "/") + "/mcp"
 			tokVerifier, err := hydra.NewAccessTokenVerifier(ctx, cfg.HydraPublicURL, publicIssuer, mcpResource)
@@ -282,11 +272,7 @@ func main() {
 				os.Exit(1)
 			}
 			api.JWT = hydra.SubjectVerifier{V: tokVerifier}
-			// Build a dedicated OIDC client for the MCP bridge with its own
-			// redirect_uri (/oauth/callback). The web-frontend OIDC client
-			// uses /auth/{slug}/callback; both clients are the same logical
-			// Authentik application but they need separate redirect URI
-			// registrations.
+			// Bridge-only OIDC client uses /oauth/callback (web uses /auth/{slug}/callback).
 			var bridgeOIDC *oidc.OIDCProvider
 			var bridgeOIDCSlug string
 			if len(cfg.AuthProviders) > 0 {
@@ -373,9 +359,7 @@ func main() {
 			if natsClient, err := messaging.New(ctx, cfg.NATSURL); err == nil {
 				dlqAPI.JS = natsClient.JS
 				defer natsClient.Close()
-				// Tap ORDERS_V1 so the merchant prep board SSE endpoint can
-				// push live updates. Failure here is non-fatal: the board
-				// still works, just without push.
+				// Tap ORDERS_V1 for the merchant board SSE; non-fatal.
 				go func() {
 					if err := order.RunBoardConsumer(ctx, natsClient.JS, boardHub, menuHub, logger); err != nil {
 						logger.Warn("board consumer stopped", "err", err)
@@ -386,8 +370,7 @@ func main() {
 			}
 		}
 
-		// 7i. P9 personalisation: favorites, reorder, home aggregate. All three
-		// share the existing repos; only favorites needs a new table (000008).
+		// Personalisation: favorites + reorder + home aggregate.
 		favoriteRepo := mpgrepo.NewFavoriteRepo(pool)
 		favoritesSvc := menu.NewFavoritesService(favoriteRepo)
 		favoritesAPI := &mhttp.FavoritesAPI{Svc: favoritesSvc}
@@ -415,21 +398,13 @@ func main() {
 				logger.Warn("invalid RECOMMENDATION_ALPHA; defaulting to 1.0", "raw", raw)
 			}
 		}
-		// Read-model repos read off the RO pool (ADR-0007): these aggregates
-		// are already eventual-consistency (Redis-cached, NATS-invalidated), so
-		// replica lag is within tolerance.
+		// Read-model aggregates run off the RO pool (ADR-0007); Redis-cached
+		// with NATS-driven invalidation + TTL safety net.
 		popularityRepo := mpgrepo.NewPopularityRepo(roPool)
 		affinityRepo := mpgrepo.NewAffinityRepo(roPool)
 		recentOrdersRepo := opgrepo.NewRecentOrdersRepo(roPool)
-		// Read-model cache (Valkey) shared by the employee home aggregate and
-		// the recommendation aggregates. The namespace prefix scopes keys so
-		// SCAN-based invalidation stays bounded.
 		homeCache := &readmodel.RedisCache{C: rdb, Prefix: "tbite:rm:"}
 		homeMetrics := readmodel.NewMetrics()
-		// Popularity + affinity are recomputed from raw orders per request;
-		// cache them so AC3 holds. Popularity is plant/date keyed and shared;
-		// affinity is user keyed over a 30-day window. The outbox invalidator
-		// drops both on order events; TTL is the safety net.
 		cachedPopularity := cachedPopularityAdapter{
 			cached: &readmodel.CachedPopularity{Inner: popularityRepo, Cache: homeCache, Metrics: homeMetrics},
 			repo:   popularityRepo,
@@ -470,9 +445,7 @@ func main() {
 			CacheTTL:    30 * time.Second,
 			CacheMetric: homeMetrics,
 		}
-		// The outbox-driven invalidator subscribes to ORDERS_V1 and
-		// clears entries scoped to the affected plant/date. Failure
-		// to start is non-fatal — the TTL is the safety net.
+		// Read-model invalidator on ORDERS_V1; non-fatal (TTL is the fallback).
 		if cfg.NATSURL != "" {
 			go func() {
 				natsClient, err := messaging.New(ctx, cfg.NATSURL)
@@ -490,9 +463,7 @@ func main() {
 		feedbackAPI := &feedbackhttp.API{Svc: cs.Feedback}
 		settlementAPI := &settlementhttp.API{Svc: cs.Settlement}
 
-		// 9. MCP server (P7) — reuses the shared services. Tools registered by
-		// mcpserver.New; mounted at /mcp by httpserver.New below. Local/e2e
-		// auth runs through Authentik; the api role mounts no fake OIDC route.
+		// MCP server — mounted at /mcp by httpserver.New below.
 		mcpSrv := mcpserver.New(mcpserver.Deps{
 			Pool:       pool,
 			Audit:      cs.AuditRepo,
@@ -507,15 +478,8 @@ func main() {
 			Sessions:   cs.SessStore,
 		})
 
-		// MCP OAuth metadata. When the Hydra sidecar is wired, advertise
-		// OUR host as the authorization server: Hydra is configured with
-		// URLS_SELF_ISSUER pointing at us, and the /.well-known/openid-
-		// configuration discovery + DCR + /oauth2/* endpoints are reverse-
-		// proxied at our host — so the JWT iss claim, discovery doc, and
-		// PRM all line up on one origin. This is what makes Claude.ai /
-		// ChatGPT's strict OAuth client trust Hydra-issued tokens via DCR.
-		// When Hydra isn't wired, fall back to Authentik's issuer (bearer-
-		// paste only, no DCR).
+		// MCP OAuth metadata: advertise our host when Hydra is wired (DCR
+		// needs one origin); fall back to Authentik's issuer otherwise.
 		var mcpAuthServers []string
 		if cfg.HydraPublicURL != "" {
 			mcpAuthServers = []string{strings.TrimRight(cfg.OIDCCallbackBaseURL, "/") + "/"}
@@ -534,30 +498,20 @@ func main() {
 			// Direct multipart upload — vendor-scoped, returns public MinIO URL.
 			r.Post("/api/merchant/uploads", menuAPI.HandleDirectUpload)
 
-			// Hydra OAuth bridge — only mounted when the sidecar is wired.
-			// These endpoints are anonymous: they're the URLs Hydra
-			// redirects the user's browser to during the login/consent
-			// dance, before any session exists.
+			// Hydra OAuth bridge endpoints (anonymous; only when sidecar wired).
 			if hydraBridge != nil {
 				r.Get("/oauth/login", hydraBridge.LoginHandler)
 				r.Get("/oauth/callback", hydraBridge.CallbackHandler)
 				r.Get("/oauth/consent", hydraBridge.ConsentHandler)
-				// Discovery shim — wraps Hydra's /.well-known/openid-
-				// configuration and injects registration_endpoint
-				// (Hydra v2.2-2.3 omits it from the published doc).
+				// Discovery shim injects registration_endpoint (Hydra v2.2-2.3 omits it).
 				r.Get("/.well-known/openid-configuration", hydraDiscovery.ServeHTTP)
 				r.Get("/.well-known/oauth-authorization-server", hydraDiscovery.ServeHTTP)
-				// DCR (RFC 7591) — sanitizing proxy strips empty-string
-				// optional URI fields from Hydra's response. Strict OAuth
-				// clients (Claude Code, Claude.ai web, ChatGPT) reject
-				// empty policy_uri/tos_uri/etc and would otherwise mark
-				// the connection as failed during the registration step.
+				// DCR (RFC 7591) sanitizing proxy: strips empty optional URI
+				// fields strict OAuth clients (Claude/ChatGPT) reject.
 				dcrProxy := &hydra.SanitizingDCRProxy{HydraURL: cfg.HydraPublicURL}
 				r.Handle("/oauth2/register", dcrProxy)
 				r.Handle("/oauth2/register/*", dcrProxy)
-				// Reverse proxy — Hydra's OAuth surface served under our
-				// own host so URLs in the discovery doc and the iss
-				// claim in JWTs line up.
+				// Reverse-proxy Hydra under our host so iss / discovery URLs line up.
 				r.Handle("/oauth2/*", hydraProxy)
 				r.Get("/.well-known/jwks.json", hydraProxy.ServeHTTP)
 				r.Get("/userinfo", hydraProxy.ServeHTTP)
@@ -583,11 +537,8 @@ func main() {
 			os.Exit(1)
 		}
 	case config.RoleMCPStdio:
-		// mcp-stdio role: same MCPServer + tool wiring as the api role's /mcp
-		// mount, but transported over stdin/stdout for local MCP clients
-		// (Claude Code, Cursor, etc.). The user is resolved once at boot from
-		// MCP_BEARER_TOKEN and attached to every request's context via
-		// StdioServer.SetContextFunc — stdio is single-client so this is safe.
+		// Same MCPServer wiring as the api role's /mcp, but over stdin/stdout
+		// for local clients. Single-client → resolve the bearer user once at boot.
 		token := os.Getenv("MCP_BEARER_TOKEN")
 		if token == "" {
 			logger.Error("MCP_BEARER_TOKEN required for mcp-stdio role")

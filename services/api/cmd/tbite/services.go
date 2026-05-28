@@ -1,18 +1,7 @@
+// Shared service-graph wiring for the RoleAPI and RoleMCPStdio cases — single
+// source of truth so the two roles can't drift again. services_test.go uses
+// reflection to assert every field is non-nil (cmd/ isn't in the test suite).
 package main
-
-// This file de-duplicates the per-role service-graph wiring that used to live
-// inline in main.go's RoleAPI and RoleMCPStdio cases. Both roles construct the
-// same seven domain services (order/vendor/menu/payroll/compliance/feedback/
-// settlement) plus their shared repos; previously the two inline copies had
-// already drifted (mcp-stdio omitted payroll.Exceptions, compliance.Vendors,
-// and feedback.Reverser). buildCoreServices is the single source of truth, so
-// future changes can't drift again.
-//
-// Wiring correctness here is critical: a missing field is a runtime nil-deref
-// the compiler can't catch, and the cmd package isn't part of the test
-// coverage. services_test.go uses reflection over the returned struct to
-// assert every field is non-nil — exercising the constructor catches a wiring
-// slip before deploy.
 
 import (
 	"context"
@@ -45,11 +34,8 @@ import (
 	vpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/postgres"
 )
 
-// coreServices bundles the seven domain services plus the shared repos that
-// role-specific code (HTTP API, MCP stdio bootstrap, the per-role extras like
-// Reorder/Favorites/Home) needs to construct further wiring on top.
+// coreServices bundles the shared services + repos both roles need.
 type coreServices struct {
-	// shared repos
 	UserRepo       *pgrepo.UserRepo
 	SessStore      *idredis.SessionStore
 	OrderRepo      *opgrepo.OrderRepo
@@ -61,7 +47,6 @@ type coreServices struct {
 	PlantRepo      *vpgrepo.PlantMappingRepo
 	VendorRepo     *vpgrepo.VendorRepo
 
-	// domain services
 	Order      *order.Service
 	Vendor     *vendor.Service
 	Menu       *menu.Service
@@ -71,14 +56,11 @@ type coreServices struct {
 	Settlement *settlement.Service
 }
 
-// buildCoreServices constructs the shared service graph used by both the api
-// and mcp-stdio roles. Pure construction (no DB calls), so it's safe to call
-// with nil pool/rdb under test for nil-field assertion. storage may be nil:
-// when nil, compliance.Service.Storage is left as the interface zero value,
-// matching the previous mcp-stdio behaviour where document upload paths were
-// not wired.
+// buildCoreServices constructs the shared service graph. Pure construction
+// (no DB calls) so it's safe to call with nil pool/rdb in tests. s3 may be
+// nil — compliance.Storage is then left at the interface zero value rather
+// than wrapping a typed-nil pointer.
 func buildCoreServices(_ context.Context, pool *pgxpool.Pool, rdb *cache.Client, cfg config.Config, s3 *storage.S3Client, _ *slog.Logger) (*coreServices, error) {
-	// repos (stateless wrappers around the pool/rdb)
 	userRepo := pgrepo.NewUserRepo(pool)
 	sessStore := idredis.NewSessionStore(rdb, 7*24*time.Hour)
 	orderRepo := opgrepo.NewOrderRepo(pool)
@@ -95,10 +77,8 @@ func buildCoreServices(_ context.Context, pool *pgxpool.Pool, rdb *cache.Client,
 		return nil, fmt.Errorf("authentik provisioner: %w", err)
 	}
 
-	// domain services — both roles get the same full wiring (previous inline
-	// MCP copy omitted payroll.Exceptions / compliance.Vendors / feedback
-	// .Reverser; unifying here can't make MCP worse since none of those fields
-	// were exercised by any MCP tool, and it removes the drift risk).
+	// Both roles get the full wiring; the previous mcp-stdio inline copy had
+	// drifted (omitted payroll.Exceptions / compliance.Vendors / feedback.Reverser).
 	orderService := &order.Service{
 		Pool:        pool,
 		Orders:      orderRepo,
@@ -153,9 +133,7 @@ func buildCoreServices(_ context.Context, pool *pgxpool.Pool, rdb *cache.Client,
 		VendorGov: vendorService,
 		Clock:     clock.SystemClock{},
 	}
-	// Only assign Storage when non-nil: a typed-nil *S3Client wrapped in the
-	// objectStore interface would compare != nil and panic on first call.
-	if s3 != nil {
+	if s3 != nil { // avoid wrapping a typed-nil pointer in the interface
 		complianceService.Storage = s3
 	}
 	feedbackService := &feedback.Service{
