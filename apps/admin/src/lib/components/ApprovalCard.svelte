@@ -1,8 +1,4 @@
 <script lang="ts">
-  // Ported from ui_kits/tbite/AdminView.jsx TbApprovalCard.
-  // Bound to real VendorDTO data: id / display_name / legal_name / contact_email
-  // / status / plants. The reference's per-doc chips have no list source on the
-  // dashboard endpoint, so the doc summary links to the vendor documents page.
   import { Button, StateTag, Icon } from "@tbite/ui";
 
   interface Props {

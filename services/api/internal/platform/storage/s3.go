@@ -16,9 +16,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// S3Client is a thin wrapper over the AWS SDK S3 client carrying the bucket
-// name we always operate against. Methods are deliberately narrow so callers
-// (e.g. payroll settler) don't need to import the SDK directly.
+// S3Client is a thin wrapper over the AWS SDK S3 client, narrow on purpose
+// so callers don't need to import the SDK directly.
 type S3Client struct {
 	Bucket string
 	s3     *s3.Client
@@ -64,9 +63,8 @@ func NewS3(ctx context.Context, cfg S3Config) (*S3Client, error) {
 	return &S3Client{Bucket: cfg.Bucket, s3: client}, nil
 }
 
-// EnsureBucket creates the bucket if it does not already exist. It is
-// idempotent: BucketAlreadyOwnedByYou / BucketAlreadyExists are treated as
-// success so the worker can re-run safely.
+// EnsureBucket creates the bucket if missing. Idempotent: BucketAlreadyExists /
+// BucketAlreadyOwnedByYou treated as success.
 func (c *S3Client) EnsureBucket(ctx context.Context) error {
 	_, err := c.s3.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(c.Bucket)})
 	if err == nil {
@@ -81,9 +79,8 @@ func (c *S3Client) EnsureBucket(ctx context.Context) error {
 	return nil
 }
 
-// PutObject uploads body at the given key with the supplied content-type and
-// returns a canonical s3://bucket/key URI that callers can persist as a stable
-// reference (we record it on payroll_batch.export_uri).
+// PutObject uploads body at key with the supplied content-type, returning a
+// canonical s3://bucket/key URI for persistence.
 func (c *S3Client) PutObject(ctx context.Context, key string, body io.Reader, contentType string) (string, error) {
 	_, err := c.s3.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(c.Bucket),
@@ -109,14 +106,9 @@ func (c *S3Client) GetObject(ctx context.Context, key string) (io.ReadCloser, er
 	return out.Body, nil
 }
 
-// PresignedPut returns a time-bounded URL the client uses to upload
-// bytes directly to object storage with HTTP PUT. The API never sees
-// the file body, which is the architectural goal of ADR-0010 / issue
-// #60: keep bulk transfer off API CPU and memory.
-//
-// Method enforcement is the responsibility of the client and of the
-// bucket policy; size and content-type are signed in so the client
-// cannot upload a 1GB binary against a 2MB-image authorization.
+// PresignedPut returns a time-bounded PUT URL so the client uploads bytes
+// directly to storage (ADR-0010 / #60). Size + content-type are signed in,
+// so a 2 MB-image authorization can't be used for a 1 GB binary.
 func (c *S3Client) PresignedPut(ctx context.Context, key, contentType string, sizeLimit int64, ttl time.Duration) (string, error) {
 	presigner := s3.NewPresignClient(c.s3)
 	if ttl <= 0 {
@@ -137,9 +129,8 @@ func (c *S3Client) PresignedPut(ctx context.Context, key, contentType string, si
 	return req.URL, nil
 }
 
-// PresignedGet returns a time-bounded URL the client uses to download
-// bytes directly from object storage. Used by the menu/compliance
-// surfaces in lieu of API proxying.
+// PresignedGet returns a time-bounded GET URL so the client downloads
+// directly from storage (no API proxying).
 func (c *S3Client) PresignedGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
 	presigner := s3.NewPresignClient(c.s3)
 	if ttl <= 0 {

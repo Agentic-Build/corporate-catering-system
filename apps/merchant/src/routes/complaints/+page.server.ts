@@ -5,7 +5,6 @@ import { apiFor } from "$lib/server/api";
 
 type ComplaintDTO = components["schemas"]["ComplaintDTO"];
 
-// Complaint statuses surfaced to the merchant inbox.
 const STATUS_VALUES = ["open", "vendor_responded", "escalated", "resolved"] as const;
 type MerchantComplaintStatus = (typeof STATUS_VALUES)[number];
 

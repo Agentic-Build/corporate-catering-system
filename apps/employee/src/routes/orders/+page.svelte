@@ -1,6 +1,5 @@
 <script lang="ts">
-  // 我的訂單 — design-language pass. Tabs + OrderCard styling ported from
-  // EmployeePages.jsx; bound to the real /api/employee/orders payload.
+  // 我的訂單
   import { PageHeader, Tabs, StateTag, EmptyState, Icon } from "@tbite/ui";
 
   type Order = {
@@ -37,7 +36,6 @@
     no_show: "未領取",
     refunded: "已退款",
   };
-  // Left-accent colour, mirroring the reference OrderCard.
   const accent: Record<string, string> = {
     draft: "border-l-tb-slate-300",
     placed: "border-l-tb-red-600",

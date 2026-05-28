@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Ported from reference_src/ui.jsx Toggle — accessible switch.
   interface Props {
     on: boolean;
     onChange: (next: boolean) => void;

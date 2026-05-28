@@ -11,7 +11,6 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
   if (locals.user.role !== "vendor_operator") throw redirect(303, "/login");
 
   const client = apiFor(locals.apiToken);
-  // The handler returns { "settlement": {...}, "orders": [...] }.
   let settlement: SettlementDTO | null = null;
   let orders: OrderLineDTO[] = [];
   try {

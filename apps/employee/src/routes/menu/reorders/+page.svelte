@@ -1,7 +1,5 @@
 <script lang="ts">
-  // 再點一次 — design-language pass. Reorder chips are past orders, not single
-  // menu items, so they render as reorder cards in a grid rather than
-  // MealCards. The reorderPast action + partial-mode toast are preserved.
+  // 再點一次: chips are past orders, render as reorder cards (not MealCards).
   import { onMount } from "svelte";
   import { deserialize } from "$app/forms";
   import { PageHeader, EmptyState } from "@tbite/ui";

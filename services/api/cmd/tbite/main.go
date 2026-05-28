@@ -21,15 +21,11 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/pflag"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
 	chttp "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/http"
-	cpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/postgres"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/config"
 	dlqhttp "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/http"
 	dlqpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/feedback"
 	feedbackhttp "github.com/takalawang/corporate-catering-system/services/api/internal/feedback/http"
-	fpg "github.com/takalawang/corporate-catering-system/services/api/internal/feedback/postgres"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idauthentik "github.com/takalawang/corporate-catering-system/services/api/internal/identity/authentik"
@@ -37,7 +33,6 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/hydra"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
 	pgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/identity/postgres"
-	idredis "github.com/takalawang/corporate-catering-system/services/api/internal/identity/redis"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/mcpserver"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
 	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
@@ -46,9 +41,7 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
 	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
 	opgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
 	payrollhttp "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/http"
-	payrollpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/postgres"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/plants"
 	phttp "github.com/takalawang/corporate-catering-system/services/api/internal/plants/http"
 	ppgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/plants/postgres"
@@ -61,12 +54,8 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
 	qhttp "github.com/takalawang/corporate-catering-system/services/api/internal/quota/http"
 	qpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/settlement"
 	settlementhttp "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/http"
-	settlementpg "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/postgres"
-	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 	vhttp "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/http"
-	vpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/postgres"
 )
 
 func main() {
@@ -189,11 +178,8 @@ func main() {
 		}
 		defer pool.Close()
 
-		// 1b. Read-only pool for the home/recommendation read-model paths
-		// (ADR-0007). newROPool targets DATABASE_RO_URL and falls back to the
-		// primary when no replica is configured, so single-DB deployments are
-		// unaffected while production offloads these eventual-consistency reads
-		// to a replica.
+		// Read-only pool for read-model paths (ADR-0007); falls back to primary
+		// when no replica is configured.
 		roPool, err := newROPool(ctx, cfg)
 		if err != nil {
 			logger.Error("pg ro pool", "err", err)
@@ -209,36 +195,59 @@ func main() {
 		}
 		defer rdb.Close()
 
-		// 3. OIDC providers
+		// 3. S3 / object storage. Constructed before buildCoreServices so the
+		// compliance service is wired to a non-nil Storage; the api role hard-
+		// depends on object storage so we fail fast on misconfiguration.
+		s3API, err := storage.NewS3(ctx, storage.S3Config{
+			Endpoint:        cfg.S3Endpoint,
+			Region:          cfg.S3Region,
+			AccessKeyID:     cfg.S3AccessKeyID,
+			SecretAccessKey: cfg.S3SecretAccessKey,
+			Bucket:          cfg.S3Bucket,
+			UsePathStyle:    cfg.S3UsePathStyle,
+		})
+		if err != nil {
+			logger.Error("s3", "err", err)
+			os.Exit(1)
+		}
+		if err := s3API.EnsureBucket(ctx); err != nil {
+			logger.Warn("ensure bucket failed; uploads will fail until storage is reachable", "err", err)
+		}
+
+		// 4. Shared service graph (same wiring the mcp-stdio role uses).
+		cs, err := buildCoreServices(ctx, pool, rdb, cfg, s3API, logger)
+		if err != nil {
+			logger.Error("build services", "err", err)
+			os.Exit(1)
+		}
+		if err := qpgrepo.RegisterSupplyGauges(pool); err != nil {
+			logger.Warn("register supply gauges", "err", err)
+		}
+
+		// 5. OIDC providers
 		providers, err := buildOIDCProviders(ctx, cfg)
 		if err != nil {
 			logger.Error("oidc providers", "err", err)
 			os.Exit(1)
 		}
 
-		// 4. Repositories
-		userRepo := pgrepo.NewUserRepo(pool)
+		// 6. Identity-specific repos + state store (API-only)
 		idRepo := pgrepo.NewUserIdentityRepo(pool)
-
-		// 5. Session store + OIDC state store
-		sessStore := idredis.NewSessionStore(rdb, 7*24*time.Hour)
 		stateStore := oidc.NewRedisStateStore(rdb, 5*time.Minute)
 
-		// 6. Identity service
+		// 7. Identity service + HTTP API
 		svc := &identity.Service{
-			Users:      userRepo,
+			Users:      cs.UserRepo,
 			Identities: idRepo,
-			Sessions:   sessStore,
+			Sessions:   cs.SessStore,
 			Providers:  providers,
 			States:     stateStore,
 		}
-
-		// 7. HTTP API
 		api := &idhttp.API{
 			Svc:      svc,
-			Sessions: sessStore,
-			Users:    userRepo,
-			Handoff:  sessStore,
+			Sessions: cs.SessStore,
+			Users:    cs.UserRepo,
+			Handoff:  cs.SessStore,
 			AppURLs: idhttp.AppBaseURLs{
 				"employee": cfg.AppBaseURLEmployee,
 				"merchant": cfg.AppBaseURLMerchant,
@@ -246,22 +255,15 @@ func main() {
 			},
 		}
 
-		// 7a-bis. Hydra OAuth bridge — only wired when HYDRA_PUBLIC_URL is
-		// set. We reverse-proxy Hydra's OAuth surface under our own host
-		// so MCP clients see a single issuer and CORS-clean origin. Hydra
-		// is configured with URLS_SELF_ISSUER=our_host so its discovery
-		// doc and the iss claim it signs into tokens line up with what
-		// clients fetch from our /.well-known/openid-configuration.
+		// Hydra OAuth bridge (only when HYDRA_PUBLIC_URL is set): we reverse-
+		// proxy Hydra under our host so MCP clients see one issuer (matches
+		// Hydra's URLS_SELF_ISSUER) and a CORS-clean origin.
 		var (
 			hydraBridge    *hydra.Bridge
 			hydraProxy     http.Handler
 			hydraDiscovery *hydra.DiscoveryShim
 		)
 		if cfg.HydraPublicURL != "" {
-			// JWT iss claim is OIDCCallbackBaseURL (our advertised host),
-			// but the verifier needs a reachable URL to fetch the
-			// discovery doc at boot — that's the Hydra container's
-			// directly-reachable URL.
 			publicIssuer := strings.TrimRight(cfg.OIDCCallbackBaseURL, "/") + "/"
 			mcpResource := strings.TrimRight(cfg.OIDCCallbackBaseURL, "/") + "/mcp"
 			tokVerifier, err := hydra.NewAccessTokenVerifier(ctx, cfg.HydraPublicURL, publicIssuer, mcpResource)
@@ -270,11 +272,7 @@ func main() {
 				os.Exit(1)
 			}
 			api.JWT = hydra.SubjectVerifier{V: tokVerifier}
-			// Build a dedicated OIDC client for the MCP bridge with its own
-			// redirect_uri (/oauth/callback). The web-frontend OIDC client
-			// uses /auth/{slug}/callback; both clients are the same logical
-			// Authentik application but they need separate redirect URI
-			// registrations.
+			// Bridge-only OIDC client uses /oauth/callback (web uses /auth/{slug}/callback).
 			var bridgeOIDC *oidc.OIDCProvider
 			var bridgeOIDCSlug string
 			if len(cfg.AuthProviders) > 0 {
@@ -297,8 +295,8 @@ func main() {
 			}
 			hydraBridge = &hydra.Bridge{
 				Hydra:            hydra.NewAdminClient(cfg.HydraAdminURL),
-				Sessions:         sessStore,
-				Users:            userRepo,
+				Sessions:         cs.SessStore,
+				Users:            cs.UserRepo,
 				Identities:       idRepo,
 				OIDCProvider:     bridgeOIDC,
 				OIDCProviderName: bridgeOIDCSlug,
@@ -320,130 +318,34 @@ func main() {
 			)
 		}
 
-		// 7b. Vendor service + admin handlers
-		authentikProvisioner, err := newAuthentikProvisioner(cfg)
-		if err != nil {
-			logger.Error("authentik provisioner", "err", err)
-			os.Exit(1)
-		}
-		vendorService := &vendor.Service{
-			Vendors:     vpgrepo.NewVendorRepo(pool),
-			Plants:      vpgrepo.NewPlantMappingRepo(pool),
-			Operators:   vpgrepo.NewOperatorRepo(pool),
-			Provisioner: authentikProvisioner,
-			Users:       userRepo,
-			Sessions:    sessStore,
-			Audit:       opgrepo.NewAuditRepo(pool),
-		}
-		vendorAPI := &vhttp.API{Svc: vendorService}
+		// 8. HTTP handlers — one per bounded context, all sharing the services
+		// constructed in buildCoreServices above.
+		vendorAPI := &vhttp.API{Svc: cs.Vendor}
 
-		// 7b-bis. Plant registry service + endpoints.
+		// Plant registry (vendors pick from this list during onboarding).
 		plantRegistrySvc := &plants.Service{Repo: ppgrepo.NewPlantRepo(pool)}
-		plantAPI := &phttp.API{Svc: plantRegistrySvc, VendorSvc: vendorService}
+		plantAPI := &phttp.API{Svc: plantRegistrySvc, VendorSvc: cs.Vendor}
 
-		// 7c. Menu service + merchant/employee handlers
-		itemRepo := mpgrepo.NewItemRepo(pool)
-		menuService := &menu.Service{
-			Categories: mpgrepo.NewCategoryRepo(pool),
-			Items:      itemRepo,
-			Images:     mpgrepo.NewImageRepo(pool),
-		}
+		// Menu — direct multipart + presigned uploads go to object storage
+		// (Storage is set at construction since s3API is already built).
 		menuAPI := &mhttp.API{
-			Svc:                  menuService,
+			Svc:                  cs.Menu,
+			Storage:              s3API,
 			StoragePublicBaseURL: cfg.S3PublicBaseURL,
 			StorageBucket:        cfg.S3Bucket,
 		}
 
-		// 7d. Quota service + merchant handlers (vendor capacity management)
-		supplyRepo := qpgrepo.NewSupplyRepo(pool)
-		if err := qpgrepo.RegisterSupplyGauges(pool); err != nil {
-			logger.Warn("register supply gauges", "err", err)
-		}
-		quotaService := &quota.Service{
-			Supplies: supplyRepo,
-			Items:    itemRepo,
-		}
-		quotaAPI := &qhttp.API{Svc: quotaService}
+		// Quota (merchant capacity management).
+		quotaAPI := &qhttp.API{Svc: &quota.Service{Supplies: cs.SupplyRepo, Items: cs.ItemRepo}}
 
-		// 7e. Order service + employee handlers (place / list / get / cancel)
-		orderRepo := opgrepo.NewOrderRepo(pool)
-		stateEventRepo := opgrepo.NewStateEventRepo(pool)
-		auditRepo := opgrepo.NewAuditRepo(pool)
-		outboxRepo := opgrepo.NewOutboxRepo(pool)
-		plantRepo := vpgrepo.NewPlantMappingRepo(pool)
-		orderService := &order.Service{
-			Pool:        pool,
-			Orders:      orderRepo,
-			OrdersTx:    orderRepo,
-			StateEvents: stateEventRepo,
-			StateTx:     stateEventRepo,
-			Audit:       auditRepo,
-			AuditTx:     auditRepo,
-			Outbox:      outboxRepo,
-			OutboxTx:    outboxRepo,
-			QuotaTx:     supplyRepo,
-			Items:       itemRepo,
-			Plants:      plantRepo,
-			Vendors:     vpgrepo.NewVendorRepo(pool),
-			Clock:       clock.SystemClock{},
-			Location:    appLocation(),
-		}
-		// BoardHub fans live order events to the merchant prep board over SSE.
-		// It is wired to NATS below when NATS_URL is configured.
+		// Order — BoardHub / MenuHub fan live events to the merchant prep board
+		// over SSE; wired to NATS below when NATS_URL is configured.
 		boardHub := order.NewBoardHub()
 		menuHub := order.NewMenuHub()
-		orderAPI := &ohttp.API{Svc: orderService, Board: boardHub, MenuHub: menuHub}
+		orderAPI := &ohttp.API{Svc: cs.Order, Board: boardHub, MenuHub: menuHub}
 
-		// 7f. Payroll service + admin/employee handlers
-		payrollService := &payroll.Service{
-			Pool:       pool,
-			Batches:    payrollpgrepo.NewBatchRepo(pool),
-			Entries:    payrollpgrepo.NewEntryRepo(pool),
-			Disputes:   payrollpgrepo.NewDisputeRepo(pool),
-			Exceptions: payrollpgrepo.NewExceptionRepo(pool),
-			Orders:     orderRepo,
-			OrderTx:    orderRepo,
-			Audit:      auditRepo,
-			Outbox:     outboxRepo,
-			Clock:      clock.SystemClock{},
-		}
-		payrollAPI := &payrollhttp.API{Svc: payrollService}
-
-		// 7g. Compliance service + admin handlers (vendor docs / anomalies /
-		// audit query / dlq stub). S3 is constructed here as well as in worker
-		// so document uploads have somewhere to land. If S3 is misconfigured we
-		// fail fast — the api role now hard-depends on object storage.
-		s3API, err := storage.NewS3(ctx, storage.S3Config{
-			Endpoint:        cfg.S3Endpoint,
-			Region:          cfg.S3Region,
-			AccessKeyID:     cfg.S3AccessKeyID,
-			SecretAccessKey: cfg.S3SecretAccessKey,
-			Bucket:          cfg.S3Bucket,
-			UsePathStyle:    cfg.S3UsePathStyle,
-		})
-		if err != nil {
-			logger.Error("s3", "err", err)
-			os.Exit(1)
-		}
-		if err := s3API.EnsureBucket(ctx); err != nil {
-			logger.Warn("ensure bucket failed; uploads will fail until storage is reachable", "err", err)
-		}
-		// Menu-item images travel via presigned PUT/GET or direct upload to
-		// object storage. The API authorises both paths.
-		menuAPI.Storage = s3API
-		complianceService := &compliance.Service{
-			Pool:      pool,
-			Docs:      cpgrepo.NewDocumentRepo(pool),
-			Anomaly:   cpgrepo.NewAnomalyRepo(pool),
-			Storage:   s3API,
-			Audit:     auditRepo,
-			Outbox:    outboxRepo,
-			AuditQry:  auditRepo,
-			Vendors:   vpgrepo.NewVendorRepo(pool),
-			VendorGov: vendorService,
-			Clock:     clock.SystemClock{},
-		}
-		complianceAPI := &chttp.API{Svc: complianceService}
+		payrollAPI := &payrollhttp.API{Svc: cs.Payroll}
+		complianceAPI := &chttp.API{Svc: cs.Compliance}
 
 		// 7h. DLQ admin handlers (list/replay/resolve). NATS is optional: when
 		// NATS_URL is set we wire JetStream so /replay can re-publish; otherwise
@@ -457,9 +359,7 @@ func main() {
 			if natsClient, err := messaging.New(ctx, cfg.NATSURL); err == nil {
 				dlqAPI.JS = natsClient.JS
 				defer natsClient.Close()
-				// Tap ORDERS_V1 so the merchant prep board SSE endpoint can
-				// push live updates. Failure here is non-fatal: the board
-				// still works, just without push.
+				// Tap ORDERS_V1 for the merchant board SSE; non-fatal.
 				go func() {
 					if err := order.RunBoardConsumer(ctx, natsClient.JS, boardHub, menuHub, logger); err != nil {
 						logger.Warn("board consumer stopped", "err", err)
@@ -470,22 +370,21 @@ func main() {
 			}
 		}
 
-		// 7i. P9 personalisation: favorites, reorder, home aggregate. All three
-		// share the existing repos; only favorites needs a new table (000008).
+		// Personalisation: favorites + reorder + home aggregate.
 		favoriteRepo := mpgrepo.NewFavoriteRepo(pool)
 		favoritesSvc := menu.NewFavoritesService(favoriteRepo)
 		favoritesAPI := &mhttp.FavoritesAPI{Svc: favoritesSvc}
 
 		reorderSvc := order.NewReorderService(
 			pool,
-			orderRepo,
-			p9SupplyRepoAdapter{inner: supplyRepo},
-			p9ItemRepoAdapter{inner: itemRepo},
-			vpgrepo.NewVendorRepo(pool),
-			plantRepo,
-			stateEventRepo,
-			auditRepo,
-			outboxRepo,
+			cs.OrderRepo,
+			p9SupplyRepoAdapter{inner: cs.SupplyRepo},
+			p9ItemRepoAdapter{inner: cs.ItemRepo},
+			cs.VendorRepo,
+			cs.PlantRepo,
+			cs.StateEventRepo,
+			cs.AuditRepo,
+			cs.OutboxRepo,
 			clock.SystemClock{},
 			appLocation(),
 		)
@@ -499,21 +398,13 @@ func main() {
 				logger.Warn("invalid RECOMMENDATION_ALPHA; defaulting to 1.0", "raw", raw)
 			}
 		}
-		// Read-model repos read off the RO pool (ADR-0007): these aggregates
-		// are already eventual-consistency (Redis-cached, NATS-invalidated), so
-		// replica lag is within tolerance.
+		// Read-model aggregates run off the RO pool (ADR-0007); Redis-cached
+		// with NATS-driven invalidation + TTL safety net.
 		popularityRepo := mpgrepo.NewPopularityRepo(roPool)
 		affinityRepo := mpgrepo.NewAffinityRepo(roPool)
 		recentOrdersRepo := opgrepo.NewRecentOrdersRepo(roPool)
-		// Read-model cache (Valkey) shared by the employee home aggregate and
-		// the recommendation aggregates. The namespace prefix scopes keys so
-		// SCAN-based invalidation stays bounded.
 		homeCache := &readmodel.RedisCache{C: rdb, Prefix: "tbite:rm:"}
 		homeMetrics := readmodel.NewMetrics()
-		// Popularity + affinity are recomputed from raw orders per request;
-		// cache them so AC3 holds. Popularity is plant/date keyed and shared;
-		// affinity is user keyed over a 30-day window. The outbox invalidator
-		// drops both on order events; TTL is the safety net.
 		cachedPopularity := cachedPopularityAdapter{
 			cached: &readmodel.CachedPopularity{Inner: popularityRepo, Cache: homeCache, Metrics: homeMetrics},
 			repo:   popularityRepo,
@@ -549,14 +440,12 @@ func main() {
 		}
 		homeAPI := &mhttp.HomeAPI{
 			Home:        homeSvc,
-			MenuSvc:     menuService,
+			MenuSvc:     cs.Menu,
 			Cache:       homeCache,
 			CacheTTL:    30 * time.Second,
 			CacheMetric: homeMetrics,
 		}
-		// The outbox-driven invalidator subscribes to ORDERS_V1 and
-		// clears entries scoped to the affected plant/date. Failure
-		// to start is non-fatal — the TTL is the safety net.
+		// Read-model invalidator on ORDERS_V1; non-fatal (TTL is the fallback).
 		if cfg.NATSURL != "" {
 			go func() {
 				natsClient, err := messaging.New(ctx, cfg.NATSURL)
@@ -571,59 +460,26 @@ func main() {
 			}()
 		}
 
-		// 7j. Feedback (F1): employee meal ratings + complaint workflow.
-		// Reverser wires admin "resolve with compensation" to ReverseOrder so a
-		// complaint resolved with `compensate=true` reverses the salary deduction.
-		feedbackService := &feedback.Service{
-			Pool:       pool,
-			Ratings:    fpg.NewRatingRepo(pool),
-			Complaints: fpg.NewComplaintRepo(pool),
-			Orders:     fpg.NewOrderReader(pool),
-			Audit:      auditRepo,
-			Clock:      clock.SystemClock{},
-			Reverser:   payrollService,
-		}
-		feedbackAPI := &feedbackhttp.API{Svc: feedbackService}
+		feedbackAPI := &feedbackhttp.API{Svc: cs.Feedback}
+		settlementAPI := &settlementhttp.API{Svc: cs.Settlement}
 
-		// 7k. Vendor settlement (F2): monthly reconciliation + admin close.
-		settlementRepo := settlementpg.NewSettlementRepo(pool)
-		settlementService := &settlement.Service{
-			Pool:        pool,
-			Settlements: settlementRepo,
-			Orders:      settlementRepo,
-			Audit:       auditRepo,
-		}
-		settlementAPI := &settlementhttp.API{Svc: settlementService}
-
-		// 8. HTTP server. Local and e2e auth now run through Authentik; there is
-		// no fake OIDC route mounted by the API.
-
-		// 9. MCP server (P7). Reuses the same service instances and the same
-		// Bearer auth middleware as the REST API. Tools are registered in
-		// subsequent P7 tasks; Task 1 mounts the skeleton at /mcp.
+		// MCP server — mounted at /mcp by httpserver.New below.
 		mcpSrv := mcpserver.New(mcpserver.Deps{
 			Pool:       pool,
-			Audit:      auditRepo,
-			Order:      orderService,
-			Vendor:     vendorService,
-			Menu:       menuService,
-			Payroll:    payrollService,
-			Compliance: complianceService,
-			Feedback:   feedbackService,
-			Settlement: settlementService,
-			Users:      userRepo,
-			Sessions:   sessStore,
+			Audit:      cs.AuditRepo,
+			Order:      cs.Order,
+			Vendor:     cs.Vendor,
+			Menu:       cs.Menu,
+			Payroll:    cs.Payroll,
+			Compliance: cs.Compliance,
+			Feedback:   cs.Feedback,
+			Settlement: cs.Settlement,
+			Users:      cs.UserRepo,
+			Sessions:   cs.SessStore,
 		})
 
-		// MCP OAuth metadata. When the Hydra sidecar is wired, advertise
-		// OUR host as the authorization server: Hydra is configured with
-		// URLS_SELF_ISSUER pointing at us, and the /.well-known/openid-
-		// configuration discovery + DCR + /oauth2/* endpoints are reverse-
-		// proxied at our host — so the JWT iss claim, discovery doc, and
-		// PRM all line up on one origin. This is what makes Claude.ai /
-		// ChatGPT's strict OAuth client trust Hydra-issued tokens via DCR.
-		// When Hydra isn't wired, fall back to Authentik's issuer (bearer-
-		// paste only, no DCR).
+		// MCP OAuth metadata: advertise our host when Hydra is wired (DCR
+		// needs one origin); fall back to Authentik's issuer otherwise.
 		var mcpAuthServers []string
 		if cfg.HydraPublicURL != "" {
 			mcpAuthServers = []string{strings.TrimRight(cfg.OIDCCallbackBaseURL, "/") + "/"}
@@ -642,30 +498,20 @@ func main() {
 			// Direct multipart upload — vendor-scoped, returns public MinIO URL.
 			r.Post("/api/merchant/uploads", menuAPI.HandleDirectUpload)
 
-			// Hydra OAuth bridge — only mounted when the sidecar is wired.
-			// These endpoints are anonymous: they're the URLs Hydra
-			// redirects the user's browser to during the login/consent
-			// dance, before any session exists.
+			// Hydra OAuth bridge endpoints (anonymous; only when sidecar wired).
 			if hydraBridge != nil {
 				r.Get("/oauth/login", hydraBridge.LoginHandler)
 				r.Get("/oauth/callback", hydraBridge.CallbackHandler)
 				r.Get("/oauth/consent", hydraBridge.ConsentHandler)
-				// Discovery shim — wraps Hydra's /.well-known/openid-
-				// configuration and injects registration_endpoint
-				// (Hydra v2.2-2.3 omits it from the published doc).
+				// Discovery shim injects registration_endpoint (Hydra v2.2-2.3 omits it).
 				r.Get("/.well-known/openid-configuration", hydraDiscovery.ServeHTTP)
 				r.Get("/.well-known/oauth-authorization-server", hydraDiscovery.ServeHTTP)
-				// DCR (RFC 7591) — sanitizing proxy strips empty-string
-				// optional URI fields from Hydra's response. Strict OAuth
-				// clients (Claude Code, Claude.ai web, ChatGPT) reject
-				// empty policy_uri/tos_uri/etc and would otherwise mark
-				// the connection as failed during the registration step.
+				// DCR (RFC 7591) sanitizing proxy: strips empty optional URI
+				// fields strict OAuth clients (Claude/ChatGPT) reject.
 				dcrProxy := &hydra.SanitizingDCRProxy{HydraURL: cfg.HydraPublicURL}
 				r.Handle("/oauth2/register", dcrProxy)
 				r.Handle("/oauth2/register/*", dcrProxy)
-				// Reverse proxy — Hydra's OAuth surface served under our
-				// own host so URLs in the discovery doc and the iss
-				// claim in JWTs line up.
+				// Reverse-proxy Hydra under our host so iss / discovery URLs line up.
 				r.Handle("/oauth2/*", hydraProxy)
 				r.Get("/.well-known/jwks.json", hydraProxy.ServeHTTP)
 				r.Get("/userinfo", hydraProxy.ServeHTTP)
@@ -691,11 +537,8 @@ func main() {
 			os.Exit(1)
 		}
 	case config.RoleMCPStdio:
-		// mcp-stdio role: same MCPServer + tool wiring as the api role's /mcp
-		// mount, but transported over stdin/stdout for local MCP clients
-		// (Claude Code, Cursor, etc.). The user is resolved once at boot from
-		// MCP_BEARER_TOKEN and attached to every request's context via
-		// StdioServer.SetContextFunc — stdio is single-client so this is safe.
+		// Same MCPServer wiring as the api role's /mcp, but over stdin/stdout
+		// for local clients. Single-client → resolve the bearer user once at boot.
 		token := os.Getenv("MCP_BEARER_TOKEN")
 		if token == "" {
 			logger.Error("MCP_BEARER_TOKEN required for mcp-stdio role")
@@ -715,119 +558,40 @@ func main() {
 		}
 		defer rdb.Close()
 
-		userRepo := pgrepo.NewUserRepo(pool)
-		sessStore := idredis.NewSessionStore(rdb, 7*24*time.Hour)
+		// Construct the shared service graph (same wiring the api role uses).
+		// Storage is nil here: no MCP tool currently exercises document upload
+		// (only audit.query, which uses AuditQry).
+		cs, err := buildCoreServices(ctx, pool, rdb, cfg, nil, logger)
+		if err != nil {
+			logger.Error("build services", "err", err)
+			os.Exit(1)
+		}
 
-		// Resolve the user that owns the bearer token. We do this once at boot
-		// rather than per-request because stdio is single-client.
-		sess, err := sessStore.Get(ctx, token)
+		// Resolve the user that owns the bearer token once at boot — stdio is
+		// single-client so we don't re-check per request.
+		sess, err := cs.SessStore.Get(ctx, token)
 		if err != nil {
 			logger.Error("invalid MCP_BEARER_TOKEN", "err", err)
 			os.Exit(1)
 		}
-		user, err := userRepo.GetByID(ctx, sess.UserID)
+		user, err := cs.UserRepo.GetByID(ctx, sess.UserID)
 		if err != nil {
 			logger.Error("user lookup", "err", err)
 			os.Exit(1)
 		}
 
-		// Wire the same services the api role uses for MCP. Compliance.Storage
-		// is intentionally nil — no MCP tool currently exercises the document
-		// upload path, only audit.query (which uses AuditQry).
-		auditRepo := opgrepo.NewAuditRepo(pool)
-		outboxRepo := opgrepo.NewOutboxRepo(pool)
-		stateRepo := opgrepo.NewStateEventRepo(pool)
-		orderRepo := opgrepo.NewOrderRepo(pool)
-		supplyRepo := qpgrepo.NewSupplyRepo(pool)
-		itemRepo := mpgrepo.NewItemRepo(pool)
-		plantRepo := vpgrepo.NewPlantMappingRepo(pool)
-		authentikProvisioner, err := newAuthentikProvisioner(cfg)
-		if err != nil {
-			logger.Error("authentik provisioner", "err", err)
-			os.Exit(1)
-		}
-
-		orderService := &order.Service{
-			Pool:        pool,
-			Orders:      orderRepo,
-			OrdersTx:    orderRepo,
-			StateEvents: stateRepo,
-			StateTx:     stateRepo,
-			Audit:       auditRepo,
-			AuditTx:     auditRepo,
-			Outbox:      outboxRepo,
-			OutboxTx:    outboxRepo,
-			QuotaTx:     supplyRepo,
-			Items:       itemRepo,
-			Plants:      plantRepo,
-			Vendors:     vpgrepo.NewVendorRepo(pool),
-			Clock:       clock.SystemClock{},
-			Location:    appLocation(),
-		}
-		vendorService := &vendor.Service{
-			Vendors:     vpgrepo.NewVendorRepo(pool),
-			Plants:      plantRepo,
-			Operators:   vpgrepo.NewOperatorRepo(pool),
-			Provisioner: authentikProvisioner,
-			Users:       userRepo,
-			Sessions:    sessStore,
-			Audit:       opgrepo.NewAuditRepo(pool),
-		}
-		menuService := &menu.Service{
-			Categories: mpgrepo.NewCategoryRepo(pool),
-			Items:      itemRepo,
-			Images:     mpgrepo.NewImageRepo(pool),
-		}
-		payrollService := &payroll.Service{
-			Pool:     pool,
-			Batches:  payrollpgrepo.NewBatchRepo(pool),
-			Entries:  payrollpgrepo.NewEntryRepo(pool),
-			Disputes: payrollpgrepo.NewDisputeRepo(pool),
-			Orders:   orderRepo,
-			OrderTx:  orderRepo,
-			Audit:    auditRepo,
-			Outbox:   outboxRepo,
-			Clock:    clock.SystemClock{},
-		}
-		complianceService := &compliance.Service{
-			Pool:      pool,
-			Docs:      cpgrepo.NewDocumentRepo(pool),
-			Anomaly:   cpgrepo.NewAnomalyRepo(pool),
-			Storage:   nil, // not needed for read-only MCP tools
-			Audit:     auditRepo,
-			Outbox:    outboxRepo,
-			AuditQry:  auditRepo,
-			VendorGov: vendorService,
-			Clock:     clock.SystemClock{},
-		}
-		feedbackService := &feedback.Service{
-			Pool:       pool,
-			Ratings:    fpg.NewRatingRepo(pool),
-			Complaints: fpg.NewComplaintRepo(pool),
-			Orders:     fpg.NewOrderReader(pool),
-			Audit:      auditRepo,
-			Clock:      clock.SystemClock{},
-		}
-		settlementRepo := settlementpg.NewSettlementRepo(pool)
-		settlementService := &settlement.Service{
-			Pool:        pool,
-			Settlements: settlementRepo,
-			Orders:      settlementRepo,
-			Audit:       auditRepo,
-		}
-
 		mcpSrv := mcpserver.New(mcpserver.Deps{
 			Pool:       pool,
-			Audit:      auditRepo,
-			Order:      orderService,
-			Vendor:     vendorService,
-			Menu:       menuService,
-			Payroll:    payrollService,
-			Compliance: complianceService,
-			Feedback:   feedbackService,
-			Settlement: settlementService,
-			Users:      userRepo,
-			Sessions:   sessStore,
+			Audit:      cs.AuditRepo,
+			Order:      cs.Order,
+			Vendor:     cs.Vendor,
+			Menu:       cs.Menu,
+			Payroll:    cs.Payroll,
+			Compliance: cs.Compliance,
+			Feedback:   cs.Feedback,
+			Settlement: cs.Settlement,
+			Users:      cs.UserRepo,
+			Sessions:   cs.SessStore,
 		})
 
 		stdioSrv := mcpgo.NewStdioServer(mcpSrv)

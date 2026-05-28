@@ -1,6 +1,4 @@
 <script lang="ts">
-  // Calibrated against reference_src/ui.jsx + components.jsx Card.
-  // `tone` is kept (existing callers pass it); reference calls it `variant`.
   interface Props {
     tone?: "default" | "info" | "warning" | "success" | "danger";
     title?: string;

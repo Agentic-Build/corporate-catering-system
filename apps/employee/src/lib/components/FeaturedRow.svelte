@@ -1,7 +1,5 @@
 <script lang="ts" generics="T extends { key: string }">
-  // Horizontal featured scroller — ported from EmployeeView.jsx TbFeaturedRow.
-  // Generic over the row's items: the caller supplies a `card` snippet so the
-  // same scroller serves both MealCard rows and the reorder-order card row.
+  // Horizontal featured scroller; caller supplies the `card` snippet.
   import type { Snippet } from "svelte";
   import { Icon } from "@tbite/ui";
 

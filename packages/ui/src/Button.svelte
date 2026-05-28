@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Calibrated against reference_src/ui.jsx + components.jsx Button.
   interface Props {
     variant?: "primary" | "secondary" | "ghost" | "danger";
     size?: "sm" | "md";

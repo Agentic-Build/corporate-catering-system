@@ -16,9 +16,8 @@ const (
 	// MCP stdio transport for local AI clients.
 	RoleMCPStdio Role = "mcp-stdio"
 
-	// Cloud-native split worker roles (architecture #56). Each runs as
-	// an independent Deployment with its own scaling rule and DLQ
-	// behavior. There is no legacy combined worker/scheduler role.
+	// Cloud-native split worker roles (architecture #56): each runs as an
+	// independent Deployment with its own scaling rule and DLQ behaviour.
 	RoleOutboxRelay      Role = "outbox-relay"
 	RolePayrollSettler   Role = "payroll-settler"
 	RoleOnTimeEvaluator  Role = "on-time-evaluator"
@@ -27,16 +26,13 @@ const (
 	RoleDocExpiryScanner Role = "document-expiry-scanner"
 	RoleFeedbackScanner  Role = "feedback-scanner"
 
-	// Realtime SSE gateway (architecture #58). Serves only the
-	// long-lived SSE endpoints, consuming from JetStream, so that
-	// ordinary API request pods do not carry primary long-connection
-	// load.
+	// Realtime SSE gateway (architecture #58): serves only the long-lived
+	// SSE endpoints, consuming from JetStream, so API request pods don't
+	// carry the long-connection load.
 	RoleRealtimeGateway Role = "realtime-gateway"
 
-	// One-shot provisioning role (architecture #62). Runs as a
-	// Kubernetes Job (pre-install / pre-upgrade Helm hook) to declare
-	// JetStream streams and consumers, then exits. Removes the
-	// data-plane mutation from ordinary worker startup.
+	// One-shot provisioning role (architecture #62): Helm hook Job that
+	// declares JetStream streams + consumers and exits.
 	RoleProvisionStreams Role = "provision-streams"
 )
 
@@ -45,12 +41,8 @@ type Config struct {
 	HTTPAddr string
 	LogLevel string
 
-	// DatabaseRW is the read/write connection string aimed at the
-	// Postgres primary. DatabaseRO is the read-only fan-out string
-	// aimed at a replica (or a PgBouncer pool fronting replicas);
-	// it falls back to DatabaseRW when empty, which preserves the
-	// behaviour of small deployments that do not yet run replicas.
-	// See architecture ADR-0007 (#54).
+	// DatabaseRW = primary write conn string; DatabaseRO = replica fan-out
+	// (falls back to RW when empty for small deployments). ADR-0007 / #54.
 	DatabaseRW   string
 	DatabaseRO   string
 	DBMaxConns   int32
@@ -75,9 +67,7 @@ type Config struct {
 	AppBaseURLMerchant string
 	AppBaseURLAdmin    string
 
-	// S3-compatible object storage (MinIO local / AWS S3 / GCS HMAC). Used by
-	// the payroll settler worker. Optional at boot — only the worker role
-	// actually requires it, so we don't validate here.
+	// S3-compatible object storage. Optional at boot — only worker roles require it.
 	S3Endpoint        string
 	S3Region          string
 	S3AccessKeyID     string
@@ -86,12 +76,9 @@ type Config struct {
 	S3UsePathStyle    bool
 	S3PublicBaseURL   string
 
-	// HydraPublicURL / HydraAdminURL configure the Ory Hydra sidecar that
-	// fronts our OAuth surface so MCP clients (Claude.ai, ChatGPT) get
-	// real Dynamic Client Registration (RFC 7591) — Authentik 2026.2 still
-	// lacks DCR (scheduled for 2026.8). When HydraPublicURL is empty the
-	// MCP /.well-known/oauth-protected-resource falls back to advertising
-	// the Authentik issuer directly (no DCR).
+	// Hydra sidecar URLs fronting our OAuth surface so MCP clients get RFC 7591
+	// DCR (Authentik 2026.2 lacks it). Empty HydraPublicURL → MCP metadata
+	// advertises Authentik directly (no DCR).
 	HydraPublicURL string
 	HydraAdminURL  string
 
@@ -172,9 +159,7 @@ func getenv(k, def string) string {
 }
 
 // envInt32 parses an integer env var, returning def on unset or parse error.
-// The chart wires database pool budgets through these vars so HPA / KEDA
-// scaling can be reasoned about against a known total backend connection
-// budget.
+// Used for DB pool budgets so HPA/KEDA scaling has a known total backend budget.
 func envInt32(k string, def int32) int32 {
 	v := os.Getenv(k)
 	if v == "" {
@@ -264,11 +249,9 @@ func ParseRole(s string) (Role, error) {
 	}
 }
 
-// EffectiveDatabaseRO returns DatabaseRO when set, otherwise the
-// DatabaseRW string. Application code that reads on hot, eventual-
-// consistency paths (menu, home, recommendation) should ask for the
-// RO pool by name; small deployments without a replica still receive a
-// working connection string.
+// EffectiveDatabaseRO returns DatabaseRO when set, else DatabaseRW.
+// Hot read paths (menu, home, recommendation) should ask for the RO pool by
+// name; small single-DB deployments still get a working conn string.
 func (c Config) EffectiveDatabaseRO() string {
 	if c.DatabaseRO == "" {
 		return c.DatabaseRW

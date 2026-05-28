@@ -2,10 +2,7 @@
 module.exports = {
   theme: {
     extend: {
-      // Complete `tb-` color namespace. Every hue the T-Bite design
-      // system uses, full 50–950 scale, so any reference color maps
-      // exactly. Hex values mirror packages/tokens/src/tokens.css and
-      // the Tailwind CSS v3 default palette (consistent with each other).
+      // `tb-` color namespace, full 50–950 scale; mirrors tokens.css.
       colors: {
         "tb-red": {
           50: "#fef2f2",

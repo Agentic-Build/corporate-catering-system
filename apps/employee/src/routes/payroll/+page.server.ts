@@ -26,9 +26,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const r = await client.GET("/api/employee/payroll");
   if (r.data) entries = r.data.items ?? [];
 
-  // 本月進行中 — current (unsettled) period's per-order lines plus the live
-  // accumulated total. Both feed the hero + per-order rows above the batch
-  // table.
+  // Unsettled period: per-order lines + live total for the hero + rows.
   let currentLines: CurrentPayrollLine[] = [];
   let currentTotalMinor = 0;
   const cr = await client.GET("/api/employee/payroll/current");
@@ -41,8 +39,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  // Submit a 1–5 star meal rating with an optional comment (≤ 500 chars).
-  // Mirrors orders/[id] ?/rate so the PayrollEntrySheet can rate inline.
+  // Mirror of orders/[id] ?/rate so PayrollEntrySheet can rate inline.
   rate: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { ratingError: "unauthenticated" });
     const fd = await request.formData();
@@ -70,8 +67,7 @@ export const actions: Actions = {
     return { ratingOk: true, orderId, rating: r.data.rating };
   },
 
-  // File a meal complaint (description 5–1000 chars). Mirrors orders/[id]
-  // ?/complain.
+  // Mirror of orders/[id] ?/complain.
   complain: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { complaintError: "unauthenticated" });
     const fd = await request.formData();

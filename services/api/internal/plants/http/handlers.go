@@ -18,8 +18,6 @@ type API struct {
 	VendorSvc *vendor.Service
 }
 
-// ----- DTOs -----
-
 type plantDTO struct {
 	Code      string `json:"code"`
 	Label     string `json:"label"`
@@ -70,8 +68,6 @@ type setMerchantPlantsInput struct {
 		Plants []string `json:"plants"`
 	}
 }
-
-// ----- Registration -----
 
 func (a *API) Register(api huma.API) {
 	// Public (active only) — any authenticated user.
@@ -133,8 +129,6 @@ func (a *API) Register(api huma.API) {
 		DefaultStatus: http.StatusNoContent,
 	}, a.merchantSet)
 }
-
-// ----- Handlers -----
 
 func (a *API) listActive(ctx context.Context, _ *struct{}) (*listPlantsOutput, error) {
 	if _, ok := idhttp.UserFromContext(ctx); !ok {
@@ -230,8 +224,6 @@ func (a *API) merchantSet(ctx context.Context, in *setMerchantPlantsInput) (*str
 	return &struct{}{}, nil
 }
 
-// ----- Auth guards -----
-
 func (a *API) requireAdmin(ctx context.Context) error {
 	_, err := idhttp.RequireAdmin(ctx)
 	return err
@@ -241,8 +233,6 @@ func (a *API) requireVendor(ctx context.Context) (string, error) {
 	_, vendorID, err := idhttp.RequireVendor(ctx)
 	return vendorID, err
 }
-
-// ----- Helpers -----
 
 func toDTO(p *plants.Plant) plantDTO {
 	return plantDTO{

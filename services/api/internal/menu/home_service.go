@@ -8,16 +8,12 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
 )
 
-// ---------- Cross-package projection types ----------
-// These are defined in the menu package (rather than order/postgres) to avoid
-// the import cycle:
-//   menu → order/postgres → order → menu
-// The concrete order/postgres repo returns these types directly, so there is
-// no marshalling cost.
+// Cross-package projection types live here (not in order/postgres) to break
+// the menu → order/postgres → order → menu cycle.
 
 // RecentOrderRow is the projection returned by RecentOrdersByUser. One row
-// per (user, vendor) — the user's most-recent order with that vendor in the
-// last 30 days, plus the per-vendor frequency.
+// per (user, vendor): most-recent order with that vendor in the last 30 days,
+// plus per-vendor frequency.
 type RecentOrderRow struct {
 	OrderID         string
 	VendorID        string
@@ -38,14 +34,9 @@ type UserOrderToday struct {
 }
 
 // HomeService computes the employee landing page: target_day derivation, the
-// order summary (if any), and the three chip carousels (reorder / favorite /
-// recommend). All cross-cutting state — Clock, server timezone, recommender
-// α — is injected so the orchestration is easy to test.
-//
-// Timezone assumption: ServerTZ is the timezone used to derive `today` from
-// the wall clock. For a single-region deployment whose server is collocated
-// with the employees' lunch window (the P9 target deployment), ServerTZ ==
-// time.Local. Multi-region deployments are out of scope for P9.
+// order summary (if any), and the three chip carousels (reorder/favorite/
+// recommend). ServerTZ is used to derive `today` (single-region deployment;
+// time.Local in production).
 type HomeService struct {
 	Clock    clock.Clock
 	ServerTZ *time.Location
@@ -65,8 +56,6 @@ type HomeService struct {
 	FavoriteLimit  int     // default 5
 	RecommendLimit int     // default 5
 }
-
-// ---------- Repository ports (local interfaces — keep wiring decoupled) ----------
 
 // RecentOrdersForHome captures the slice of order/postgres.RecentOrdersRepo
 // the home service consumes.
@@ -95,8 +84,6 @@ type AffinityForHome interface {
 type FavoritesForHome interface {
 	ListByUser(ctx context.Context, userID, targetDay, plant string, limit int, cursor *time.Time) ([]FavoriteChip, *time.Time, error)
 }
-
-// ---------- Output types ----------
 
 // HomeState is the result of target-day derivation: which day the page
 // should show, whether the user already ordered for that day, and a tiny
@@ -128,23 +115,15 @@ type ReorderChip struct {
 	AvailableToday  bool // can the items be served on the target day?
 }
 
-// ---------- Public methods ----------
-
 const (
 	dateLayout = "2006-01-02"
 )
 
-// Compute derives the home page's target_day + order summary. State machine:
-//
-//  1. If dayOverride is non-empty, parse it as YYYY-MM-DD and use as-is.
-//     Still surface the day's order summary if one exists.
-//  2. Otherwise, today = clock.Now() in ServerTZ.
-//  3. If the user has an order today and it is picked_up/no_show, today is
-//     "done" for this user → advance to the next orderable day (the first
-//     day from tomorrow whose supplies aren't all past cutoff).
-//  4. Otherwise, target the next orderable day starting from today: stay on
-//     today unless every meal_supply row for the day has cutoff_at ≤ now, in
-//     which case skip forward to the first day that is still orderable.
+// Compute derives the home page's target_day + order summary.
+// dayOverride: parse YYYY-MM-DD and use as-is.
+// Otherwise today=now in ServerTZ; if today's order is picked_up/no_show or
+// every meal_supply for today is past cutoff, skip forward to the next
+// orderable day (up to 14 days out).
 func (s *HomeService) Compute(ctx context.Context, userID, plant, dayOverride string) (HomeState, error) {
 	tz := s.ServerTZ
 	if tz == nil {
@@ -368,7 +347,7 @@ func (s *HomeService) RecommendChips(
 		Items:          items,
 		FavoriteIDs:    favIDs,
 		Alpha:          s.Alpha,
-		Limit:          0, // 0 == no truncation; paginate manually below.
+		Limit:          0, // paginate manually below
 	})
 	start := offset
 	if start < 0 {
@@ -390,8 +369,7 @@ func (s *HomeService) RecommendChips(
 }
 
 // favoriteIDSet returns the user's current favorite menu_item_ids, used to
-// exclude them from the recommendation set. 50 is the repo cap; favorites
-// > 50 is not a planned P9 UX.
+// exclude them from the recommendation set (50 = repo cap).
 func (s *HomeService) favoriteIDSet(ctx context.Context, userID, targetDay, plant string) (map[string]struct{}, error) {
 	chips, _, err := s.FavoritesRepo.ListByUser(ctx, userID, targetDay, plant, 50, nil)
 	if err != nil {

@@ -17,19 +17,16 @@
   }
   const orders = $derived((data.orders ?? []) as MerchantOrder[]);
 
-  // QR is generated client-side: order id → tbite://pickup?order=<id> → dataURL.
-  // Keyed by order id so each label renders its own sticker QR.
+  // QR dataURLs keyed by order id; generated client-side.
   let qrByOrder = $state<Record<string, string>>({});
 
-  // 用 $effect 而非 onMount：日期分頁靠 query 導航不會重新 mount，
-  // 但 orders ($derived) 會反應式更新；讀取 orders 讓本 effect 訂閱其變更並重算 QR。
+  // $effect (not onMount): date paging is query-nav, no remount; we need
+  // reactivity on orders ($derived). Read orders synchronously to subscribe.
   $effect(() => {
-    // 同步讀取 orders 才能讓 effect 訂閱其變更（await 後讀取不會被追蹤）。
     const currentOrders = orders;
     let cancelled = false;
     (async () => {
-      // qrcode is CommonJS and breaks SvelteKit/Vite SSR, so import it lazily
-      // here — $effect only runs in the browser, keeping it out of the SSR graph.
+      // qrcode is CommonJS — lazy-import in browser to keep it out of SSR.
       const mod = await import("qrcode");
       const QRCode = (mod as unknown as { default?: typeof mod }).default ?? mod;
       const next: Record<string, string> = {};

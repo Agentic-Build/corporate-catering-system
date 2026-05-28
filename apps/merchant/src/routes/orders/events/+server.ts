@@ -2,10 +2,7 @@ import { error } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 import { API_BASE_URL } from "$lib/server/env";
 
-// SSE proxy: the browser's EventSource cannot attach the bearer token, so the
-// merchant app streams /api/merchant/orders/events from the Go API through
-// this same-origin route, injecting the session token server-side. The
-// upstream stream is piped straight to the browser.
+// SSE proxy: EventSource can't send bearer tokens, so inject it server-side.
 export const GET: RequestHandler = async ({ locals }) => {
   if (!locals.user || locals.user.role !== "vendor_operator") {
     throw error(403, "vendor operator required");

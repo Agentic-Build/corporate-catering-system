@@ -1,13 +1,10 @@
 <script lang="ts">
-  // Calibrated against reference_src/ui.jsx + components.jsx StatCard.
-  // `eyebrow`/`suffix`/`children` are kept (existing callers pass them);
-  // `label`/`delta`/`deltaTone`/`hint` mirror the reference.
   import StateTag from "./StateTag.svelte";
 
   interface Props {
-    /** Uppercase eyebrow label (existing callers). */
+    /** Uppercase eyebrow label. */
     eyebrow?: string;
-    /** Plain label — reference style; used when `eyebrow` is absent. */
+    /** Plain label, used when `eyebrow` is absent. */
     label?: string;
     value: string | number;
     suffix?: string;

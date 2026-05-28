@@ -7,9 +7,8 @@ import { buildDays, taipeiISO } from "$lib/date";
 type MenuQuery = NonNullable<operations["listEmployeeMenu"]["parameters"]["query"]>;
 type MenuSort = NonNullable<MenuQuery["sort"]>;
 
-// F3 — keys the filter bar writes into the URL. The full-menu grid is
-// served from /api/employee/menu (filtered server-side) whenever any of
-// these is set; otherwise the home payload's day_menu is used as-is.
+// F3: when any filter-bar key is set in the URL we fetch the filtered grid
+// from /api/employee/menu; otherwise the home payload's day_menu is used.
 const MENU_SORTS = new Set(["name", "price_asc", "price_desc", "remain"]);
 
 export const load: PageServerLoad = async ({ locals, url, parent, depends }) => {
@@ -23,7 +22,7 @@ export const load: PageServerLoad = async ({ locals, url, parent, depends }) => 
   const selectedPlant = url.searchParams.get("plant") ?? locals.user.plant ?? plants[0]?.id ?? "";
   const dayOverride = url.searchParams.get("day") ?? undefined;
 
-  // ── F3 menu filter — parsed from the URL query ──
+  // F3 menu filter parsed from the URL query.
   const sp = url.searchParams;
   const sortParam = sp.get("sort") ?? "";
   const menuFilter = {
@@ -90,8 +89,7 @@ export const load: PageServerLoad = async ({ locals, url, parent, depends }) => 
     error = e instanceof Error ? e.message : String(e);
   }
 
-  // ── F3 — when the filter bar is active, fetch the full-menu grid from the
-  //    filtered /api/employee/menu endpoint and use it in place of day_menu.
+  // When filter bar is active, fetch filtered grid in place of day_menu.
   let filteredMenu: NonNullable<unknown>[] | undefined;
   if (filterActive) {
     try {
@@ -119,7 +117,6 @@ export const load: PageServerLoad = async ({ locals, url, parent, depends }) => 
     }
   }
 
-  // Build favoriteIds set so MealCards can highlight ⭐.
   const favoriteIds = new Set(
     (home.favorite_chips as Array<{ menu_item_id: string }>).map((c) => c.menu_item_id),
   );
@@ -127,7 +124,7 @@ export const load: PageServerLoad = async ({ locals, url, parent, depends }) => 
   const today = new Date();
   const days = buildDays(today, home.target_day);
 
-  // Tag universe for the filter chips — distinct tags across the day's menu.
+  // Distinct tag universe for filter chips, across the day's menu.
   const tagPool = new Set<string>();
   for (const m of home.day_menu as Array<{ tags?: string[] | null }>) {
     for (const t of m.tags ?? []) tagPool.add(t);

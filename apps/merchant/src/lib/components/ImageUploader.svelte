@@ -1,8 +1,5 @@
 <script lang="ts">
-  // 餐點圖片上傳 — picks image files, POSTs each to the /api/uploads proxy
-  // (which forwards to POST /api/merchant/uploads), shows thumbnails, and
-  // supports remove + reorder. The resulting URL list is bindable so the
-  // edit/create form can submit it as a hidden JSON input.
+  // 餐點圖片上傳: POSTs picks to /api/uploads proxy; bindable URL list.
   import { Icon } from "@tbite/ui";
 
   interface Props {
@@ -10,8 +7,7 @@
   }
   let { images = $bindable() }: Props = $props();
 
-  // Mirrors the server's allow-list (menu/http/upload.go) so obviously-invalid
-  // files are rejected before a pointless upload round-trip.
+  // Mirrors menu/http/upload.go allow-list; reject invalid before round-trip.
   const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
   const MAX_BYTES = 2 * 1024 * 1024;
 

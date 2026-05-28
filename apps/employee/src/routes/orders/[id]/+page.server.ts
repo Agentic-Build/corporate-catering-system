@@ -25,11 +25,9 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
   if (r.error || !r.data) throw error(404, "order not found");
   const order = r.data.order;
 
-  // Surface an already-filed complaint for this order (no per-order GET, so
-  // pull the employee's complaint list and match on order_id).
+  // No per-order complaint GET, so match by order_id in the list.
   let complaint = undefined;
-  // Surface an already-submitted rating so a revisit shows it instead of a
-  // blank form (404 = not rated yet, leaves rating undefined).
+  // 404 from rating endpoint = not rated yet; leave rating undefined.
   let rating = undefined;
   if (order.status === "picked_up") {
     const cr = await client.GET("/api/employee/complaints");
@@ -40,8 +38,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     if (rr.data) rating = rr.data.rating;
   }
 
-  // For a still-editable order, load the vendor's menu on the supply date so
-  // the edit form can show item names and let the employee add dishes.
+  // Edit form needs the vendor's menu on supply_date for names + adds.
   let menu = undefined;
   if (order.status === "placed") {
     const mr = await client.GET("/api/employee/menu", {
@@ -64,9 +61,7 @@ export const actions: Actions = {
     throw redirect(303, `/orders/${params.id}`);
   },
 
-  // Modify a placed order's items before cutoff. The form submits a JSON
-  // array of {menu_item_id, qty}; qty 0 entries are dropped so an item can be
-  // removed by setting it to zero in the edit UI.
+  // Modify a placed order before cutoff; qty 0 entries are dropped.
   modify: async ({ request, locals, params }) => {
     if (!locals.user) return fail(401, { modifyError: "unauthenticated" });
     const fd = await request.formData();

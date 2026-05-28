@@ -24,7 +24,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     const r = await client.GET("/api/merchant/reconciliation", {
       params: { query: { period } },
     });
-    // The handler wraps the DTO: { "reconciliation": {...} }.
     if (r.data) reconciliation = r.data.reconciliation ?? null;
   } catch {}
 

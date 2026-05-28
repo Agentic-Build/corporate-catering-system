@@ -1,6 +1,5 @@
 <script lang="ts">
-  // Ported from ui_kits/tbite/AdminView.jsx header shell — no role switcher,
-  // so the sticky header sits at top-0 (not top-[52px]).
+  // Admin app shell: sticky header + nav.
   import "../app.css";
   import { page } from "$app/stores";
   import { TBiteLogo, Button, Icon, type IconName } from "@tbite/ui";
@@ -55,7 +54,6 @@
             福
           </div>
         </div>
-        <!-- Mobile: keep a reachable logout (desktop group is md+ only). -->
         <form method="POST" action="/auth/logout" class="ml-auto md:hidden">
           <Button variant="ghost" size="sm" type="submit">登出</Button>
         </form>

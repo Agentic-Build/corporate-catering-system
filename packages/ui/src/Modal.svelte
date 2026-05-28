@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Ported from reference_src/ui.jsx Modal — scrim + centred card.
   import type { Snippet } from "svelte";
   import Icon from "./Icon.svelte";
 
@@ -19,7 +18,6 @@
     if (e.key === "Escape") onClose();
   }
 
-  // Lock body scroll while the modal is open.
   $effect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -29,7 +27,7 @@
     };
   });
 
-  // Focus management — move focus into the dialog on open, restore it on close.
+  // Move focus into the dialog on open; restore on close.
   $effect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;

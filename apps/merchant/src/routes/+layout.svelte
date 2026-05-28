@@ -5,8 +5,7 @@
   import BottomNav from "$lib/components/BottomNav.svelte";
   let { data, children } = $props();
 
-  // No vendor-name field on the merchant `Me` payload — the operator's
-  // display name is the closest real data, and stands in for the shop.
+  // Merchant Me payload has no vendor_name; use display_name as the shop label.
   const vendorName = $derived(data.user?.display_name ?? "");
   const avatarText = $derived(vendorName ? vendorName.slice(0, 2) : "");
 

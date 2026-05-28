@@ -1,9 +1,5 @@
-// Asia/Taipei date helpers (mirror of apps/employee/src/lib/date.ts — pending a
-// shared @tbite util package to dedupe the copies).
-//
-// Asia/Taipei is UTC+8 year-round (no DST), so a fixed offset gives the correct
-// local calendar date regardless of host/browser timezone. Date#toISOString()
-// .slice(0,10) returns the UTC date — the previous day for 00:00–08:00 Taipei.
+// Asia/Taipei date helpers. Fixed UTC+8 offset (no DST) avoids the off-by-one
+// during 00:00–08:00 Taipei when running on a UTC server.
 
 const TAIPEI_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;

@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const r = await client.GET("/api/employee/reorders", {
     params: { query: { limit: PAGE_LIMIT } },
   });
-  // Also pull target_day so chip form submit knows the supply_date.
+  // Pull target_day so chip form submit knows the supply_date.
   const h = await client.GET("/api/employee/home", { params: { query: {} } });
   const targetDay = h.data?.target_day ?? taipeiISO();
 

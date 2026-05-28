@@ -1,8 +1,5 @@
 <script lang="ts">
-  // Ported from ui_kits/tbite/AdminView.jsx TbAlertList — severity-toned
-  // alert rows. Bound to real AnomalyDTO data (kind / severity / notes /
-  // target_kind / target_id / created_at). The reference's mock TB_ALERTS
-  // is replaced with the live GET /api/admin/anomalies feed.
+  // Severity-toned alert rows bound to AnomalyDTO.
   import { Card, Button } from "@tbite/ui";
 
   interface Anomaly {
@@ -20,7 +17,6 @@
   }
   let { anomalies }: Props = $props();
 
-  // critical/high → danger, medium → warning, low/other → info.
   const toneMap: Record<string, { dot: string; border: string; bg: string }> = {
     danger: { dot: "bg-tb-rose-500", border: "border-tb-rose-200", bg: "bg-tb-rose-50/60" },
     warning: { dot: "bg-tb-amber-500", border: "border-tb-amber-200", bg: "bg-tb-amber-50/60" },
@@ -31,7 +27,6 @@
     if (severity === "medium") return toneMap.warning;
     return toneMap.info;
   }
-  // Human-readable anomaly kind labels.
   const kindLabel: Record<string, string> = {
     late_delivery: "配送延遲",
     low_ontime_rate: "準時率下降",

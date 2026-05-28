@@ -29,10 +29,7 @@ export const actions: Actions = {
       body: { order_id: params.id, reason } as any,
     });
     if (r.error) {
-      // RFC 9457 problem-details — surface a calm Chinese message, never the raw
-      // backend string. Current-period (not-yet-settled) orders now open an
-      // entry-less dispute on the backend, so 404 here means the order genuinely
-      // doesn't exist.
+      // RFC 9457 problem-details: surface a calm Chinese message, not raw backend.
       const err = r.error as { status?: number; detail?: string };
       const message = err.status === 404 ? "找不到訂單。" : "送出申訴失敗，請稍後再試。";
       return fail(err.status ?? 400, { error: message });

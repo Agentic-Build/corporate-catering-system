@@ -78,13 +78,9 @@ func (s *Service) MerchantCompliance(ctx context.Context, vendorID string) (*Mer
 }
 
 // computeWarnings derives compliance warnings from a vendor's document set.
-// It is pure: given the same documents and now, it returns the same warnings.
-//
-//   - document_rejected — any document whose status is rejected.
-//   - document_expired  — an approved document whose expires_at is before now.
-//   - document_expiring — an approved document whose expires_at is within the
-//     next expiringWindowDays (and not already expired).
-//   - document_missing  — a required document kind with no document on file.
+// Pure: same inputs → same warnings. Kinds: document_rejected (any rejected),
+// document_expired / document_expiring (approved within expiringWindowDays),
+// document_missing (required kind absent).
 func computeWarnings(docs []*Document, now time.Time) []Warning {
 	var warnings []Warning
 	uploaded := make(map[DocumentKind]bool, len(docs))

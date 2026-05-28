@@ -1,6 +1,4 @@
 <script lang="ts">
-  // Ported from the search box in EmployeeView.jsx — pill input with a
-  // left search icon and a red focus ring.
   import Icon from "./Icon.svelte";
 
   interface Props {

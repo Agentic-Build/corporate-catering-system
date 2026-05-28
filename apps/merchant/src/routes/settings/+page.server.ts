@@ -13,7 +13,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     if (r.data) settings = (r.data as { settings: typeof settings }).settings;
   } catch {}
 
-  // Service-area selection lives here too: all plants + the vendor's current set.
   const [allRes, myRes] = await Promise.allSettled([
     client.GET("/api/plants"),
     client.GET("/api/merchant/plants"),

@@ -1,15 +1,10 @@
-// Package mcpserver — ChatGPT-convention search/fetch tools.
+// ChatGPT-convention search/fetch tools. ChatGPT Custom Connectors / Apps SDK
+// require these two tools with a strict shape:
 //
-// ChatGPT (Custom Connectors and the Apps SDK) requires every MCP server it
-// connects to expose two specific tools with a strict result shape:
+//	search(query) -> { "results": [{id, title, text, url}, …] }
+//	fetch(id)     -> { id, title, text, url, metadata? }
 //
-//	search(query)            -> { "results": [ {id, title, text, url}, … ] }
-//	fetch(id)                -> { id, title, text, url, metadata? }
-//
-// We map these into the same business operations the dedicated employee tools
-// use, just with the ChatGPT shape so the connector works out of the box.
-// Object IDs are prefixed (`menu:`, `order:`, `vendor:`) so fetch can route
-// to the right service without an ambiguous lookup.
+// IDs are prefixed (menu:/order:/vendor:) so fetch routes unambiguously.
 package mcpserver
 
 import (
@@ -26,9 +21,7 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
 )
 
-// searchResult is the ChatGPT-required item shape for the `search` tool.
-// The URL is a deep link into the employee web app so the user can confirm
-// or follow up in-product.
+// searchResult is the ChatGPT-required item shape; URL deep-links into the app.
 type searchResult struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
@@ -36,8 +29,7 @@ type searchResult struct {
 	URL   string `json:"url"`
 }
 
-// fetchResult is the ChatGPT-required shape for the `fetch` tool. Metadata is
-// optional but ChatGPT surfaces it in the citation card.
+// fetchResult is the ChatGPT-required fetch shape; Metadata surfaces in the citation card.
 type fetchResult struct {
 	ID       string         `json:"id"`
 	Title    string         `json:"title"`
@@ -53,10 +45,8 @@ const (
 )
 
 func registerChatGPTTools(s *server.MCPServer, deps Deps) {
-	// -------- search --------
-	// Unified search across menu items + the caller's own orders. Required by
-	// ChatGPT Custom Connectors / Apps SDK. Returns at most 20 results to fit
-	// inside ChatGPT's tool-result token budget.
+	// Unified search across menu items + caller's own orders. ≤20 results
+	// (fits ChatGPT's tool-result token budget).
 	s.AddTool(
 		mcp.NewTool("search",
 			mcp.WithDescription("Search across the corporate catering platform. Returns matching menu items the employee can order today plus their recent orders. Use the returned IDs with the `fetch` tool to retrieve full details."),
@@ -82,8 +72,7 @@ func registerChatGPTTools(s *server.MCPServer, deps Deps) {
 
 			results := []searchResult{}
 
-			// 1) Menu items — only when we have a plant to scope by. Plant
-			//    fallback to the user's home plant.
+			// Menu items — only when we have a plant to scope by.
 			if deps.Menu != nil && u.Plant != nil && *u.Plant != "" {
 				now := time.Now()
 				day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
@@ -136,9 +125,8 @@ func registerChatGPTTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- fetch --------
-	// Retrieves a full document for a single ID returned by `search`. Routes
-	// by prefix: menu:<uuid>, order:<uuid>, vendor:<uuid>.
+	// fetch: full document for one search-result id; route by prefix
+	// (menu:<uuid> / order:<uuid> / vendor:<uuid>).
 	s.AddTool(
 		mcp.NewTool("fetch",
 			mcp.WithDescription("Fetch the full content of one search result by ID. Accepts IDs returned by the `search` tool (prefixed with menu:, order:, or vendor:)."),

@@ -126,8 +126,6 @@ UPDATE vendor_settlement
 	return nil
 }
 
-// ----- OrderAggregateRepository -----
-
 // AggregateByVendor rolls up picked_up/no_show orders per vendor over the
 // period. portion_count joins order_item and sums qty; gross_minor sums
 // total_price_minor. order_ids is gathered with array_agg.

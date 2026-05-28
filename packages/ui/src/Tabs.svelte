@@ -1,6 +1,4 @@
 <script lang="ts">
-  // Ported from the OrdersPage tab bar in EmployeePages.jsx —
-  // underline style with an optional count pill.
   interface Tab {
     id: string;
     label: string;

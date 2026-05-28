@@ -1,7 +1,5 @@
 <script lang="ts">
-  // 推薦你今天 — design-language pass. The recommendations API returns name /
-  // price / reason only (no photo, stock or capacity), so items render as
-  // recommendation cards in a grid rather than full MealCards.
+  // 推薦你今天: API returns name/price/reason only, so render as recommendation cards.
   import { onMount } from "svelte";
   import { deserialize } from "$app/forms";
   import { PageHeader, EmptyState, Button, Icon } from "@tbite/ui";

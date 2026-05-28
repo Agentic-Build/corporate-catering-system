@@ -1,8 +1,5 @@
 <script lang="ts">
-  // Ported from ui_kits/tbite/AdminView.jsx — the 福委會 governance dashboard.
-  // All sections bind to real +page.server.ts data. Where the reference shows
-  // illustrative fields the API does not expose (per-entry employee name/number,
-  // weekly on-time rate), those are omitted or swapped for real metrics.
+  // 福委會 governance dashboard.
   import { Card, StatCard, StateTag, Button, Icon } from "@tbite/ui";
   import ApprovalCard from "$lib/components/ApprovalCard.svelte";
   import AlertList from "$lib/components/AlertList.svelte";

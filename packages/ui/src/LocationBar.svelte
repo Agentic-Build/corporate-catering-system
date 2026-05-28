@@ -1,8 +1,5 @@
 <script lang="ts">
-  // Plant + day selector. Matches the design-system `TbLocationBar`: a collapsed
-  // capsule (pin + plant · day + chevron) that opens a dropdown panel listing
-  // pickup plants and the day strip. Props are unchanged from the prior version
-  // so callers need no edits.
+  // Plant + day selector capsule that opens a dropdown panel.
   import Icon from "./Icon.svelte";
 
   interface PlantOption {
@@ -31,7 +28,6 @@
   const currentPlant = $derived(plants.find((p) => p.id === selectedPlant));
   const currentDay = $derived(days.find((d) => d.id === selectedDay));
 
-  // Close on outside click while the panel is open.
   $effect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) {

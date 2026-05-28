@@ -21,8 +21,6 @@ type API struct {
 	Svc *feedback.Service
 }
 
-// ----- DTOs -----
-
 type ratingDTO struct {
 	ID        string `json:"id"`
 	OrderID   string `json:"order_id"`
@@ -94,8 +92,6 @@ func toComplaintDTO(c *feedback.Complaint) complaintDTO {
 	return out
 }
 
-// ----- Inputs / Outputs -----
-
 type rateOrderInput struct {
 	ID   string `path:"id" format:"uuid"`
 	Body struct {
@@ -156,8 +152,6 @@ type adminResolveInput struct {
 		Compensate bool   `json:"compensate,omitempty"`
 	}
 }
-
-// ----- Registration -----
 
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
@@ -257,8 +251,6 @@ func (a *API) Register(api huma.API) {
 	}, a.adminResolveComplaint)
 }
 
-// ----- Auth helpers -----
-
 func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
 	return idhttp.RequireEmployee(ctx)
 }
@@ -270,8 +262,6 @@ func (a *API) requireVendor(ctx context.Context) (*identity.User, string, error)
 func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
 	return idhttp.RequireAdmin(ctx)
 }
-
-// ----- Handlers -----
 
 func (a *API) rateOrder(ctx context.Context, in *rateOrderInput) (*ratingOutput, error) {
 	u, err := a.requireEmployee(ctx)

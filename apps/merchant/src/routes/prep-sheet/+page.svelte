@@ -25,7 +25,6 @@
   }
   const plants = $derived((data.sheet.plants ?? []) as Plant[]);
 
-  // Day quick-picker: today + next 6.
   const days = $derived.by(() => {
     const out: { id: string; label: string }[] = [];
     for (let i = 0; i < 7; i++) {

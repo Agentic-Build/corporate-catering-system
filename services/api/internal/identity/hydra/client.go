@@ -20,17 +20,15 @@ import (
 	"time"
 )
 
-// AdminClient is a minimal HTTP client for Hydra's admin API. We only call
-// the four endpoints the login + consent bridge needs; using the full Ory
-// SDK would pull in a much larger dependency tree for no benefit.
+// AdminClient is a minimal HTTP client for Hydra's admin API (four endpoints
+// the login + consent bridge needs; avoids the full Ory SDK dependency tree).
 type AdminClient struct {
 	BaseURL string
 	HTTP    *http.Client
 }
 
-// NewAdminClient returns a client pointed at the Hydra admin endpoint, e.g.
-// http://hydra:4445 in compose or http://hydra.tbite.svc:4445 in K8s. The
-// admin port must never be reachable from the public internet.
+// NewAdminClient returns a client pointed at Hydra's admin endpoint. The admin
+// port must never be reachable from the public internet.
 func NewAdminClient(baseURL string) *AdminClient {
 	return &AdminClient{
 		BaseURL: baseURL,
@@ -38,9 +36,8 @@ func NewAdminClient(baseURL string) *AdminClient {
 	}
 }
 
-// LoginRequest is the slice of Hydra's GetLoginRequest response we use to
-// decide whether the user needs to log in again or can skip straight to
-// consent.
+// LoginRequest is the slice of Hydra's GetLoginRequest response we consume
+// to decide between re-login and skip-to-consent.
 type LoginRequest struct {
 	Challenge      string   `json:"challenge"`
 	Skip           bool     `json:"skip"`
@@ -66,22 +63,19 @@ type ConsentRequest struct {
 	} `json:"client"`
 }
 
-// AcceptLoginRequest accepts a login challenge with the given subject (the
-// stable user identifier — we use identity.User.ID). Returns the URL Hydra
-// wants the browser to be redirected to (always a Hydra-internal URL that
-// continues the flow).
+// AcceptLoginRequest accepts a login challenge with the given subject
+// (identity.User.ID), returning the URL Hydra wants the browser redirected to.
 func (c *AdminClient) AcceptLoginRequest(ctx context.Context, challenge, subject string) (string, error) {
 	body := map[string]any{
 		"subject":      subject,
 		"remember":     true,
-		"remember_for": 3600, // seconds — keep parity with our session TTL idea
+		"remember_for": 3600, // seconds — matches session TTL
 	}
 	return c.acceptChallenge(ctx, "/admin/oauth2/auth/requests/login/accept", challenge, body)
 }
 
-// GetLoginRequest fetches Hydra's view of a login challenge so the handler
-// can decide whether to short-circuit (skip=true) or run the full Authentik
-// login flow.
+// GetLoginRequest fetches Hydra's view of a login challenge (skip=true →
+// short-circuit; otherwise run the full Authentik flow).
 func (c *AdminClient) GetLoginRequest(ctx context.Context, challenge string) (*LoginRequest, error) {
 	var out LoginRequest
 	if err := c.get(ctx, "/admin/oauth2/auth/requests/login", challenge, &out); err != nil {
@@ -90,9 +84,8 @@ func (c *AdminClient) GetLoginRequest(ctx context.Context, challenge string) (*L
 	return &out, nil
 }
 
-// AcceptConsentRequest accepts a consent challenge with the given scopes and
-// returns the redirect URL Hydra wants. MCP clients almost always request
-// `openid profile email` — we forward those plus the t-bite role claims.
+// AcceptConsentRequest accepts a consent challenge with the given scopes,
+// returning Hydra's redirect URL. Claims are forwarded into id_token + access_token.
 func (c *AdminClient) AcceptConsentRequest(ctx context.Context, challenge string, scopes []string, idTokenClaims map[string]any) (string, error) {
 	body := map[string]any{
 		"grant_scope": scopes,
@@ -172,9 +165,8 @@ func (c *AdminClient) acceptChallenge(ctx context.Context, path, challenge strin
 	return out.RedirectTo, nil
 }
 
-// paramFor returns the query-string key Hydra expects for each admin
-// endpoint. Login endpoints use login_challenge, consent uses
-// consent_challenge — Hydra is strict about the name.
+// paramFor returns the query-string key Hydra expects per admin endpoint
+// (login_challenge / consent_challenge — Hydra is strict about the name).
 func paramFor(path string) string {
 	switch {
 	case strings.Contains(path, "login"):

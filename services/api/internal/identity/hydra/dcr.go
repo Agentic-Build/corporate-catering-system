@@ -10,15 +10,10 @@ import (
 	"strings"
 )
 
-// SanitizingDCRProxy wraps the /oauth2/register endpoint to fix a known
-// interoperability bug between Ory Hydra v2.2/v2.3 and strict OAuth clients
-// (Claude Code, Claude.ai web, ChatGPT): Hydra emits optional URI fields
-// (policy_uri, tos_uri, client_uri, logo_uri) as empty strings rather than
-// omitting them, which fails RFC 8259/3986 URI validation in those clients.
-//
-// RFC 7591 §2 explicitly defines those fields as optional URIs, so emitting
-// them as empty strings is wrong on Hydra's side. We forward the request
-// untouched, then scrub the response before passing it back.
+// SanitizingDCRProxy wraps /oauth2/register to work around Ory Hydra v2.2/v2.3
+// emitting optional URI fields as empty strings (policy_uri, tos_uri,
+// client_uri, logo_uri) — strict OAuth clients (Claude Code/web, ChatGPT)
+// reject these per RFC 7591 §2. We forward the request and scrub the response.
 type SanitizingDCRProxy struct {
 	HydraURL string
 	HTTP     *http.Client
@@ -27,7 +22,6 @@ type SanitizingDCRProxy struct {
 // ServeHTTP forwards POST /oauth2/register (and PUT/GET/DELETE for the
 // registration_client_uri lifecycle) to Hydra and sanitises the response.
 func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Build upstream URL preserving path + query.
 	upstream, err := url.Parse(p.HydraURL)
 	if err != nil {
 		http.Error(w, "hydra url parse: "+err.Error(), http.StatusBadGateway)
@@ -36,15 +30,12 @@ func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	upstream.Path = strings.TrimRight(upstream.Path, "/") + r.URL.Path
 	upstream.RawQuery = r.URL.RawQuery
 
-	// Buffer body so we can forward and (if needed) retry — DCR responses
-	// are small so this is cheap.
 	var body []byte
 	if r.Body != nil {
 		body, _ = io.ReadAll(r.Body)
 		_ = r.Body.Close()
 	}
 
-	// On POST/PUT we may rewrite the scope field — see expandRegistrationScope.
 	if r.Method == http.MethodPost || r.Method == http.MethodPut {
 		if expanded, changed := expandRegistrationScope(body); changed {
 			body = expanded
@@ -56,8 +47,7 @@ func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "build upstream req: "+err.Error(), http.StatusBadGateway)
 		return
 	}
-	// Copy headers verbatim except Host — Hydra needs the original-looking
-	// Host for its own URL resolver.
+	// Copy headers except Host (Hydra needs its own Host for URL resolution).
 	for k, vs := range r.Header {
 		if strings.EqualFold(k, "Host") {
 			continue
@@ -85,8 +75,7 @@ func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only attempt to scrub JSON 2xx responses; pass everything else
-	// (errors, 4xx, content-type mismatches) through verbatim.
+	// Only scrub JSON 2xx; pass everything else through verbatim.
 	scrubbed := raw
 	ct := resp.Header.Get("Content-Type")
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 && strings.HasPrefix(ct, "application/json") {
@@ -109,16 +98,10 @@ func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(scrubbed)
 }
 
-// expandRegistrationScope rewrites the client's `scope` field in a DCR
-// request to always include `offline_access`. Strict MCP clients like
-// Claude Code register WITHOUT offline_access but later request it at
-// authorize time to mint a refresh token. Hydra binds the granted scope
-// set at registration, so without this rewrite the authorize step fails
-// with `invalid_scope: The OAuth 2.0 Client is not allowed to request
-// scope 'offline_access'`. We also preserve `openid` so id_tokens stay
-// available, and dedupe any scopes the client already listed.
-//
-// Returns (rewritten body, true) when the body was actually changed.
+// expandRegistrationScope adds `openid` + `offline_access` to a DCR request's
+// scope. Strict MCP clients (Claude Code) register without offline_access but
+// later request it at authorize, which Hydra rejects (scope is bound at
+// registration). Returns (rewritten body, true) when changed.
 func expandRegistrationScope(body []byte) ([]byte, bool) {
 	if len(body) == 0 {
 		return body, false
@@ -156,17 +139,10 @@ func expandRegistrationScope(body []byte) ([]byte, bool) {
 }
 
 // sanitizeDCRResponse strips fields that strict OAuth clients reject:
-//   - Empty-string optional URIs (policy_uri / tos_uri / client_uri /
-//     logo_uri / jwks_uri). RFC 7591 says omit-or-set, not allow empty.
-//   - The `contacts: null` field — RFC 7591 says contacts is an array of
-//     strings; null breaks decoders that type it as []string.
-//   - The `audience: []` field when empty. Some clients reject empty
-//     arrays in audience because the spec defines audience as having at
-//     least one entry.
-//
-// Mutating only the fields above keeps every Hydra-specific extension
-// (registration_access_token, *_lifespan, etc.) intact so token refresh
-// and re-registration via registration_client_uri keep working.
+// empty-string optional URIs (policy_uri/tos_uri/client_uri/logo_uri/jwks_uri),
+// `contacts: null`, and empty `audience: []`/`allowed_cors_origins: []`. All
+// Hydra-specific extensions (registration_access_token, *_lifespan, …) pass
+// through so refresh/re-registration keep working.
 func sanitizeDCRResponse(raw []byte) ([]byte, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(raw, &doc); err != nil {
@@ -192,7 +168,6 @@ func sanitizeDCRResponse(raw []byte) ([]byte, error) {
 		}
 	}
 
-	// allowed_cors_origins similarly may be sent as empty array.
 	if v, ok := doc["allowed_cors_origins"]; ok {
 		if a, ok := v.([]any); ok && len(a) == 0 {
 			delete(doc, "allowed_cors_origins")

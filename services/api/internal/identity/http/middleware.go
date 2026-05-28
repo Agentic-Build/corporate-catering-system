@@ -17,9 +17,7 @@ const (
 )
 
 // JWTVerifier is the small surface AuthMiddleware needs from the Hydra
-// access-token verifier so we don't import a hydra package here and create
-// a cycle. The hydra package wires the concrete implementation; tests
-// substitute a stub.
+// access-token verifier (kept local to avoid an import cycle on hydra).
 type JWTVerifier interface {
 	Verify(ctx context.Context, raw string) (subject string, err error)
 }
@@ -29,10 +27,9 @@ func UserFromContext(ctx context.Context) (*identity.User, bool) {
 	return u, ok
 }
 
-// ContextWithUser attaches an authenticated user to ctx under the same
-// unexported key AuthMiddleware uses, so non-HTTP entrypoints (MCP stdio,
-// tests, etc.) can populate the request context the same way the middleware
-// does on the HTTP path.
+// ContextWithUser attaches an authenticated user under the same key
+// AuthMiddleware uses, so non-HTTP entrypoints (MCP stdio, tests) populate
+// the request context the same way.
 func ContextWithUser(ctx context.Context, u *identity.User) context.Context {
 	return context.WithValue(ctx, userCtxKey, u)
 }
@@ -42,19 +39,10 @@ func TokenFromContext(ctx context.Context) (string, bool) {
 	return t, ok
 }
 
-// AuthMiddleware authenticates the caller by Bearer token. It tries two
-// token shapes in order:
-//
-//  1. T-Bite session token (the `tb_…` value the SvelteKit frontends use).
-//     Looked up in Redis.
-//  2. Hydra-issued JWT access token (`eyJ…`), validated against Hydra's
-//     JWKS. Subject claim is the T-Bite user ID.
-//
-// JWT validation is skipped when API.JWT is nil — the api role wires it,
-// the mcp-stdio role doesn't.
-//
-// On either successful lookup the user is loaded and attached to ctx;
-// failures fall through to anonymous handling for invalid session tokens.
+// AuthMiddleware authenticates the caller by Bearer token. Tries in order:
+// (1) T-Bite session token (`tb_…`) in Redis, (2) Hydra-issued JWT access
+// token validated against JWKS. JWT path is skipped when API.JWT is nil.
+// Invalid tokens fall through to anonymous handling.
 func (a *API) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -63,7 +51,6 @@ func (a *API) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// 1. Session-token path.
 		sess, err := a.Sessions.Get(r.Context(), tok)
 		switch {
 		case err == nil:
@@ -88,8 +75,7 @@ func (a *API) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// 2. Hydra JWT path. Only attempted when the api role wired a
-		// verifier; mcp-stdio and tests skip this branch.
+		// Hydra JWT path — only when wired (api role).
 		if a.JWT == nil {
 			next.ServeHTTP(w, r)
 			return

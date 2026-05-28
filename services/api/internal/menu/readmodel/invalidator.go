@@ -1,14 +1,8 @@
 package readmodel
 
-// Outbox-driven cache invalidator (architecture #57 + #59). The
-// invalidator subscribes to the ORDERS_V1 JetStream stream and
-// drops cache entries scoped to the affected plant/date so the next
-// home/menu read recomputes from authoritative state.
-//
-// The invalidator runs inside the realtime-gateway role and inside
-// the api role. Both subscribe with AckNonePolicy + DeliverNewPolicy
-// because the cache TTL is a safety net: a missed event becomes
-// staleness up to TTL seconds, not data loss.
+// Outbox-driven cache invalidator (#57+#59). Subscribes ORDERS_V1 and drops
+// cache entries scoped to the affected plant/date. AckNone + DeliverNew —
+// the cache TTL is a safety net so a missed event = staleness, not data loss.
 
 import (
 	"context"
@@ -21,9 +15,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-// sanitizeConsumerToken replaces every character that is invalid in a NATS
-// durable consumer name (anything outside [A-Za-z0-9_-], e.g. the '.' in a
-// macOS hostname like "host.local") with '-'. NATS rejects '.' in names.
+// sanitizeConsumerToken replaces NATS-invalid characters (anything outside
+// [A-Za-z0-9_-], e.g. '.' in "host.local") with '-'.
 func sanitizeConsumerToken(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
@@ -35,10 +28,8 @@ func sanitizeConsumerToken(s string) string {
 	}, s)
 }
 
-// orderEvent is the minimal projection the invalidator needs from
-// ORDERS_V1 payloads. Plant + supply_date drive the home/popularity SCAN
-// pattern; user_id (present on placed/modified events) drives the affinity
-// key.
+// orderEvent is the minimal ORDERS_V1 projection: plant + supply_date drive
+// home/popularity SCAN patterns; user_id drives the affinity key.
 type orderEvent struct {
 	OrderID    string `json:"order_id"`
 	UserID     string `json:"user_id"`
@@ -46,10 +37,8 @@ type orderEvent struct {
 	SupplyDate string `json:"supply_date"` // YYYY-MM-DD
 }
 
-// RunOrderInvalidator wires the consumer that invalidates read-model
-// entries when an order event arrives. Returns when ctx is cancelled
-// or the consumer fails to set up; the caller decides whether to
-// retry or to exit the process.
+// RunOrderInvalidator wires the consumer that invalidates read-model entries
+// on order events. Returns when ctx is cancelled or consumer setup fails.
 func RunOrderInvalidator(ctx context.Context, js jetstream.JetStream, cache Cache, logger *slog.Logger) error {
 	stream, err := js.Stream(ctx, "ORDERS_V1")
 	if err != nil {
@@ -74,8 +63,7 @@ func RunOrderInvalidator(ctx context.Context, js jetstream.JetStream, cache Cach
 		if p.Plant == "" || p.SupplyDate == "" {
 			return
 		}
-		// Home + plant popularity are both plant/date keyed; affinity is
-		// keyed by user (only invalidated when the event carries user_id).
+		// Home + popularity are plant/date keyed; affinity is user keyed.
 		patterns := []string{
 			HomeKeyPattern(p.Plant, p.SupplyDate),
 			PopularityKeyPattern(p.Plant, p.SupplyDate),
