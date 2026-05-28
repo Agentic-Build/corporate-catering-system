@@ -39,7 +39,7 @@ export const actions: Actions = {
               .filter(Boolean)
           : [],
         images,
-      } as any,
+      },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     throw redirect(303, "/menus");

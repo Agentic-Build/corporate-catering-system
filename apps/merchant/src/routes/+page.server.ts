@@ -1,8 +1,13 @@
 import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
 import { defaultCutoffAt } from "$lib/cutoff";
 import { dayId } from "$lib/date";
+
+type MerchantItemDTO = components["schemas"]["MerchantItemDTO"];
+type MerchantOrderDTO = components["schemas"]["MerchantOrderDTO"];
+type SupplyDTO = components["schemas"]["SupplyDTO"];
 
 const WEEKDAY = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
 
@@ -22,19 +27,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   });
 
   // Library = all menu items incl. archived (drawer + name lookups).
-  let items: any[] = [];
+  let items: MerchantItemDTO[] = [];
   try {
     const r = await client.GET("/api/merchant/menu-items", {
       params: { query: { include_archived: true } },
     });
-    if (r.data) items = (r.data as any).items ?? [];
+    if (r.data) items = r.data.items ?? [];
   } catch {}
-  let todayOrders: any[] = [];
+  let todayOrders: MerchantOrderDTO[] = [];
   try {
     const r = await client.GET("/api/merchant/orders", {
-      params: { query: { date: today } as any },
+      params: { query: { date: today } },
     });
-    if (r.data) todayOrders = (r.data as any).items ?? [];
+    if (r.data) todayOrders = r.data.items ?? [];
   } catch {}
 
   const supplyResults = await Promise.all(
@@ -43,19 +48,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         const r = await client.GET("/api/merchant/supply", {
           params: { query: { date: d.id } },
         });
-        return { date: d.id, items: r.data ? ((r.data as any).items ?? []) : [] };
+        return { date: d.id, items: (r.data?.items ?? []) as SupplyDTO[] };
       } catch {
-        return { date: d.id, items: [] as any[] };
+        return { date: d.id, items: [] as SupplyDTO[] };
       }
     }),
   );
-  const supplyByDate: Record<string, any[]> = Object.fromEntries(
+  const supplyByDate: Record<string, SupplyDTO[]> = Object.fromEntries(
     supplyResults.map((s) => [s.date, s.items]),
   );
 
-  const todaySupply: any[] = supplyByDate[today] ?? [];
-  const totalCapacity = todaySupply.reduce((a: number, s: any) => a + s.capacity, 0);
-  const totalSold = todaySupply.reduce((a: number, s: any) => a + (s.capacity - s.remain), 0);
+  const todaySupply: SupplyDTO[] = supplyByDate[today] ?? [];
+  const totalCapacity = todaySupply.reduce((a, s) => a + s.capacity, 0);
+  const totalSold = todaySupply.reduce((a, s) => a + (s.capacity - s.remain), 0);
   const todayOrderCount = todayOrders.length;
   const pickedUp = todayOrders.filter((o) => o.status === "picked_up").length;
   const pendingPrep = todayOrders.filter(
@@ -96,7 +101,7 @@ export const actions: Actions = {
         pickup_window: pickupWindow,
         eta_label: pickupWindow,
         cutoff_at: cutoffAt,
-      } as any,
+      },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { success: true };
@@ -112,7 +117,7 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/merchant/supply/{itemID}/{date}/sold-out", {
       params: { path: { itemID: itemId, date } },
-      body: { sold_out: soldOut } as never,
+      body: { sold_out: soldOut },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { success: true };

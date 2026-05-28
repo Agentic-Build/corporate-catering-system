@@ -1,6 +1,10 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
+import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+
+type MerchantOrderDTO = components["schemas"]["MerchantOrderDTO"];
+type MerchantItemDTO = components["schemas"]["MerchantItemDTO"];
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
@@ -10,21 +14,21 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
   const date = url.searchParams.get("date") ?? todayStr;
   const client = apiFor(locals.apiToken);
-  let items: any[] = [];
+  let items: MerchantOrderDTO[] = [];
   try {
-    const r = await client.GET("/api/merchant/orders", { params: { query: { date } as any } });
-    if (r.data) items = (r.data as any).items ?? [];
+    const r = await client.GET("/api/merchant/orders", { params: { query: { date } } });
+    if (r.data) items = r.data.items ?? [];
   } catch {}
 
-  let menuItems: any[] = [];
+  let menuItems: MerchantItemDTO[] = [];
   try {
     const r = await client.GET("/api/merchant/menu-items", {
-      params: { query: { include_archived: true } as any },
+      params: { query: { include_archived: true } },
     });
-    if (r.data) menuItems = (r.data as any).items ?? [];
+    if (r.data) menuItems = r.data.items ?? [];
   } catch {}
   const itemsById: Record<string, { name: string }> = Object.fromEntries(
-    menuItems.map((i: any) => [i.id, { name: i.name }]),
+    menuItems.map((i) => [i.id, { name: i.name }]),
   );
 
   const [yy, mm, dd] = todayStr.split("-").map(Number);
