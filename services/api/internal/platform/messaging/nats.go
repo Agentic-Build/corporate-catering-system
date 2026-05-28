@@ -17,13 +17,31 @@ type Client struct {
 	StreamReplicas int // JetStream stream replica count; 1 = single-node default
 }
 
+// New dials NATS with a bounded retry on the initial connect so the caller is
+// not blocked by transient EOFs when the server is still coming up (k8s pod
+// ordering, testcontainers warm-up).
 func New(ctx context.Context, url string) (*Client, error) {
-	nc, err := nats.Connect(url,
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(2*time.Second),
+	var (
+		nc       *nats.Conn
+		err      error
+		deadline = time.Now().Add(10 * time.Second)
 	)
-	if err != nil {
-		return nil, fmt.Errorf("nats connect: %w", err)
+	for {
+		nc, err = nats.Connect(url,
+			nats.MaxReconnects(-1),
+			nats.ReconnectWait(2*time.Second),
+		)
+		if err == nil {
+			break
+		}
+		if ctx.Err() != nil || time.Now().After(deadline) {
+			return nil, fmt.Errorf("nats connect: %w", err)
+		}
+		select {
+		case <-time.After(200 * time.Millisecond):
+		case <-ctx.Done():
+			return nil, fmt.Errorf("nats connect: %w", ctx.Err())
+		}
 	}
 	js, err := jetstream.New(nc)
 	if err != nil {
