@@ -17,10 +17,9 @@
   }
   const orders = $derived((data.orders ?? []) as MerchantOrder[]);
 
-  // QR dataURLs keyed by order id; generated client-side.
   let qrByOrder = $state<Record<string, string>>({});
 
-  // $effect (not onMount): date paging is query-nav, no remount; we need
+  // $effect (not onMount): date paging is query-nav with no remount; we need
   // reactivity on orders ($derived). Read orders synchronously to subscribe.
   $effect(() => {
     const currentOrders = orders;

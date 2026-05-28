@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Severity-toned alert rows bound to AnomalyDTO.
   import { Card, Button } from "@tbite/ui";
 
   interface Anomaly {

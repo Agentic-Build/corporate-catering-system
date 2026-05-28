@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 已訂/上限 progress bar.
   interface Props {
     ordered: number;
     cap: number;

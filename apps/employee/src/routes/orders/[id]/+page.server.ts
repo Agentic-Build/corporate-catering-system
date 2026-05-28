@@ -26,9 +26,9 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
   if (r.error || !r.data) throw error(404, "order not found");
   const order = r.data.order;
 
-  // No per-order complaint GET, so match by order_id in the list.
+  // No per-order complaint GET; match by order_id in the list.
   let complaint = undefined;
-  // 404 from rating endpoint = not rated yet; leave rating undefined.
+  // 404 from rating endpoint = not rated yet.
   let rating = undefined;
   if (order.status === "picked_up") {
     const cr = await client.GET("/api/employee/complaints");
@@ -39,7 +39,6 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     if (rr.data) rating = rr.data.rating;
   }
 
-  // Edit form needs the vendor's menu on supply_date for names + adds.
   let menu = undefined;
   if (order.status === "placed") {
     const mr = await client.GET("/api/employee/menu", {
@@ -62,7 +61,7 @@ export const actions: Actions = {
     throw redirect(303, `/orders/${params.id}`);
   },
 
-  // Modify a placed order before cutoff; qty 0 entries are dropped.
+  // qty 0 entries are dropped; empty list rejected (must use cancel instead).
   modify: async ({ request, locals, params }) => {
     if (!locals.user) return fail(401, { modifyError: "unauthenticated" });
     const fd = await request.formData();
@@ -99,7 +98,6 @@ export const actions: Actions = {
     throw redirect(303, `/orders/${params.id}`);
   },
 
-  // Submit a 1–5 star meal rating with an optional comment (≤ 500 chars).
   rate: async ({ request, locals, params }) => {
     if (!locals.user) return fail(401, { ratingError: "unauthenticated" });
     const fd = await request.formData();
@@ -125,7 +123,6 @@ export const actions: Actions = {
     return { ratingOk: true, rating: r.data.rating };
   },
 
-  // File a meal complaint (description 5–1000 chars).
   complain: async ({ request, locals, params }) => {
     if (!locals.user) return fail(401, { complaintError: "unauthenticated" });
     const fd = await request.formData();

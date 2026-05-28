@@ -6,7 +6,6 @@ import { apiFor } from "$lib/server/api";
 type ReconciliationDTO = components["schemas"]["ReconciliationDTO"];
 type SettlementDTO = components["schemas"]["SettlementDTO"];
 
-/** Current month as YYYY-MM. */
 function currentPeriod(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;

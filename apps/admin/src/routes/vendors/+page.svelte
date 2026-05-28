@@ -92,7 +92,6 @@
     </p>
   {:else}
     <Card>
-      <!-- Mobile: card list (mockup style). -->
       <div class="divide-y divide-tb-slate-100 md:hidden">
         {#each data.vendors as v (v.id)}
           <div class="py-3 first:pt-0 last:pb-0">
@@ -119,7 +118,6 @@
         {/each}
       </div>
 
-      <!-- Desktop: table (unchanged). -->
       <div class="hidden overflow-hidden rounded-xl border border-tb-slate-200 md:block">
         <table class="w-full text-sm">
           <thead

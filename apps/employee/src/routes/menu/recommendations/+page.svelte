@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 推薦你今天: API returns name/price/reason only, so render as recommendation cards.
   import { onMount } from "svelte";
   import { deserialize } from "$app/forms";
   import { PageHeader, EmptyState, Button, Icon } from "@tbite/ui";

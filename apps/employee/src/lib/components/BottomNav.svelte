@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Mobile bottom navigation; hidden at lg+ where the Sidebar takes over.
   import { Icon, type IconName } from "@tbite/ui";
   import { page } from "$app/stores";
 

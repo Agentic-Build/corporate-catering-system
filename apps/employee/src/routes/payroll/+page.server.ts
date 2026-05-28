@@ -26,7 +26,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const r = await client.GET("/api/employee/payroll");
   if (r.data) entries = r.data.items ?? [];
 
-  // Unsettled period: per-order lines + live total for the hero + rows.
   let currentLines: CurrentPayrollLine[] = [];
   let currentTotalMinor = 0;
   const cr = await client.GET("/api/employee/payroll/current");
@@ -39,7 +38,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  // Mirror of orders/[id] ?/rate so PayrollEntrySheet can rate inline.
+  // Mirror of orders/[id] ?/rate for inline PayrollEntrySheet.
   rate: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { ratingError: "unauthenticated" });
     const fd = await request.formData();

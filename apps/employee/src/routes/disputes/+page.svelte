@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 申訴記錄
   import { PageHeader, Card, StateTag, EmptyState } from "@tbite/ui";
 
   let { data } = $props();

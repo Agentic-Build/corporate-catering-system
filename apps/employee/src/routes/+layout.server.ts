@@ -3,7 +3,6 @@ import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
 import type { PlantOption } from "$lib/plants";
 
-// Shell data: user, active-order count for sidebar badge, plants for LocationBar.
 export const load: LayoutServerLoad = async ({ locals }) => {
   if (!locals.user) {
     return { user: null, activeOrders: 0, plants: [] as PlantOption[] };

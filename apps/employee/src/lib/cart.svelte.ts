@@ -1,11 +1,11 @@
-// Singleton rune-based cart store. Client-side only; checkout fires a one-shot
-// `?/placeOrder` action — there is no backend cart table.
+// Client-side only; checkout fires a one-shot `?/placeOrder` action — there is
+// no backend cart table.
 
 interface CartLine {
   qty: number;
   name: string;
   vendor: string;
-  price: number; // minor units, per single unit
+  price: number;
   image?: string;
 }
 
@@ -15,12 +15,10 @@ class Cart {
   count = $derived(Object.values(this.items).reduce((s, l) => s + l.qty, 0));
   total = $derived(Object.values(this.items).reduce((s, l) => s + l.qty * l.price, 0));
 
-  /** Quantity of a single item (0 when absent). */
   qty(id: string): number {
     return this.items[id]?.qty ?? 0;
   }
 
-  /** Add one unit, creating the line from `meta` if it does not exist yet. */
   add(id: string, meta: Omit<CartLine, "qty">): void {
     const cur = this.items[id];
     this.items = {
@@ -29,14 +27,13 @@ class Cart {
     };
   }
 
-  /** Increment an existing line by one. */
   inc(id: string): void {
     const cur = this.items[id];
     if (!cur) return;
     this.items = { ...this.items, [id]: { ...cur, qty: cur.qty + 1 } };
   }
 
-  /** Decrement a line by one; removes it when it reaches zero. */
+  // Removes the line when qty drops to 0.
   dec(id: string): void {
     const cur = this.items[id];
     if (!cur) return;

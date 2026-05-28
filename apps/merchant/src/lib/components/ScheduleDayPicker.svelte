@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Day picker strip with per-day status pip.
   interface Day {
     id: string;
     head: string;

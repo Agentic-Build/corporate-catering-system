@@ -12,12 +12,10 @@
     other: "其他",
   } as Record<string, string>;
 
-  /** Format an ISO timestamp as "YYYY-MM-DD HH:MM"; "—" when absent. */
   function ts(s: string | null | undefined): string {
     return s ? s.slice(0, 16).replace("T", " ") : "—";
   }
 
-  // Per-complaint submitting state (keyed by complaint id)
   let submitting = $state<Record<string, boolean>>({});
 </script>
 
@@ -57,7 +55,6 @@
             · 員工 <span title={c.user_id}>{c.user_id.slice(0, 8)}</span>
           </p>
 
-          <!-- Complaint history timeline -->
           <div class="mt-3 grid gap-2 border-t border-tb-slate-100 pt-3">
             <div class="rounded-xl bg-tb-slate-50 p-3">
               <p class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
@@ -91,7 +88,6 @@
             </div>
           </div>
 
-          <!-- Resolution action -->
           <form
             method="POST"
             action="?/resolve"

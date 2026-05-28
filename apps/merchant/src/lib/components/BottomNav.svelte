@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Mobile bottom navigation; hidden at md+ where the top nav takes over.
   import { Icon, type IconName } from "@tbite/ui";
   import { page } from "$app/stores";
 

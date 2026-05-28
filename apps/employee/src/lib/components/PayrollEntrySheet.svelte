@@ -1,8 +1,5 @@
 <script lang="ts">
-  // 薪資逐筆明細互動 sheet — opened when a 本月進行中 row is clicked. Mirrors
-  // the App's EntryDetailSheet: two modes ⭐評分 / 📣客訴, reusing the payroll
-  // page's ?/rate and ?/complain actions (same backend wiring as the order
-  // detail page). An already-rated order shows rating mode disabled.
+  // Reuses /payroll's ?/rate and ?/complain actions; same wiring as order detail.
   import { Modal, Button, Icon } from "@tbite/ui";
   import { enhance } from "$app/forms";
   import { invalidateAll } from "$app/navigation";
@@ -40,7 +37,6 @@
   let complaintError = $state<string | null>(null);
   let done = $state<"rated" | "complained" | null>(null);
 
-  // Reset transient state whenever the sheet (re)opens for a row.
   $effect(() => {
     if (open) {
       mode = line?.rated ? "complain" : "rate";

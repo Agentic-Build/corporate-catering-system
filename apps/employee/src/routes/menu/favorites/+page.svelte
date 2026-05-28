@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 我的常點
   import { onMount } from "svelte";
   import { deserialize } from "$app/forms";
   import { PageHeader, EmptyState, Button, Icon } from "@tbite/ui";
@@ -70,7 +69,6 @@
 {:else if chips.length === 0}
   <EmptyState icon="heart" title="尚無收藏" hint="從今日菜單點收藏喜歡的菜色。" />
 {:else if hero}
-  <!-- Hero — favourite #1 -->
   <article
     class="mb-5 overflow-hidden rounded-tb-2xl border border-tb-amber-200 bg-gradient-to-br from-tb-amber-50 to-tb-rose-50"
   >

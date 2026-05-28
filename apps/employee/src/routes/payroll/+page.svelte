@@ -52,7 +52,6 @@
   subtitle="查詢每月月結的餐費、退款與淨額。"
 />
 
-<!-- 本月進行中 — accumulating, not-yet-settled period -->
 <section class="mb-6">
   <h2 class="mb-2 text-base font-extrabold tracking-tight text-tb-slate-900">本月進行中</h2>
   <div class="mb-3">

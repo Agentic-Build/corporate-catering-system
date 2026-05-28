@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Single-day schedule table. Today is read-only; "移除" sets capacity to 0.
+  // Today is read-only; "移除" sets capacity to 0.
   import { Button, Icon } from "@tbite/ui";
   import OrderProgress from "./OrderProgress.svelte";
 

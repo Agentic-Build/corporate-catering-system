@@ -16,7 +16,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
   });
   if (r.error || !r.data) throw error(404, "batch not found");
 
-  // Settlement exception list — the GET re-runs departed-employee detection.
+  // GET re-runs departed-employee detection as a side-effect.
   let exceptions: ExceptionDTO[] = [];
   const ex = await client.GET("/api/admin/payroll/batches/{id}/exceptions", {
     params: { path: { id: params.id } },
@@ -41,7 +41,6 @@ export const actions: Actions = {
     throw redirect(303, `/payroll/${params.id}`);
   },
 
-  // Flag a batch entry with a manual deduction-failed exception.
   flagException: async ({ request, params, locals }) => {
     const fd = await request.formData();
     const entryId = String(fd.get("entry_id") ?? "");
@@ -59,7 +58,7 @@ export const actions: Actions = {
     throw redirect(303, `/payroll/${params.id}`);
   },
 
-  // Resolve an exception: resolved (still deducted) or excluded (dropped from CSV).
+  // status=resolved still deducts; status=excluded drops from CSV.
   resolveException: async ({ request, params, locals }) => {
     const fd = await request.formData();
     const exId = String(fd.get("exception_id") ?? "");

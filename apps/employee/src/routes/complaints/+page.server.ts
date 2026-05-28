@@ -17,8 +17,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  // Escalate to the welfare committee. The backend enforces the 24h gate;
-  // a too-early call comes back as a 4xx which is surfaced as a message.
+  // Backend enforces a 24h gate; too-early returns 4xx (surfaced as a message).
   escalate: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const fd = await request.formData();
@@ -39,7 +38,6 @@ export const actions: Actions = {
     return { ok: true };
   },
 
-  // Employee marks the complaint resolved (satisfied).
   resolve: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const fd = await request.formData();

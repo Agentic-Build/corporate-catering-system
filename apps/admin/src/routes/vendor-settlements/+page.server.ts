@@ -6,13 +6,11 @@ import { apiFor } from "$lib/server/api";
 
 type Settlement = components["schemas"]["SettlementDTO"];
 
-/** Current month as YYYY-MM. */
 function currentMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/** First / last calendar day (YYYY-MM-DD) of a YYYY-MM period. */
 function monthBounds(period: string): { start: string; end: string } | null {
   const m = /^(\d{4})-(\d{2})$/.exec(period);
   if (!m) return null;
@@ -45,7 +43,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  // Close the selected period: cut one settlement per vendor with orders.
   close: async ({ request, locals }) => {
     const fd = await request.formData();
     const period = String(fd.get("period") ?? "").trim();
@@ -60,7 +57,6 @@ export const actions: Actions = {
     throw redirect(303, `/vendor-settlements?period=${period}`);
   },
 
-  // Void a closed settlement so the period can be re-closed.
   voidSettlement: async ({ request, locals, url }) => {
     const fd = await request.formData();
     const id = String(fd.get("id") ?? "");

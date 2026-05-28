@@ -1,5 +1,4 @@
 <script lang="ts">
-  // 我的: profile + quick links (mobile bottom-nav Profile tab).
   import { Icon, type IconName } from "@tbite/ui";
 
   let { data } = $props();

@@ -59,12 +59,9 @@
   });
   const ntd = (minor: number) => "$" + Math.round(minor).toLocaleString();
 
-  // Confirm exclude-from-CSV modal
   let confirmExclude = $state<{ id: string; userId: string } | null>(null);
-  // Plain object used as record for form refs (keyed by exception id)
   const excludeFormEls: Record<string, HTMLFormElement> = {};
 
-  // Loading states
   let submittingLock = $state(false);
   let submittingExclude = $state(false);
 </script>
@@ -182,7 +179,6 @@
                 <input type="hidden" name="status" value="resolved" />
                 <Button variant="secondary" size="sm" type="submit">標記已處理</Button>
               </form>
-              <!-- Exclude from CSV — requires confirmation modal (affects payroll) -->
               <form
                 method="POST"
                 action="?/resolveException"
@@ -294,7 +290,6 @@
   </Card>
 {/if}
 
-<!-- Confirm exclude-from-CSV modal -->
 <Modal
   open={confirmExclude !== null}
   onClose={() => (confirmExclude = null)}

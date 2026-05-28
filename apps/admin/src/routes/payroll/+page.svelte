@@ -63,7 +63,6 @@
     </p>
   {:else}
     <Card>
-      <!-- Mobile: card list. -->
       <div class="divide-y divide-tb-slate-100 md:hidden">
         {#each data.batches as b (b.id)}
           <div class="py-3 first:pt-0 last:pb-0">
@@ -100,7 +99,6 @@
         {/each}
       </div>
 
-      <!-- Desktop: table (unchanged). -->
       <div class="hidden overflow-hidden rounded-xl border border-tb-slate-200 md:block">
         <table class="w-full text-sm">
           <thead

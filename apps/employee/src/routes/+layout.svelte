@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Employee app shell: sticky header, sidebar, main body, global cart drawer.
   import "../app.css";
   import { TBiteLogo, LocationBar, SearchInput, Button, Icon } from "@tbite/ui";
   import { goto } from "$app/navigation";
@@ -13,7 +12,6 @@
 
   let { data, children } = $props();
 
-  // Plant/day driven by URL search params, with user.plant as fallback.
   const today = taipeiISO();
   const selectedPlant = $derived(
     $page.url.searchParams.get("plant") ?? data.user?.plant ?? data.plants[0]?.id ?? "",
@@ -27,7 +25,6 @@
     goto(url.pathname + url.search);
   }
 
-  // Header search only routes the home grid; navigate home then filter.
   let search = $state("");
   function onSearch(v: string) {
     search = v;
@@ -43,7 +40,6 @@
 
   let cartOpen = $state(false);
 
-  // cart-bump animation on the header cart button when the count changes
   let bump = $state(false);
   let prevCount = $state(0);
   let bumpTimer: ReturnType<typeof setTimeout> | null = null;

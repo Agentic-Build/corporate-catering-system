@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Employee home: greeting, category strip, featured rows, full menu grid.
   import { MealCard, StateTag, WeekCalendar } from "@tbite/ui";
   import { invalidate, invalidateAll, goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -30,7 +29,7 @@
     goto(u.pathname + u.search, { keepFocus: true, noScroll: true });
   }
 
-  // SSE: refetch only the menu/home fragment (app:home) on stock changes.
+  // Refetch only the home fragment (app:home) on stock-change SSE events.
   onMount(() => {
     const es = new EventSource("/menu/events");
     es.onmessage = (e) => {
@@ -105,7 +104,6 @@
       return `${y} / ${String(m).padStart(2, "0")} / ${String(d).padStart(2, "0")} · 週${wk[date.getDay()]}`;
     })(),
   );
-  // Cutoff is only known when the user already has an order today.
   const cutoffText = $derived(
     (() => {
       if (!orderSummary?.cutoff_at) return null;
@@ -119,7 +117,7 @@
 
   const query = $derived($page.url.searchParams.get("q")?.trim() ?? "");
 
-  // F3: when filter bar params are present, server returns filtered/sorted grid;
+  // When filter-bar params are present, server returns filtered/sorted grid;
   // otherwise client only narrows day_menu by the header search box.
   const serverFiltered = $derived(Boolean(data.filterActive));
   const filteredMenu = $derived(
@@ -131,7 +129,7 @@
         }),
   );
 
-  // A4: 全部餐點 view toggle (meal/vendor), persisted in ?view= + localStorage.
+  // Persisted in ?view= + localStorage.
   let menuView = $state<"meal" | "vendor">("meal");
   onMount(() => {
     const fromUrl = $page.url.searchParams.get("view");
@@ -159,7 +157,7 @@
     return [...groups.values()];
   });
 
-  // Enrich chips with day_menu data when on sale; else render as unavailable.
+  // Chip data joined with day_menu when on sale; falls back to unavailable card.
   type RecCard = { key: string } & RecommendC & { menu?: DayMenuItem };
   type FavCard = { key: string } & FavoriteC & { menu?: DayMenuItem };
   const recommendCards = $derived(
@@ -200,7 +198,7 @@
     if (toastTimer) clearTimeout(toastTimer);
   });
 
-  // Surface reorder partial-mode flash via query-params (do NOT clear `q`).
+  // Surface reorder partial-mode flash from URL params (do NOT clear `q`).
   $effect(() => {
     const params = $page.url.searchParams;
     if (params.get("reorder") === "partial") {
@@ -284,7 +282,6 @@
 </script>
 
 <div class="fade-up">
-  <!-- Greeting -->
   <section class="mb-5">
     <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-red-600">{eyebrow}</div>
     <h1 class="mt-1 text-3xl font-black tracking-tight text-tb-slate-900">
@@ -302,7 +299,6 @@
     </p>
   </section>
 
-  <!-- Week-view date picker -->
   <section class="mb-5">
     <div class="mb-2 text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
       選擇取餐日 · 可預訂未來 7 天
@@ -326,7 +322,6 @@
     </div>
   {/if}
 
-  <!-- Today's order summary, when present -->
   {#if hasOrdered && orderSummary}
     <a
       href={`/orders/${orderSummary.order_id}`}
@@ -344,7 +339,6 @@
     </a>
   {/if}
 
-  <!-- Featured row · 再點一次 -->
   <FeaturedRow
     title="再點一次"
     subtitle="你最近的訂單 · 一鍵重新預訂"
@@ -400,7 +394,6 @@
     {/snippet}
   </FeaturedRow>
 
-  <!-- Featured row · 推薦你今天 -->
   <FeaturedRow
     title="推薦你今天"
     subtitle="同事熱門 × 你的常用商家"
@@ -454,7 +447,6 @@
     {/snippet}
   </FeaturedRow>
 
-  <!-- Featured row · 我的最愛 -->
   <FeaturedRow
     title="我的最愛"
     subtitle="你收藏的菜色"
@@ -501,7 +493,6 @@
     {/snippet}
   </FeaturedRow>
 
-  <!-- Full menu grid -->
   <section>
     <div class="mb-3 flex items-end justify-between gap-2">
       <div>
@@ -513,7 +504,6 @@
       <MenuViewToggle view={menuView} onChange={setMenuView} />
     </div>
 
-    <!-- F3 篩選列 -->
     <MenuFilterBar
       tags={data.tagPool as string[]}
       q={data.menuFilter.q}

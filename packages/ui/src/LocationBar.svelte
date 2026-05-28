@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Plant + day selector capsule that opens a dropdown panel.
   import Icon from "./Icon.svelte";
 
   interface PlantOption {

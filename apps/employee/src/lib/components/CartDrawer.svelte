@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Cart drawer; submits `?/placeOrder` on the home route via hidden form.
   import { Drawer, Icon, Button } from "@tbite/ui";
   import { enhance } from "$app/forms";
   import { cart } from "$lib/cart.svelte";
@@ -14,7 +13,6 @@
 
   const entries = $derived(Object.entries(cart.items));
 
-  // Show `?/placeOrder` errors inside the drawer, not behind on the page.
   let submitError = $state<string | null>(null);
   let submitting = $state(false);
 </script>

@@ -18,7 +18,6 @@
       : 0,
   );
 
-  // Default to tomorrow when present, else today.
   let selectedDay = $state(data.days[1]?.id ?? data.days[0]!.id);
   let libraryOpen = $state(false);
 
@@ -29,7 +28,7 @@
     data.days.find((d: any) => d.id === selectedDay) ?? data.days[0]!,
   );
 
-  /** Enrich a date's supply rows with menu-item detail; drop removed (cap 0). */
+  // Drops removed rows (cap 0).
   function slotsFor(date: string) {
     const supply = data.supplyByDate[date] ?? [];
     return supply
@@ -71,7 +70,7 @@
     queueMicrotask(() => capForm?.requestSubmit());
   }
 
-  /** After publishItem resolves, fire the queued capacity submit (if any). */
+  // Fires the queued capacity submit (if any) after publishItem resolves.
   const publishEnhance = () => {
     return async ({
       update,
@@ -101,7 +100,6 @@
     queueMicrotask(() => soldOutForm?.requestSubmit());
   }
 
-  /** Library "加入此日" — publish if archived, then schedule a default cap. */
   function addFromLibrary(item: any) {
     if (item.status === "archived") {
       // Publish first; capacity is submitted from publishEnhance after success.
@@ -115,7 +113,6 @@
 </script>
 
 <div class="fade-up">
-  <!-- Today operational dashboard -->
   <section class="mb-6">
     <div class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-red-600">
       {data.today.replace(/-/g, " / ")} · {todayDay.weekday} · 今日營運
@@ -137,7 +134,6 @@
     <StatCard label="今日營收" value={`$${data.stats.revenue.toLocaleString()}`} />
   </section>
 
-  <!-- 7-day schedule planner -->
   <section>
     <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
       <div>
@@ -185,7 +181,6 @@
   </section>
 </div>
 
-<!-- Meal-library drawer -->
 <MealLibraryDrawer
   open={libraryOpen}
   onClose={() => (libraryOpen = false)}
@@ -194,7 +189,6 @@
   onAdd={addFromLibrary}
 />
 
-<!-- Hidden forms — drive schedule edits through +page.server.ts actions. -->
 <form bind:this={capForm} method="POST" action="?/setSupply" class="hidden" use:enhance>
   <input type="hidden" name="item_id" value={capItemId} />
   <input type="hidden" name="date" value={capDate} />

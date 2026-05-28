@@ -96,7 +96,6 @@
           </span>
         </header>
 
-        <!-- 廠區分區表 — aggregated item counts -->
         <h3 class="mb-1 text-xs font-bold uppercase tracking-eyebrow text-tb-red-600">分區彙總</h3>
         <table class="mb-4 w-full text-sm">
           <thead class="sr-only">
@@ -115,7 +114,6 @@
           </tbody>
         </table>
 
-        <!-- 配送籃清單 — one row per order -->
         <h3 class="mb-1 text-xs font-bold uppercase tracking-eyebrow text-tb-red-600">
           配送籃清單
         </h3>
@@ -142,7 +140,6 @@
           </tbody>
         </table>
 
-        <!-- 餐點標籤 — one card per order, for the basket -->
         <h3 class="mb-2 mt-4 text-xs font-bold uppercase tracking-eyebrow text-tb-red-600">
           餐點標籤
         </h3>

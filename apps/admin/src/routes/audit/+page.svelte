@@ -13,23 +13,17 @@
     }
   }
 
-  // Convert datetime-local value (YYYY-MM-DDTHH:MM) to RFC3339 for the server.
-  // We append ":00Z" — treating the input as UTC, which is consistent with server-side filtering.
+  // datetime-local lacks TZ; treat as UTC to match server-side filtering.
   function toRfc3339(localVal: string): string {
     if (!localVal) return "";
-    // datetime-local gives "YYYY-MM-DDTHH:MM" (no seconds, no TZ)
     return localVal.length === 16 ? localVal + ":00Z" : localVal;
   }
 
-  // Initialize the datetime-local input from the existing since value.
-  // Strip trailing "Z" / seconds so the input shows "YYYY-MM-DDTHH:MM".
   function fromRfc3339(since: string): string {
     if (!since) return "";
-    // e.g. "2026-05-01T00:00:00Z" → "2026-05-01T00:00"
     return since.slice(0, 16);
   }
 
-  // sinceLocal is controlled by the user; initialised from URL param on mount only.
   let sinceLocal = $state(untrack(() => fromRfc3339(data.since)));
   let sinceHidden = $derived(toRfc3339(sinceLocal));
 </script>
@@ -65,7 +59,6 @@
       <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
         起始時間
       </span>
-      <!-- datetime-local for usability; hidden field converts to RFC3339 for server -->
       <input
         type="datetime-local"
         bind:value={sinceLocal}

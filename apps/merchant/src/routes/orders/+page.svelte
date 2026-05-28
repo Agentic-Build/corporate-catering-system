@@ -42,8 +42,7 @@
     cancelled: "已取消",
   } as Record<string, string>;
 
-  // Scan-to-serve: decode meal sticker QR, mark order ready. html5-qrcode is
-  // dynamically imported to avoid SSR failures.
+  // html5-qrcode is dynamically imported to avoid SSR failures.
   let scanOpen = $state(false);
   let scanError = $state("");
   let markReadyForm = $state<HTMLFormElement>();
@@ -98,7 +97,6 @@
     });
   }
 
-  // Mount the camera once the scan region exists.
   $effect(() => {
     if (scanOpen) {
       requestAnimationFrame(() => startScan());
@@ -169,7 +167,6 @@
   </p>
 {/if}
 
-<!-- Single-order serve form, submitted programmatically after a successful scan. -->
 <form method="POST" action="?/markReady" bind:this={markReadyForm} class="hidden">
   <input type="hidden" name="order_id" value={scannedID} />
 </form>

@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Admin app shell: sticky header + nav.
   import "../app.css";
   import { page } from "$app/stores";
   import { TBiteLogo, Button, Icon, type IconName } from "@tbite/ui";
@@ -19,7 +18,6 @@
     { href: "/dlq", label: "死信佇列", icon: "alert" },
   ];
 
-  /** A nav item is active when the path matches it or sits beneath it. */
   function isActive(href: string, path: string): boolean {
     if (href === "/") return path === "/";
     return path === href || path.startsWith(href + "/");

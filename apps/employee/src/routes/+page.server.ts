@@ -215,7 +215,6 @@ export const actions: Actions = {
       body: { plant, supply_date: supplyDate, notes, items },
     });
     if (r.error) {
-      // RFC 9457 problem-details — surface a calm Chinese message, not raw JSON.
       const err = r.error as { status?: number; detail?: string };
       const msg =
         err.detail === "order: cutoff time has passed"
@@ -228,7 +227,7 @@ export const actions: Actions = {
     throw redirect(303, `/orders/${orderID}`);
   },
 
-  // Reorder an entire past order. May produce partial result with unavailable_items[].
+  // May produce partial result with unavailable_items[].
   reorderPast: async ({ request, locals }) => {
     if (!locals.user) throw redirect(303, "/login");
     const fd = await request.formData();
@@ -243,7 +242,7 @@ export const actions: Actions = {
     });
 
     if (r.error) {
-      // 409 case: huma RFC 9457 problem-details; backend embeds unavailable_items in error body.
+      // Backend embeds unavailable_items in the problem-details error body.
       const err = r.error as { unavailable_items?: Array<{ name: string }>; detail?: string };
       const items = err.unavailable_items ?? [];
       const names = items.map((i) => i.name).join("、");
@@ -271,7 +270,6 @@ export const actions: Actions = {
     throw redirect(303, `/orders/${newOrderId}`);
   },
 
-  // Add a menu_item to favorites (idempotent).
   addFavorite: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const fd = await request.formData();
@@ -286,7 +284,6 @@ export const actions: Actions = {
     return { ok: true };
   },
 
-  // Remove a favorite (idempotent — 204 even if missing).
   removeFavorite: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const fd = await request.formData();
