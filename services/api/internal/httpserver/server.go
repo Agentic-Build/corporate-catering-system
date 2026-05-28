@@ -64,21 +64,6 @@ func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(c
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
-	// HTTP access log (skip /healthz, /readyz noise) for MCP client tracing.
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/healthz" && r.URL.Path != "/readyz" {
-				logger.Info("http",
-					"method", r.Method,
-					"path", r.URL.Path,
-					"query", r.URL.RawQuery,
-					"ua", r.Header.Get("User-Agent"),
-					"auth", r.Header.Get("Authorization") != "",
-				)
-			}
-			next.ServeHTTP(w, r)
-		})
-	})
 	r.Use(idAPI.AuthMiddleware)
 
 	r.Get("/healthz", healthHandler)
