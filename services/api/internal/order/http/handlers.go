@@ -8,6 +8,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/sse"
 
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
@@ -62,14 +63,8 @@ func toDTO(o *order.Order) orderDTO {
 		CutoffAt:        o.CutoffAt.UTC().Format(time.RFC3339),
 		Items:           make([]orderItemDTO, 0, len(o.Items)),
 	}
-	if o.PlacedAt != nil {
-		s := o.PlacedAt.UTC().Format(time.RFC3339)
-		d.PlacedAt = &s
-	}
-	if o.CancelledAt != nil {
-		s := o.CancelledAt.UTC().Format(time.RFC3339)
-		d.CancelledAt = &s
-	}
+	d.PlacedAt = httpserver.FormatNullableTimePtr(o.PlacedAt)
+	d.CancelledAt = httpserver.FormatNullableTimePtr(o.CancelledAt)
 	for _, it := range o.Items {
 		d.Items = append(d.Items, orderItemDTO{
 			ID:             it.ID,
@@ -169,18 +164,9 @@ func toMerchantDTO(o *order.Order) merchantOrderDTO {
 		Notes:           o.Notes,
 		Items:           make([]orderItemDTO, 0, len(o.Items)),
 	}
-	if o.PlacedAt != nil {
-		s := o.PlacedAt.UTC().Format(time.RFC3339)
-		d.PlacedAt = &s
-	}
-	if o.ReadyAt != nil {
-		s := o.ReadyAt.UTC().Format(time.RFC3339)
-		d.ReadyAt = &s
-	}
-	if o.PickedUpAt != nil {
-		s := o.PickedUpAt.UTC().Format(time.RFC3339)
-		d.PickedUpAt = &s
-	}
+	d.PlacedAt = httpserver.FormatNullableTimePtr(o.PlacedAt)
+	d.ReadyAt = httpserver.FormatNullableTimePtr(o.ReadyAt)
+	d.PickedUpAt = httpserver.FormatNullableTimePtr(o.PickedUpAt)
 	for _, it := range o.Items {
 		d.Items = append(d.Items, orderItemDTO{
 			ID:             it.ID,

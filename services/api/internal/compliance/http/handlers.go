@@ -13,6 +13,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 )
@@ -89,10 +90,7 @@ func docToDTO(d *compliance.Document) documentDTO {
 		s := *d.ReviewedBy
 		out.ReviewedBy = &s
 	}
-	if d.ReviewedAt != nil {
-		s := d.ReviewedAt.UTC().Format(time.RFC3339)
-		out.ReviewedAt = &s
-	}
+	out.ReviewedAt = httpserver.FormatNullableTimePtr(d.ReviewedAt)
 	return out
 }
 
@@ -117,14 +115,8 @@ func anomalyToDTO(a *compliance.Anomaly) anomalyDTO {
 		Notes:       a.Notes,
 		CreatedAt:   a.CreatedAt.UTC().Format(time.RFC3339),
 	}
-	if a.TriagedAt != nil {
-		s := a.TriagedAt.UTC().Format(time.RFC3339)
-		out.TriagedAt = &s
-	}
-	if a.ClosedAt != nil {
-		s := a.ClosedAt.UTC().Format(time.RFC3339)
-		out.ClosedAt = &s
-	}
+	out.TriagedAt = httpserver.FormatNullableTimePtr(a.TriagedAt)
+	out.ClosedAt = httpserver.FormatNullableTimePtr(a.ClosedAt)
 	return out
 }
 

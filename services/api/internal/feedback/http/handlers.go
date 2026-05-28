@@ -11,6 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/feedback"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 )
@@ -72,22 +73,13 @@ func toComplaintDTO(c *feedback.Complaint) complaintDTO {
 		Resolution:     c.Resolution,
 		CreatedAt:      c.CreatedAt.UTC().Format(time.RFC3339),
 	}
-	if c.VendorRespondedAt != nil {
-		s := c.VendorRespondedAt.UTC().Format(time.RFC3339)
-		out.VendorRespondedAt = &s
-	}
-	if c.EscalatedAt != nil {
-		s := c.EscalatedAt.UTC().Format(time.RFC3339)
-		out.EscalatedAt = &s
-	}
+	out.VendorRespondedAt = httpserver.FormatNullableTimePtr(c.VendorRespondedAt)
+	out.EscalatedAt = httpserver.FormatNullableTimePtr(c.EscalatedAt)
 	if c.ResolvedBy != nil {
 		s := *c.ResolvedBy
 		out.ResolvedBy = &s
 	}
-	if c.ResolvedAt != nil {
-		s := c.ResolvedAt.UTC().Format(time.RFC3339)
-		out.ResolvedAt = &s
-	}
+	out.ResolvedAt = httpserver.FormatNullableTimePtr(c.ResolvedAt)
 	return out
 }
 

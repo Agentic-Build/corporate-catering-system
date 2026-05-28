@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
@@ -59,18 +60,12 @@ func toBatchDTO(b *payroll.Batch) batchDTO {
 		PeriodEnd:   b.PeriodEnd.UTC().Format("2006-01-02"),
 		Status:      string(b.Status),
 	}
-	if b.LockedAt != nil {
-		s := b.LockedAt.UTC().Format(time.RFC3339)
-		d.LockedAt = &s
-	}
+	d.LockedAt = httpserver.FormatNullableTimePtr(b.LockedAt)
 	if b.LockedBy != nil {
 		s := *b.LockedBy
 		d.LockedBy = &s
 	}
-	if b.ExportedAt != nil {
-		s := b.ExportedAt.UTC().Format(time.RFC3339)
-		d.ExportedAt = &s
-	}
+	d.ExportedAt = httpserver.FormatNullableTimePtr(b.ExportedAt)
 	if b.ExportURI != nil {
 		s := *b.ExportURI
 		d.ExportURI = &s
@@ -108,10 +103,7 @@ func toDisputeDTO(d *payroll.Dispute) disputeDTO {
 		s := *d.ResolvedBy
 		out.ResolvedBy = &s
 	}
-	if d.ResolvedAt != nil {
-		s := d.ResolvedAt.UTC().Format(time.RFC3339)
-		out.ResolvedAt = &s
-	}
+	out.ResolvedAt = httpserver.FormatNullableTimePtr(d.ResolvedAt)
 	return out
 }
 
@@ -145,10 +137,7 @@ func toExceptionDTO(e *payroll.Exception) exceptionDTO {
 		s := *e.ResolvedBy
 		out.ResolvedBy = &s
 	}
-	if e.ResolvedAt != nil {
-		s := e.ResolvedAt.UTC().Format(time.RFC3339)
-		out.ResolvedAt = &s
-	}
+	out.ResolvedAt = httpserver.FormatNullableTimePtr(e.ResolvedAt)
 	return out
 }
 
