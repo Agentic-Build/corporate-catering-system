@@ -2,6 +2,7 @@ import { redirect, fail, type Actions } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type MerchantItemDTO = components["schemas"]["MerchantItemDTO"];
 
@@ -22,7 +23,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   copy: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
-    const id = (await request.formData()).get("id")?.toString() ?? "";
+    const id = formStr(await request.formData(), "id");
     if (!id) return fail(400, { error: "缺少品項 id" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/merchant/menu-items/{id}/copy", {
@@ -36,7 +37,7 @@ export const actions: Actions = {
   // Soft-delete (archive); hidden from the default list.
   delete: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
-    const id = (await request.formData()).get("id")?.toString() ?? "";
+    const id = formStr(await request.formData(), "id");
     if (!id) return fail(400, { error: "缺少品項 id" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/merchant/menu-items/{id}/archive", {

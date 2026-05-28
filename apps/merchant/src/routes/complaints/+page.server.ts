@@ -2,6 +2,7 @@ import { redirect, fail, type Actions } from "@sveltejs/kit";
 import type { components } from "@tbite/api-client";
 import type { PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type ComplaintDTO = components["schemas"]["ComplaintDTO"];
 
@@ -34,8 +35,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   respond: async ({ request, locals }) => {
     const fd = await request.formData();
-    const id = fd.get("complaint_id")?.toString() ?? "";
-    const response = fd.get("response")?.toString() ?? "".trim();
+    const id = formStr(fd, "complaint_id");
+    const response = formStr(fd, "response").trim();
     if (!id) return fail(400, { error: "缺少客訴編號" });
     if (response.length < 5) return fail(400, { error: "回覆內容至少需 5 個字", complaintID: id });
 

@@ -49,7 +49,7 @@ describe("problemMessage", () => {
     expect(problemMessage({ title: "Bad Request" })).toBe("Bad Request");
     expect(problemMessage("plain string")).toBe("plain string");
     expect(problemMessage(null)).toBe("未知錯誤");
-    expect(problemMessage({})).toBe("[object Object]");
+    expect(problemMessage({})).toBe("未知錯誤");
   });
 });
 

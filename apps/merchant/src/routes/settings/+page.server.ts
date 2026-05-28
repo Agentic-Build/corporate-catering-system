@@ -2,6 +2,7 @@ import { redirect, fail, type Actions } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type PlantDTO = components["schemas"]["PlantDTO"];
 type VendorSettingsDTO = components["schemas"]["VendorSettingsDTO"];
@@ -33,8 +34,8 @@ export const actions: Actions = {
   save: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const fd = await request.formData();
-    const cutoffHour = Number.parseInt(fd.get("cutoff_hour")?.toString() ?? "", 10);
-    const windowDays = Number.parseInt(fd.get("preorder_window_days")?.toString() ?? "", 10);
+    const cutoffHour = Number.parseInt(formStr(fd, "cutoff_hour"), 10);
+    const windowDays = Number.parseInt(formStr(fd, "preorder_window_days"), 10);
     if (!Number.isInteger(cutoffHour) || cutoffHour < 0 || cutoffHour > 23) {
       return fail(400, { error: "截單時間需為 0–23 之間的整數" });
     }

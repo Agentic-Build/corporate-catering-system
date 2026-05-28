@@ -35,7 +35,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
 
   const byPlant: Record<string, MerchantOrderDTO[]> = {};
   for (const o of items) {
-    if (!byPlant[o.plant]) byPlant[o.plant] = [];
+    byPlant[o.plant] ??= [];
     byPlant[o.plant]!.push(o);
   }
 
