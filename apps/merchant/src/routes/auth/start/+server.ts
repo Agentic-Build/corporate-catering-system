@@ -1,21 +1,10 @@
-import { redirect, error } from "@sveltejs/kit";
+import { createAuthStartHandler } from "@tbite/web-auth/routes";
 import { env } from "$env/dynamic/private";
 
-export async function GET({ url }) {
-  const provider = url.searchParams.get("provider");
-  const returnTo = url.searchParams.get("return_to") ?? "/";
-  if (!provider || !/^[a-z0-9][a-z0-9_.-]*$/.test(provider)) throw error(400, "bad provider");
-
-  const apiBaseUrl = env.API_BASE_URL ?? "http://localhost:8080";
-  const resp = await fetch(`${apiBaseUrl}/auth/${encodeURIComponent(provider)}/start`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      app: "merchant",
-      return_to: returnTo,
-    }),
-  });
-  if (!resp.ok) throw error(502, "auth start failed");
-  const data = (await resp.json()) as { auth_url: string };
-  throw redirect(303, data.auth_url);
-}
+export const GET = createAuthStartHandler({
+  portal: "merchant",
+  cookieName: "tbite_sid_merchant",
+  apiBaseUrl: env.API_BASE_URL ?? "http://localhost:8080",
+  cookieDomain: env.COOKIE_DOMAIN || undefined,
+  cookieSecure: env.NODE_ENV === "production",
+});
