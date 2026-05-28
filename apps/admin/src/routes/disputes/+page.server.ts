@@ -1,19 +1,25 @@
 import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+
+type DisputeDTO = components["schemas"]["DisputeDTO"];
+type DisputeStatus = NonNullable<
+  operations["listPayrollDisputes"]["parameters"]["query"]
+>["status"];
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
   if (locals.user.role !== "welfare_admin") throw redirect(303, "/login");
 
-  const status = url.searchParams.get("status") ?? "";
+  const status = (url.searchParams.get("status") ?? "") as DisputeStatus;
   const client = apiFor(locals.apiToken);
-  let disputes: any[] = [];
+  let disputes: DisputeDTO[] = [];
   try {
     const r = await client.GET("/api/admin/payroll/disputes", {
-      params: { query: (status ? { status } : {}) as any },
+      params: { query: status ? { status } : {} },
     });
-    if (r.data) disputes = (r.data as any).items ?? [];
+    if (r.data) disputes = r.data.items ?? [];
   } catch {}
   return { user: locals.user, disputes, status };
 };
@@ -35,7 +41,7 @@ export const actions: Actions = {
         status: "resolved_refund",
         resolution,
         refund_minor: refundMinor,
-      } as any,
+      },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { ok: true };
@@ -53,7 +59,7 @@ export const actions: Actions = {
         status: "resolved_reject",
         resolution,
         refund_minor: 0,
-      } as any,
+      },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { ok: true };

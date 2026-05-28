@@ -1,6 +1,10 @@
 import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+
+type MessageDTO = components["schemas"]["MessageDTO"];
+type DLQQuery = NonNullable<operations["listDLQ"]["parameters"]["query"]>;
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
@@ -8,12 +12,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const stream = url.searchParams.get("stream") ?? "";
   const client = apiFor(locals.apiToken);
-  let messages: any[] = [];
+  let messages: MessageDTO[] = [];
   try {
-    const query: Record<string, string | number> = { limit: 200 };
+    const query: DLQQuery = { limit: 200 };
     if (stream) query.stream = stream;
-    const r = await client.GET("/api/admin/dlq", { params: { query: query as any } });
-    if (r.data) messages = (r.data as any).items ?? [];
+    const r = await client.GET("/api/admin/dlq", { params: { query } });
+    if (r.data) messages = r.data.items ?? [];
   } catch {}
   return { user: locals.user, messages, stream };
 };
@@ -36,7 +40,7 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/dlq/{id}/resolve", {
       params: { path: { id } },
-      body: { notes } as any,
+      body: { notes },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { ok: true };
