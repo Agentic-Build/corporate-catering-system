@@ -20,6 +20,8 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/messaging"
 )
 
+const consumerName = "on-time-evaluator"
+
 // onTimeEvent is the minimal record kept in the rolling window.
 type onTimeEvent struct {
 	timestamp time.Time
@@ -69,8 +71,8 @@ func (e *OnTimeRateEvaluator) Run(ctx context.Context) error {
 		return fmt.Errorf("get stream: %w", err)
 	}
 	cons, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		Name:           "on-time-evaluator",
-		Durable:        "on-time-evaluator",
+		Name:           consumerName,
+		Durable:        consumerName,
 		FilterSubjects: []string{"order.picked_up.v1", "order.no_show.v1"},
 		AckPolicy:      jetstream.AckExplicitPolicy,
 		MaxDeliver:     5,
@@ -120,7 +122,7 @@ func (e *OnTimeRateEvaluator) Run(ctx context.Context) error {
 			e.Logger.Warn("handle event", "subject", msg.Subject(), "err", err)
 			// MaxDeliver=5; once exhausted, DLQ + Term so a poison event
 			// stops being redelivered (and double-counted) forever.
-			messaging.DLQOnExhaustion(ctx, msg, e.Pool, "on-time-evaluator", 5, err)
+			messaging.DLQOnExhaustion(ctx, msg, e.Pool, consumerName, 5, err)
 			continue
 		}
 		_ = msg.Ack()

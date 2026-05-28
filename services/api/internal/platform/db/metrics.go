@@ -1,10 +1,5 @@
 package db
 
-// pgxpool metrics. Names match vmalert TbiteDbPoolSaturation
-// (chart/tbite-platform/templates/vmalert-rules.yaml) so the otel→prom
-// collector emits the exact series the alert queries. role labels
-// distinguish the rw and ro pools.
-
 import (
 	"context"
 	"sync"
@@ -31,61 +26,11 @@ type poolRef struct {
 	role string
 }
 
-// RegisterPoolMetrics wires pgxpool.Stat into OTel observable gauges
-// (acquired/idle/total/max connections). role tags the series so rw vs
-// ro pools are distinguishable. Safe to call multiple times: instruments
-// register once on the global meter; additional pools join the observed
-// set.
 func RegisterPoolMetrics(pool *pgxpool.Pool, role string) error {
 	if pool == nil {
 		return nil
 	}
-	poolGauges.once.Do(func() {
-		meter := otel.GetMeterProvider().Meter("tbite.api")
-		acquired, err := meter.Int64ObservableGauge("tbite_db_pool_acquired_connections",
-			metric.WithDescription("pgxpool acquired (in-use) connections."))
-		if err != nil {
-			poolGauges.initErr = err
-			return
-		}
-		idle, err := meter.Int64ObservableGauge("tbite_db_pool_idle_connections",
-			metric.WithDescription("pgxpool idle (available) connections."))
-		if err != nil {
-			poolGauges.initErr = err
-			return
-		}
-		total, err := meter.Int64ObservableGauge("tbite_db_pool_total_connections",
-			metric.WithDescription("pgxpool total (acquired+idle+constructing) connections."))
-		if err != nil {
-			poolGauges.initErr = err
-			return
-		}
-		maxG, err := meter.Int64ObservableGauge("tbite_db_pool_max_connections",
-			metric.WithDescription("pgxpool max connections budget."))
-		if err != nil {
-			poolGauges.initErr = err
-			return
-		}
-		poolGauges.acquired = acquired
-		poolGauges.idle = idle
-		poolGauges.total = total
-		poolGauges.max = maxG
-
-		_, poolGauges.initErr = meter.RegisterCallback(func(_ context.Context, o metric.Observer) error {
-			poolGauges.mu.Lock()
-			refs := append([]poolRef(nil), poolGauges.pools...)
-			poolGauges.mu.Unlock()
-			for _, ref := range refs {
-				s := ref.pool.Stat()
-				attrs := metric.WithAttributes(attribute.String("role", ref.role))
-				o.ObserveInt64(poolGauges.acquired, int64(s.AcquiredConns()), attrs)
-				o.ObserveInt64(poolGauges.idle, int64(s.IdleConns()), attrs)
-				o.ObserveInt64(poolGauges.total, int64(s.TotalConns()), attrs)
-				o.ObserveInt64(poolGauges.max, int64(s.MaxConns()), attrs)
-			}
-			return nil
-		}, poolGauges.acquired, poolGauges.idle, poolGauges.total, poolGauges.max)
-	})
+	poolGauges.once.Do(initPoolGauges)
 	if poolGauges.initErr != nil {
 		return poolGauges.initErr
 	}
@@ -98,5 +43,44 @@ func RegisterPoolMetrics(pool *pgxpool.Pool, role string) error {
 		}
 	}
 	poolGauges.pools = append(poolGauges.pools, poolRef{pool: pool, role: role})
+	return nil
+}
+
+func initPoolGauges() {
+	meter := otel.GetMeterProvider().Meter("tbite.api")
+	gauges := []struct {
+		name string
+		desc string
+		dst  *metric.Int64ObservableGauge
+	}{
+		{"tbite_db_pool_acquired_connections", "pgxpool acquired (in-use) connections.", &poolGauges.acquired},
+		{"tbite_db_pool_idle_connections", "pgxpool idle (available) connections.", &poolGauges.idle},
+		{"tbite_db_pool_total_connections", "pgxpool total (acquired+idle+constructing) connections.", &poolGauges.total},
+		{"tbite_db_pool_max_connections", "pgxpool max connections budget.", &poolGauges.max},
+	}
+	for _, g := range gauges {
+		gauge, err := meter.Int64ObservableGauge(g.name, metric.WithDescription(g.desc))
+		if err != nil {
+			poolGauges.initErr = err
+			return
+		}
+		*g.dst = gauge
+	}
+	_, poolGauges.initErr = meter.RegisterCallback(observePools,
+		poolGauges.acquired, poolGauges.idle, poolGauges.total, poolGauges.max)
+}
+
+func observePools(_ context.Context, o metric.Observer) error {
+	poolGauges.mu.Lock()
+	refs := append([]poolRef(nil), poolGauges.pools...)
+	poolGauges.mu.Unlock()
+	for _, ref := range refs {
+		s := ref.pool.Stat()
+		attrs := metric.WithAttributes(attribute.String("role", ref.role))
+		o.ObserveInt64(poolGauges.acquired, int64(s.AcquiredConns()), attrs)
+		o.ObserveInt64(poolGauges.idle, int64(s.IdleConns()), attrs)
+		o.ObserveInt64(poolGauges.total, int64(s.TotalConns()), attrs)
+		o.ObserveInt64(poolGauges.max, int64(s.MaxConns()), attrs)
+	}
 	return nil
 }

@@ -8,25 +8,36 @@ import { buildDays, taipeiISO } from "@tbite/web-shared";
 type MenuQuery = NonNullable<operations["listEmployeeMenu"]["parameters"]["query"]>;
 type MenuSort = NonNullable<MenuQuery["sort"]>;
 
-// F3: when any filter-bar key is set in the URL we fetch the filtered grid
-// from /api/employee/menu; otherwise the home payload's day_menu is used.
+type MenuFilter = {
+  q: string;
+  tags: string[];
+  priceMin: number;
+  priceMax: number;
+  inStock: boolean;
+  sort: MenuSort | "";
+};
+
+type HomePayload = {
+  target_day: string;
+  has_ordered: boolean;
+  order_summary?: {
+    order_id: string;
+    vendor_id: string;
+    status: string;
+    cutoff_at: string;
+    total_price_minor: number;
+  };
+  reorder_chips: NonNullable<unknown>[];
+  favorite_chips: NonNullable<unknown>[];
+  recommend_chips: NonNullable<unknown>[];
+  day_menu: NonNullable<unknown>[];
+};
+
 const MENU_SORTS = new Set(["name", "price_asc", "price_desc", "remain"]);
 
-export const load: PageServerLoad = async ({ locals, url, parent, depends }) => {
-  if (!locals.user) {
-    throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname + url.search));
-  }
-  // SSE menu "changed" events invalidate only this fragment, not the whole page.
-  depends("app:home");
-
-  const { plants } = await parent();
-  const selectedPlant = url.searchParams.get("plant") ?? locals.user.plant ?? plants[0]?.id ?? "";
-  const dayOverride = url.searchParams.get("day") ?? undefined;
-
-  // F3 menu filter parsed from the URL query.
-  const sp = url.searchParams;
+function parseMenuFilter(sp: URLSearchParams): MenuFilter {
   const sortParam = sp.get("sort") ?? "";
-  const menuFilter = {
+  return {
     q: sp.get("q")?.trim() ?? "",
     tags: sp.getAll("tags").filter(Boolean),
     priceMin: Number(sp.get("price_min") ?? "") || 0,
@@ -34,30 +45,22 @@ export const load: PageServerLoad = async ({ locals, url, parent, depends }) => 
     inStock: sp.get("in_stock") === "1",
     sort: (MENU_SORTS.has(sortParam) ? sortParam : "") as MenuSort | "",
   };
-  const filterActive =
-    menuFilter.q !== "" ||
-    menuFilter.tags.length > 0 ||
-    menuFilter.priceMin > 0 ||
-    menuFilter.priceMax > 0 ||
-    menuFilter.inStock ||
-    menuFilter.sort !== "";
+}
 
-  let home: {
-    target_day: string;
-    has_ordered: boolean;
-    order_summary?: {
-      order_id: string;
-      vendor_id: string;
-      status: string;
-      cutoff_at: string;
-      total_price_minor: number;
-    };
-    reorder_chips: NonNullable<unknown>[];
-    favorite_chips: NonNullable<unknown>[];
-    recommend_chips: NonNullable<unknown>[];
-    day_menu: NonNullable<unknown>[];
-  } = {
-    target_day: dayOverride ?? taipeiISO(),
+function isFilterActive(f: MenuFilter): boolean {
+  return (
+    f.q !== "" ||
+    f.tags.length > 0 ||
+    f.priceMin > 0 ||
+    f.priceMax > 0 ||
+    f.inStock ||
+    f.sort !== ""
+  );
+}
+
+function emptyHome(targetDay: string): HomePayload {
+  return {
+    target_day: targetDay,
     has_ordered: false,
     order_summary: undefined,
     reorder_chips: [],
@@ -65,79 +68,119 @@ export const load: PageServerLoad = async ({ locals, url, parent, depends }) => 
     recommend_chips: [],
     day_menu: [],
   };
-  let error: string | undefined;
+}
 
+async function fetchHome(
+  token: string | undefined,
+  dayOverride: string | undefined,
+  fallbackDay: string,
+): Promise<{ home: HomePayload; error?: string }> {
   try {
-    const client = createApiClient(API_BASE_URL, locals.apiToken);
+    const client = createApiClient(API_BASE_URL, token);
     const res = await client.GET("/api/employee/home", {
       params: { query: dayOverride ? { day: dayOverride } : {} },
     });
     if (res.data) {
       const d = res.data;
-      home = {
-        target_day: d.target_day,
-        has_ordered: d.has_ordered,
-        order_summary: d.order_summary,
-        reorder_chips: (d.reorder_chips ?? []) as NonNullable<unknown>[],
-        favorite_chips: (d.favorite_chips ?? []) as NonNullable<unknown>[],
-        recommend_chips: (d.recommend_chips ?? []) as NonNullable<unknown>[],
-        day_menu: (d.day_menu ?? []) as NonNullable<unknown>[],
+      return {
+        home: {
+          target_day: d.target_day,
+          has_ordered: d.has_ordered,
+          order_summary: d.order_summary,
+          reorder_chips: (d.reorder_chips ?? []) as NonNullable<unknown>[],
+          favorite_chips: (d.favorite_chips ?? []) as NonNullable<unknown>[],
+          recommend_chips: (d.recommend_chips ?? []) as NonNullable<unknown>[],
+          day_menu: (d.day_menu ?? []) as NonNullable<unknown>[],
+        },
       };
-    } else if (res.error) {
-      error = problemMessage(res.error);
     }
+    if (res.error) {
+      return { home: emptyHome(fallbackDay), error: problemMessage(res.error) };
+    }
+    return { home: emptyHome(fallbackDay) };
   } catch (e) {
-    error = e instanceof Error ? e.message : String(e);
+    return { home: emptyHome(fallbackDay), error: e instanceof Error ? e.message : String(e) };
   }
+}
 
-  // When filter bar is active, fetch filtered grid in place of day_menu.
+function buildMenuQuery(plant: string, day: string, f: MenuFilter): MenuQuery {
+  const query: MenuQuery = { plant, day };
+  if (f.q) query.q = f.q;
+  if (f.tags.length > 0) query.tags = f.tags;
+  if (f.priceMin > 0) query.price_min = f.priceMin;
+  if (f.priceMax > 0) query.price_max = f.priceMax;
+  if (f.inStock) query.in_stock = true;
+  if (f.sort) query.sort = f.sort;
+  return query;
+}
+
+async function fetchFilteredMenu(
+  token: string | undefined,
+  plant: string,
+  day: string,
+  filter: MenuFilter,
+): Promise<{ items?: NonNullable<unknown>[]; error?: string }> {
+  try {
+    const client = createApiClient(API_BASE_URL, token);
+    const mr = await client.GET("/api/employee/menu", {
+      params: { query: buildMenuQuery(plant, day, filter) },
+    });
+    if (mr.data) {
+      return { items: (mr.data.items ?? []) as NonNullable<unknown>[] };
+    }
+    if (mr.error) {
+      return { error: problemMessage(mr.error) };
+    }
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+function collectTags(...lists: Array<NonNullable<unknown>[] | undefined>): string[] {
+  const pool = new Set<string>();
+  for (const list of lists) {
+    for (const m of (list ?? []) as Array<{ tags?: string[] | null }>) {
+      for (const t of m.tags ?? []) pool.add(t);
+    }
+  }
+  return Array.from(pool).sort((a, b) => a.localeCompare(b));
+}
+
+export const load: PageServerLoad = async ({ locals, url, parent, depends }) => {
+  if (!locals.user) {
+    throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname + url.search));
+  }
+  depends("app:home");
+
+  const { plants } = await parent();
+  const selectedPlant = url.searchParams.get("plant") ?? locals.user.plant ?? plants[0]?.id ?? "";
+  const dayOverride = url.searchParams.get("day") ?? undefined;
+  const menuFilter = parseMenuFilter(url.searchParams);
+  const filterActive = isFilterActive(menuFilter);
+
+  const { home, error: homeError } = await fetchHome(
+    locals.apiToken,
+    dayOverride,
+    dayOverride ?? taipeiISO(),
+  );
+  let error = homeError;
+
   let filteredMenu: NonNullable<unknown>[] | undefined;
   if (filterActive) {
-    try {
-      const client = createApiClient(API_BASE_URL, locals.apiToken);
-      const query: MenuQuery = {
-        plant: selectedPlant,
-        day: home.target_day,
-      };
-      if (menuFilter.q) query.q = menuFilter.q;
-      if (menuFilter.tags.length > 0) query.tags = menuFilter.tags;
-      if (menuFilter.priceMin > 0) query.price_min = menuFilter.priceMin;
-      if (menuFilter.priceMax > 0) query.price_max = menuFilter.priceMax;
-      if (menuFilter.inStock) query.in_stock = true;
-      if (menuFilter.sort) query.sort = menuFilter.sort;
-      const mr = await client.GET("/api/employee/menu", {
-        params: { query },
-      });
-      if (mr.data) {
-        filteredMenu = (mr.data.items ?? []) as NonNullable<unknown>[];
-      } else if (mr.error && !error) {
-        error = problemMessage(mr.error);
-      }
-    } catch (e) {
-      if (!error) error = e instanceof Error ? e.message : String(e);
-    }
+    const r = await fetchFilteredMenu(locals.apiToken, selectedPlant, home.target_day, menuFilter);
+    filteredMenu = r.items;
+    if (r.error && !error) error = r.error;
   }
 
   const favoriteIds = new Set(
     (home.favorite_chips as Array<{ menu_item_id: string }>).map((c) => c.menu_item_id),
   );
 
-  const today = new Date();
-  const days = buildDays(today, home.target_day);
-
-  // Distinct tag universe for filter chips, across the day's menu.
-  const tagPool = new Set<string>();
-  for (const m of home.day_menu as Array<{ tags?: string[] | null }>) {
-    for (const t of m.tags ?? []) tagPool.add(t);
-  }
-  for (const m of (filteredMenu ?? []) as Array<{ tags?: string[] | null }>) {
-    for (const t of m.tags ?? []) tagPool.add(t);
-  }
-
   return {
     user: locals.user,
     plants,
-    days,
+    days: buildDays(new Date(), home.target_day),
     selectedPlant,
     selectedDay: home.target_day,
     home,
@@ -145,7 +188,7 @@ export const load: PageServerLoad = async ({ locals, url, parent, depends }) => 
     menuFilter,
     filterActive,
     filteredMenu,
-    tagPool: Array.from(tagPool).sort(),
+    tagPool: collectTags(home.day_menu, filteredMenu),
     error,
   };
 };

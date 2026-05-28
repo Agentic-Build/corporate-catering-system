@@ -9,8 +9,8 @@ RUN pnpm --filter @tbite/merchant build
 
 FROM node:24.16.0-alpine AS runner
 WORKDIR /app
-COPY --chown=node:node --from=builder /repo/apps/merchant/build ./
-COPY --chown=node:node --from=builder /repo/apps/merchant/package.json ./
+COPY --chown=node:node --chmod=0555 --from=builder /repo/apps/merchant/build ./
+COPY --chown=node:node --chmod=0555 --from=builder /repo/apps/merchant/package.json ./
 ENV NODE_ENV=production
 USER node
 EXPOSE 3000

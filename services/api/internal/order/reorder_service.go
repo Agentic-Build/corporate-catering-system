@@ -133,6 +133,12 @@ const (
 	reasonArchived     = "archived"
 )
 
+type reorderCandidate struct {
+	item  *ReorderMenuItem
+	qty   int
+	price int64
+}
+
 // Reorder clones the source order's surviving items into a new placed order.
 // Decrement-and-insert runs in one transaction so a mid-flight failure leaves
 // no partial order and restores any quota decremented. Availability checks
@@ -142,7 +148,32 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 	if err != nil {
 		return nil, fmt.Errorf("reorder: invalid supply_date %q: %w", in.SupplyDate, err)
 	}
+	src, err := s.validateReorderRequest(ctx, in)
+	if err != nil {
+		return nil, err
+	}
 
+	now := s.clock.Now()
+	survivors, unavailable, err := s.classifyReorderItems(ctx, src.Items, targetDay, now)
+	if err != nil {
+		return nil, err
+	}
+	if len(survivors) == 0 {
+		return &ReorderResult{NewOrderID: "", UnavailableItems: unavailable}, nil
+	}
+
+	o, err := s.buildReorderOrder(ctx, in, src, targetDay, now, survivors)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.persistReorderTx(ctx, in, src, o, targetDay); err != nil {
+		// Handler maps quota.ErrOutOfStock to 409.
+		return nil, err
+	}
+	return &ReorderResult{NewOrderID: o.ID, UnavailableItems: unavailable}, nil
+}
+
+func (s *ReorderService) validateReorderRequest(ctx context.Context, in ReorderInput) (*Order, error) {
 	src, err := s.orders.GetByID(ctx, in.SourceOrderID)
 	if err != nil {
 		return nil, err
@@ -150,94 +181,68 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 	if src.UserID != in.UserID {
 		return nil, ErrForbidden
 	}
-
 	// Source vendor must still serve the employee's (possibly changed) plant.
 	servingPlants, err := s.plants.ListByVendor(ctx, src.VendorID)
 	if err != nil {
 		return nil, err
 	}
-	served := false
 	for _, p := range servingPlants {
 		if p.Plant == in.Plant {
-			served = true
-			break
+			return src, nil
 		}
 	}
-	if !served {
-		return nil, ErrVendorPlantMismatch
-	}
+	return nil, ErrVendorPlantMismatch
+}
 
-	// First pass: classify each source item without touching quota.
-	type candidate struct {
-		item  *ReorderMenuItem
-		qty   int
-		price int64
-	}
-	survivors := make([]candidate, 0, len(src.Items))
+func (s *ReorderService) classifyReorderItems(ctx context.Context, items []Item, targetDay, now time.Time) ([]reorderCandidate, []UnavailableItem, error) {
+	survivors := make([]reorderCandidate, 0, len(items))
 	unavailable := make([]UnavailableItem, 0)
-	now := s.clock.Now()
-
-	for _, it := range src.Items {
-		mi, err := s.items.GetByID(ctx, it.MenuItemID)
+	for _, it := range items {
+		c, u, err := s.classifyOne(ctx, it, targetDay, now)
 		if err != nil {
-			// menu_item gone → treat as archived (no name to render).
-			if errors.Is(err, ErrReorderItemNotFound) {
-				unavailable = append(unavailable, UnavailableItem{
-					MenuItemID: it.MenuItemID,
-					Name:       "",
-					Reason:     reasonArchived,
-				})
-				continue
-			}
-			return nil, err
+			return nil, nil, err
 		}
-		if mi.Archived {
-			unavailable = append(unavailable, UnavailableItem{
-				MenuItemID: mi.ID,
-				Name:       mi.Name,
-				Reason:     reasonArchived,
-			})
+		if u != nil {
+			unavailable = append(unavailable, *u)
 			continue
 		}
-		sup, err := s.supply.Get(ctx, mi.ID, targetDay)
-		if err != nil {
-			if errors.Is(err, ErrReorderSupplyNotFound) {
-				unavailable = append(unavailable, UnavailableItem{
-					MenuItemID: mi.ID,
-					Name:       mi.Name,
-					Reason:     reasonNoSupply,
-				})
-				continue
-			}
-			return nil, err
-		}
-		if !now.Before(sup.CutoffAt) {
-			unavailable = append(unavailable, UnavailableItem{
-				MenuItemID: mi.ID,
-				Name:       mi.Name,
-				Reason:     reasonCutoffPassed,
-			})
-			continue
-		}
-		// Pre-check capacity from sup.Get so the partial-fallback UI can show
-		// "out_of_quota" even when no order is created. The authoritative atomic
-		// check still happens inside the tx via DecrementTx.
-		if sup.Remain < it.Qty {
-			unavailable = append(unavailable, UnavailableItem{
-				MenuItemID: mi.ID,
-				Name:       mi.Name,
-				Reason:     reasonOutOfQuota,
-			})
-			continue
-		}
-		survivors = append(survivors, candidate{item: mi, qty: it.Qty, price: mi.PriceMinor})
+		survivors = append(survivors, *c)
 	}
+	return survivors, unavailable, nil
+}
 
-	if len(survivors) == 0 {
-		return &ReorderResult{NewOrderID: "", UnavailableItems: unavailable}, nil
+func (s *ReorderService) classifyOne(ctx context.Context, it Item, targetDay, now time.Time) (*reorderCandidate, *UnavailableItem, error) {
+	mi, err := s.items.GetByID(ctx, it.MenuItemID)
+	if err != nil {
+		// menu_item gone → treat as archived (no name to render).
+		if errors.Is(err, ErrReorderItemNotFound) {
+			return nil, &UnavailableItem{MenuItemID: it.MenuItemID, Reason: reasonArchived}, nil
+		}
+		return nil, nil, err
 	}
+	if mi.Archived {
+		return nil, &UnavailableItem{MenuItemID: mi.ID, Name: mi.Name, Reason: reasonArchived}, nil
+	}
+	sup, err := s.supply.Get(ctx, mi.ID, targetDay)
+	if err != nil {
+		if errors.Is(err, ErrReorderSupplyNotFound) {
+			return nil, &UnavailableItem{MenuItemID: mi.ID, Name: mi.Name, Reason: reasonNoSupply}, nil
+		}
+		return nil, nil, err
+	}
+	if !now.Before(sup.CutoffAt) {
+		return nil, &UnavailableItem{MenuItemID: mi.ID, Name: mi.Name, Reason: reasonCutoffPassed}, nil
+	}
+	// Pre-check capacity from sup.Get so the partial-fallback UI can show
+	// "out_of_quota" even when no order is created. The authoritative atomic
+	// check still happens inside the tx via DecrementTx.
+	if sup.Remain < it.Qty {
+		return nil, &UnavailableItem{MenuItemID: mi.ID, Name: mi.Name, Reason: reasonOutOfQuota}, nil
+	}
+	return &reorderCandidate{item: mi, qty: it.Qty, price: mi.PriceMinor}, nil, nil
+}
 
-	// Build the new order shell; CreateTx fills ID/CreatedAt/UpdatedAt.
+func (s *ReorderService) buildReorderOrder(ctx context.Context, in ReorderInput, src *Order, targetDay, now time.Time, survivors []reorderCandidate) (*Order, error) {
 	domainItems := make([]Item, 0, len(survivors))
 	var totalPrice int64
 	for _, c := range survivors {
@@ -248,7 +253,6 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 		})
 		totalPrice += c.price * int64(c.qty)
 	}
-	placedAt := now
 	// Order cutoff_at gates a later Modify; compute it the same way Service.Place
 	// does (vendor cutoff hour, service tz, day before supply_date).
 	v, err := s.vendors.GetByID(ctx, src.VendorID)
@@ -260,7 +264,8 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 		loc = time.UTC
 	}
 	newCutoff := time.Date(targetDay.Year(), targetDay.Month(), targetDay.Day()-1, v.CutoffHour, 0, 0, 0, loc)
-	o := &Order{
+	placedAt := now
+	return &Order{
 		UserID:          in.UserID,
 		VendorID:        src.VendorID,
 		Plant:           in.Plant,
@@ -270,14 +275,16 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 		PlacedAt:        &placedAt,
 		CutoffAt:        newCutoff,
 		Items:           domainItems,
-	}
+	}, nil
+}
 
-	// Single tx: decrement quota for each survivor, insert order + items,
-	// state event + outbox + audit. Quota race on any survivor → ErrOutOfStock
-	// rolls back the whole tx (we don't try to drop one survivor and keep the
-	// rest — caller retries).
+// persistReorderTx writes the reorder atomically: decrement quota for each
+// survivor, insert order + items, state event + outbox + audit. Quota race on
+// any survivor → ErrOutOfStock rolls back the whole tx (we don't try to drop
+// one survivor and keep the rest — caller retries).
+func (s *ReorderService) persistReorderTx(ctx context.Context, in ReorderInput, src *Order, o *Order, targetDay time.Time) error {
 	role := "employee"
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		for _, it := range o.Items {
 			if _, err := s.supply.DecrementTx(ctx, tx, it.MenuItemID, targetDay, it.Qty); err != nil {
 				return err
@@ -304,10 +311,4 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 		}
 		return s.audit.WriteTx(ctx, tx, &in.UserID, &role, "order.reorder", "order", o.ID, payload, "")
 	})
-	if err != nil {
-		// Handler maps quota.ErrOutOfStock to 409.
-		return nil, err
-	}
-
-	return &ReorderResult{NewOrderID: o.ID, UnavailableItems: unavailable}, nil
 }

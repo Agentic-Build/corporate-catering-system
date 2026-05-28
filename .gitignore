@@ -83,3 +83,8 @@ playwright-report/
 
 # Claude Code per-agent isolated worktrees (harness-managed, never commit).
 .claude/worktrees/
+
+# Local planning files used by claude-code (kept out of git)
+task_plan.md
+findings.md
+progress.md

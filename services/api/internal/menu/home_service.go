@@ -125,52 +125,20 @@ const (
 // every meal_supply for today is past cutoff, skip forward to the next
 // orderable day (up to 14 days out).
 func (s *HomeService) Compute(ctx context.Context, userID, plant, dayOverride string) (HomeState, error) {
-	tz := s.ServerTZ
-	if tz == nil {
-		tz = time.Local
-	}
-	now := s.Clock.Now().In(tz)
-
 	if dayOverride != "" {
-		d, err := time.Parse(dateLayout, dayOverride)
-		if err != nil {
-			return HomeState{}, fmt.Errorf("day must be YYYY-MM-DD: %w", err)
-		}
-		day := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
-		summary, err := s.orderSummaryFor(ctx, userID, plant, day)
+		day, err := parseDayOverride(dayOverride)
 		if err != nil {
 			return HomeState{}, err
 		}
-		return HomeState{
-			TargetDay:    day.Format(dateLayout),
-			HasOrdered:   summary != nil,
-			OrderSummary: summary,
-		}, nil
+		return s.buildHomeStateForDay(ctx, userID, plant, day)
 	}
 
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	tomorrow := today.AddDate(0, 0, 1)
-
+	today := startOfDay(s.Clock.Now().In(s.serverTZ()))
 	row, err := s.RecentOrders.GetOrderByUserDate(ctx, userID, today, plant)
 	if err != nil {
 		return HomeState{}, fmt.Errorf("get order by user/date: %w", err)
 	}
-	if row != nil {
-		if row.Status == "picked_up" || row.Status == "no_show" {
-			next, err := s.nextOrderableDay(ctx, plant, tomorrow)
-			if err != nil {
-				return HomeState{}, fmt.Errorf("next-orderable-day: %w", err)
-			}
-			summary, err := s.orderSummaryFor(ctx, userID, plant, next)
-			if err != nil {
-				return HomeState{}, err
-			}
-			return HomeState{
-				TargetDay:    next.Format(dateLayout),
-				HasOrdered:   summary != nil,
-				OrderSummary: summary,
-			}, nil
-		}
+	if row != nil && !isClosedOrderStatus(row.Status) {
 		return HomeState{
 			TargetDay:    today.Format(dateLayout),
 			HasOrdered:   true,
@@ -178,19 +146,50 @@ func (s *HomeService) Compute(ctx context.Context, userID, plant, dayOverride st
 		}, nil
 	}
 
-	next, err := s.nextOrderableDay(ctx, plant, today)
+	startDay := today
+	if row != nil {
+		startDay = today.AddDate(0, 0, 1)
+	}
+	next, err := s.nextOrderableDay(ctx, plant, startDay)
 	if err != nil {
 		return HomeState{}, fmt.Errorf("next-orderable-day: %w", err)
 	}
-	summary, err := s.orderSummaryFor(ctx, userID, plant, next)
+	return s.buildHomeStateForDay(ctx, userID, plant, next)
+}
+
+func (s *HomeService) serverTZ() *time.Location {
+	if s.ServerTZ == nil {
+		return time.Local
+	}
+	return s.ServerTZ
+}
+
+func (s *HomeService) buildHomeStateForDay(ctx context.Context, userID, plant string, day time.Time) (HomeState, error) {
+	summary, err := s.orderSummaryFor(ctx, userID, plant, day)
 	if err != nil {
 		return HomeState{}, err
 	}
 	return HomeState{
-		TargetDay:    next.Format(dateLayout),
+		TargetDay:    day.Format(dateLayout),
 		HasOrdered:   summary != nil,
 		OrderSummary: summary,
 	}, nil
+}
+
+func parseDayOverride(s string) (time.Time, error) {
+	d, err := time.Parse(dateLayout, s)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("day must be YYYY-MM-DD: %w", err)
+	}
+	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC), nil
+}
+
+func startOfDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func isClosedOrderStatus(status string) bool {
+	return status == "picked_up" || status == "no_show"
 }
 
 func (s *HomeService) nextOrderableDay(ctx context.Context, plant string, start time.Time) (time.Time, error) {

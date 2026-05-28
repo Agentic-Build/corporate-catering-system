@@ -26,6 +26,7 @@ spec:
         app.kubernetes.io/component: provision-streams
     spec:
       restartPolicy: OnFailure
+      automountServiceAccountToken: false
       {{- include "tbite.imagePullSecrets" . | nindent 6 }}
       securityContext:
         {{- include "tbite.podSecurityContext" . | nindent 8 }}

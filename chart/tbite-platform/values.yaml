@@ -121,8 +121,8 @@ api:
   args: ["--role=api"]
   port: 8080
   resources:
-    requests: { cpu: 200m, memory: 256Mi }
-    limits:   { cpu: 1000m, memory: 768Mi }
+    requests: { cpu: 200m, memory: 256Mi, ephemeral-storage: 64Mi }
+    limits:   { cpu: 1000m, memory: 768Mi, ephemeral-storage: 512Mi }
   hpa:
     enabled: true
     customMetrics:
@@ -155,8 +155,8 @@ realtime:
   topicScope: "plant_date"
   terminationGracePeriodSeconds: 90
   resources:
-    requests: { cpu: 200m, memory: 256Mi }
-    limits:   { cpu: 1000m, memory: 768Mi }
+    requests: { cpu: 200m, memory: 256Mi, ephemeral-storage: 64Mi }
+    limits:   { cpu: 1000m, memory: 768Mi, ephemeral-storage: 512Mi }
   hpa:
     enabled: true
     customMetrics:
@@ -181,8 +181,8 @@ web:
       tag: ""
     port: 3000
     resources:
-      requests: { cpu: 100m, memory: 128Mi }
-      limits:   { cpu: 500m, memory: 384Mi }
+      requests: { cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 500m, memory: 384Mi, ephemeral-storage: 512Mi }
     hpa:
       enabled: true
       minReplicas: 2
@@ -199,8 +199,8 @@ web:
       tag: ""
     port: 3000
     resources:
-      requests: { cpu: 100m, memory: 128Mi }
-      limits:   { cpu: 500m, memory: 384Mi }
+      requests: { cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 500m, memory: 384Mi, ephemeral-storage: 512Mi }
     hpa:
       enabled: true
       minReplicas: 1
@@ -217,8 +217,8 @@ web:
       tag: ""
     port: 3000
     resources:
-      requests: { cpu: 100m, memory: 128Mi }
-      limits:   { cpu: 500m, memory: 384Mi }
+      requests: { cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 500m, memory: 384Mi, ephemeral-storage: 512Mi }
     hpa:
       enabled: true
       minReplicas: 1
@@ -235,8 +235,8 @@ workers:
     args: ["--role=outbox-relay"]
     probePort: 2112
     resources:
-      requests: { cpu: 100m, memory: 128Mi }
-      limits:   { cpu: 500m, memory: 384Mi }
+      requests: { cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 500m, memory: 384Mi, ephemeral-storage: 512Mi }
     keda:
       enabled: true
       minReplicas: 1
@@ -255,8 +255,8 @@ workers:
     args: ["--role=payroll-settler"]
     probePort: 2112
     resources:
-      requests: { cpu: 100m, memory: 128Mi }
-      limits:   { cpu: 500m, memory: 384Mi }
+      requests: { cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 500m, memory: 384Mi, ephemeral-storage: 512Mi }
     keda:
       enabled: true
       minReplicas: 1
@@ -272,8 +272,8 @@ workers:
     args: ["--role=on-time-evaluator"]
     probePort: 2112
     resources:
-      requests: { cpu: 100m, memory: 128Mi }
-      limits:   { cpu: 500m, memory: 384Mi }
+      requests: { cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 500m, memory: 384Mi, ephemeral-storage: 512Mi }
     keda:
       enabled: true
       minReplicas: 1
@@ -292,8 +292,8 @@ scheduler:
     probePort: 2112
     leaseName: tbite-cutoff-sweeper
     resources:
-      requests: { cpu: 50m, memory: 64Mi }
-      limits:   { cpu: 200m, memory: 192Mi }
+      requests: { cpu: 50m, memory: 64Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 200m, memory: 192Mi, ephemeral-storage: 512Mi }
   noShowSweeper:
     enabled: true
     replicaCount: 1
@@ -301,8 +301,8 @@ scheduler:
     probePort: 2112
     leaseName: tbite-no-show-sweeper
     resources:
-      requests: { cpu: 50m, memory: 64Mi }
-      limits:   { cpu: 200m, memory: 192Mi }
+      requests: { cpu: 50m, memory: 64Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 200m, memory: 192Mi, ephemeral-storage: 512Mi }
   documentExpiryScanner:
     enabled: true
     replicaCount: 1
@@ -310,8 +310,8 @@ scheduler:
     probePort: 2112
     leaseName: tbite-doc-expiry-scanner
     resources:
-      requests: { cpu: 50m, memory: 64Mi }
-      limits:   { cpu: 200m, memory: 192Mi }
+      requests: { cpu: 50m, memory: 64Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 200m, memory: 192Mi, ephemeral-storage: 512Mi }
   feedbackScanner:
     enabled: true
     replicaCount: 1
@@ -319,8 +319,8 @@ scheduler:
     probePort: 2112
     leaseName: tbite-feedback-scanner
     resources:
-      requests: { cpu: 50m, memory: 64Mi }
-      limits:   { cpu: 200m, memory: 192Mi }
+      requests: { cpu: 50m, memory: 64Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 200m, memory: 192Mi, ephemeral-storage: 512Mi }
 
 #-----------------------------------------------------------------------------
 # Helm hook Jobs (pre-install, pre-upgrade)
@@ -336,23 +336,23 @@ hooks:
     backoffLimit: 3
     activeDeadlineSeconds: 1800
     resources:
-      requests: { cpu: 50m, memory: 64Mi }
-      limits:   { cpu: 500m, memory: 256Mi }
+      requests: { cpu: 50m, memory: 64Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 500m, memory: 256Mi, ephemeral-storage: 512Mi }
   provisionStreams:
     enabled: true
     backoffLimit: 3
     activeDeadlineSeconds: 600
     resources:
-      requests: { cpu: 50m, memory: 64Mi }
-      limits:   { cpu: 500m, memory: 256Mi }
+      requests: { cpu: 50m, memory: 64Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 500m, memory: 256Mi, ephemeral-storage: 512Mi }
   bucketBootstrap:
     enabled: true
     image: { repository: minio/mc, tag: RELEASE.2025-08-13T08-35-41Z }
     backoffLimit: 3
     activeDeadlineSeconds: 600
     resources:
-      requests: { cpu: 50m, memory: 64Mi }
-      limits:   { cpu: 500m, memory: 256Mi }
+      requests: { cpu: 50m, memory: 64Mi, ephemeral-storage: 64Mi }
+      limits:   { cpu: 500m, memory: 256Mi, ephemeral-storage: 512Mi }
     extraBuckets: []
     policy: "private"
     # Prefixes opened to anonymous read (browser-direct image serving).
@@ -549,8 +549,8 @@ minioStandalone:
     size: 50Gi
     storageClass: ""
   resources:
-    requests: { cpu: 100m, memory: 256Mi }
-    limits:   { cpu: 500m, memory: 1Gi }
+    requests: { cpu: 100m, memory: 256Mi, ephemeral-storage: 64Mi }
+    limits:   { cpu: 500m, memory: 1Gi, ephemeral-storage: 512Mi }
   credentialsSecretRef:
     name: tbite-minio-root
     accessKeyKey: accessKey
