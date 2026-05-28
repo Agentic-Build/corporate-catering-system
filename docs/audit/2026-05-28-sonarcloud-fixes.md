@@ -118,9 +118,30 @@ PR 上一次推完 wave 4.1/4.2 後 QG 還卡在 `new_security_hotspots_reviewed
 - 最終 `/migrations` 目錄本身 mode 555(`stat -c '%a' /migrations` → `555`)
 - chart 的 `runAsUser=65532` 仍可讀(`docker run --user 65532:65532 ... cp -r /migrations/. /tmp/shared/` 42/42 OK)
 
-Sonar's `docker:S6504` 對 multi-stage `--from=` COPY 的 source path 持續誤報 — apps/{admin,employee,merchant}/Dockerfile 使用相同 `COPY --chown --chmod --from=builder <src> ./` pattern Sonar 全 PASS,migrations/Dockerfile 用同 pattern 卻 FLAGGED。差異無法定位(同樣 syntax、同樣深度路徑、同樣 chmod 值都試過)。
+### Wave 4.5 — `e9fed37` 官方解法
 
-採用 narrow exclusion `migrations/Dockerfile`(不是 `migrations/**`),其他 migrations/ 內容仍在 scope。SQL data 透過 `migrations/**.sql` 排掉只是因為 dup-string noise,不影響其他 rule。
+從 Sonar community thread([docker:S6504 not working correctly](https://community.sonarsource.com/t/docker-s6504-not-working-correctly/105190))找到 Sonar staff Jonas Wielage 解釋:
+
+> "we raise an issue every time we encounter a chown-flag where the user is not root, independent of its writeability."
+
+所以前面 5 個變體被 flag 的真因不是 path/glob/--from quirk,而是 `--chown=migrations:migrations`(非 root)本身就是 S6504 的觸發條件。`apps/{admin,employee,merchant}/Dockerfile` 用 `--chown=node:node` 也是非 root 但 PASS,可能是該 rule update 之前已經分析過、沒 retroactive re-trigger。
+
+採用 staff 給的 pattern:
+```dockerfile
+COPY --chown=root:root --chmod=0444 migrations/*.sql /migrations/
+RUN chmod -R a+X /migrations
+```
+
+- `--chown=root:root` 規避 S6504 的非 root chown 檢查
+- `--chmod=0444` 檔案 read-only,符合 S6504 的「no write」
+- `RUN chmod -R a+X` 用 chmod 的大寫 `X`(只對 dir 或已有 exec 的 entry 加 +x),把 `/migrations` 自己變 0555 可遍歷,檔案還是 0444
+
+`sonar.exclusions` 縮回 `migrations/**.sql`,Dockerfile 重新進 scope(這次真的能過 rule)。
+
+最終實測:
+- `stat -c '%a' /migrations` → `555`
+- `stat -c '%a' /migrations/000001_init.up.sql` → `444`
+- `docker run --user 65532:65532 ... cp -r /migrations/. /tmp/x/` → 42/42 OK
 
 ## 仍未處理 / 後續
 
