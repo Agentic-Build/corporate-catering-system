@@ -36,7 +36,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Frontend coverage (merchant + pickup have vitest configs)
+      - name: Frontend coverage
         run: |
           pnpm --filter @tbite/merchant exec vitest run --coverage || true
           pnpm --filter @tbite/pickup exec vitest run --coverage || true
