@@ -43,7 +43,7 @@ export const actions: Actions = {
     if (!locals.user) return fail(401, { ratingError: "unauthenticated" });
     const fd = await request.formData();
     const orderId = String(fd.get("order_id") ?? "").trim();
-    const score = parseInt(String(fd.get("score") ?? ""), 10);
+    const score = Number.parseInt(String(fd.get("score") ?? ""), 10);
     const comment = String(fd.get("comment") ?? "").trim();
     if (!orderId) return fail(400, { ratingError: "缺少訂單資訊" });
     if (!Number.isInteger(score) || score < 1 || score > 5) {
