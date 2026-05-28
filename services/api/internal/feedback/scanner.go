@@ -40,7 +40,7 @@ type FeedbackScanner struct {
 	Ratings    RatingRepository
 	Complaints ComplaintRepository
 	Anomaly    compliance.AnomalyRepository
-	Clock      Clock
+	Clock      Nower
 	Logger     *slog.Logger
 
 	// Interval is how often Run triggers a scan (default 1h).

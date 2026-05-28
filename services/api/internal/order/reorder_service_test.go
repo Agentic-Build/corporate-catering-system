@@ -152,19 +152,18 @@ func setupReorder(t *testing.T) reorderTestEnv {
 		Clock:       fixedClock{T: reorderClockTime},
 	}
 
-	reorderSvc := order.NewReorderService(
-		pool,
-		orderRepo,
-		supplyRepoAdapter{inner: supplyRepo},
-		itemRepoAdapter{inner: itemRepo},
-		vpg.NewVendorRepo(pool),
-		plantRepo,
-		stateRepo,
-		auditRepo,
-		outboxRepo,
-		fixedClock{T: reorderClockTime},
-		nil,
-	)
+	reorderSvc := order.NewReorderService(order.ReorderDeps{
+		Pool:    pool,
+		Orders:  orderRepo,
+		Supply:  supplyRepoAdapter{inner: supplyRepo},
+		Items:   itemRepoAdapter{inner: itemRepo},
+		Vendors: vpg.NewVendorRepo(pool),
+		Plants:  plantRepo,
+		State:   stateRepo,
+		Audit:   auditRepo,
+		Outbox:  outboxRepo,
+		Clock:   fixedClock{T: reorderClockTime},
+	})
 
 	cleanup := func() {
 		pool.Close()

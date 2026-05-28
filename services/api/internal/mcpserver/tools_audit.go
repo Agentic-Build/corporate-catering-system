@@ -37,13 +37,13 @@ func registerAuditTools(s *server.MCPServer, deps Deps) {
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			u, ok := userFromCtx(ctx)
 			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
+				return mcp.NewToolResultError(errNotAuthenticated), nil
 			}
 			if u.Role != identity.RoleWelfareAdmin {
 				return mcp.NewToolResultError("only welfare_admin can query audit"), nil
 			}
 			if deps.Compliance == nil {
-				return mcp.NewToolResultError("compliance service not configured"), nil
+				return mcp.NewToolResultError(errComplianceNotConfigured), nil
 			}
 			filter := compliance.AuditFilter{
 				TargetKind: req.GetString("target_kind", ""),

@@ -31,7 +31,7 @@ type ReorderSupply struct {
 // meal_supply row exists for the (item, date) pair.
 var ErrReorderSupplyNotFound = errors.New("reorder: supply not found")
 
-// ErrReorderItemNotFound is returned by reorderItemRepo.Get when the
+// ErrReorderItemNotFound is returned by reorderItemGetter.Get when the
 // menu_item row no longer exists.
 var ErrReorderItemNotFound = errors.New("reorder: menu item not found")
 
@@ -49,8 +49,8 @@ type reorderSupplyRepo interface {
 	DecrementTx(ctx context.Context, tx pgx.Tx, itemID string, date time.Time, n int) (int, error)
 }
 
-// reorderItemRepo is the smallest menu_item surface ReorderService needs.
-type reorderItemRepo interface {
+// reorderItemGetter is the smallest menu_item surface ReorderService needs.
+type reorderItemGetter interface {
 	GetByID(ctx context.Context, id string) (*ReorderMenuItem, error)
 }
 
@@ -63,44 +63,48 @@ type ReorderService struct {
 	pool    *pgxpool.Pool
 	orders  reorderOrderRepo
 	supply  reorderSupplyRepo
-	items   reorderItemRepo
+	items   reorderItemGetter
 	vendors VendorReader
 	plants  vendor.PlantMappingRepository
-	state   StateEventTx
-	audit   AuditTx
-	outbox  OutboxTx
-	clock   Clock
+	state   StateEventAppender
+	audit   AuditTxWriter
+	outbox  OutboxAppender
+	clock   Nower
 	// loc is the timezone for computing the order-level cutoff_at, matching
 	// Service.Location. Nil means UTC.
 	loc *time.Location
 }
 
+// ReorderDeps groups the dependencies passed to NewReorderService. The struct
+// form keeps the constructor under the 7-param ceiling.
+type ReorderDeps struct {
+	Pool     *pgxpool.Pool
+	Orders   reorderOrderRepo
+	Supply   reorderSupplyRepo
+	Items    reorderItemGetter
+	Vendors  VendorReader
+	Plants   vendor.PlantMappingRepository
+	State    StateEventAppender
+	Audit    AuditTxWriter
+	Outbox   OutboxAppender
+	Clock    Nower
+	Location *time.Location
+}
+
 // NewReorderService wires the service.
-func NewReorderService(
-	pool *pgxpool.Pool,
-	orders reorderOrderRepo,
-	supply reorderSupplyRepo,
-	items reorderItemRepo,
-	vendors VendorReader,
-	plants vendor.PlantMappingRepository,
-	state StateEventTx,
-	audit AuditTx,
-	outbox OutboxTx,
-	clock Clock,
-	loc *time.Location,
-) *ReorderService {
+func NewReorderService(d ReorderDeps) *ReorderService {
 	return &ReorderService{
-		pool:    pool,
-		orders:  orders,
-		supply:  supply,
-		items:   items,
-		vendors: vendors,
-		plants:  plants,
-		state:   state,
-		audit:   audit,
-		outbox:  outbox,
-		clock:   clock,
-		loc:     loc,
+		pool:    d.Pool,
+		orders:  d.Orders,
+		supply:  d.Supply,
+		items:   d.Items,
+		vendors: d.Vendors,
+		plants:  d.Plants,
+		state:   d.State,
+		audit:   d.Audit,
+		outbox:  d.Outbox,
+		clock:   d.Clock,
+		loc:     d.Location,
 	}
 }
 

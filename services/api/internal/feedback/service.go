@@ -24,7 +24,7 @@ const (
 )
 
 // Clock lets tests pin "now".
-type Clock interface{ Now() time.Time }
+type Nower interface{ Now() time.Time }
 
 // txBeginner is the transaction-starting surface of *pgxpool.Pool.
 type txBeginner interface {
@@ -38,8 +38,8 @@ type Service struct {
 	Ratings    RatingRepository
 	Complaints ComplaintRepository
 	Orders     OrderReader
-	Audit      AuditTx
-	Clock      Clock
+	Audit      AuditTxWriter
+	Clock      Nower
 	// Reverser is the payroll-reversal hook used by AdminResolveComplaint when
 	// resolving with compensation. compensate=true with Reverser=nil fails —
 	// silently skipping a money movement would mask a misconfiguration.
@@ -94,10 +94,17 @@ func (s *Service) RateOrder(ctx context.Context, in RateOrderInput) (*Rating, er
 		if err := s.Ratings.CreateTx(ctx, tx, r); err != nil {
 			return mapUniqueViolation(err)
 		}
-		return s.writeAudit(ctx, tx, in.UserID, "employee", "feedback.rate_order", "meal_rating", r.ID, map[string]any{
-			"order_id":  in.OrderID,
-			"vendor_id": o.VendorID,
-			"score":     in.Score,
+		return s.writeAudit(ctx, tx, auditEntry{
+			ActorID:    in.UserID,
+			ActorRole:  "employee",
+			Action:     "feedback.rate_order",
+			TargetKind: "meal_rating",
+			TargetID:   r.ID,
+			Payload: map[string]any{
+				"order_id":  in.OrderID,
+				"vendor_id": o.VendorID,
+				"score":     in.Score,
+			},
 		})
 	})
 	if err != nil {
@@ -154,10 +161,17 @@ func (s *Service) FileComplaint(ctx context.Context, in FileComplaintInput) (*Co
 		if err := s.Complaints.CreateTx(ctx, tx, c); err != nil {
 			return mapUniqueViolation(err)
 		}
-		return s.writeAudit(ctx, tx, in.UserID, "employee", "feedback.file_complaint", "meal_complaint", c.ID, map[string]any{
-			"order_id":  in.OrderID,
-			"vendor_id": o.VendorID,
-			"category":  string(in.Category),
+		return s.writeAudit(ctx, tx, auditEntry{
+			ActorID:    in.UserID,
+			ActorRole:  "employee",
+			Action:     "feedback.file_complaint",
+			TargetKind: "meal_complaint",
+			TargetID:   c.ID,
+			Payload: map[string]any{
+				"order_id":  in.OrderID,
+				"vendor_id": o.VendorID,
+				"category":  string(in.Category),
+			},
 		})
 	})
 	if err != nil {
@@ -182,10 +196,15 @@ func (s *Service) RespondToComplaint(ctx context.Context, complaintID, vendorID,
 	if len(strings.TrimSpace(response)) < minResponseLen {
 		return fmt.Errorf("%w: response must be at least %d characters", ErrValidation, minResponseLen)
 	}
-	return s.transition(ctx, c, StatusOpen, StatusVendorResponded,
-		ComplaintUpdate{VendorResponse: strings.TrimSpace(response)},
-		actorUserID, "vendor_operator", "feedback.complaint_respond",
-		map[string]any{"vendor_id": vendorID})
+	return s.transition(ctx, c, complaintTransition{
+		From:      StatusOpen,
+		To:        StatusVendorResponded,
+		Fields:    ComplaintUpdate{VendorResponse: strings.TrimSpace(response)},
+		ActorID:   actorUserID,
+		ActorRole: "vendor_operator",
+		Action:    "feedback.complaint_respond",
+		Extra:     map[string]any{"vendor_id": vendorID},
+	})
 }
 
 // EscalateComplaint is the employee action: open|vendor_responded → escalated.
@@ -205,10 +224,15 @@ func (s *Service) EscalateComplaint(ctx context.Context, complaintID, userID str
 	if s.Clock.Now().Before(c.CreatedAt.Add(escalateGate)) {
 		return ErrEscalateTooEarly
 	}
-	return s.transition(ctx, c, c.Status, StatusEscalated,
-		ComplaintUpdate{},
-		userID, "employee", "feedback.complaint_escalate",
-		map[string]any{"from": string(c.Status)})
+	return s.transition(ctx, c, complaintTransition{
+		From:      c.Status,
+		To:        StatusEscalated,
+		Fields:    ComplaintUpdate{},
+		ActorID:   userID,
+		ActorRole: "employee",
+		Action:    "feedback.complaint_escalate",
+		Extra:     map[string]any{"from": string(c.Status)},
+	})
 }
 
 // EmployeeResolveComplaint is the employee "satisfied" close: open|
@@ -224,10 +248,15 @@ func (s *Service) EmployeeResolveComplaint(ctx context.Context, complaintID, use
 	if c.Status != StatusOpen && c.Status != StatusVendorResponded {
 		return ErrInvalidTransition
 	}
-	return s.transition(ctx, c, c.Status, StatusResolved,
-		ComplaintUpdate{Resolution: "resolved by employee (satisfied)", ResolvedBy: &userID},
-		userID, "employee", "feedback.complaint_resolve",
-		map[string]any{"resolved_by_role": "employee", "from": string(c.Status)})
+	return s.transition(ctx, c, complaintTransition{
+		From:      c.Status,
+		To:        StatusResolved,
+		Fields:    ComplaintUpdate{Resolution: "resolved by employee (satisfied)", ResolvedBy: &userID},
+		ActorID:   userID,
+		ActorRole: "employee",
+		Action:    "feedback.complaint_resolve",
+		Extra:     map[string]any{"resolved_by_role": "employee", "from": string(c.Status)},
+	})
 }
 
 // AdminResolveComplaint closes an escalated complaint: escalated → resolved.
@@ -247,10 +276,15 @@ func (s *Service) AdminResolveComplaint(ctx context.Context, complaintID, adminU
 	if compensate && s.Reverser == nil {
 		return fmt.Errorf("compensation requested but reverser not configured")
 	}
-	if err := s.transition(ctx, c, StatusEscalated, StatusResolved,
-		ComplaintUpdate{Resolution: strings.TrimSpace(resolution), ResolvedBy: &adminUserID},
-		adminUserID, "welfare_admin", "feedback.complaint_resolve",
-		map[string]any{"resolved_by_role": "welfare_admin", "compensate": compensate}); err != nil {
+	if err := s.transition(ctx, c, complaintTransition{
+		From:      StatusEscalated,
+		To:        StatusResolved,
+		Fields:    ComplaintUpdate{Resolution: strings.TrimSpace(resolution), ResolvedBy: &adminUserID},
+		ActorID:   adminUserID,
+		ActorRole: "welfare_admin",
+		Action:    "feedback.complaint_resolve",
+		Extra:     map[string]any{"resolved_by_role": "welfare_admin", "compensate": compensate},
+	}); err != nil {
 		return err
 	}
 	if compensate {
@@ -259,22 +293,41 @@ func (s *Service) AdminResolveComplaint(ctx context.Context, complaintID, adminU
 	return nil
 }
 
+// complaintTransition bundles the inputs to Service.transition so the helper
+// keeps its parameter count under the >7 ceiling.
+type complaintTransition struct {
+	From      ComplaintStatus
+	To        ComplaintStatus
+	Fields    ComplaintUpdate
+	ActorID   string
+	ActorRole string
+	Action    string
+	Extra     map[string]any
+}
+
 // transition applies a complaint status change + audit row in one transaction.
-func (s *Service) transition(ctx context.Context, c *Complaint, from, to ComplaintStatus, fields ComplaintUpdate, actorID, actorRole, action string, extra map[string]any) error {
+func (s *Service) transition(ctx context.Context, c *Complaint, t complaintTransition) error {
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		if err := s.Complaints.UpdateStatusTx(ctx, tx, c.ID, from, to, fields); err != nil {
+		if err := s.Complaints.UpdateStatusTx(ctx, tx, c.ID, t.From, t.To, t.Fields); err != nil {
 			return err
 		}
 		payload := map[string]any{
 			"complaint_id": c.ID,
 			"order_id":     c.OrderID,
 			"vendor_id":    c.VendorID,
-			"to":           string(to),
+			"to":           string(t.To),
 		}
-		for k, v := range extra {
+		for k, v := range t.Extra {
 			payload[k] = v
 		}
-		return s.writeAudit(ctx, tx, actorID, actorRole, action, "meal_complaint", c.ID, payload)
+		return s.writeAudit(ctx, tx, auditEntry{
+			ActorID:    t.ActorID,
+			ActorRole:  t.ActorRole,
+			Action:     t.Action,
+			TargetKind: "meal_complaint",
+			TargetID:   c.ID,
+			Payload:    payload,
+		})
 	})
 }
 
@@ -299,10 +352,21 @@ func (s *Service) GetComplaint(ctx context.Context, id string) (*Complaint, erro
 	return s.Complaints.GetByID(ctx, id)
 }
 
-func (s *Service) writeAudit(ctx context.Context, tx pgx.Tx, actorID, actorRole, action, targetKind, targetID string, payload map[string]any) error {
-	aID := actorID
-	aRole := actorRole
-	return s.Audit.WriteTx(ctx, tx, &aID, &aRole, action, targetKind, targetID, payload, "")
+// auditEntry groups the audit-row attributes that the feedback service writes
+// inside a transaction. Keeps writeAudit under the >7 param ceiling.
+type auditEntry struct {
+	ActorID    string
+	ActorRole  string
+	Action     string
+	TargetKind string
+	TargetID   string
+	Payload    map[string]any
+}
+
+func (s *Service) writeAudit(ctx context.Context, tx pgx.Tx, e auditEntry) error {
+	aID := e.ActorID
+	aRole := e.ActorRole
+	return s.Audit.WriteTx(ctx, tx, &aID, &aRole, e.Action, e.TargetKind, e.TargetID, e.Payload, "")
 }
 
 func validCategory(c ComplaintCategory) bool {

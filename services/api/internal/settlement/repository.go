@@ -43,6 +43,6 @@ type OrderAggregateRepository interface {
 
 // AuditTx mirrors the audit-repo shape shared across services so settlement
 // writes can append an audit_event inside the same transaction.
-type AuditTx interface {
+type AuditTxWriter interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }

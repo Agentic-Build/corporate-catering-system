@@ -35,7 +35,7 @@ type DocumentExpiryScanner struct {
 	Interval   time.Duration
 	DaysWindow int
 	Logger     *slog.Logger
-	Clock      clock.Clock
+	Clock      clock.Nower
 }
 
 // RunOnce executes a single scan pass. Returns the number of documents

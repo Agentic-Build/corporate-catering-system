@@ -18,7 +18,6 @@ import (
 )
 
 func registerVendorTools(s *server.MCPServer, deps Deps) {
-	// === vendor.list ===
 	s.AddTool(
 		mcp.NewTool("vendor.list",
 			mcp.WithDescription("List vendors with optional status filter (welfare_admin only)"),
@@ -27,32 +26,8 @@ func registerVendorTools(s *server.MCPServer, deps Deps) {
 			),
 			annoReadOnly(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleWelfareAdmin {
-				return mcp.NewToolResultError("only welfare_admin can list vendors"), nil
-			}
-			if deps.Vendor == nil {
-				return mcp.NewToolResultError("vendor service not configured"), nil
-			}
-			var statuses []vendor.Status
-			if statusStr := req.GetString("status", ""); statusStr != "" {
-				statuses = []vendor.Status{vendor.Status(statusStr)}
-			}
-			vs, err := deps.Vendor.List(ctx, statuses)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			auditAfter(ctx, deps, "vendor.list", "vendor", "list", nil, u)
-			data, _ := json.Marshal(map[string]any{"count": len(vs), "vendors": vs})
-			return mcp.NewToolResultText(string(data)), nil
-		},
+		vendorListHandler(deps),
 	)
-
-	// === vendor.suspend (high-risk) ===
 	s.AddTool(
 		mcp.NewTool("vendor.suspend",
 			mcp.WithDescription("Suspend an approved vendor (welfare_admin only, high-risk)"),
@@ -65,35 +40,8 @@ func registerVendorTools(s *server.MCPServer, deps Deps) {
 			),
 			annoHighRiskAdmin(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleWelfareAdmin {
-				return mcp.NewToolResultError("only welfare_admin can suspend vendors"), nil
-			}
-			if deps.Vendor == nil {
-				return mcp.NewToolResultError("vendor service not configured"), nil
-			}
-			vendorID, err := req.RequireString("vendor_id")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			reason := req.GetString("reason", "")
-			if err := deps.Vendor.Suspend(ctx, vendorID, u.ID); err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			payload := map[string]any{}
-			if reason != "" {
-				payload["reason"] = reason
-			}
-			auditAfter(ctx, deps, "vendor.suspend", "vendor", vendorID, payload, u)
-			return mcp.NewToolResultText(`{"status":"suspended"}`), nil
-		},
+		vendorSuspendHandler(deps),
 	)
-
-	// === vendor.reinstate ===
 	s.AddTool(
 		mcp.NewTool("vendor.reinstate",
 			mcp.WithDescription("Reinstate a suspended vendor (welfare_admin only)"),
@@ -103,26 +51,82 @@ func registerVendorTools(s *server.MCPServer, deps Deps) {
 			),
 			annoReversible(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleWelfareAdmin {
-				return mcp.NewToolResultError("only welfare_admin can reinstate vendors"), nil
-			}
-			if deps.Vendor == nil {
-				return mcp.NewToolResultError("vendor service not configured"), nil
-			}
-			vendorID, err := req.RequireString("vendor_id")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			if err := deps.Vendor.Reinstate(ctx, vendorID, u.ID); err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			auditAfter(ctx, deps, "vendor.reinstate", "vendor", vendorID, nil, u)
-			return mcp.NewToolResultText(`{"status":"reinstated"}`), nil
-		},
+		vendorReinstateHandler(deps),
 	)
+}
+
+// adminVendorPrelude validates auth + welfare_admin role + Vendor wired.
+func adminVendorPrelude(ctx context.Context, deps Deps, denyMsg string) (*identity.User, *mcp.CallToolResult) {
+	u, ok := userFromCtx(ctx)
+	if !ok {
+		return nil, mcp.NewToolResultError(errNotAuthenticated)
+	}
+	if u.Role != identity.RoleWelfareAdmin {
+		return nil, mcp.NewToolResultError(denyMsg)
+	}
+	if deps.Vendor == nil {
+		return nil, mcp.NewToolResultError(errVendorNotConfigured)
+	}
+	return u, nil
+}
+
+func vendorListHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := adminVendorPrelude(ctx, deps, "only welfare_admin can list vendors")
+		if errRes != nil {
+			return errRes, nil
+		}
+		var statuses []vendor.Status
+		if statusStr := req.GetString("status", ""); statusStr != "" {
+			statuses = []vendor.Status{vendor.Status(statusStr)}
+		}
+		vs, err := deps.Vendor.List(ctx, statuses)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		auditAfter(ctx, deps, "vendor.list", "vendor", "list", nil, u)
+		data, _ := json.Marshal(map[string]any{"count": len(vs), "vendors": vs})
+		return mcp.NewToolResultText(string(data)), nil
+	}
+}
+
+func vendorSuspendHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := adminVendorPrelude(ctx, deps, "only welfare_admin can suspend vendors")
+		if errRes != nil {
+			return errRes, nil
+		}
+		vendorID, err := req.RequireString("vendor_id")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		reason := req.GetString("reason", "")
+		if err := deps.Vendor.Suspend(ctx, vendorID, u.ID); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		payload := map[string]any{}
+		if reason != "" {
+			payload["reason"] = reason
+		}
+		auditAfter(ctx, deps, "vendor.suspend", "vendor", vendorID, payload, u)
+		return mcp.NewToolResultText(`{"status":"suspended"}`), nil
+	}
+}
+
+func vendorReinstateHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := adminVendorPrelude(ctx, deps, "only welfare_admin can reinstate vendors")
+		if errRes != nil {
+			return errRes, nil
+		}
+		vendorID, err := req.RequireString("vendor_id")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		if err := deps.Vendor.Reinstate(ctx, vendorID, u.ID); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		auditAfter(ctx, deps, "vendor.reinstate", "vendor", vendorID, nil, u)
+		return mcp.NewToolResultText(`{"status":"reinstated"}`), nil
+	}
 }

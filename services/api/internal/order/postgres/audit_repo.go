@@ -34,7 +34,7 @@ func (r *AuditRepo) Write(ctx context.Context, actorID, actorRole *string, actio
 	})
 }
 
-// List satisfies compliance.AuditQuery so /api/admin/audit can read back
+// List satisfies compliance.AuditLister so /api/admin/audit can read back
 // recent rows. We cap limit at 200 to keep responses bounded; callers paginate
 // by tightening Since on subsequent requests.
 func (r *AuditRepo) List(ctx context.Context, filter compliance.AuditFilter) ([]compliance.AuditRow, error) {

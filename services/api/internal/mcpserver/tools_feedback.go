@@ -19,7 +19,6 @@ import (
 )
 
 func registerFeedbackTools(s *server.MCPServer, deps Deps) {
-	// === feedback.rate_order ===
 	s.AddTool(
 		mcp.NewTool("feedback.rate_order",
 			mcp.WithDescription("Submit a meal rating for a picked-up order (employee owner only)"),
@@ -36,42 +35,8 @@ func registerFeedbackTools(s *server.MCPServer, deps Deps) {
 			),
 			annoCreate(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleEmployee {
-				return mcp.NewToolResultError("only employee can rate orders"), nil
-			}
-			if deps.Feedback == nil {
-				return mcp.NewToolResultError("feedback service not configured"), nil
-			}
-			orderID, err := req.RequireString("order_id")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			score := int(req.GetFloat("score", 0))
-			comment := req.GetString("comment", "")
-			r, err := deps.Feedback.RateOrder(ctx, feedback.RateOrderInput{
-				OrderID: orderID,
-				UserID:  u.ID,
-				Score:   score,
-				Comment: comment,
-			})
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			auditAfter(ctx, deps, "feedback.rate_order", "meal_rating", r.ID, map[string]any{
-				"order_id": orderID,
-				"score":    score,
-			}, u)
-			data, _ := json.Marshal(r)
-			return mcp.NewToolResultText(string(data)), nil
-		},
+		feedbackRateOrderHandler(deps),
 	)
-
-	// === feedback.file_complaint ===
 	s.AddTool(
 		mcp.NewTool("feedback.file_complaint",
 			mcp.WithDescription("File a complaint for a picked-up order (employee owner only)"),
@@ -89,44 +54,87 @@ func registerFeedbackTools(s *server.MCPServer, deps Deps) {
 			),
 			annoCreate(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleEmployee {
-				return mcp.NewToolResultError("only employee can file complaints"), nil
-			}
-			if deps.Feedback == nil {
-				return mcp.NewToolResultError("feedback service not configured"), nil
-			}
-			orderID, err := req.RequireString("order_id")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			category, err := req.RequireString("category")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			description, err := req.RequireString("description")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			c, err := deps.Feedback.FileComplaint(ctx, feedback.FileComplaintInput{
-				OrderID:     orderID,
-				UserID:      u.ID,
-				Category:    feedback.ComplaintCategory(category),
-				Description: description,
-			})
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			auditAfter(ctx, deps, "feedback.file_complaint", "meal_complaint", c.ID, map[string]any{
-				"order_id": orderID,
-				"category": category,
-			}, u)
-			data, _ := json.Marshal(c)
-			return mcp.NewToolResultText(string(data)), nil
-		},
+		feedbackFileComplaintHandler(deps),
 	)
+}
+
+// feedbackEmployeePrelude validates auth + employee role + Feedback wired.
+func feedbackEmployeePrelude(ctx context.Context, deps Deps, denyMsg string) (*identity.User, *mcp.CallToolResult) {
+	u, ok := userFromCtx(ctx)
+	if !ok {
+		return nil, mcp.NewToolResultError(errNotAuthenticated)
+	}
+	if u.Role != identity.RoleEmployee {
+		return nil, mcp.NewToolResultError(denyMsg)
+	}
+	if deps.Feedback == nil {
+		return nil, mcp.NewToolResultError("feedback service not configured")
+	}
+	return u, nil
+}
+
+func feedbackRateOrderHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := feedbackEmployeePrelude(ctx, deps, "only employee can rate orders")
+		if errRes != nil {
+			return errRes, nil
+		}
+		orderID, err := req.RequireString("order_id")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		score := int(req.GetFloat("score", 0))
+		comment := req.GetString("comment", "")
+		r, err := deps.Feedback.RateOrder(ctx, feedback.RateOrderInput{
+			OrderID: orderID,
+			UserID:  u.ID,
+			Score:   score,
+			Comment: comment,
+		})
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		auditAfter(ctx, deps, "feedback.rate_order", "meal_rating", r.ID, map[string]any{
+			"order_id": orderID,
+			"score":    score,
+		}, u)
+		data, _ := json.Marshal(r)
+		return mcp.NewToolResultText(string(data)), nil
+	}
+}
+
+func feedbackFileComplaintHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := feedbackEmployeePrelude(ctx, deps, "only employee can file complaints")
+		if errRes != nil {
+			return errRes, nil
+		}
+		orderID, err := req.RequireString("order_id")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		category, err := req.RequireString("category")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		description, err := req.RequireString("description")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		c, err := deps.Feedback.FileComplaint(ctx, feedback.FileComplaintInput{
+			OrderID:     orderID,
+			UserID:      u.ID,
+			Category:    feedback.ComplaintCategory(category),
+			Description: description,
+		})
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		auditAfter(ctx, deps, "feedback.file_complaint", "meal_complaint", c.ID, map[string]any{
+			"order_id": orderID,
+			"category": category,
+		}, u)
+		data, _ := json.Marshal(c)
+		return mcp.NewToolResultText(string(data)), nil
+	}
 }

@@ -45,8 +45,6 @@ const (
 )
 
 func registerChatGPTTools(s *server.MCPServer, deps Deps) {
-	// Unified search across menu items + caller's own orders. ≤20 results
-	// (fits ChatGPT's tool-result token budget).
 	s.AddTool(
 		mcp.NewTool("search",
 			mcp.WithDescription("Search across the corporate catering platform. Returns matching menu items the employee can order today plus their recent orders. Use the returned IDs with the `fetch` tool to retrieve full details."),
@@ -56,77 +54,8 @@ func registerChatGPTTools(s *server.MCPServer, deps Deps) {
 			),
 			annoReadOnly(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if !canReadMenu(u.Role) {
-				return mcp.NewToolResultError(fmt.Sprintf("role %s cannot search", u.Role)), nil
-			}
-			q, err := req.RequireString("query")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			q = strings.TrimSpace(q)
-
-			results := []searchResult{}
-
-			// Menu items — only when we have a plant to scope by.
-			if deps.Menu != nil && u.Plant != nil && *u.Plant != "" {
-				now := time.Now()
-				day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
-				items, err := deps.Menu.ListForEmployee(ctx, menu.EmployeeMenuFilter{
-					Plant: *u.Plant,
-					Day:   day,
-					Q:     q,
-				})
-				if err == nil {
-					for _, it := range items {
-						if len(results) >= 20 {
-							break
-						}
-						results = append(results, searchResult{
-							ID:    prefixMenu + it.ID,
-							Title: it.Name,
-							Text:  formatMenuSnippet(it),
-							URL:   "/menu?date=" + day.Format("2006-01-02") + "&item=" + it.ID,
-						})
-					}
-				}
-			}
-
-			// 2) Orders — filter the caller's recent orders client-side by
-			//    matching the query against vendor + plant + supply_date.
-			//    Cheap because list_mine is bounded to ~30 days.
-			if deps.Order != nil && u.Role == identity.RoleEmployee && len(results) < 20 {
-				orders, err := deps.Order.ListByUser(ctx, u.ID)
-				if err == nil {
-					lower := strings.ToLower(q)
-					for _, o := range orders {
-						if len(results) >= 20 {
-							break
-						}
-						hay := strings.ToLower(o.Plant + " " + o.SupplyDate.Format("2006-01-02") + " " + string(o.Status))
-						if lower == "" || strings.Contains(hay, lower) {
-							results = append(results, searchResult{
-								ID:    prefixOrder + o.ID,
-								Title: fmt.Sprintf("Order %s — %s", shortID(o.ID), o.SupplyDate.Format("2006-01-02")),
-								Text:  fmt.Sprintf("plant=%s status=%s items=%d", o.Plant, o.Status, len(o.Items)),
-								URL:   "/orders/" + o.ID,
-							})
-						}
-					}
-				}
-			}
-
-			payload, _ := json.Marshal(map[string]any{"results": results})
-			return mcp.NewToolResultText(string(payload)), nil
-		},
+		chatGPTSearchHandler(deps),
 	)
-
-	// fetch: full document for one search-result id; route by prefix
-	// (menu:<uuid> / order:<uuid> / vendor:<uuid>).
 	s.AddTool(
 		mcp.NewTool("fetch",
 			mcp.WithDescription("Fetch the full content of one search result by ID. Accepts IDs returned by the `search` tool (prefixed with menu:, order:, or vendor:)."),
@@ -136,27 +65,111 @@ func registerChatGPTTools(s *server.MCPServer, deps Deps) {
 			),
 			annoReadOnly(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			id, err := req.RequireString("id")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			switch {
-			case strings.HasPrefix(id, prefixMenu):
-				return fetchMenuItem(ctx, deps, u, strings.TrimPrefix(id, prefixMenu))
-			case strings.HasPrefix(id, prefixOrder):
-				return fetchOrder(ctx, deps, u, strings.TrimPrefix(id, prefixOrder))
-			case strings.HasPrefix(id, prefixVendor):
-				return fetchVendor(ctx, deps, u, strings.TrimPrefix(id, prefixVendor))
-			default:
-				return mcp.NewToolResultError(fmt.Sprintf("unknown id prefix in %q; expected menu:, order:, or vendor:", id)), nil
-			}
-		},
+		chatGPTFetchHandler(deps),
 	)
+}
+
+// searchMenuItems appends up to (20 - len(results)) menu items matching q.
+func searchMenuItems(ctx context.Context, deps Deps, u *identity.User, q string, results []searchResult) []searchResult {
+	if deps.Menu == nil || u.Plant == nil || *u.Plant == "" {
+		return results
+	}
+	now := time.Now()
+	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	items, err := deps.Menu.ListForEmployee(ctx, menu.EmployeeMenuFilter{
+		Plant: *u.Plant,
+		Day:   day,
+		Q:     q,
+	})
+	if err != nil {
+		return results
+	}
+	for _, it := range items {
+		if len(results) >= 20 {
+			break
+		}
+		results = append(results, searchResult{
+			ID:    prefixMenu + it.ID,
+			Title: it.Name,
+			Text:  formatMenuSnippet(it),
+			URL:   "/menu?date=" + day.Format(dateLayoutISO) + "&item=" + it.ID,
+		})
+	}
+	return results
+}
+
+// searchOrders appends up to (20 - len(results)) of the user's orders that
+// match q against vendor/plant/supply_date.
+func searchOrders(ctx context.Context, deps Deps, u *identity.User, q string, results []searchResult) []searchResult {
+	if deps.Order == nil || u.Role != identity.RoleEmployee || len(results) >= 20 {
+		return results
+	}
+	orders, err := deps.Order.ListByUser(ctx, u.ID)
+	if err != nil {
+		return results
+	}
+	lower := strings.ToLower(q)
+	for _, o := range orders {
+		if len(results) >= 20 {
+			break
+		}
+		hay := strings.ToLower(o.Plant + " " + o.SupplyDate.Format(dateLayoutISO) + " " + string(o.Status))
+		if lower != "" && !strings.Contains(hay, lower) {
+			continue
+		}
+		results = append(results, searchResult{
+			ID:    prefixOrder + o.ID,
+			Title: fmt.Sprintf("Order %s — %s", shortID(o.ID), o.SupplyDate.Format(dateLayoutISO)),
+			Text:  fmt.Sprintf("plant=%s status=%s items=%d", o.Plant, o.Status, len(o.Items)),
+			URL:   "/orders/" + o.ID,
+		})
+	}
+	return results
+}
+
+func chatGPTSearchHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, ok := userFromCtx(ctx)
+		if !ok {
+			return mcp.NewToolResultError(errNotAuthenticated), nil
+		}
+		if !canReadMenu(u.Role) {
+			return mcp.NewToolResultError(fmt.Sprintf("role %s cannot search", u.Role)), nil
+		}
+		q, err := req.RequireString("query")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		q = strings.TrimSpace(q)
+		results := []searchResult{}
+		results = searchMenuItems(ctx, deps, u, q, results)
+		results = searchOrders(ctx, deps, u, q, results)
+		payload, _ := json.Marshal(map[string]any{"results": results})
+		return mcp.NewToolResultText(string(payload)), nil
+	}
+}
+
+func chatGPTFetchHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, ok := userFromCtx(ctx)
+		if !ok {
+			return mcp.NewToolResultError(errNotAuthenticated), nil
+		}
+		id, err := req.RequireString("id")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		switch {
+		case strings.HasPrefix(id, prefixMenu):
+			return fetchMenuItem(ctx, deps, u, strings.TrimPrefix(id, prefixMenu))
+		case strings.HasPrefix(id, prefixOrder):
+			return fetchOrder(ctx, deps, u, strings.TrimPrefix(id, prefixOrder))
+		case strings.HasPrefix(id, prefixVendor):
+			return fetchVendor(ctx, deps, u, strings.TrimPrefix(id, prefixVendor))
+		default:
+			return mcp.NewToolResultError(fmt.Sprintf("unknown id prefix in %q; expected menu:, order:, or vendor:", id)), nil
+		}
+	}
 }
 
 func fetchMenuItem(ctx context.Context, deps Deps, u *identity.User, itemID string) (*mcp.CallToolResult, error) {
@@ -180,7 +193,7 @@ func fetchMenuItem(ctx context.Context, deps Deps, u *identity.User, itemID stri
 			ID:    prefixMenu + it.ID,
 			Title: it.Name,
 			Text:  formatMenuFull(it),
-			URL:   "/menu?date=" + day.Format("2006-01-02") + "&item=" + it.ID,
+			URL:   "/menu?date=" + day.Format(dateLayoutISO) + "&item=" + it.ID,
 			Metadata: map[string]any{
 				"vendor":        it.VendorName,
 				"price_minor":   it.PriceMinor,
@@ -210,13 +223,13 @@ func fetchOrder(ctx context.Context, deps Deps, u *identity.User, orderID string
 	}
 	out := fetchResult{
 		ID:    prefixOrder + o.ID,
-		Title: fmt.Sprintf("Order %s — %s", shortID(o.ID), o.SupplyDate.Format("2006-01-02")),
+		Title: fmt.Sprintf("Order %s — %s", shortID(o.ID), o.SupplyDate.Format(dateLayoutISO)),
 		Text:  fmt.Sprintf("plant=%s status=%s items=%d", o.Plant, o.Status, len(o.Items)),
 		URL:   "/orders/" + o.ID,
 		Metadata: map[string]any{
 			"plant":       o.Plant,
 			"status":      o.Status,
-			"supply_date": o.SupplyDate.Format("2006-01-02"),
+			"supply_date": o.SupplyDate.Format(dateLayoutISO),
 			"items":       o.Items,
 			"vendor_id":   o.VendorID,
 			"created_at":  o.CreatedAt.Format(time.RFC3339),

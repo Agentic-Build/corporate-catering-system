@@ -21,18 +21,18 @@ type txBeginner interface {
 }
 
 // AuditTx mirrors the audit-repo shape used by order.Service.
-type AuditTx interface {
+type AuditTxWriter interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
 
 // OutboxTx mirrors the outbox-repo shape used by order.Service.
-type OutboxTx interface {
+type OutboxAppender interface {
 	AppendTx(ctx context.Context, tx pgx.Tx, aggregateType, aggregateID, subject string, payload map[string]any, headers map[string]any) error
 }
 
 // OrderTx is the order repo subset Service needs inside a transaction
 // (refund transitions picked_up/no_show → refunded).
-type OrderTx interface {
+type OrderStatusTxUpdater interface {
 	UpdateStatusTx(ctx context.Context, tx pgx.Tx, id string, from, to order.Status) error
 }
 
@@ -43,7 +43,7 @@ type OrderRepo interface {
 }
 
 // Clock lets tests pin "now".
-type Clock interface{ Now() time.Time }
+type Nower interface{ Now() time.Time }
 
 // Service orchestrates payroll Build / Lock / OpenDispute / ResolveDispute.
 // All multi-row writes run inside pgx.BeginFunc so partial failure rolls back atomically.
@@ -53,12 +53,12 @@ type Service struct {
 	Entries      EntryRepository
 	Disputes     DisputeRepository
 	Exceptions   ExceptionRepository
-	CurrentLines CurrentLinesRepository
+	CurrentLines CurrentLinesLister
 	Orders       OrderRepo
-	OrderTx      OrderTx
-	Audit        AuditTx
-	Outbox       OutboxTx
-	Clock        Clock
+	OrderTx      OrderStatusTxUpdater
+	Audit        AuditTxWriter
+	Outbox       OutboxAppender
+	Clock        Nower
 }
 
 // BuildDraftInput selects which supply dates roll into the draft batch.

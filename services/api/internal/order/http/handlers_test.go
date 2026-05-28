@@ -123,7 +123,7 @@ func (fakeStateRepo) ListByOrder(context.Context, string) ([]*order.StateEvent, 
 }
 func (fakeStateRepo) AppendTx(context.Context, pgx.Tx, *order.StateEvent) error { return nil }
 
-// fakeAuditRepo implements order.AuditRepository + order.AuditTx.
+// fakeAuditRepo implements order.AuditWriter + order.AuditTx.
 type fakeAuditRepo struct{}
 
 func (fakeAuditRepo) Write(context.Context, *string, *string, string, string, string, map[string]any, string) error {

@@ -17,7 +17,6 @@ import (
 )
 
 func registerPayrollTools(s *server.MCPServer, deps Deps) {
-	// === payroll.list_batches ===
 	s.AddTool(
 		mcp.NewTool("payroll.list_batches",
 			mcp.WithDescription("List payroll batches (welfare_admin only)"),
@@ -26,32 +25,8 @@ func registerPayrollTools(s *server.MCPServer, deps Deps) {
 			),
 			annoReadOnly(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleWelfareAdmin {
-				return mcp.NewToolResultError("only welfare_admin can list batches"), nil
-			}
-			if deps.Payroll == nil {
-				return mcp.NewToolResultError("payroll service not configured"), nil
-			}
-			var statuses []payroll.BatchStatus
-			if statusStr := req.GetString("status", ""); statusStr != "" {
-				statuses = []payroll.BatchStatus{payroll.BatchStatus(statusStr)}
-			}
-			bs, err := deps.Payroll.ListBatches(ctx, statuses)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			auditAfter(ctx, deps, "payroll.list_batches", "payroll_batch", "list", nil, u)
-			data, _ := json.Marshal(map[string]any{"count": len(bs), "batches": bs})
-			return mcp.NewToolResultText(string(data)), nil
-		},
+		payrollListBatchesHandler(deps),
 	)
-
-	// === payroll.lock_batch ===
 	s.AddTool(
 		mcp.NewTool("payroll.lock_batch",
 			mcp.WithDescription("Lock a draft payroll batch (welfare_admin only)"),
@@ -61,30 +36,8 @@ func registerPayrollTools(s *server.MCPServer, deps Deps) {
 			),
 			annoHighRiskAdmin(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleWelfareAdmin {
-				return mcp.NewToolResultError("only welfare_admin can lock batches"), nil
-			}
-			if deps.Payroll == nil {
-				return mcp.NewToolResultError("payroll service not configured"), nil
-			}
-			batchID, err := req.RequireString("batch_id")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			if err := deps.Payroll.Lock(ctx, batchID, u.ID); err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			auditAfter(ctx, deps, "payroll.lock_batch", "payroll_batch", batchID, nil, u)
-			return mcp.NewToolResultText(`{"status":"locked"}`), nil
-		},
+		payrollLockBatchHandler(deps),
 	)
-
-	// === payroll.resolve_dispute (high-risk on refund path) ===
 	s.AddTool(
 		mcp.NewTool("payroll.resolve_dispute",
 			mcp.WithDescription("Resolve a payroll dispute (welfare_admin only; high-risk on refund)"),
@@ -104,45 +57,96 @@ func registerPayrollTools(s *server.MCPServer, deps Deps) {
 			),
 			annoStateChange(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleWelfareAdmin {
-				return mcp.NewToolResultError("only welfare_admin can resolve disputes"), nil
-			}
-			if deps.Payroll == nil {
-				return mcp.NewToolResultError("payroll service not configured"), nil
-			}
-			disputeID, err := req.RequireString("dispute_id")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			statusStr, err := req.RequireString("status")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			if statusStr != string(payroll.DisputeStatusResolvedRefund) &&
-				statusStr != string(payroll.DisputeStatusResolvedReject) {
-				return mcp.NewToolResultError("status must be resolved_refund | resolved_reject"), nil
-			}
-			resolution := req.GetString("resolution", "")
-			refundMinor := int64(req.GetFloat("refund_minor", 0))
-			if err := deps.Payroll.ResolveDispute(ctx, payroll.ResolveDisputeInput{
-				DisputeID:   disputeID,
-				ResolvedBy:  u.ID,
-				Status:      payroll.DisputeStatus(statusStr),
-				Resolution:  resolution,
-				RefundMinor: refundMinor,
-			}); err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			auditAfter(ctx, deps, "payroll.resolve_dispute", "payroll_dispute", disputeID, map[string]any{
-				"status":       statusStr,
-				"refund_minor": refundMinor,
-			}, u)
-			return mcp.NewToolResultText(`{"status":"resolved"}`), nil
-		},
+		payrollResolveDisputeHandler(deps),
 	)
+}
+
+// adminPayrollPrelude validates auth + welfare_admin role + Payroll wired.
+func adminPayrollPrelude(ctx context.Context, deps Deps, denyMsg string) (*identity.User, *mcp.CallToolResult) {
+	u, ok := userFromCtx(ctx)
+	if !ok {
+		return nil, mcp.NewToolResultError(errNotAuthenticated)
+	}
+	if u.Role != identity.RoleWelfareAdmin {
+		return nil, mcp.NewToolResultError(denyMsg)
+	}
+	if deps.Payroll == nil {
+		return nil, mcp.NewToolResultError(errPayrollNotConfigured)
+	}
+	return u, nil
+}
+
+func payrollListBatchesHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := adminPayrollPrelude(ctx, deps, "only welfare_admin can list batches")
+		if errRes != nil {
+			return errRes, nil
+		}
+		var statuses []payroll.BatchStatus
+		if statusStr := req.GetString("status", ""); statusStr != "" {
+			statuses = []payroll.BatchStatus{payroll.BatchStatus(statusStr)}
+		}
+		bs, err := deps.Payroll.ListBatches(ctx, statuses)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		auditAfter(ctx, deps, "payroll.list_batches", "payroll_batch", "list", nil, u)
+		data, _ := json.Marshal(map[string]any{"count": len(bs), "batches": bs})
+		return mcp.NewToolResultText(string(data)), nil
+	}
+}
+
+func payrollLockBatchHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := adminPayrollPrelude(ctx, deps, "only welfare_admin can lock batches")
+		if errRes != nil {
+			return errRes, nil
+		}
+		batchID, err := req.RequireString("batch_id")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		if err := deps.Payroll.Lock(ctx, batchID, u.ID); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		auditAfter(ctx, deps, "payroll.lock_batch", "payroll_batch", batchID, nil, u)
+		return mcp.NewToolResultText(`{"status":"locked"}`), nil
+	}
+}
+
+func payrollResolveDisputeHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := adminPayrollPrelude(ctx, deps, "only welfare_admin can resolve disputes")
+		if errRes != nil {
+			return errRes, nil
+		}
+		disputeID, err := req.RequireString("dispute_id")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		statusStr, err := req.RequireString("status")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		if statusStr != string(payroll.DisputeStatusResolvedRefund) &&
+			statusStr != string(payroll.DisputeStatusResolvedReject) {
+			return mcp.NewToolResultError("status must be resolved_refund | resolved_reject"), nil
+		}
+		resolution := req.GetString("resolution", "")
+		refundMinor := int64(req.GetFloat("refund_minor", 0))
+		if err := deps.Payroll.ResolveDispute(ctx, payroll.ResolveDisputeInput{
+			DisputeID:   disputeID,
+			ResolvedBy:  u.ID,
+			Status:      payroll.DisputeStatus(statusStr),
+			Resolution:  resolution,
+			RefundMinor: refundMinor,
+		}); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		auditAfter(ctx, deps, "payroll.resolve_dispute", "payroll_dispute", disputeID, map[string]any{
+			"status":       statusStr,
+			"refund_minor": refundMinor,
+		}, u)
+		return mcp.NewToolResultText(`{"status":"resolved"}`), nil
+	}
 }

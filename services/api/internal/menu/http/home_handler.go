@@ -13,6 +13,11 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu/readmodel"
 )
 
+const (
+	errHomeNotAuthenticated = "not authenticated"
+	homeDateLayoutISO       = "2006-01-02"
+)
+
 // HomeAPI exposes the employee landing-page aggregate endpoint plus "see more"
 // pagination for reorder + recommendation chips (favorites pagination lives in
 // the menu API).
@@ -146,7 +151,7 @@ func (a *HomeAPI) Register(api huma.API) {
 func (a *HomeAPI) getHome(ctx context.Context, in *homeInput) (*homeOutput, error) {
 	user, ok := idhttp.UserFromContext(ctx)
 	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
+		return nil, huma.Error401Unauthorized(errHomeNotAuthenticated)
 	}
 	plant, err := requireEmployeePlant(user)
 	if err != nil {
@@ -158,7 +163,7 @@ func (a *HomeAPI) getHome(ctx context.Context, in *homeInput) (*homeOutput, erro
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	dayT, err := time.Parse("2006-01-02", state.TargetDay)
+	dayT, err := time.Parse(homeDateLayoutISO, state.TargetDay)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("internal: bad target_day", err)
 	}
@@ -219,7 +224,7 @@ func (a *HomeAPI) getHome(ctx context.Context, in *homeInput) (*homeOutput, erro
 func (a *HomeAPI) listReorders(ctx context.Context, in *reordersInput) (*reordersOutput, error) {
 	user, ok := idhttp.UserFromContext(ctx)
 	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
+		return nil, huma.Error401Unauthorized(errHomeNotAuthenticated)
 	}
 	plant, err := requireEmployeePlant(user)
 	if err != nil {
@@ -230,7 +235,7 @@ func (a *HomeAPI) listReorders(ctx context.Context, in *reordersInput) (*reorder
 	if err != nil {
 		return nil, huma.Error500InternalServerError("compute target day", err)
 	}
-	dayT, _ := time.Parse("2006-01-02", state.TargetDay)
+	dayT, _ := time.Parse(homeDateLayoutISO, state.TargetDay)
 	limit := in.Limit
 	if limit == 0 {
 		limit = 5
@@ -250,7 +255,7 @@ func (a *HomeAPI) listReorders(ctx context.Context, in *reordersInput) (*reorder
 func (a *HomeAPI) listRecommendations(ctx context.Context, in *recommendationsInput) (*recommendationsOutput, error) {
 	user, ok := idhttp.UserFromContext(ctx)
 	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
+		return nil, huma.Error401Unauthorized(errHomeNotAuthenticated)
 	}
 	plant, err := requireEmployeePlant(user)
 	if err != nil {
@@ -264,7 +269,7 @@ func (a *HomeAPI) listRecommendations(ctx context.Context, in *recommendationsIn
 		}
 		dayStr = state.TargetDay
 	}
-	dayT, perr := time.Parse("2006-01-02", dayStr)
+	dayT, perr := time.Parse(homeDateLayoutISO, dayStr)
 	if perr != nil {
 		return nil, huma.Error400BadRequest("day must be YYYY-MM-DD")
 	}

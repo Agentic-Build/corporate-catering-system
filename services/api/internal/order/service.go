@@ -41,22 +41,22 @@ type OrderTx interface {
 }
 
 // StateEventTx is the state-event repo subset used inside a transaction.
-type StateEventTx interface {
+type StateEventAppender interface {
 	AppendTx(ctx context.Context, tx pgx.Tx, ev *StateEvent) error
 }
 
 // AuditTx is the audit repo subset used inside a transaction.
-type AuditTx interface {
+type AuditTxWriter interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
 
 // OutboxTx is the outbox repo subset used inside a transaction.
-type OutboxTx interface {
+type OutboxAppender interface {
 	AppendTx(ctx context.Context, tx pgx.Tx, aggregateType, aggregateID, subject string, payload map[string]any, headers map[string]any) error
 }
 
 // Clock allows tests to control "now" for cutoff checks.
-type Clock interface{ Now() time.Time }
+type Nower interface{ Now() time.Time }
 
 // VendorReader is the vendor read dependency Place needs to resolve a vendor's
 // per-vendor cutoff hour.
@@ -72,16 +72,16 @@ type Service struct {
 	Orders      Repository
 	OrdersTx    OrderTx
 	StateEvents StateEventRepository
-	StateTx     StateEventTx
-	Audit       AuditRepository
-	AuditTx     AuditTx
+	StateTx     StateEventAppender
+	Audit       AuditWriter
+	AuditTx     AuditTxWriter
 	Outbox      OutboxRepository
-	OutboxTx    OutboxTx
+	OutboxTx    OutboxAppender
 	QuotaTx     QuotaTx
 	Items       menu.ItemRepository
 	Plants      vendor.PlantMappingRepository
 	Vendors     VendorReader
-	Clock       Clock
+	Clock       Nower
 	// Location is the timezone for computing a vendor's cutoff hour. Nil means
 	// UTC; production wires time.Local.
 	Location *time.Location
@@ -100,59 +100,51 @@ type PlaceOrderInput struct {
 	Notes      string
 }
 
-// Place creates an order in PLACED state inside a single transaction. On any
-// failure (including ErrOutOfStock) everything rolls back, so quota decrements
-// are released and no order / state / outbox / audit row is left behind.
-func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error) {
-	startedAt := time.Now()
-	// outcome / vendorIDRef are mutated below and read by the deferred emitter
-	// so dashboards can attribute every termination to (plant, vendor).
-	outcome := "success"
-	vendorIDRef := ""
-	defer func() {
-		observability.RecordOrderPlaceLatency(ctx, time.Since(startedAt).Seconds(), in.Plant, defaultMealWindow, outcome)
-		observability.RecordOrderPlaced(ctx, in.Plant, vendorIDRef, defaultMealWindow, outcome)
-	}()
-	if len(in.Items) == 0 {
-		outcome = "empty"
-		return nil, ErrEmptyOrder
-	}
+// resolvedItems is the validated item-set + derived totals shared by Place's
+// resolution and tx phases.
+type resolvedItems struct {
+	VendorID   string
+	TotalPrice int64
+	Items      []Item
+}
 
-	// Resolve menu items, verify a single vendor, and compute total price.
-	// Read-only lookups outside the tx avoid row locks on unmutated menu rows.
-	var vendorID string
-	var totalPrice int64
-	domainItems := make([]Item, 0, len(in.Items))
-	for _, pi := range in.Items {
+// resolvePlaceItems verifies each PlaceItem (qty, menu lookup, single vendor)
+// and returns the domain items plus the derived totals.
+func (s *Service) resolvePlaceItems(ctx context.Context, items []PlaceItem, outcome *string) (*resolvedItems, error) {
+	out := &resolvedItems{Items: make([]Item, 0, len(items))}
+	for _, pi := range items {
 		if pi.Qty <= 0 {
-			outcome = "invalid_qty"
+			*outcome = "invalid_qty"
 			return nil, fmt.Errorf("order: item qty must be positive")
 		}
 		mi, err := s.Items.GetByID(ctx, pi.MenuItemID)
 		if err != nil {
-			outcome = "menu_item_lookup_failed"
+			*outcome = "menu_item_lookup_failed"
 			return nil, err
 		}
-		if vendorID == "" {
-			vendorID = mi.VendorID
-			vendorIDRef = vendorID
-		} else if vendorID != mi.VendorID {
-			outcome = "multi_vendor"
+		if out.VendorID == "" {
+			out.VendorID = mi.VendorID
+		} else if out.VendorID != mi.VendorID {
+			*outcome = "multi_vendor"
 			return nil, ErrMultiVendor
 		}
-		domainItems = append(domainItems, Item{
+		out.Items = append(out.Items, Item{
 			MenuItemID:     pi.MenuItemID,
 			Qty:            pi.Qty,
 			UnitPriceMinor: mi.PriceMinor,
 		})
-		totalPrice += mi.PriceMinor * int64(pi.Qty)
+		out.TotalPrice += mi.PriceMinor * int64(pi.Qty)
 	}
+	return out, nil
+}
 
-	// Verify the vendor serves the requesting plant.
+// validateVendorPlacement verifies the vendor serves the plant and that the
+// supply_date falls inside the cutoff + preorder window. Returns cutoffAt + now.
+func (s *Service) validateVendorPlacement(ctx context.Context, in PlaceOrderInput, vendorID string, outcome *string) (time.Time, time.Time, error) {
 	plants, err := s.Plants.ListByVendor(ctx, vendorID)
 	if err != nil {
-		outcome = "plants_lookup_failed"
-		return nil, err
+		*outcome = "plants_lookup_failed"
+		return time.Time{}, time.Time{}, err
 	}
 	served := false
 	for _, p := range plants {
@@ -162,16 +154,13 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		}
 	}
 	if !served {
-		outcome = "vendor_plant_mismatch"
-		return nil, ErrVendorPlantMismatch
+		*outcome = "vendor_plant_mismatch"
+		return time.Time{}, time.Time{}, ErrVendorPlantMismatch
 	}
-
-	// Cutoff: the vendor's configured cutoff hour, local time, the day before
-	// the supply date.
 	v, err := s.Vendors.GetByID(ctx, vendorID)
 	if err != nil {
-		outcome = "vendor_lookup_failed"
-		return nil, err
+		*outcome = "vendor_lookup_failed"
+		return time.Time{}, time.Time{}, err
 	}
 	loc := s.Location
 	if loc == nil {
@@ -180,39 +169,26 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 	cutoffAt := time.Date(in.SupplyDate.Year(), in.SupplyDate.Month(), in.SupplyDate.Day()-1, v.CutoffHour, 0, 0, 0, loc)
 	now := s.Clock.Now()
 	if !now.Before(cutoffAt) {
-		outcome = "cutoff_passed"
-		return nil, ErrCutoffPassed
+		*outcome = "cutoff_passed"
+		return time.Time{}, time.Time{}, ErrCutoffPassed
 	}
-
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
-	maxDate := today.AddDate(0, 0, v.PreorderWindowDays)
-	if in.SupplyDate.After(maxDate) {
-		outcome = "outside_preorder_window"
-		return nil, ErrOutsidePreorderWindow
+	if in.SupplyDate.After(today.AddDate(0, 0, v.PreorderWindowDays)) {
+		*outcome = "outside_preorder_window"
+		return time.Time{}, time.Time{}, ErrOutsidePreorderWindow
 	}
+	return cutoffAt, now, nil
+}
 
-	placedAt := now
-	o := &Order{
-		UserID:          in.UserID,
-		VendorID:        vendorID,
-		Plant:           in.Plant,
-		SupplyDate:      in.SupplyDate,
-		Status:          StatusPlaced,
-		TotalPriceMinor: totalPrice,
-		Notes:           in.Notes,
-		PlacedAt:        &placedAt,
-		CutoffAt:        cutoffAt,
-		Items:           domainItems,
-	}
-
-	// quotaExhaustedItem is set inside the closure when Decrement returns
-	// ErrOutOfStock so the post-commit emit can include the offending item.
-	var quotaExhaustedItem string
-	err = MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+// persistPlacedOrder runs the decrement-quota / insert-order / state / outbox /
+// audit writes inside one tx. Sets *quotaExhaustedItem when DecrementTx
+// returns ErrOutOfStock.
+func (s *Service) persistPlacedOrder(ctx context.Context, in PlaceOrderInput, o *Order, quotaExhaustedItem *string) error {
+	return MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		for _, it := range o.Items {
 			if _, err := s.QuotaTx.DecrementTx(ctx, tx, it.MenuItemID, in.SupplyDate, it.Qty); err != nil {
 				if errors.Is(err, quota.ErrOutOfStock) {
-					quotaExhaustedItem = it.MenuItemID
+					*quotaExhaustedItem = it.MenuItemID
 				}
 				return err
 			}
@@ -238,18 +214,63 @@ func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error)
 		}
 		return s.AuditTx.WriteTx(ctx, tx, &in.UserID, &role, "order.place", "order", o.ID, payload, "")
 	}))
+}
+
+// Place creates an order in PLACED state inside a single transaction. On any
+// failure (including ErrOutOfStock) everything rolls back, so quota decrements
+// are released and no order / state / outbox / audit row is left behind.
+func (s *Service) Place(ctx context.Context, in PlaceOrderInput) (*Order, error) {
+	startedAt := time.Now()
+	outcome := "success"
+	vendorIDRef := ""
+	defer func() {
+		observability.RecordOrderPlaceLatency(ctx, time.Since(startedAt).Seconds(), in.Plant, defaultMealWindow, outcome)
+		observability.RecordOrderPlaced(ctx, in.Plant, vendorIDRef, defaultMealWindow, outcome)
+	}()
+	if len(in.Items) == 0 {
+		outcome = "empty"
+		return nil, ErrEmptyOrder
+	}
+
+	resolved, err := s.resolvePlaceItems(ctx, in.Items, &outcome)
 	if err != nil {
-		if quotaExhaustedItem != "" {
+		return nil, err
+	}
+	vendorIDRef = resolved.VendorID
+
+	cutoffAt, now, err := s.validateVendorPlacement(ctx, in, resolved.VendorID, &outcome)
+	if err != nil {
+		return nil, err
+	}
+
+	placedAt := now
+	o := &Order{
+		UserID:          in.UserID,
+		VendorID:        resolved.VendorID,
+		Plant:           in.Plant,
+		SupplyDate:      in.SupplyDate,
+		Status:          StatusPlaced,
+		TotalPriceMinor: resolved.TotalPrice,
+		Notes:           in.Notes,
+		PlacedAt:        &placedAt,
+		CutoffAt:        cutoffAt,
+		Items:           resolved.Items,
+	}
+
+	var quotaExhaustedItem string
+	if err := s.persistPlacedOrder(ctx, in, o, &quotaExhaustedItem); err != nil {
+		switch {
+		case quotaExhaustedItem != "":
 			outcome = "quota_exhausted"
-			observability.RecordQuotaExhausted(ctx, in.Plant, vendorID, defaultMealWindow, quotaExhaustedItem)
-		} else if errors.Is(err, ErrConcurrentModification) {
+			observability.RecordQuotaExhausted(ctx, in.Plant, resolved.VendorID, defaultMealWindow, quotaExhaustedItem)
+		case errors.Is(err, ErrConcurrentModification):
 			outcome = "concurrent_modification"
-		} else {
+		default:
 			outcome = "tx_error"
 		}
 		return nil, err
 	}
-	observability.RecordOrderPrice(ctx, totalPrice, in.Plant, vendorID)
+	observability.RecordOrderPrice(ctx, resolved.TotalPrice, in.Plant, resolved.VendorID)
 	return o, nil
 }
 
@@ -314,41 +335,21 @@ type ModifyOrderInput struct {
 	Notes   string
 }
 
-// Modify replaces the items of a user-owned PLACED order before its cutoff.
-// Quota is adjusted by per-menu-item delta inside one transaction so failures
-// don't leak quota. Order ID and status are unchanged — only items + total —
-// so no state event is written, only an audit row + order.modified.v1 outbox.
-func (s *Service) Modify(ctx context.Context, in ModifyOrderInput) (*Order, error) {
-	if len(in.Items) == 0 {
-		return nil, ErrEmptyOrder
-	}
-	o, err := s.Orders.GetByID(ctx, in.OrderID)
-	if err != nil {
-		return nil, err
-	}
-	if o.UserID != in.UserID {
-		return nil, ErrForbidden
-	}
-	if o.Status != StatusPlaced {
-		return nil, ErrInvalidTransition
-	}
-	if !s.Clock.Now().Before(o.CutoffAt) {
-		return nil, ErrCutoffPassed
-	}
-
-	// Resolve the new item set; every item must belong to the order's vendor.
+// resolveModifyItems verifies the new items belong to the order's vendor and
+// returns the domain items + total price.
+func (s *Service) resolveModifyItems(ctx context.Context, items []PlaceItem, vendorID string) ([]Item, int64, error) {
 	var totalPrice int64
-	newItems := make([]Item, 0, len(in.Items))
-	for _, pi := range in.Items {
+	newItems := make([]Item, 0, len(items))
+	for _, pi := range items {
 		if pi.Qty <= 0 {
-			return nil, fmt.Errorf("order: item qty must be positive")
+			return nil, 0, fmt.Errorf("order: item qty must be positive")
 		}
 		mi, err := s.Items.GetByID(ctx, pi.MenuItemID)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		if mi.VendorID != o.VendorID {
-			return nil, ErrMultiVendor
+		if mi.VendorID != vendorID {
+			return nil, 0, ErrMultiVendor
 		}
 		newItems = append(newItems, Item{
 			MenuItemID:     pi.MenuItemID,
@@ -357,18 +358,25 @@ func (s *Service) Modify(ctx context.Context, in ModifyOrderInput) (*Order, erro
 		})
 		totalPrice += mi.PriceMinor * int64(pi.Qty)
 	}
+	return newItems, totalPrice, nil
+}
 
-	// Per-menu-item quota delta: desired qty minus currently-held qty. A
-	// positive delta decrements quota, negative restores it, zero is a no-op.
+// quotaDeltaForModify returns the per-menu-item desired_qty − current_qty delta.
+func quotaDeltaForModify(current, desired []Item) map[string]int {
 	delta := map[string]int{}
-	for _, it := range o.Items {
+	for _, it := range current {
 		delta[it.MenuItemID] -= it.Qty
 	}
-	for _, it := range newItems {
+	for _, it := range desired {
 		delta[it.MenuItemID] += it.Qty
 	}
+	return delta
+}
 
-	err = MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+// persistModifiedOrder applies the quota delta, swaps the item rows + total +
+// notes, then writes outbox + audit, all inside a single tx.
+func (s *Service) persistModifiedOrder(ctx context.Context, in ModifyOrderInput, o *Order, newItems []Item, totalPrice int64, delta map[string]int) error {
+	return MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		for itemID, d := range delta {
 			switch {
 			case d > 0:
@@ -394,7 +402,35 @@ func (s *Service) Modify(ctx context.Context, in ModifyOrderInput) (*Order, erro
 		role := "employee"
 		return s.AuditTx.WriteTx(ctx, tx, &in.UserID, &role, "order.modify", "order", o.ID, payload, "")
 	}))
+}
+
+// Modify replaces the items of a user-owned PLACED order before its cutoff.
+// Quota is adjusted by per-menu-item delta inside one transaction so failures
+// don't leak quota. Order ID and status are unchanged — only items + total —
+// so no state event is written, only an audit row + order.modified.v1 outbox.
+func (s *Service) Modify(ctx context.Context, in ModifyOrderInput) (*Order, error) {
+	if len(in.Items) == 0 {
+		return nil, ErrEmptyOrder
+	}
+	o, err := s.Orders.GetByID(ctx, in.OrderID)
 	if err != nil {
+		return nil, err
+	}
+	if o.UserID != in.UserID {
+		return nil, ErrForbidden
+	}
+	if o.Status != StatusPlaced {
+		return nil, ErrInvalidTransition
+	}
+	if !s.Clock.Now().Before(o.CutoffAt) {
+		return nil, ErrCutoffPassed
+	}
+	newItems, totalPrice, err := s.resolveModifyItems(ctx, in.Items, o.VendorID)
+	if err != nil {
+		return nil, err
+	}
+	delta := quotaDeltaForModify(o.Items, newItems)
+	if err := s.persistModifiedOrder(ctx, in, o, newItems, totalPrice, delta); err != nil {
 		return nil, err
 	}
 	observability.RecordOrderModified(ctx, o.Plant, o.VendorID)

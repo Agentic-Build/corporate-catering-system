@@ -21,8 +21,8 @@ type txBeginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-// objectStore is the blob-write surface of *storage.S3Client.
-type objectStore interface {
+// objectPutter is the blob-write surface of *storage.S3Client.
+type objectPutter interface {
 	PutObject(ctx context.Context, key string, body io.Reader, contentType string) (string, error)
 }
 
@@ -32,20 +32,20 @@ type VendorSuspender interface {
 }
 
 // Clock lets tests pin "now".
-type Clock interface{ Now() time.Time }
+type Nower interface{ Now() time.Time }
 
 // AuditTx mirrors the audit-repo shape used by order/payroll services.
-type AuditTx interface {
+type AuditTxWriter interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
 
 // OutboxTx mirrors the outbox-repo shape used by order/payroll services.
-type OutboxTx interface {
+type OutboxAppender interface {
 	AppendTx(ctx context.Context, tx pgx.Tx, aggregateType, aggregateID, subject string, payload map[string]any, headers map[string]any) error
 }
 
-// AuditQuery is the minimal read-side interface for /api/admin/audit.
-type AuditQuery interface {
+// AuditLister is the minimal read-side interface for /api/admin/audit.
+type AuditLister interface {
 	List(ctx context.Context, filter AuditFilter) ([]AuditRow, error)
 }
 
@@ -57,7 +57,7 @@ type AuditFilter struct {
 	Limit      int
 }
 
-// AuditRow is a single row returned by AuditQuery.List.
+// AuditRow is a single row returned by AuditLister.List.
 type AuditRow struct {
 	ID         int64
 	ActorID    *string
@@ -76,11 +76,11 @@ type Service struct {
 	Pool     txBeginner
 	Docs     DocumentRepository
 	Anomaly  AnomalyRepository
-	Storage  objectStore
-	Audit    AuditTx
-	Outbox   OutboxTx
-	AuditQry AuditQuery
-	Clock    Clock
+	Storage  objectPutter
+	Audit    AuditTxWriter
+	Outbox   OutboxAppender
+	AuditQry AuditLister
+	Clock    Nower
 	// Vendors backs the merchant compliance self-view (GET /api/merchant/compliance).
 	Vendors VendorReader
 	// VendorGov executes anomaly-triage governance actions (suspend). Optional;

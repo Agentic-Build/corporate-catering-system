@@ -228,9 +228,9 @@ func (s *Service) ListForEmployee(ctx context.Context, f EmployeeMenuFilter) ([]
 	return out, nil
 }
 
-// BatchImageRepository is an optional capability (postgres ImageRepo): load
+// BatchImageLister is an optional capability (postgres ImageRepo): load
 // images for many items in one query, avoiding ListForEmployee's N+1.
-type BatchImageRepository interface {
+type BatchImageLister interface {
 	ListByItems(ctx context.Context, itemIDs []string) (map[string][]*Image, error)
 }
 
@@ -245,7 +245,7 @@ func (s *Service) imageURIsForRows(ctx context.Context, rows []*ActiveItemRow) (
 		}
 		return uris
 	}
-	if batch, ok := s.Images.(BatchImageRepository); ok {
+	if batch, ok := s.Images.(BatchImageLister); ok {
 		ids := make([]string, len(rows))
 		for i, r := range rows {
 			ids[i] = r.Item.ID

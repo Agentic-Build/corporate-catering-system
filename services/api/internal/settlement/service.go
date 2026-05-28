@@ -9,7 +9,10 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/observability"
 )
 
-const auditActorRole = "welfare_admin"
+const (
+	auditActorRole = "welfare_admin"
+	dateLayoutISO  = "2006-01-02"
+)
 
 // txBeginner is the transaction-starting surface of *pgxpool.Pool.
 type txBeginner interface {
@@ -23,7 +26,7 @@ type Service struct {
 	Pool        txBeginner
 	Settlements SettlementRepository
 	Orders      OrderAggregateRepository
-	Audit       AuditTx
+	Audit       AuditTxWriter
 }
 
 // CloseSettlementInput selects the period to settle.
@@ -73,11 +76,11 @@ func (s *Service) CloseSettlement(ctx context.Context, in CloseSettlementInput) 
 		}
 		actorRole := auditActorRole
 		payload := map[string]any{
-			"period_start": in.PeriodStart.Format("2006-01-02"),
-			"period_end":   in.PeriodEnd.Format("2006-01-02"),
+			"period_start": in.PeriodStart.Format(dateLayoutISO),
+			"period_end":   in.PeriodEnd.Format(dateLayoutISO),
 			"vendor_count": len(out),
 		}
-		return s.Audit.WriteTx(ctx, tx, &closedBy, &actorRole, "settlement.close", "vendor_settlement_period", in.PeriodStart.Format("2006-01-02")+"/"+in.PeriodEnd.Format("2006-01-02"), payload, "")
+		return s.Audit.WriteTx(ctx, tx, &closedBy, &actorRole, "settlement.close", "vendor_settlement_period", in.PeriodStart.Format(dateLayoutISO)+"/"+in.PeriodEnd.Format(dateLayoutISO), payload, "")
 	})
 	if err != nil {
 		return nil, err
@@ -107,8 +110,8 @@ func (s *Service) VoidSettlement(ctx context.Context, id, voidedBy string) error
 		payload := map[string]any{
 			"settlement_id": id,
 			"vendor_id":     st.VendorID,
-			"period_start":  st.PeriodStart.Format("2006-01-02"),
-			"period_end":    st.PeriodEnd.Format("2006-01-02"),
+			"period_start":  st.PeriodStart.Format(dateLayoutISO),
+			"period_end":    st.PeriodEnd.Format(dateLayoutISO),
 		}
 		return s.Audit.WriteTx(ctx, tx, &voidedBy, &actorRole, "settlement.void", "vendor_settlement", id, payload, "")
 	})

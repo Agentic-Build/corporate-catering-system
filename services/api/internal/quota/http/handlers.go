@@ -12,6 +12,8 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
 )
 
+const dateLayoutISO = "2006-01-02"
+
 // API exposes vendor-facing quota endpoints (set/list supply for the merchant).
 // Decrement/Restore are not surfaced here — order placement (P3) consumes the
 // repo directly. Employee `remain` is already served by GET /api/employee/menu.
@@ -35,7 +37,7 @@ func toDTO(s *quota.Supply) supplyDTO {
 	return supplyDTO{
 		ID:           s.ID,
 		MenuItemID:   s.MenuItemID,
-		SupplyDate:   s.SupplyDate.Format("2006-01-02"),
+		SupplyDate:   s.SupplyDate.Format(dateLayoutISO),
 		Capacity:     s.Capacity,
 		Remain:       s.Remain,
 		SoldOut:      s.SoldOut,
@@ -118,7 +120,7 @@ func parseDate(s string, fallback time.Time) (time.Time, error) {
 	if s == "" {
 		return fallback, nil
 	}
-	t, err := time.Parse("2006-01-02", s)
+	t, err := time.Parse(dateLayoutISO, s)
 	if err != nil {
 		return time.Time{}, huma.Error400BadRequest("invalid date (want YYYY-MM-DD)")
 	}
@@ -187,7 +189,7 @@ func (a *API) list(ctx context.Context, in *listSupplyInput) (*listSupplyOutput,
 		return nil, mapErr(err)
 	}
 	var resp listSupplyOutput
-	resp.Body.Date = day.Format("2006-01-02")
+	resp.Body.Date = day.Format(dateLayoutISO)
 	resp.Body.Items = make([]supplyDTO, 0, len(supplies))
 	for _, s := range supplies {
 		resp.Body.Items = append(resp.Body.Items, toDTO(s))

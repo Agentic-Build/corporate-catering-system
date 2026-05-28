@@ -109,65 +109,17 @@ func main() {
 	}
 	observability.MustInitMetrics()
 
-	// Cloud-native split roles short-circuit before api/mcp-stdio so the
-	// per-role bodies stay in roles.go.
-	switch role {
-	case config.RoleOutboxRelay:
-		if err := runOutboxRelay(ctx, logger, cfg); err != nil {
-			logger.Error("outbox-relay", "err", err)
-			os.Exit(1)
-		}
-		return
-	case config.RolePayrollSettler:
-		if err := runPayrollSettler(ctx, logger, cfg); err != nil {
-			logger.Error("payroll-settler", "err", err)
-			os.Exit(1)
-		}
-		return
-	case config.RoleOnTimeEvaluator:
-		if err := runOnTimeEvaluator(ctx, logger, cfg); err != nil {
-			logger.Error("on-time-evaluator", "err", err)
-			os.Exit(1)
-		}
-		return
-	case config.RoleCutoffSweeper:
-		if err := runCutoffSweeper(ctx, logger, cfg); err != nil {
-			logger.Error("cutoff-sweeper", "err", err)
-			os.Exit(1)
-		}
-		return
-	case config.RoleNoShowSweeper:
-		if err := runNoShowSweeper(ctx, logger, cfg); err != nil {
-			logger.Error("no-show-sweeper", "err", err)
-			os.Exit(1)
-		}
-		return
-	case config.RoleDocExpiryScanner:
-		if err := runDocExpiryScanner(ctx, logger, cfg); err != nil {
-			logger.Error("document-expiry-scanner", "err", err)
-			os.Exit(1)
-		}
-		return
-	case config.RoleFeedbackScanner:
-		if err := runFeedbackScanner(ctx, logger, cfg); err != nil {
-			logger.Error("feedback-scanner", "err", err)
-			os.Exit(1)
-		}
-		return
-	case config.RoleRealtimeGateway:
-		if err := runRealtimeGateway(ctx, logger, cfg); err != nil {
-			logger.Error("realtime-gateway", "err", err)
-			os.Exit(1)
-		}
-		return
-	case config.RoleProvisionStreams:
-		if err := runProvisionStreams(ctx, logger, cfg); err != nil {
-			logger.Error("provision-streams", "err", err)
-			os.Exit(1)
-		}
+	dispatch(ctx, logger, cfg, role)
+}
+
+// dispatch routes the parsed role to its runner and translates errors into
+// the process exit code. Split roles short-circuit first; the API + MCP
+// stdio runners follow.
+func dispatch(ctx context.Context, logger *slog.Logger, cfg config.Config, role config.Role) {
+	if runner, ok := splitRoleRunners()[role]; ok {
+		runRoleOrExit(ctx, logger, cfg, role, runner)
 		return
 	}
-
 	appRunners := map[config.Role]func(context.Context, *slog.Logger, config.Config) error{
 		config.RoleAPI:      runAPI,
 		config.RoleMCPStdio: runMCPStdio,
@@ -183,10 +135,36 @@ func main() {
 	}
 }
 
+// splitRoleRunners returns the role → runner table for the cloud-native split
+// roles (one Deployment per role).
+func splitRoleRunners() map[config.Role]func(context.Context, *slog.Logger, config.Config) error {
+	return map[config.Role]func(context.Context, *slog.Logger, config.Config) error{
+		config.RoleOutboxRelay:      runOutboxRelay,
+		config.RolePayrollSettler:   runPayrollSettler,
+		config.RoleOnTimeEvaluator:  runOnTimeEvaluator,
+		config.RoleCutoffSweeper:    runCutoffSweeper,
+		config.RoleNoShowSweeper:    runNoShowSweeper,
+		config.RoleDocExpiryScanner: runDocExpiryScanner,
+		config.RoleFeedbackScanner:  runFeedbackScanner,
+		config.RoleRealtimeGateway:  runRealtimeGateway,
+		config.RoleProvisionStreams: runProvisionStreams,
+	}
+}
+
+// runRoleOrExit invokes runner; on error it logs (role, err) and exits 1.
+func runRoleOrExit(ctx context.Context, logger *slog.Logger, cfg config.Config, role config.Role, runner func(context.Context, *slog.Logger, config.Config) error) {
+	if err := runner(ctx, logger, cfg); err != nil {
+		logger.Error(string(role), "err", err)
+		os.Exit(1)
+	}
+}
+
 // noopCleanup is the no-op cleanup returned by setup helpers that haven't
 // acquired any resource yet (early-error paths and the NATS-off branch).
 // Callers can `defer cleanup()` unconditionally.
-func noopCleanup() {}
+func noopCleanup() {
+	// intentionally empty: returned when there is no resource to release
+}
 
 type apiInfra struct {
 	pool   *pgxpool.Pool
@@ -433,13 +411,19 @@ func setupHomeAndReadModel(ctx context.Context, cfg config.Config, cs *coreServi
 	favoriteRepo := mpgrepo.NewFavoriteRepo(inf.pool)
 	favoritesAPI := &mhttp.FavoritesAPI{Svc: menu.NewFavoritesService(favoriteRepo)}
 
-	reorderAPI := &ohttp.ReorderAPI{Svc: order.NewReorderService(
-		inf.pool, cs.OrderRepo,
-		p9SupplyRepoAdapter{inner: cs.SupplyRepo},
-		p9ItemRepoAdapter{inner: cs.ItemRepo},
-		cs.VendorRepo, cs.PlantRepo, cs.StateEventRepo, cs.AuditRepo, cs.OutboxRepo,
-		clock.SystemClock{}, appLocation(),
-	)}
+	reorderAPI := &ohttp.ReorderAPI{Svc: order.NewReorderService(order.ReorderDeps{
+		Pool:     inf.pool,
+		Orders:   cs.OrderRepo,
+		Supply:   p9SupplyRepoAdapter{inner: cs.SupplyRepo},
+		Items:    p9ItemRepoAdapter{inner: cs.ItemRepo},
+		Vendors:  cs.VendorRepo,
+		Plants:   cs.PlantRepo,
+		State:    cs.StateEventRepo,
+		Audit:    cs.AuditRepo,
+		Outbox:   cs.OutboxRepo,
+		Clock:    clock.SystemClock{},
+		Location: appLocation(),
+	})}
 
 	homeCache := &readmodel.RedisCache{C: inf.rdb, Prefix: "tbite:rm:"}
 	homeMetrics := readmodel.NewMetrics()

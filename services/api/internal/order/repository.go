@@ -24,7 +24,7 @@ type StateEventRepository interface {
 	ListByOrder(ctx context.Context, orderID string) ([]*StateEvent, error)
 }
 
-type AuditRepository interface {
+type AuditWriter interface {
 	Write(ctx context.Context, actorID *string, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
 

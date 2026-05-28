@@ -12,37 +12,37 @@ import (
 )
 
 // OrdersTx is the order-repo subset Cutoff uses inside a transaction.
-type OrdersTx interface {
+type OrderStatusUpdater interface {
 	UpdateStatusTx(ctx context.Context, tx pgx.Tx, id string, from, to order.Status) error
 }
 
 // StateTx is the state-event-repo subset used inside a transaction.
-type StateTx interface {
+type StateAppender interface {
 	AppendTx(ctx context.Context, tx pgx.Tx, ev *order.StateEvent) error
 }
 
 // AuditTx is the audit-repo subset used inside a transaction.
-type AuditTx interface {
+type AuditTxWriter interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
 
 // OutboxTx is the outbox-repo subset used inside a transaction.
-type OutboxTx interface {
+type OutboxAppender interface {
 	AppendTx(ctx context.Context, tx pgx.Tx, aggregateType, aggregateID, subject string, payload map[string]any, headers map[string]any) error
 }
 
 // Clock allows tests to control "now".
-type Clock interface{ Now() time.Time }
+type Nower interface{ Now() time.Time }
 
 // Cutoff runs the daily cutoff transition (placed → cutoff) for orders past cutoff_at.
 type Cutoff struct {
 	Pool     *pgxpool.Pool
 	Orders   order.Repository
-	OrdersTx OrdersTx
-	StateTx  StateTx
-	AuditTx  AuditTx
-	OutboxTx OutboxTx
-	Clock    Clock
+	OrdersTx OrderStatusUpdater
+	StateTx  StateAppender
+	AuditTx  AuditTxWriter
+	OutboxTx OutboxAppender
+	Clock    Nower
 	Logger   *slog.Logger
 }
 

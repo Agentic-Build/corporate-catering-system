@@ -28,8 +28,8 @@ import (
 
 const consumerName = "payroll-settler"
 
-// UserLookup resolves a user_id to the subset of "user" columns the HR CSV needs.
-type UserLookup interface {
+// UserGetter resolves a user_id to the subset of "user" columns the HR CSV needs.
+type UserGetter interface {
 	GetByID(ctx context.Context, id string) (*PayrollUser, error)
 }
 
@@ -68,7 +68,7 @@ type Settler struct {
 	Pool       *pgxpool.Pool
 	Batches    payroll.BatchRepository
 	Entries    payroll.EntryRepository
-	Users      UserLookup
+	Users      UserGetter
 	Exceptions ExceptionLister
 	Storage    *storage.S3Client
 	Logger     *slog.Logger
