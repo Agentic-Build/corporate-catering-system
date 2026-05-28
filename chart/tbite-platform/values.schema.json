@@ -160,7 +160,9 @@
     "authentikBlueprints": { "type": "object" },
     "authentikBootstrap": { "type": "object" },
     "crdsReady": { "type": "boolean" },
-    "tbite": { "type": "object" }
+    "tbite": { "type": "object" },
+    "fullnameOverride": { "type": "string" },
+    "nameOverride": { "type": "string" }
   },
   "additionalProperties": false,
   "allOf": [
