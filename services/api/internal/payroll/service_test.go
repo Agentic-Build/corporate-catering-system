@@ -19,10 +19,10 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	opg "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
-	ppg "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
+	opg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
+	ppg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll/postgres"
 )
 
 type fixedClock struct{ T time.Time }

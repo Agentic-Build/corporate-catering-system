@@ -10,17 +10,17 @@ import (
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 
-	chttp "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/http"
-	dlqhttp "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/http"
-	feedbackhttp "github.com/takalawang/corporate-catering-system/services/api/internal/feedback/http"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
-	mhttp "github.com/takalawang/corporate-catering-system/services/api/internal/menu/http"
-	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
-	payrollhttp "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/http"
-	phttp "github.com/takalawang/corporate-catering-system/services/api/internal/plants/http"
-	qhttp "github.com/takalawang/corporate-catering-system/services/api/internal/quota/http"
-	settlementhttp "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/http"
-	vhttp "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/http"
+	chttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance/http"
+	dlqhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/dlq/http"
+	feedbackhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/feedback/http"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
+	mhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu/http"
+	ohttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/http"
+	payrollhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll/http"
+	phttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/plants/http"
+	qhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota/http"
+	settlementhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/settlement/http"
+	vhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors/http"
 )
 
 func main() {

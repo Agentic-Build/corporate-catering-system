@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/oidc"
 )
 
 // Bridge serves login + consent + OIDC callback endpoints that connect Hydra's

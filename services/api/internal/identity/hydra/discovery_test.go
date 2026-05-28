@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/hydra"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/hydra"
 )
 
 // TestDiscoveryShim_InjectsRegistrationEndpoint pins the fix for Hydra

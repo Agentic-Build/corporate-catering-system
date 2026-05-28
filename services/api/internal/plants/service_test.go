@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/plants"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/plants"
 )
 
 // fakePlantRepo is an in-memory implementation for testing.

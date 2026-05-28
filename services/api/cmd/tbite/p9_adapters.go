@@ -7,12 +7,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
-	mpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu/readmodel"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
-	qpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
+	mpgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu/readmodel"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
+	qpgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota/postgres"
 )
 
 // p9ItemRepoAdapter bridges *mpgrepo.ItemRepo into order.ReorderService's

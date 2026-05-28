@@ -6,8 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/observability"
 )
 
 // ReverseOrder reverses (沖銷) the salary deduction for a single charged order.

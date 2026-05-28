@@ -12,8 +12,8 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota/postgres"
 )
 
 // gaugePoints returns the int64 gauge data points for the named instrument

@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
-	pgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
+	pgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance/postgres"
 )
 
 func TestAnomalyRepo_OpenAndGet(t *testing.T) {

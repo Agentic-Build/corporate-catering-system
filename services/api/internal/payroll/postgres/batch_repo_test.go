@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
-	pgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
+	pgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll/postgres"
 )
 
 func mkPeriod(t *testing.T, year int, month time.Month) (time.Time, time.Time) {

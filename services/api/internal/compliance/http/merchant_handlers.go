@@ -12,8 +12,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 )
 
 type vendorInfoDTO struct {

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 )
 
 type Config struct {

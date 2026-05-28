@@ -12,8 +12,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
-	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/observability"
+	vendor "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors"
 )
 
 // txBeginner is the transaction-starting surface of *pgxpool.Pool.

@@ -16,8 +16,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
 )
 
 func registerOrderTools(s *server.MCPServer, deps Deps) {

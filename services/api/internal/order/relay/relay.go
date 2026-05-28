@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/messaging"
 )
 
 type Relay struct {

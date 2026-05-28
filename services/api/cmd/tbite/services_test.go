@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/config"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/config"
 )
 
 // Asserts every wired field is non-nil — cmd/ has no other test coverage, so

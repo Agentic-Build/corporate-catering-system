@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/oidc"
 )
 
 func setupRedis(t *testing.T) (*redis.Client, func()) {

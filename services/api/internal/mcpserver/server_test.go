@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/mcpserver"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/mcpserver"
 )
 
 func TestMCPServer_BootEmpty(t *testing.T) {

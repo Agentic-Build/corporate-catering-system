@@ -10,9 +10,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
-	ohttp "github.com/takalawang/corporate-catering-system/services/api/internal/order/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
+	ohttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/http"
 )
 
 // buildReorderHandler wires only the reorder endpoint. The ReorderService has a

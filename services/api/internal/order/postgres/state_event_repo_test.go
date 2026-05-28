@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	pgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
+	pgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
 )
 
 func TestStateEventRepo_AppendAndList(t *testing.T) {

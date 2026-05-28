@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/plants"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/plants/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/plants"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/plants/postgres"
 )
 
 func TestPlantRepo_CreateAndGet(t *testing.T) {

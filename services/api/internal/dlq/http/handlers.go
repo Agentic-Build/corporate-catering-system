@@ -17,9 +17,9 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/dlq"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/dlq"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 )
 
 // API wires the DLQ repository and (optionally) a JetStream client used by

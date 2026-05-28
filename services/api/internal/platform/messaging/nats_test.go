@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	tcnats "github.com/testcontainers/testcontainers-go/modules/nats"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/messaging"
 )
 
 func setupNATS(t *testing.T) (string, func()) {

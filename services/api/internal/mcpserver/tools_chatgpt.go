@@ -17,8 +17,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
 )
 
 // searchResult is the ChatGPT-required item shape; URL deep-links into the app.

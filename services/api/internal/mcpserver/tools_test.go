@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/mcpserver"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/mcpserver"
 )
 
 // TestMCPServer_RegistersExpectedTools is a structural smoke test: with empty

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu/postgres"
 )
 
 // --- helpers reused by popularity/affinity/recent_orders tests ---

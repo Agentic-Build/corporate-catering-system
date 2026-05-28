@@ -19,9 +19,9 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	opg "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/settlement"
-	spg "github.com/takalawang/corporate-catering-system/services/api/internal/settlement/postgres"
+	opg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/settlement"
+	spg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/settlement/postgres"
 )
 
 func migrationsDir() string {

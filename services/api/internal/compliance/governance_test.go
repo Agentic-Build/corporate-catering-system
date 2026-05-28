@@ -19,10 +19,10 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
-	cpg "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/postgres"
-	opg "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	vendorpkg "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
+	cpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance/postgres"
+	opg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
+	vendorpkg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors"
 )
 
 // failingAudit always errors, used to assert state changes roll back when the

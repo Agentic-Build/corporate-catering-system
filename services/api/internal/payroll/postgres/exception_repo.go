@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
 )
 
 type ExceptionRepo struct{ pool *pgxpool.Pool }

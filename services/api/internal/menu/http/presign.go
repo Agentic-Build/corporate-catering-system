@@ -16,7 +16,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 )
 
 // maxImageBytes caps a single uploaded image at 2 MB; enforced via the

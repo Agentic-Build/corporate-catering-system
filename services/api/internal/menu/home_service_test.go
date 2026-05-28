@@ -19,10 +19,10 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
-	mpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
-	opgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
+	mpgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu/postgres"
+	opgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/clock"
 )
 
 // ---------- Postgres testcontainer boilerplate (local to this _test package) ----------

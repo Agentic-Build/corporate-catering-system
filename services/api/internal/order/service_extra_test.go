@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	menu "github.com/takalawang/corporate-catering-system/services/api/internal/menu"
-	mpg "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	opg "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	qpg "github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
-	vpg "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/postgres"
+	menu "github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
+	mpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
+	opg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
+	qpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota/postgres"
+	vpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors/postgres"
 )
 
 const missingUUID = "99999999-9999-9999-9999-999999999999"

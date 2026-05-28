@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 )
 
 func TestUpsertVendorOperatorCreatesUserAndRecoveryLink(t *testing.T) {
