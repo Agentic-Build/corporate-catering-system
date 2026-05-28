@@ -2,7 +2,6 @@ package settlementhttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -338,21 +337,4 @@ func (a *API) voidSettlement(ctx context.Context, in *settlementIDInput) (*struc
 		return nil, mapErr(err)
 	}
 	return &struct{}{}, nil
-}
-
-// mapErr translates settlement sentinels to huma HTTP errors.
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, settlement.ErrSettlementNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, settlement.ErrForbidden):
-		return huma.Error403Forbidden(err.Error())
-	case errors.Is(err, settlement.ErrInvalidPeriod),
-		errors.Is(err, settlement.ErrNoOrdersInPeriod):
-		return huma.Error400BadRequest(err.Error())
-	case errors.Is(err, settlement.ErrPeriodAlreadyClosed),
-		errors.Is(err, settlement.ErrInvalidTransition):
-		return huma.Error409Conflict(err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
 }

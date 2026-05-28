@@ -2,7 +2,6 @@ package qhttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
-	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
 )
 
@@ -195,14 +193,4 @@ func (a *API) list(ctx context.Context, in *listSupplyInput) (*listSupplyOutput,
 		resp.Body.Items = append(resp.Body.Items, toDTO(s))
 	}
 	return &resp, nil
-}
-
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, quota.ErrSupplyNotFound), errors.Is(err, menu.ErrItemNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, menu.ErrForbidden):
-		return huma.Error403Forbidden(err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
 }

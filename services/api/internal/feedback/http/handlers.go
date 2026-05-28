@@ -5,13 +5,13 @@ package feedbackhttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/feedback"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 )
@@ -73,22 +73,13 @@ func toComplaintDTO(c *feedback.Complaint) complaintDTO {
 		Resolution:     c.Resolution,
 		CreatedAt:      c.CreatedAt.UTC().Format(time.RFC3339),
 	}
-	if c.VendorRespondedAt != nil {
-		s := c.VendorRespondedAt.UTC().Format(time.RFC3339)
-		out.VendorRespondedAt = &s
-	}
-	if c.EscalatedAt != nil {
-		s := c.EscalatedAt.UTC().Format(time.RFC3339)
-		out.EscalatedAt = &s
-	}
+	out.VendorRespondedAt = httpserver.FormatNullableTimePtr(c.VendorRespondedAt)
+	out.EscalatedAt = httpserver.FormatNullableTimePtr(c.EscalatedAt)
 	if c.ResolvedBy != nil {
 		s := *c.ResolvedBy
 		out.ResolvedBy = &s
 	}
-	if c.ResolvedAt != nil {
-		s := c.ResolvedAt.UTC().Format(time.RFC3339)
-		out.ResolvedAt = &s
-	}
+	out.ResolvedAt = httpserver.FormatNullableTimePtr(c.ResolvedAt)
 	return out
 }
 
@@ -409,25 +400,4 @@ func complaintListResponse(cs []*feedback.Complaint) *listComplaintsOutput {
 		resp.Body.Items = append(resp.Body.Items, toComplaintDTO(c))
 	}
 	return &resp
-}
-
-// mapErr translates feedback sentinels to huma HTTP errors.
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, feedback.ErrOrderNotFound),
-		errors.Is(err, feedback.ErrComplaintNotFound),
-		errors.Is(err, feedback.ErrRatingNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, feedback.ErrForbidden):
-		return huma.Error403Forbidden(err.Error())
-	case errors.Is(err, feedback.ErrValidation):
-		return huma.Error422UnprocessableEntity(err.Error())
-	case errors.Is(err, feedback.ErrOrderNotPickedUp),
-		errors.Is(err, feedback.ErrAlreadyRated),
-		errors.Is(err, feedback.ErrComplaintExists),
-		errors.Is(err, feedback.ErrInvalidTransition),
-		errors.Is(err, feedback.ErrEscalateTooEarly):
-		return huma.Error409Conflict(err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
 }

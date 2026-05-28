@@ -2,7 +2,6 @@ package ohttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -10,7 +9,6 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
-	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
 )
 
 // ReorderAPI exposes POST /api/employee/orders/reorder. Kept separate from
@@ -125,23 +123,6 @@ func toUnavailableDTOs(items []order.UnavailableItem) []unavailableItemDTO {
 	return out
 }
 
-// reorderMapErr mirrors mapErr in handlers.go but stays local so we don't have
-// to touch the existing file. quota.ErrOutOfStock can still leak out when the
-// pre-check passes but the in-tx decrement loses a race; surface it as 409.
-func reorderMapErr(err error) error {
-	switch {
-	case errors.Is(err, order.ErrOrderNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, order.ErrForbidden):
-		return huma.Error403Forbidden(err.Error())
-	case errors.Is(err, quota.ErrOutOfStock),
-		errors.Is(err, quota.ErrSupplyNotFound),
-		errors.Is(err, order.ErrInvalidTransition),
-		errors.Is(err, order.ErrCutoffPassed):
-		return huma.Error409Conflict(err.Error())
-	case errors.Is(err, order.ErrVendorPlantMismatch):
-		// Reorder's plant guard mirrors Service.Place; map to 400 like Place does.
-		return huma.Error400BadRequest(err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
-}
+// reorderMapErr delegates to the shared order errRules — the reorder paths
+// surface the same sentinels as Place (cutoff/stock/state/plant).
+func reorderMapErr(err error) error { return mapErr(err) }
