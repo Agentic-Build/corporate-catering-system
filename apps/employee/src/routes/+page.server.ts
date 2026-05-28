@@ -3,7 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient, type operations } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
-import { buildDays, taipeiISO } from "$lib/date";
+import { buildDays, taipeiISO } from "@tbite/web-shared";
 
 type MenuQuery = NonNullable<operations["listEmployeeMenu"]["parameters"]["query"]>;
 type MenuSort = NonNullable<MenuQuery["sort"]>;

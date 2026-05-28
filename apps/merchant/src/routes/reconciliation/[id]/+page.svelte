@@ -1,6 +1,6 @@
 <script lang="ts">
   import { PageHeader, Card, StatCard, StateTag, EmptyState, Button, Icon } from "@tbite/ui";
-  import { formatMinor } from "$lib/money";
+  import { formatMinor } from "@tbite/web-shared";
 
   let { data } = $props();
 

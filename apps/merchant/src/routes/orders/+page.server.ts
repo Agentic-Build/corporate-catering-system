@@ -3,7 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
-import { taipeiISO, dayId } from "$lib/date";
+import { taipeiISO, dayId } from "@tbite/web-shared";
 
 type MerchantOrderDTO = components["schemas"]["MerchantOrderDTO"];
 type MerchantItemDTO = components["schemas"]["MerchantItemDTO"];

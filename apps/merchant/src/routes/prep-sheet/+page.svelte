@@ -1,6 +1,6 @@
 <script lang="ts">
   import { PageHeader, Button, Icon, EmptyState } from "@tbite/ui";
-  import { dayId } from "$lib/date";
+  import { dayId } from "@tbite/web-shared";
 
   let { data } = $props();
 

@@ -3,7 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
-import { taipeiISO } from "$lib/date";
+import { taipeiISO } from "@tbite/web-shared";
 
 const PAGE_LIMIT = 20;
 
