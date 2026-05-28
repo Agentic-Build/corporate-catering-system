@@ -145,7 +145,7 @@ export const load: PageServerLoad = async ({ locals, url, parent, depends }) => 
     menuFilter,
     filterActive,
     filteredMenu,
-    tagPool: Array.from(tagPool).sort(),
+    tagPool: Array.from(tagPool).sort((a, b) => a.localeCompare(b)),
     error,
   };
 };

@@ -29,6 +29,7 @@ spec:
         {{- include "tbite.labels" . | nindent 8 }}
     spec:
       restartPolicy: OnFailure
+      automountServiceAccountToken: false
       containers:
         - name: psql
           image: {{ .Values.postgres.cluster.imageName | quote }}

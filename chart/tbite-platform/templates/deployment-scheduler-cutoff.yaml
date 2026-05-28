@@ -27,6 +27,7 @@ spec:
         {{- include "tbite.podAnnotations" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "tbite.roleServiceAccountName" (dict "ctx" . "role" $role) }}
+      automountServiceAccountToken: false
       {{- include "tbite.imagePullSecrets" . | nindent 6 }}
       securityContext:
         {{- include "tbite.podSecurityContext" . | nindent 8 }}
