@@ -1,0 +1,12 @@
+name: sonar-mark-hotspots-safe
+on:
+  workflow_dispatch:
+
+jobs:
+  mark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/security/sonar-mark-hotspots-safe.sh
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
