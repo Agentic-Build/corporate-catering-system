@@ -45,6 +45,11 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/storage"
 )
 
+const (
+	errPgPoolWrap     = "pg pool: %w"
+	checkerPostgresRW = "postgres-rw"
+)
+
 // newRWPool constructs the RW pgxpool with the chart-supplied budget.
 // All split roles share this constructor so a single env knob controls
 // how many backend connections one replica may open. Pool metrics are
@@ -127,7 +132,7 @@ func serveProbes(ctx context.Context, logger *slog.Logger, deps ...httpserver.Ch
 func runOutboxRelay(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	pool, err := newRWPool(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("pg pool: %w", err)
+		return fmt.Errorf(errPgPoolWrap, err)
 	}
 	defer pool.Close()
 	nc, err := newNATS(ctx, cfg)
@@ -151,7 +156,7 @@ func runOutboxRelay(ctx context.Context, logger *slog.Logger, cfg config.Config)
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		return serveProbes(egctx, logger,
-			httpserver.PostgresChecker("postgres-rw", pool),
+			httpserver.PostgresChecker(checkerPostgresRW, pool),
 			httpserver.NATSChecker("nats", nc.NC),
 		)
 	})
@@ -168,7 +173,7 @@ func runOutboxRelay(ctx context.Context, logger *slog.Logger, cfg config.Config)
 func runPayrollSettler(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	pool, err := newRWPool(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("pg pool: %w", err)
+		return fmt.Errorf(errPgPoolWrap, err)
 	}
 	defer pool.Close()
 	nc, err := newNATS(ctx, cfg)
@@ -208,7 +213,7 @@ func runPayrollSettler(ctx context.Context, logger *slog.Logger, cfg config.Conf
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		return serveProbes(egctx, logger,
-			httpserver.PostgresChecker("postgres-rw", pool),
+			httpserver.PostgresChecker(checkerPostgresRW, pool),
 			httpserver.NATSChecker("nats", nc.NC),
 		)
 	})
@@ -224,7 +229,7 @@ func runPayrollSettler(ctx context.Context, logger *slog.Logger, cfg config.Conf
 func runOnTimeEvaluator(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	pool, err := newRWPool(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("pg pool: %w", err)
+		return fmt.Errorf(errPgPoolWrap, err)
 	}
 	defer pool.Close()
 	nc, err := newNATS(ctx, cfg)
@@ -243,7 +248,7 @@ func runOnTimeEvaluator(ctx context.Context, logger *slog.Logger, cfg config.Con
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		return serveProbes(egctx, logger,
-			httpserver.PostgresChecker("postgres-rw", pool),
+			httpserver.PostgresChecker(checkerPostgresRW, pool),
 			httpserver.NATSChecker("nats", nc.NC),
 		)
 	})
@@ -294,7 +299,7 @@ func runWithLeaseSingleton(
 func runCutoffSweeper(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	pool, err := newRWPool(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("pg pool: %w", err)
+		return fmt.Errorf(errPgPoolWrap, err)
 	}
 	defer pool.Close()
 
@@ -316,7 +321,7 @@ func runCutoffSweeper(ctx context.Context, logger *slog.Logger, cfg config.Confi
 		}
 	}
 	return runWithLeaseSingleton(ctx, logger, "CUTOFF_LEASE_NAME", "tbite-cutoff-sweeper",
-		[]httpserver.Checker{httpserver.PostgresChecker("postgres-rw", pool)},
+		[]httpserver.Checker{httpserver.PostgresChecker(checkerPostgresRW, pool)},
 		func(c context.Context) error { return cutoff.Run(c, interval) },
 	)
 }
@@ -324,7 +329,7 @@ func runCutoffSweeper(ctx context.Context, logger *slog.Logger, cfg config.Confi
 func runNoShowSweeper(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	pool, err := newRWPool(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("pg pool: %w", err)
+		return fmt.Errorf(errPgPoolWrap, err)
 	}
 	defer pool.Close()
 
@@ -355,7 +360,7 @@ func runNoShowSweeper(ctx context.Context, logger *slog.Logger, cfg config.Confi
 		}
 	}
 	return runWithLeaseSingleton(ctx, logger, "NO_SHOW_LEASE_NAME", "tbite-no-show-sweeper",
-		[]httpserver.Checker{httpserver.PostgresChecker("postgres-rw", pool)},
+		[]httpserver.Checker{httpserver.PostgresChecker(checkerPostgresRW, pool)},
 		noShow.Run,
 	)
 }
@@ -363,7 +368,7 @@ func runNoShowSweeper(ctx context.Context, logger *slog.Logger, cfg config.Confi
 func runDocExpiryScanner(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	pool, err := newRWPool(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("pg pool: %w", err)
+		return fmt.Errorf(errPgPoolWrap, err)
 	}
 	defer pool.Close()
 
@@ -382,7 +387,7 @@ func runDocExpiryScanner(ctx context.Context, logger *slog.Logger, cfg config.Co
 		}
 	}
 	return runWithLeaseSingleton(ctx, logger, "DOC_EXPIRY_LEASE_NAME", "tbite-doc-expiry-scanner",
-		[]httpserver.Checker{httpserver.PostgresChecker("postgres-rw", pool)},
+		[]httpserver.Checker{httpserver.PostgresChecker(checkerPostgresRW, pool)},
 		docScanner.Run,
 	)
 }
@@ -390,7 +395,7 @@ func runDocExpiryScanner(ctx context.Context, logger *slog.Logger, cfg config.Co
 func runFeedbackScanner(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	pool, err := newRWPool(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("pg pool: %w", err)
+		return fmt.Errorf(errPgPoolWrap, err)
 	}
 	defer pool.Close()
 
@@ -414,7 +419,7 @@ func runFeedbackScanner(ctx context.Context, logger *slog.Logger, cfg config.Con
 		}
 	}
 	return runWithLeaseSingleton(ctx, logger, "FEEDBACK_LEASE_NAME", "tbite-feedback-scanner",
-		[]httpserver.Checker{httpserver.PostgresChecker("postgres-rw", pool)},
+		[]httpserver.Checker{httpserver.PostgresChecker(checkerPostgresRW, pool)},
 		fs.Run,
 	)
 }
@@ -449,7 +454,7 @@ func runProvisionStreams(ctx context.Context, logger *slog.Logger, cfg config.Co
 func runRealtimeGateway(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	pool, err := newRWPool(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("pg pool: %w", err)
+		return fmt.Errorf(errPgPoolWrap, err)
 	}
 	defer pool.Close()
 	rdb, err := cache.NewClient(ctx, cfg.RedisURL)
@@ -490,7 +495,7 @@ func runRealtimeGateway(ctx context.Context, logger *slog.Logger, cfg config.Con
 	// separate listener on PROBE_ADDR.
 
 	health := httpserver.NewHealth(
-		httpserver.PostgresChecker("postgres-rw", pool),
+		httpserver.PostgresChecker(checkerPostgresRW, pool),
 		httpserver.RedisChecker("valkey", rdb),
 		httpserver.NATSChecker("nats", nc.NC),
 	)

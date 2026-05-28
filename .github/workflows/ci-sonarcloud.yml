@@ -11,6 +11,36 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.3"
+          cache: true
+
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - name: Go coverage
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: |
+          go test ./services/api/internal/... \
+            -coverpkg=./services/api/internal/... \
+            -coverprofile=coverage.out \
+            -timeout 20m
+
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Frontend coverage (merchant + pickup have vitest configs)
+        run: |
+          pnpm --filter @tbite/merchant exec vitest run --coverage || true
+          pnpm --filter @tbite/pickup exec vitest run --coverage || true
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
