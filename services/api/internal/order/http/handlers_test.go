@@ -33,8 +33,6 @@ const (
 	empUserID  = "u-emp"
 )
 
-// ----- Fakes (ohttp_test can't import the order_test fakes) -----
-
 // fakeBeginner stands in for *pgxpool.Pool. It hands the write closure a no-op
 // pgx.Tx; the repo fakes ignore the tx, so the place/cancel/modify/etc happy
 // paths run without a real DB. Set beginErr to exercise the tx-open failure.
@@ -202,8 +200,6 @@ func (fakeVendorReader) GetByID(context.Context, string) (*vendor.Vendor, error)
 	return &vendor.Vendor{ID: testVendor, CutoffHour: 17, PreorderWindowDays: 7}, nil
 }
 
-// ----- Harness -----
-
 func employeeUser() *identity.User {
 	p := testPlant
 	return &identity.User{ID: empUserID, Role: identity.RoleEmployee, Plant: &p}
@@ -315,9 +311,7 @@ func menuItem(id, vendorID string) *menu.Item {
 
 const placeBody = `{"plant":"F12B-3F","supply_date":"2026-05-14","items":[{"menu_item_id":"33333333-3333-3333-3333-333333333333","qty":2}]}`
 
-// =========================================================================
-// POST /api/employee/orders  (place)
-// =========================================================================
+// === POST /api/employee/orders  (place) ===
 
 func TestPlaceOrder_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -399,9 +393,7 @@ func TestPlaceOrder_OK_201(t *testing.T) {
 	assert.Equal(t, 2, out.Order.Items[0].Qty)
 }
 
-// =========================================================================
-// GET /api/employee/orders  (list)
-// =========================================================================
+// === GET /api/employee/orders  (list) ===
 
 func TestListMyOrders_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -453,9 +445,7 @@ func TestListMyOrders_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =========================================================================
-// GET /api/employee/orders/{id}  (get)
-// =========================================================================
+// === GET /api/employee/orders/{id}  (get) ===
 
 func TestGetMyOrder_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -504,9 +494,7 @@ func TestGetMyOrder_OK(t *testing.T) {
 	assert.Equal(t, "placed", out.Order.Status)
 }
 
-// =========================================================================
-// PUT /api/employee/orders/{id}  (modify)
-// =========================================================================
+// === PUT /api/employee/orders/{id}  (modify) ===
 
 const modifyBody = `{"items":[{"menu_item_id":"33333333-3333-3333-3333-333333333333","qty":3}]}`
 
@@ -579,9 +567,7 @@ func TestModifyMyOrder_OK(t *testing.T) {
 	assert.Equal(t, orderID, out.Order.ID)
 }
 
-// =========================================================================
-// POST /api/employee/orders/{id}/cancel
-// =========================================================================
+// === POST /api/employee/orders/{id}/cancel ===
 
 func TestCancelMyOrder_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -637,9 +623,7 @@ func TestCancelMyOrder_OK_204(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-// =========================================================================
-// POST /api/employee/orders/{id}/pickup
-// =========================================================================
+// === POST /api/employee/orders/{id}/pickup ===
 
 func TestPickupOrder_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -690,9 +674,7 @@ func TestPickupOrder_OK_204(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-// =========================================================================
-// POST /api/merchant/orders/mark-ready
-// =========================================================================
+// === POST /api/merchant/orders/mark-ready ===
 
 const markReadyBody = `{"order_ids":["11111111-1111-1111-1111-111111111111"]}`
 
@@ -750,9 +732,7 @@ func TestMarkOrdersReady_OK_204(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-// =========================================================================
-// GET /api/merchant/orders  (listMerchantOrders)
-// =========================================================================
+// === GET /api/merchant/orders  (listMerchantOrders) ===
 
 func TestListMerchantOrders_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -847,9 +827,7 @@ func TestListMerchantOrders_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =========================================================================
-// GET /api/merchant/prep-sheet
-// =========================================================================
+// === GET /api/merchant/prep-sheet ===
 
 func TestPrepSheet_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)
@@ -907,13 +885,10 @@ func TestPrepSheet_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =========================================================================
-// SSE endpoints — auth guard only. The stream body cannot be asserted via a
-// normal request (huma's SSE writer flushes lazily and the loop blocks on
-// ctx.Done / the 20s heartbeat), so per the slice plan we cover only the
-// return-immediately guard for an unauthenticated / wrong-role caller and
-// skip the stream body itself.
-// =========================================================================
+// === SSE endpoints — auth guard only ===
+// Stream body cannot be asserted via a normal request (huma's SSE writer
+// flushes lazily and blocks on ctx.Done / 20s heartbeat); we cover only the
+// return-immediately guard for unauthenticated / wrong-role callers.
 
 func TestStreamMerchantOrderEvents_Unauthenticated(t *testing.T) {
 	srv, _ := buildHandler(t, nil)

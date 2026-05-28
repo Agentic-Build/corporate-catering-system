@@ -110,7 +110,6 @@ func (c *Cutoff) Run(ctx context.Context, interval time.Duration) error {
 	c.Logger.Info("cutoff scheduler started", "interval", interval)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	// Run once immediately at boot
 	if _, err := c.RunOnce(ctx); err != nil {
 		c.Logger.Error("cutoff initial run", "err", err)
 	}

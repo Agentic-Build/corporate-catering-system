@@ -16,7 +16,7 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/oidc"
 )
 
-// ----- extra fakes for error-branch / JWT coverage -----
+// === extra fakes for error-branch / JWT coverage ===
 
 // errSessions returns a non-NotFound error from Get to drive the 500 branch.
 type errSessions struct{ *fakeSessions }
@@ -92,7 +92,7 @@ func newServer(t *testing.T, api *idhttp.API) *httptest.Server {
 	return srv
 }
 
-// ----- AuthMiddleware branches -----
+// === AuthMiddleware branches ===
 
 func TestAuthMiddleware_NoAuthHeader(t *testing.T) {
 	api := &idhttp.API{Sessions: newFakeSessions(), Users: &fakeUsers{byID: map[string]*identity.User{}}, AppURLs: map[string]string{}}
@@ -238,7 +238,7 @@ func TestContextWithUser_RoundTrip(t *testing.T) {
 	assert.Same(t, u, got)
 }
 
-// ----- handler branches: startLogin / providers / exchangeSession / logout / completeLogin handoff -----
+// === handler branches: startLogin / providers / exchangeSession / logout / completeLogin handoff ===
 
 func newSvc(states *fakeStates) *identity.Service {
 	return &identity.Service{

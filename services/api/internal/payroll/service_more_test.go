@@ -18,7 +18,7 @@ import (
 
 const missingUUID = "00000000-0000-0000-0000-000000000000"
 
-// ---------- BuildDraft validation ----------
+// === BuildDraft validation ===
 
 func TestService_BuildDraft_PeriodStartAfterEnd(t *testing.T) {
 	_, svc, cleanup := setup(t)
@@ -30,7 +30,7 @@ func TestService_BuildDraft_PeriodStartAfterEnd(t *testing.T) {
 	require.Error(t, err)
 }
 
-// ---------- Lock error path ----------
+// === Lock error path ===
 
 func TestService_Lock_BatchNotFound(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -42,7 +42,7 @@ func TestService_Lock_BatchNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, payroll.ErrBatchNotFound)
 }
 
-// ---------- OpenDispute error paths ----------
+// === OpenDispute error paths ===
 
 func TestService_OpenDispute_EntryNotFound(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -79,7 +79,7 @@ func TestService_OpenDispute_OrderNotInEntry(t *testing.T) {
 	assert.NotErrorIs(t, err, payroll.ErrForbidden)
 }
 
-// ---------- OpenDisputeByOrder ----------
+// === OpenDisputeByOrder ===
 
 func TestService_OpenDisputeByOrder_Happy(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -115,7 +115,7 @@ func TestService_OpenDisputeByOrder_NoEntry(t *testing.T) {
 	assert.ErrorContains(t, err, "not found")
 }
 
-// ---------- ResolveDispute error paths ----------
+// === ResolveDispute error paths ===
 
 func TestService_ResolveDispute_InvalidStatus(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -251,7 +251,7 @@ func TestService_ResolveDispute_RefundOrderAlreadyRefunded(t *testing.T) {
 	assert.Equal(t, int64(5000), refunded)
 }
 
-// ---------- ListBatches / ListDisputes ----------
+// === ListBatches / ListDisputes ===
 
 func TestService_ListBatches(t *testing.T) {
 	_, svc, cleanup := setup(t)
@@ -310,7 +310,7 @@ func TestService_ListDisputes(t *testing.T) {
 	assert.Empty(t, resolved)
 }
 
-// ---------- ListCurrentLines via repo ----------
+// === ListCurrentLines via repo ===
 
 // Exercises the CurrentLines-repo branch of ListCurrentLines (the other branch,
 // the Pool fallback, is covered by TestService_ReverseOrder_CurrentPeriodNoEntry).
@@ -334,7 +334,7 @@ func TestService_ListCurrentLines_ViaRepo(t *testing.T) {
 	assert.Equal(t, int64(9000), lines[0].AmountMinor)
 }
 
-// ---------- ListExceptions error path ----------
+// === ListExceptions error path ===
 
 func TestService_ListExceptions_BatchNotFound(t *testing.T) {
 	_, svc, cleanup := setup(t)
@@ -345,7 +345,7 @@ func TestService_ListExceptions_BatchNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, payroll.ErrBatchNotFound)
 }
 
-// ---------- FlagException entry-not-in-batch ----------
+// === FlagException entry-not-in-batch ===
 
 func TestService_FlagException_EntryNotInBatch(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -371,7 +371,7 @@ func TestService_FlagException_EntryNotInBatch(t *testing.T) {
 	assert.ErrorIs(t, err, payroll.ErrInvalidException)
 }
 
-// ---------- ResolveException error paths ----------
+// === ResolveException error paths ===
 
 func TestService_ResolveException_InvalidStatus(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -423,7 +423,7 @@ func TestService_ResolveException_Resolved(t *testing.T) {
 	assert.Equal(t, payroll.ExceptionResolved, exs[0].Status)
 }
 
-// ---------- ReverseOrder error path ----------
+// === ReverseOrder error path ===
 
 func TestService_ReverseOrder_OrderNotFound(t *testing.T) {
 	_, svc, cleanup := setup(t)
@@ -434,7 +434,7 @@ func TestService_ReverseOrder_OrderNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, order.ErrOrderNotFound)
 }
 
-// ---------- in-transaction repo failure paths ----------
+// === in-transaction repo failure paths ===
 
 // execErrTx is a pgx.Tx whose every statement fails, so the first repo write
 // inside a BeginFunc closure returns its wrapped error — exercising the
@@ -602,7 +602,7 @@ func TestService_ResolveException_AuditWriteError(t *testing.T) {
 	assert.ErrorIs(t, svc.ResolveException(ctx, exs[0].ID, payroll.ExceptionResolved, "x", admin), want)
 }
 
-// ---------- QueryCurrentLines error paths (fakes) ----------
+// === QueryCurrentLines error paths (fakes) ===
 
 type errQuerier struct{ err error }
 

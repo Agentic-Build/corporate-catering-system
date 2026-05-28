@@ -29,7 +29,7 @@ const (
 	vendorID  = "v-owner"
 )
 
-// ----- Fakes (qhttp_test can't import the quota_test package's fakes) -----
+// === Fakes (qhttp_test can't import the quota_test package's fakes) ===
 
 type fakeItemRepo struct{ byID map[string]*menu.Item }
 
@@ -102,7 +102,7 @@ func (r *fakeSupplyRepo) SetSoldOut(_ context.Context, id string, date time.Time
 	return quota.ErrSupplyNotFound
 }
 
-// ----- Harness -----
+// === Harness ===
 
 func vendorUser() *identity.User {
 	v := vendorID
@@ -159,7 +159,7 @@ func do(t *testing.T, method, url, body string) *http.Response {
 	return resp
 }
 
-// ----- requireVendor branches -----
+// === requireVendor branches ===
 
 func TestSetCapacity_Unauthenticated(t *testing.T) {
 	srv, _, _ := buildHandler(t, nil)
@@ -185,7 +185,7 @@ func TestSetCapacity_NoVendorBinding(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
-// ----- setCapacity -----
+// === setCapacity ===
 
 func TestSetCapacity_OK(t *testing.T) {
 	srv, _, ir := buildHandler(t, vendorUser())
@@ -244,7 +244,7 @@ func TestSetCapacity_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// ----- setSoldOut -----
+// === setSoldOut ===
 
 func TestSetSoldOut_OK(t *testing.T) {
 	srv, sr, ir := buildHandler(t, vendorUser())
@@ -277,7 +277,7 @@ func TestSetSoldOut_SupplyNotFound_404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
-// ----- list -----
+// === list ===
 
 func TestList_WithDate(t *testing.T) {
 	srv, sr, ir := buildHandler(t, vendorUser())

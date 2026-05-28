@@ -1,25 +1,12 @@
 // Command stress drives realistic traffic against a running tbite API so the
-// observability dashboards have something to display. It:
+// observability dashboards have something to display. Provisions synthetic
+// users idempotently, mints Bearer sessions via the same Redis SessionStore
+// the API consumes, then spawns N workers picking weighted scenarios.
 //
-//  1. Connects to Postgres + Redis directly.
-//  2. Provisions a pool of synthetic users (employees, one merchant per
-//     vendor, one welfare admin) idempotently — re-running picks the same
-//     users up by their stress-* email addresses.
-//  3. Mints Bearer session tokens for those users via the same Redis
-//     SessionStore the API consumes, so requests authenticate without going
-//     through the OIDC flow.
-//  4. Spawns N concurrent workers that pick a scenario from a weighted set
-//     and hit the API with a Bearer-authed request.
-//
-// The tool is intentionally self-contained: zero external load-test
-// dependencies (k6 / vegeta / wrk) so it can run inside `make` targets and
-// reuse the project's existing Postgres + Redis client packages.
-//
-// Usage examples
+// Usage:
 //
 //	go run ./services/api/cmd/stress --duration=5m --rps=20 --scenario=mixed
-//	go run ./services/api/cmd/stress --scenario=place-only --employees=50 --concurrency=16
-//	go run ./services/api/cmd/stress --scenario=cancel-storm --duration=2m
+//	go run ./services/api/cmd/stress --scenario=lunch-crunch --duration=2m
 package main
 
 import (
@@ -99,14 +86,12 @@ func main() {
 	userRepo := pgrepo.NewUserRepo(pool)
 	sess := idredis.NewSessionStore(rdb, 24*time.Hour)
 
-	// 1. Seed users (employees + per-vendor merchants + admin) and mint Bearer sessions.
 	users, err := provisionUsers(ctx, pool, userRepo, sess, *employees, plants, summary)
 	if err != nil {
 		summary.Error("provision users", "err", err)
 		os.Exit(1)
 	}
 
-	// 2. Snapshot the menu universe so place-order scenarios pick valid items.
 	menus, err := loadMenus(ctx, pool)
 	if err != nil {
 		summary.Error("load menus", "err", err)
@@ -131,7 +116,6 @@ func main() {
 		"ready_owner_tokens", len(ownerTokens),
 	)
 
-	// 3. Build the scenario picker for the chosen mode.
 	picker := buildPicker(*scenario)
 	if picker == nil {
 		summary.Error("unknown scenario", "scenario", *scenario)
@@ -195,8 +179,6 @@ func main() {
 	st.print(summary, *scenario)
 }
 
-// ─────────────────────────── Provisioning ───────────────────────────
-
 type userToken struct {
 	user  *identity.User
 	token string
@@ -212,7 +194,6 @@ type userPool struct {
 func provisionUsers(ctx context.Context, pool *pgxpool.Pool, userRepo *pgrepo.UserRepo, sess identity.SessionStore, nEmployees int, plants []string, log *slog.Logger) (*userPool, error) {
 	out := &userPool{merchants: map[string]*userToken{}}
 
-	// Employees — N per plant rotation so every plant has representation.
 	for i := 0; i < nEmployees; i++ {
 		plant := plants[i%len(plants)]
 		empID := fmt.Sprintf("stress-emp-%03d", i)
@@ -235,7 +216,6 @@ func provisionUsers(ctx context.Context, pool *pgxpool.Pool, userRepo *pgrepo.Us
 		out.employees = append(out.employees, &userToken{user: u, token: tok.Token})
 	}
 
-	// One vendor_operator per vendor present in DB.
 	rows, err := pool.Query(ctx, `SELECT id FROM vendor WHERE status='approved' ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("list vendors: %w", err)
@@ -271,7 +251,6 @@ func provisionUsers(ctx context.Context, pool *pgxpool.Pool, userRepo *pgrepo.Us
 		out.merchants[vid] = &userToken{user: u, token: tok.Token}
 	}
 
-	// Single welfare admin.
 	adminUser, err := upsertUser(ctx, pool, userRepo, &identity.User{
 		PrimaryEmail: "stress-admin@local.invalid",
 		DisplayName:  "Stress Admin",
@@ -296,14 +275,13 @@ func provisionUsers(ctx context.Context, pool *pgxpool.Pool, userRepo *pgrepo.Us
 
 func upsertUser(ctx context.Context, pool *pgxpool.Pool, repo *pgrepo.UserRepo, in *identity.User) (*identity.User, error) {
 	if u, err := repo.GetByEmail(ctx, in.PrimaryEmail); err == nil {
-		// Already exists — refresh plant/vendor in case we changed seed params.
+		// Refresh plant/vendor in case seed params changed.
 		if _, err := pool.Exec(ctx,
 			`UPDATE "user" SET role=$2, status=$3, plant=$4, vendor_id=$5, employee_id=$6, display_name=$7, updated_at=now() WHERE id=$1`,
 			u.ID, string(in.Role), string(in.Status), in.Plant, in.VendorID, in.EmployeeID, in.DisplayName,
 		); err != nil {
 			return nil, err
 		}
-		// Re-fetch with updated fields.
 		return repo.GetByID(ctx, u.ID)
 	} else if !errors.Is(err, identity.ErrUserNotFound) {
 		return nil, err
@@ -314,9 +292,7 @@ func upsertUser(ctx context.Context, pool *pgxpool.Pool, repo *pgrepo.UserRepo, 
 	return in, nil
 }
 
-// ─────────────────────────── Menu snapshot ──────────────────────────
-
-// menuUniverse keys vendors to the {plants, items} they cover so place-order
+// vendorMenu keys vendors to the {plants, items} they cover so place-order
 // scenarios can target valid combinations.
 type vendorMenu struct {
 	vendorID string
@@ -430,8 +406,6 @@ func loadMenus(ctx context.Context, pool *pgxpool.Pool) ([]vendorMenu, error) {
 	}
 	return out, nil
 }
-
-// ─────────────────────────── Scenarios ───────────────────────────
 
 type runState struct {
 	baseURL      string
@@ -909,7 +883,6 @@ func scenarioAdjustSupply(ctx context.Context, st *runState) {
 	if len(st.users.merchants) == 0 {
 		return
 	}
-	// Pick a random merchant + one of their items + a future date.
 	vendorIDs := make([]string, 0, len(st.users.merchants))
 	for k := range st.users.merchants {
 		vendorIDs = append(vendorIDs, k)
@@ -928,8 +901,6 @@ func scenarioAdjustSupply(ctx context.Context, st *runState) {
 	}
 	mi := vm.items[rand.IntN(len(vm.items))]
 	date := pickFutureDate()
-	// Random capacity adjustment in 40..200; ±10 around current to make
-	// up/down distribution roughly even.
 	newCap := 40 + rand.IntN(160)
 	cutoffAt := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
 	body := map[string]any{
@@ -1006,8 +977,6 @@ func scenarioMarkReady(ctx context.Context, st *runState) {
 	}
 }
 
-// ─────────────────────────── HTTP helpers ───────────────────────────
-
 func postJSON(ctx context.Context, st *runState, token, path string, body any) ([]byte, int) {
 	return requestJSON(ctx, st, token, http.MethodPost, path, body)
 }
@@ -1055,8 +1024,6 @@ func requestJSON(ctx context.Context, st *runState, token, method, path string, 
 	}
 	return out, resp.StatusCode
 }
-
-// ─────────────────────────── Pickers + utils ───────────────────────────
 
 func pickEmployee(st *runState) *userToken {
 	return st.users.employees[rand.IntN(len(st.users.employees))]

@@ -29,7 +29,7 @@ const (
 	vendorID     = "v-owner"
 )
 
-// ----- Fakes (settlementhttp_test can't import the settlement_test fakes) -----
+// === Fakes (settlementhttp_test can't import the settlement_test fakes) ===
 
 type fakeSettlementRepo struct {
 	byID        map[string]*settlement.Settlement
@@ -129,7 +129,7 @@ type fakeTx struct{ pgx.Tx }
 func (fakeTx) Commit(context.Context) error   { return nil }
 func (fakeTx) Rollback(context.Context) error { return nil }
 
-// ----- Harness -----
+// === Harness ===
 
 func vendorUser() *identity.User {
 	v := vendorID
@@ -200,9 +200,7 @@ func aprilSettlement(id, vendor string, status settlement.Status) *settlement.Se
 	}
 }
 
-// =========================================================================
-// GET /api/merchant/reconciliation
-// =========================================================================
+// === GET /api/merchant/reconciliation ===
 
 func TestGetReconciliation_Unauthenticated(t *testing.T) {
 	srv, _, _ := buildHandler(t, nil)
@@ -278,9 +276,7 @@ func TestGetReconciliation_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =========================================================================
-// GET /api/merchant/settlements
-// =========================================================================
+// === GET /api/merchant/settlements ===
 
 func TestListMerchantSettlements_Unauthenticated(t *testing.T) {
 	srv, _, _ := buildHandler(t, nil)
@@ -344,9 +340,7 @@ func TestListMerchantSettlements_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =========================================================================
-// GET /api/merchant/settlements/{id}
-// =========================================================================
+// === GET /api/merchant/settlements/{id} ===
 
 func TestGetMerchantSettlement_Unauthenticated(t *testing.T) {
 	srv, _, _ := buildHandler(t, nil)
@@ -430,9 +424,7 @@ func TestGetMerchantSettlement_LinesRepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =========================================================================
-// GET /api/admin/vendor-settlements
-// =========================================================================
+// === GET /api/admin/vendor-settlements ===
 
 func TestListVendorSettlements_Unauthenticated(t *testing.T) {
 	srv, _, _ := buildHandler(t, nil)
@@ -486,9 +478,7 @@ func TestListVendorSettlements_RepoError_500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
-// =========================================================================
-// POST /api/admin/vendor-settlements/close
-// =========================================================================
+// === POST /api/admin/vendor-settlements/close ===
 
 func TestCloseSettlement_Unauthenticated(t *testing.T) {
 	srv, _, _ := buildHandler(t, nil)
@@ -574,9 +564,7 @@ func TestCloseSettlement_OK_201(t *testing.T) {
 	assert.Equal(t, int64(26000), out.Items[0].GrossMinor) // whole NTD
 }
 
-// =========================================================================
-// POST /api/admin/vendor-settlements/{id}/void
-// =========================================================================
+// === POST /api/admin/vendor-settlements/{id}/void ===
 
 func TestVoidSettlement_Unauthenticated(t *testing.T) {
 	srv, _, _ := buildHandler(t, nil)

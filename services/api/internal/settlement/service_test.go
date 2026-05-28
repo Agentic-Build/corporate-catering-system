@@ -168,7 +168,7 @@ func auditCount(t *testing.T, pool *pgxpool.Pool, action string) int {
 	return n
 }
 
-// ---------- CloseSettlement ----------
+// === CloseSettlement ===
 
 func TestService_CloseSettlement_AggregatesPerVendor(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -288,7 +288,7 @@ func TestService_CloseSettlement_ReclosableAfterVoid(t *testing.T) {
 	assert.NotEqual(t, first[0].ID, second[0].ID)
 }
 
-// ---------- VoidSettlement ----------
+// === VoidSettlement ===
 
 func TestService_VoidSettlement(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -322,7 +322,7 @@ func TestService_VoidSettlement_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, settlement.ErrSettlementNotFound)
 }
 
-// ---------- Reconciliation ----------
+// === Reconciliation ===
 
 func TestService_Reconciliation(t *testing.T) {
 	pool, svc, cleanup := setup(t)
@@ -362,7 +362,7 @@ func TestService_Reconciliation_EmptyVendor(t *testing.T) {
 	assert.Equal(t, int64(0), rec.GrossMinor)
 }
 
-// ---------- vendor-scoped reads ----------
+// === vendor-scoped reads ===
 
 func TestService_GetVendorSettlement_OwnershipCheck(t *testing.T) {
 	pool, svc, cleanup := setup(t)

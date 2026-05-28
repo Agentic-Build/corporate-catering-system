@@ -109,9 +109,8 @@ func main() {
 	}
 	observability.MustInitMetrics()
 
-	// Dispatch table for the cloud-native split roles (architecture
-	// issues #56, #58, #62). These short-circuit before the api and
-	// mcp-stdio switch so the per-role bodies stay in roles.go.
+	// Cloud-native split roles short-circuit before api/mcp-stdio so the
+	// per-role bodies stay in roles.go.
 	switch role {
 	case config.RoleOutboxRelay:
 		if err := runOutboxRelay(ctx, logger, cfg); err != nil {
@@ -187,9 +186,7 @@ func main() {
 // noopCleanup is the no-op cleanup returned by setup helpers that haven't
 // acquired any resource yet (early-error paths and the NATS-off branch).
 // Callers can `defer cleanup()` unconditionally.
-func noopCleanup() {
-	// intentionally empty: returned when no resource needs releasing
-}
+func noopCleanup() {}
 
 type apiInfra struct {
 	pool   *pgxpool.Pool

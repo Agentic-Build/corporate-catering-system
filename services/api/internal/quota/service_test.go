@@ -14,7 +14,7 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
 )
 
-// ----- Mocks -----
+// === Mocks ===
 
 type supplyKey struct {
 	itemID string
@@ -163,7 +163,7 @@ func (r *fakeItemRepo) ListActiveByPlant(_ context.Context, _ menu.EmployeeMenuF
 	return nil, nil
 }
 
-// ----- Helpers -----
+// === Helpers ===
 
 func newSvc(t *testing.T) (*quota.Service, *fakeSupplyRepo, *fakeItemRepo) {
 	t.Helper()
@@ -178,7 +178,7 @@ func day(y int, m time.Month, d int) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
-// ----- Tests -----
+// === Tests ===
 
 func TestService_SetCapacity_NewSupply_RemainEqualsCapacity(t *testing.T) {
 	svc, _, ir := newSvc(t)

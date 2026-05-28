@@ -23,7 +23,7 @@ import (
 
 var errBoom = errors.New("boom")
 
-// ----- fakes -----
+// === fakes ===
 
 type fbBeginner struct{}
 
@@ -121,7 +121,7 @@ func newSvc(orders *fakeOrderReader, ratings *fakeRatingRepo, complaints *fakeCo
 	}
 }
 
-// ----- RateOrder branches -----
+// === RateOrder branches ===
 
 func TestRateOrder_CommentTooLong(t *testing.T) {
 	svc := newSvc(&fakeOrderReader{}, &fakeRatingRepo{}, &fakeComplaintRepo{}, fakeAudit{})
@@ -178,7 +178,7 @@ func TestRateOrder_Happy_Fake(t *testing.T) {
 	assert.Equal(t, "v-1", r.VendorID)
 }
 
-// ----- GetRating -----
+// === GetRating ===
 
 func TestGetRating_Found(t *testing.T) {
 	want := &feedback.Rating{ID: "r-1", OrderID: "o-1"}
@@ -194,7 +194,7 @@ func TestGetRating_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, feedback.ErrRatingNotFound)
 }
 
-// ----- FileComplaint branches -----
+// === FileComplaint branches ===
 
 func TestFileComplaint_InvalidCategory(t *testing.T) {
 	svc := newSvc(&fakeOrderReader{}, &fakeRatingRepo{}, &fakeComplaintRepo{}, fakeAudit{})
@@ -231,7 +231,7 @@ func TestFileComplaint_CreateUniqueViolation(t *testing.T) {
 	assert.ErrorIs(t, err, feedback.ErrComplaintExists)
 }
 
-// ----- workflow GetByID error branches -----
+// === workflow GetByID error branches ===
 
 func TestRespondToComplaint_GetByIDError(t *testing.T) {
 	svc := newSvc(&fakeOrderReader{}, &fakeRatingRepo{}, &fakeComplaintRepo{getByIDErr: errBoom}, fakeAudit{})
@@ -272,7 +272,7 @@ func TestAdminResolveComplaint_TransitionError(t *testing.T) {
 	assert.ErrorIs(t, err, errBoom)
 }
 
-// ----- validCategory default + mapUniqueViolation passthrough -----
+// === validCategory default + mapUniqueViolation passthrough ===
 
 func TestFileComplaint_EmptyCategory_Invalid(t *testing.T) {
 	svc := newSvc(&fakeOrderReader{}, &fakeRatingRepo{}, &fakeComplaintRepo{}, fakeAudit{})
@@ -294,7 +294,7 @@ func TestFileComplaint_CreateGenericError(t *testing.T) {
 	assert.ErrorIs(t, err, errBoom)
 }
 
-// ----- scanner: Run loop + log helpers + RunOnce error paths -----
+// === scanner: Run loop + log helpers + RunOnce error paths ===
 
 func newFakeScanner(ratings *fakeRatingRepo, complaints *fakeComplaintRepo, anom *fakeAnomalyRepo, logger *slog.Logger) *feedback.FeedbackScanner {
 	return &feedback.FeedbackScanner{

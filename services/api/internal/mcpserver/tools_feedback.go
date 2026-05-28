@@ -19,7 +19,7 @@ import (
 )
 
 func registerFeedbackTools(s *server.MCPServer, deps Deps) {
-	// -------- feedback.rate_order --------
+	// === feedback.rate_order ===
 	s.AddTool(
 		mcp.NewTool("feedback.rate_order",
 			mcp.WithDescription("Submit a meal rating for a picked-up order (employee owner only)"),
@@ -71,7 +71,7 @@ func registerFeedbackTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- feedback.file_complaint --------
+	// === feedback.file_complaint ===
 	s.AddTool(
 		mcp.NewTool("feedback.file_complaint",
 			mcp.WithDescription("File a complaint for a picked-up order (employee owner only)"),

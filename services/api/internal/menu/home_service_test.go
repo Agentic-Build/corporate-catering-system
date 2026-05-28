@@ -25,7 +25,7 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/clock"
 )
 
-// ---------- Postgres testcontainer boilerplate (local to this _test package) ----------
+// === Postgres testcontainer boilerplate (local to this _test package) ===
 
 func setupHomePostgres(t *testing.T) (*pgxpool.Pool, func()) {
 	t.Helper()
@@ -146,7 +146,7 @@ VALUES ($1,$2,$3,$4,$5::order_status,1000,$6,$7,$6) RETURNING id`,
 	return oid
 }
 
-// ---------- Tests ----------
+// === Tests ===
 
 func newHomeServiceForTest(pool *pgxpool.Pool, now time.Time, alpha float64) *menu.HomeService {
 	return &menu.HomeService{
@@ -332,7 +332,7 @@ func TestHomeCompute_InvalidDayFormat_Errors(t *testing.T) {
 	require.Error(t, err)
 }
 
-// ----- Recommendations integration -----
+// === Recommendations integration ===
 
 func TestHomeRecommendations_IncludesPlantPopularityAndAffinityReason(t *testing.T) {
 	pool, cleanup := setupHomePostgres(t)
@@ -407,7 +407,7 @@ func TestHomeRecommendations_ExcludesFavorites(t *testing.T) {
 	}
 }
 
-// ----- Reorder chips integration -----
+// === Reorder chips integration ===
 
 func TestHomeReorderChips_PopulatesPreviewAndAvailability(t *testing.T) {
 	pool, cleanup := setupHomePostgres(t)
