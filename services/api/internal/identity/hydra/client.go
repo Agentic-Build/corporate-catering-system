@@ -20,6 +20,8 @@ import (
 	"time"
 )
 
+const mimeJSON = "application/json"
+
 // AdminClient is a minimal HTTP client for Hydra's admin API (four endpoints
 // the login + consent bridge needs; avoids the full Ory SDK dependency tree).
 type AdminClient struct {
@@ -117,7 +119,7 @@ func (c *AdminClient) get(ctx context.Context, path, challenge string, dest any)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", mimeJSON)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("hydra admin GET %s: %w", path, err)
@@ -142,8 +144,8 @@ func (c *AdminClient) acceptChallenge(ctx context.Context, path, challenge strin
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", mimeJSON)
+	req.Header.Set("Accept", mimeJSON)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("hydra admin PUT %s: %w", path, err)

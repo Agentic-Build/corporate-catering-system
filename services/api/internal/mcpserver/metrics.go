@@ -30,32 +30,44 @@ import (
 // realistic load), so a sync.Map without explicit eviction is fine.
 var startTimes sync.Map
 
+// elapsedForID returns the seconds since BeforeCallTool stored id's start time.
+func elapsedForID(id any) float64 {
+	if id == nil {
+		return 0
+	}
+	v, ok := startTimes.LoadAndDelete(id)
+	if !ok {
+		return 0
+	}
+	t, ok := v.(time.Time)
+	if !ok {
+		return 0
+	}
+	return time.Since(t).Seconds()
+}
+
+// toolCallOutcome classifies the tool call result for the metric label.
+func toolCallOutcome(result any) string {
+	if r, ok := result.(*mcp.CallToolResult); ok && r != nil && r.IsError {
+		return "tool_error"
+	}
+	return "success"
+}
+
 func buildMetricsHooks() *server.Hooks {
 	h := &server.Hooks{}
-	h.AddBeforeCallTool(func(ctx context.Context, id any, req *mcp.CallToolRequest) {
+	h.AddBeforeCallTool(func(_ context.Context, id any, _ *mcp.CallToolRequest) {
 		if id == nil {
 			return
 		}
 		startTimes.Store(id, time.Now())
 	})
 	h.AddAfterCallTool(func(ctx context.Context, id any, req *mcp.CallToolRequest, result any) {
-		var elapsed float64
-		if id != nil {
-			if v, ok := startTimes.LoadAndDelete(id); ok {
-				if t, ok := v.(time.Time); ok {
-					elapsed = time.Since(t).Seconds()
-				}
-			}
-		}
 		toolName := ""
 		if req != nil {
 			toolName = req.Params.Name
 		}
-		outcome := "success"
-		if r, ok := result.(*mcp.CallToolResult); ok && r != nil && r.IsError {
-			outcome = "tool_error"
-		}
-		observability.MCPToolCall(ctx, toolName, clientFromCtx(ctx), outcome, sideEffectFor(toolName), elapsed, nil)
+		observability.MCPToolCall(ctx, toolName, clientFromCtx(ctx), toolCallOutcome(result), sideEffectFor(toolName), elapsedForID(id), nil)
 	})
 	return h
 }

@@ -96,7 +96,7 @@ func (v *AccessTokenVerifier) Verify(ctx context.Context, raw string) (*AccessTo
 	}
 
 	// Ignore decoder errors so unrelated fields don't break otherwise-valid tokens.
-	var raw_claims struct {
+	var rawClaims struct {
 		Audience any    `json:"aud"`
 		Scope    string `json:"scope"`
 		Subject  string `json:"sub"`
@@ -115,21 +115,21 @@ func (v *AccessTokenVerifier) Verify(ctx context.Context, raw string) (*AccessTo
 		TBitePlantTop string `json:"tbite_plant"`
 		TBiteDeptTop  string `json:"tbite_department"`
 	}
-	_ = idt.Claims(&raw_claims)
+	_ = idt.Claims(&rawClaims)
 
 	claims := &AccessTokenClaims{
-		Subject:  pick(raw_claims.Subject, idt.Subject),
+		Subject:  pick(rawClaims.Subject, idt.Subject),
 		Expiry:   idt.Expiry,
-		Scopes:   strings.Fields(raw_claims.Scope),
-		ClientID: raw_claims.ClientID,
+		Scopes:   strings.Fields(rawClaims.Scope),
+		ClientID: rawClaims.ClientID,
 
-		Email:      pick(raw_claims.Ext.Email, raw_claims.EmailTop),
-		Name:       pick(raw_claims.Ext.Name, raw_claims.NameTop),
-		TBiteRole:  pick(raw_claims.Ext.TBiteRole, raw_claims.TBiteRoleTop),
-		TBitePlant: pick(raw_claims.Ext.TBitePlant, raw_claims.TBitePlantTop),
-		TBiteDept:  pick(raw_claims.Ext.TBiteDept, raw_claims.TBiteDeptTop),
+		Email:      pick(rawClaims.Ext.Email, rawClaims.EmailTop),
+		Name:       pick(rawClaims.Ext.Name, rawClaims.NameTop),
+		TBiteRole:  pick(rawClaims.Ext.TBiteRole, rawClaims.TBiteRoleTop),
+		TBitePlant: pick(rawClaims.Ext.TBitePlant, rawClaims.TBitePlantTop),
+		TBiteDept:  pick(rawClaims.Ext.TBiteDept, rawClaims.TBiteDeptTop),
 	}
-	switch a := raw_claims.Audience.(type) {
+	switch a := rawClaims.Audience.(type) {
 	case string:
 		claims.Audience = []string{a}
 	case []any:

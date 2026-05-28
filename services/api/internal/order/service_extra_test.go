@@ -22,7 +22,7 @@ const missingUUID = "99999999-9999-9999-9999-999999999999"
 // newSvcWithClock builds a Service over the live pool with a caller-chosen
 // clock, used by the no-show sweep tests that need "now" decoupled from the
 // shared testClockTime.
-func newSvcWithClock(t *testing.T, pool *pgxpool.Pool, clock order.Clock) *order.Service {
+func newSvcWithClock(t *testing.T, pool *pgxpool.Pool, clock order.Nower) *order.Service {
 	t.Helper()
 	orderRepo := opg.NewOrderRepo(pool)
 	stateRepo := opg.NewStateEventRepo(pool)

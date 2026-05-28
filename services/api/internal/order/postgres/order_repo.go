@@ -127,7 +127,7 @@ UPDATE "order"
 
 // UpdateStatus is the Repository-interface variant. Service callers that need
 // transactional orchestration use UpdateStatusTx directly.
-func (r *OrderRepo) UpdateStatus(ctx context.Context, id string, from, to order.Status, _actorID *string, _actorRole *string, _reason string) error {
+func (r *OrderRepo) UpdateStatus(ctx context.Context, id string, from, to order.Status, _ *string, _ *string, _ string) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		return r.UpdateStatusTx(ctx, tx, id, from, to)
 	})

@@ -11,6 +11,8 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
 )
 
+const errOutboxTxKind = "outbox: tx must be pgx.Tx"
+
 type OutboxRepo struct{ pool *pgxpool.Pool }
 
 func NewOutboxRepo(p *pgxpool.Pool) *OutboxRepo { return &OutboxRepo{pool: p} }
@@ -36,7 +38,7 @@ VALUES ($1,$2,$3,$4,$5)`,
 func (r *OutboxRepo) Append(ctx context.Context, tx order.Tx, aggregateType, aggregateID, subject string, payload map[string]any, headers map[string]any) error {
 	ptx, ok := tx.(pgx.Tx)
 	if !ok {
-		return fmt.Errorf("outbox: tx must be pgx.Tx")
+		return fmt.Errorf(errOutboxTxKind)
 	}
 	return r.AppendTx(ctx, ptx, aggregateType, aggregateID, subject, payload, headers)
 }
@@ -97,7 +99,7 @@ SELECT id, aggregate_type, aggregate_id, subject, payload, headers, created_at, 
 func (r *OutboxRepo) MarkPublished(ctx context.Context, tx order.Tx, ids []int64) error {
 	ptx, ok := tx.(pgx.Tx)
 	if !ok {
-		return fmt.Errorf("outbox: tx must be pgx.Tx")
+		return fmt.Errorf(errOutboxTxKind)
 	}
 	if len(ids) == 0 {
 		return ptx.Commit(ctx)
@@ -117,7 +119,7 @@ func (r *OutboxRepo) MarkPublished(ctx context.Context, tx order.Tx, ids []int64
 func (r *OutboxRepo) MarkFailed(ctx context.Context, tx order.Tx, id int64, lastError string) error {
 	ptx, ok := tx.(pgx.Tx)
 	if !ok {
-		return fmt.Errorf("outbox: tx must be pgx.Tx")
+		return fmt.Errorf(errOutboxTxKind)
 	}
 	_, err := ptx.Exec(ctx, `UPDATE outbox_event SET attempts = attempts + 1, last_error = $2 WHERE id=$1`, id, lastError)
 	return err

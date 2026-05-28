@@ -47,9 +47,8 @@ type OnTimeRateEvaluator struct {
 	data map[string][]onTimeEvent
 }
 
-// Run subscribes and processes events serially until ctx is cancelled.
-// Durable consumer survives worker restarts; the in-memory window does NOT.
-func (e *OnTimeRateEvaluator) Run(ctx context.Context) error {
+// applyDefaults fills any unset evaluator parameters with their defaults.
+func (e *OnTimeRateEvaluator) applyDefaults() {
 	if e.Window <= 0 {
 		e.Window = 7 * 24 * time.Hour
 	}
@@ -65,10 +64,13 @@ func (e *OnTimeRateEvaluator) Run(ctx context.Context) error {
 	if e.data == nil {
 		e.data = map[string][]onTimeEvent{}
 	}
+}
 
+// setupConsumer resolves the durable consumer used to drain ORDERS_V1 events.
+func (e *OnTimeRateEvaluator) setupConsumer(ctx context.Context) (jetstream.Consumer, error) {
 	stream, err := e.JS.Stream(ctx, "ORDERS_V1")
 	if err != nil {
-		return fmt.Errorf("get stream: %w", err)
+		return nil, fmt.Errorf("get stream: %w", err)
 	}
 	cons, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
 		Name:           consumerName,
@@ -78,16 +80,44 @@ func (e *OnTimeRateEvaluator) Run(ctx context.Context) error {
 		MaxDeliver:     5,
 	})
 	if err != nil {
-		return fmt.Errorf("create consumer: %w", err)
+		return nil, fmt.Errorf("create consumer: %w", err)
 	}
+	return cons, nil
+}
 
+// nextMsg waits for the next message, returning (msg, true) on success or
+// (nil, shouldExit) when the iterator is closed / ctx cancels.
+func (e *OnTimeRateEvaluator) nextMsg(ctx context.Context, it jetstream.MessagesContext) (jetstream.Msg, bool) {
+	msg, err := it.Next()
+	if err == nil {
+		return msg, true
+	}
+	if ctx.Err() != nil || errors.Is(err, jetstream.ErrMsgIteratorClosed) {
+		return nil, false
+	}
+	e.Logger.Warn("consumer next", "err", err)
+	select {
+	case <-ctx.Done():
+		return nil, false
+	case <-time.After(500 * time.Millisecond):
+	}
+	return nil, true
+}
+
+// Run subscribes and processes events serially until ctx is cancelled.
+// Durable consumer survives worker restarts; the in-memory window does NOT.
+func (e *OnTimeRateEvaluator) Run(ctx context.Context) error {
+	e.applyDefaults()
+	cons, err := e.setupConsumer(ctx)
+	if err != nil {
+		return err
+	}
 	e.Logger.Info("on-time-rate evaluator started",
 		"window", e.Window,
 		"threshold", e.Threshold,
 		"high_threshold", e.HighThresh,
 		"min_samples", e.MinSamples,
 	)
-
 	it, err := cons.Messages()
 	if err != nil {
 		return fmt.Errorf("messages: %w", err)
@@ -97,25 +127,15 @@ func (e *OnTimeRateEvaluator) Run(ctx context.Context) error {
 		<-ctx.Done()
 		it.Stop()
 	}()
-
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		msg, err := it.Next()
-		if err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			if errors.Is(err, jetstream.ErrMsgIteratorClosed) {
-				return ctx.Err()
-			}
-			e.Logger.Warn("consumer next", "err", err)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(500 * time.Millisecond):
-			}
+		msg, cont := e.nextMsg(ctx, it)
+		if !cont {
+			return ctx.Err()
+		}
+		if msg == nil {
 			continue
 		}
 		if err := e.handle(ctx, msg.Subject(), msg.Data()); err != nil {

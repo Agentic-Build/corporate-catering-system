@@ -12,6 +12,8 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/settlement"
 )
 
+const dateLayoutISO = "2006-01-02"
+
 // API exposes vendor-settlement endpoints: merchant-facing reconciliation +
 // settlement reads (vendor_id resolved from session) and admin-facing close /
 // void / overview (welfare_admin only).
@@ -61,8 +63,8 @@ func toSettlementDTO(s *settlement.Settlement) settlementDTO {
 	d := settlementDTO{
 		ID:           s.ID,
 		VendorID:     s.VendorID,
-		PeriodStart:  s.PeriodStart.UTC().Format("2006-01-02"),
-		PeriodEnd:    s.PeriodEnd.UTC().Format("2006-01-02"),
+		PeriodStart:  s.PeriodStart.UTC().Format(dateLayoutISO),
+		PeriodEnd:    s.PeriodEnd.UTC().Format(dateLayoutISO),
 		OrderCount:   s.OrderCount,
 		PortionCount: s.PortionCount,
 		GrossMinor:   s.GrossMinor,
@@ -79,7 +81,7 @@ func toSettlementDTO(s *settlement.Settlement) settlementDTO {
 func toOrderLineDTO(l *settlement.SettlementOrderLine) orderLineDTO {
 	return orderLineDTO{
 		OrderID:         l.OrderID,
-		SupplyDate:      l.SupplyDate.UTC().Format("2006-01-02"),
+		SupplyDate:      l.SupplyDate.UTC().Format(dateLayoutISO),
 		Status:          l.Status,
 		TotalPriceMinor: l.TotalPriceMinor,
 		PortionCount:    l.PortionCount,
@@ -89,8 +91,8 @@ func toOrderLineDTO(l *settlement.SettlementOrderLine) orderLineDTO {
 func toReconciliationDTO(r *settlement.Reconciliation) reconciliationDTO {
 	return reconciliationDTO{
 		VendorID:     r.VendorID,
-		PeriodStart:  r.PeriodStart.UTC().Format("2006-01-02"),
-		PeriodEnd:    r.PeriodEnd.UTC().Format("2006-01-02"),
+		PeriodStart:  r.PeriodStart.UTC().Format(dateLayoutISO),
+		PeriodEnd:    r.PeriodEnd.UTC().Format(dateLayoutISO),
 		OrderCount:   r.OrderCount,
 		PortionCount: r.PortionCount,
 		GrossMinor:   r.GrossMinor,
@@ -223,7 +225,7 @@ func parseMonth(s string) (time.Time, time.Time, error) {
 
 // parseDay parses YYYY-MM-DD into UTC midnight.
 func parseDay(s string) (time.Time, error) {
-	return time.ParseInLocation("2006-01-02", s, time.UTC)
+	return time.ParseInLocation(dateLayoutISO, s, time.UTC)
 }
 
 func (a *API) getReconciliation(ctx context.Context, in *periodQueryInput) (*reconciliationOutput, error) {

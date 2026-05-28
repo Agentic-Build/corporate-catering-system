@@ -38,13 +38,13 @@ type UserOrderToday struct {
 // recommend). ServerTZ is used to derive `today` (single-region deployment;
 // time.Local in production).
 type HomeService struct {
-	Clock    clock.Clock
+	Clock    clock.Nower
 	ServerTZ *time.Location
 
 	RecentOrders  RecentOrdersForHome
 	Popularity    PopularityForHome
-	Affinity      AffinityForHome
-	FavoritesRepo FavoritesForHome
+	Affinity      AffinityFetcher
+	FavoritesRepo FavoritesLister
 
 	// VendorNames is an optional closure that batch-resolves vendor display
 	// names. The controller wires this with the existing plant/vendor repo.
@@ -74,14 +74,14 @@ type PopularityForHome interface {
 	AllCutoffsPassed(ctx context.Context, plant string, day time.Time, now time.Time) (bool, error)
 }
 
-// AffinityForHome captures the slice of menu/postgres.AffinityRepo we use.
-type AffinityForHome interface {
+// AffinityFetcher captures the slice of menu/postgres.AffinityRepo we use.
+type AffinityFetcher interface {
 	UserVendorAffinity(ctx context.Context, userID string) (map[string]float64, error)
 }
 
-// FavoritesForHome captures the read slice of menu/postgres.FavoriteRepo
+// FavoritesLister captures the read slice of menu/postgres.FavoriteRepo
 // we use. Returns []menu.FavoriteChip — defined in this package by Task 2.
-type FavoritesForHome interface {
+type FavoritesLister interface {
 	ListByUser(ctx context.Context, userID, targetDay, plant string, limit int, cursor *time.Time) ([]FavoriteChip, *time.Time, error)
 }
 

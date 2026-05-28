@@ -41,7 +41,10 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
   const days: { id: string; label: string }[] = [];
   for (let i = 0; i < 7; i++) {
     const id = dayId(i);
-    const label = i === 0 ? "今天" : i === 1 ? "明天" : id.slice(5);
+    let label: string;
+    if (i === 0) label = "今天";
+    else if (i === 1) label = "明天";
+    else label = id.slice(5);
     days.push({ id, label });
   }
 

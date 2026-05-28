@@ -7,14 +7,14 @@ type EmployeeEntry = components["schemas"]["EmployeeEntryDTO"];
 type CurrentPayrollLine = components["schemas"]["CurrentPayrollLineDTO"];
 type ComplaintCategory = components["schemas"]["FileComplaintInputBody"]["category"];
 
-const COMPLAINT_CATEGORIES: ComplaintCategory[] = [
+const COMPLAINT_CATEGORIES: ReadonlySet<ComplaintCategory> = new Set([
   "wrong_item",
   "missing_item",
   "quality",
   "portion",
   "hygiene",
   "other",
-];
+]);
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) {
@@ -74,7 +74,7 @@ export const actions: Actions = {
     const category = String(fd.get("category") ?? "") as ComplaintCategory;
     const description = String(fd.get("description") ?? "").trim();
     if (!orderId) return fail(400, { complaintError: "缺少訂單資訊" });
-    if (!COMPLAINT_CATEGORIES.includes(category)) {
+    if (!COMPLAINT_CATEGORIES.has(category)) {
       return fail(400, { complaintError: "請選擇問題類型" });
     }
     if (description.length < 5 || description.length > 1000) {

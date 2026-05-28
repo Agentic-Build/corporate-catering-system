@@ -78,9 +78,13 @@ func TestWriteDLQ_IncrementsCounter(t *testing.T) {
 	otel.SetMeterProvider(mp)
 	t.Cleanup(func() { _ = mp.Shutdown(context.Background()) })
 
-	require.NoError(t, messaging.WriteDLQ(ctx, pool,
-		"ORDERS_V1", "order.placed.v1", "order-projector",
-		map[string]any{"order_id": "o-1"}, nil, "boom"))
+	require.NoError(t, messaging.WriteDLQ(ctx, pool, messaging.DLQEntry{
+		Stream:    "ORDERS_V1",
+		Subject:   "order.placed.v1",
+		Consumer:  "order-projector",
+		Payload:   map[string]any{"order_id": "o-1"},
+		LastError: "boom",
+	}))
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(ctx, &rm))

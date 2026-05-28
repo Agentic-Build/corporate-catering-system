@@ -59,6 +59,6 @@ type OrderReverser interface {
 }
 
 // AuditTx mirrors the audit-repo shape used by other services.
-type AuditTx interface {
+type AuditTxWriter interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }

@@ -9,7 +9,7 @@ type OperatorDTO = components["schemas"]["OperatorDTO"];
 type PlantDTO = components["schemas"]["PlantDTO"];
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
-  if (!locals.user || locals.user.role !== "welfare_admin") throw redirect(303, "/login");
+  if (locals.user?.role !== "welfare_admin") throw redirect(303, "/login");
   const client = apiFor(locals.apiToken);
   const [vendorsRes, operatorsRes, plantsRes] = await Promise.allSettled([
     client.GET("/api/admin/vendors", { params: { query: {} } }),

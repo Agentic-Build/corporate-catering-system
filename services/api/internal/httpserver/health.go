@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+const (
+	contentTypeHeader = "content-type"
+	contentTypeJSON   = "application/json"
+)
+
 // Checker reports the health of a single dependency. Checkers must be
 // cheap and bounded: the readiness handler enforces a 2-second deadline
 // for the entire check fan-out so kubelet probes do not stall.
@@ -62,7 +67,7 @@ func (h *Health) LivenessHandler() http.HandlerFunc {
 			_, _ = w.Write([]byte(`{"status":"draining"}`))
 			return
 		}
-		w.Header().Set("content-type", "application/json")
+		w.Header().Set(contentTypeHeader, contentTypeJSON)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}
 }
@@ -75,7 +80,7 @@ func (h *Health) ReadinessHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		w.Header().Set("content-type", "application/json")
+		w.Header().Set(contentTypeHeader, contentTypeJSON)
 
 		type depResult struct {
 			Name  string `json:"name"`
@@ -111,11 +116,11 @@ func (h *Health) ReadinessHandler() http.HandlerFunc {
 // Default shallow handlers used by the main API server. Split runtime roles
 // use Health directly so readiness can include their dependency set.
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("content-type", "application/json")
+	w.Header().Set(contentTypeHeader, contentTypeJSON)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func readyHandler(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("content-type", "application/json")
+	w.Header().Set(contentTypeHeader, contentTypeJSON)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 }

@@ -32,14 +32,26 @@ func dlqMessages() metric.Int64Counter {
 	return dlqMessagesCounter
 }
 
+// DLQEntry bundles the message-failure attributes WriteDLQ records.
+type DLQEntry struct {
+	Stream    string
+	Subject   string
+	Consumer  string
+	Payload   map[string]any
+	Headers   map[string]any
+	LastError string
+}
+
 // WriteDLQ records an irrecoverable message failure to dlq_message. Workers
 // call this when MaxDeliver is exceeded or processing can't be retried.
 // Deliberately not inside any per-message tx — it's the escape hatch when
 // the normal tx couldn't succeed. Visible via GET /api/admin/dlq.
-func WriteDLQ(ctx context.Context, pool *pgxpool.Pool, stream, subject, consumer string, payload, headers map[string]any, lastError string) error {
+func WriteDLQ(ctx context.Context, pool *pgxpool.Pool, e DLQEntry) error {
+	payload := e.Payload
 	if payload == nil {
 		payload = map[string]any{}
 	}
+	headers := e.Headers
 	if headers == nil {
 		headers = map[string]any{}
 	}
@@ -54,11 +66,11 @@ func WriteDLQ(ctx context.Context, pool *pgxpool.Pool, stream, subject, consumer
 	if _, err := pool.Exec(ctx, `
 INSERT INTO dlq_message (source_stream, source_subject, source_consumer, payload, headers, last_error)
 VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)`,
-		stream, subject, consumer, p, h, lastError); err != nil {
+		e.Stream, e.Subject, e.Consumer, p, h, e.LastError); err != nil {
 		return fmt.Errorf("write dlq: %w", err)
 	}
 	if c := dlqMessages(); c != nil {
-		c.Add(ctx, 1, metric.WithAttributes(attribute.String("source_stream", stream)))
+		c.Add(ctx, 1, metric.WithAttributes(attribute.String("source_stream", e.Stream)))
 	}
 	return nil
 }
@@ -75,7 +87,13 @@ func DLQOnExhaustion(ctx context.Context, msg jetstream.Msg, pool *pgxpool.Pool,
 	}
 	var payload map[string]any
 	_ = json.Unmarshal(msg.Data(), &payload)
-	if werr := WriteDLQ(ctx, pool, meta.Stream, msg.Subject(), consumer, payload, nil, procErr.Error()); werr != nil {
+	if WriteDLQ(ctx, pool, DLQEntry{
+		Stream:    meta.Stream,
+		Subject:   msg.Subject(),
+		Consumer:  consumer,
+		Payload:   payload,
+		LastError: procErr.Error(),
+	}) != nil {
 		_ = msg.Nak()
 		return false
 	}

@@ -11,6 +11,11 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 )
 
+const (
+	errProvisionerNotConfigured = "%w: provisioner is not configured"
+	errWrapWithDetail           = "%w: %v"
+)
+
 // AuditWriter records an admin action against the append-only audit log.
 // *order/postgres.AuditRepo satisfies it.
 type AuditWriter interface {
@@ -246,7 +251,7 @@ func (s *Service) CreateOperator(ctx context.Context, vendorID, email, displayNa
 		return nil, fmt.Errorf("%w: display_name is required", ErrInvalidOperator)
 	}
 	if s.Provisioner == nil {
-		return nil, fmt.Errorf("%w: provisioner is not configured", ErrProvisioningSetup)
+		return nil, fmt.Errorf(errProvisionerNotConfigured, ErrProvisioningSetup)
 	}
 	prov, err := s.Provisioner.UpsertVendorOperator(ctx, identity.VendorOperatorProvisionInput{
 		Email:       email,
@@ -255,7 +260,7 @@ func (s *Service) CreateOperator(ctx context.Context, vendorID, email, displayNa
 		Active:      true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrProvisioningSetup, err)
+		return nil, fmt.Errorf(errWrapWithDetail, ErrProvisioningSetup, err)
 	}
 	now := time.Now().UTC()
 	op := &OperatorAccount{
@@ -314,26 +319,26 @@ func (s *Service) ReinstateOperator(ctx context.Context, vendorID, operatorID st
 
 func (s *Service) suspendRemoteOperator(ctx context.Context, op *OperatorAccount) error {
 	if s.Provisioner == nil {
-		return fmt.Errorf("%w: provisioner is not configured", ErrProvisioningSetup)
+		return fmt.Errorf(errProvisionerNotConfigured, ErrProvisioningSetup)
 	}
 	if op.ExternalSubject == nil || *op.ExternalSubject == "" {
 		return fmt.Errorf("%w: missing external subject", ErrInvalidOperator)
 	}
 	if err := s.Provisioner.SuspendVendorOperator(ctx, op.Provider, *op.ExternalSubject); err != nil {
-		return fmt.Errorf("%w: %v", ErrProvisioningSetup, err)
+		return fmt.Errorf(errWrapWithDetail, ErrProvisioningSetup, err)
 	}
 	return nil
 }
 
 func (s *Service) reinstateRemoteOperator(ctx context.Context, op *OperatorAccount) error {
 	if s.Provisioner == nil {
-		return fmt.Errorf("%w: provisioner is not configured", ErrProvisioningSetup)
+		return fmt.Errorf(errProvisionerNotConfigured, ErrProvisioningSetup)
 	}
 	if op.ExternalSubject == nil || *op.ExternalSubject == "" {
 		return fmt.Errorf("%w: missing external subject", ErrInvalidOperator)
 	}
 	if err := s.Provisioner.ReinstateVendorOperator(ctx, op.Provider, *op.ExternalSubject, op.VendorID); err != nil {
-		return fmt.Errorf("%w: %v", ErrProvisioningSetup, err)
+		return fmt.Errorf(errWrapWithDetail, ErrProvisioningSetup, err)
 	}
 	return nil
 }

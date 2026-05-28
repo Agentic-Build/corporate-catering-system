@@ -13,6 +13,8 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
 )
 
+const dateLayoutISO = "2006-01-02"
+
 // API exposes payroll endpoints: admin batch + dispute management plus
 // employee dispute submission. Admin routes require welfare_admin; the
 // employee dispute endpoints require the employee role.
@@ -76,8 +78,8 @@ type batchIDInput struct {
 func toBatchDTO(b *payroll.Batch) batchDTO {
 	d := batchDTO{
 		ID:          b.ID,
-		PeriodStart: b.PeriodStart.UTC().Format("2006-01-02"),
-		PeriodEnd:   b.PeriodEnd.UTC().Format("2006-01-02"),
+		PeriodStart: b.PeriodStart.UTC().Format(dateLayoutISO),
+		PeriodEnd:   b.PeriodEnd.UTC().Format(dateLayoutISO),
 		Status:      string(b.Status),
 	}
 	d.LockedAt = httpserver.FormatNullableTimePtr(b.LockedAt)
@@ -282,5 +284,5 @@ func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
 
 // parseDay parses YYYY-MM-DD into UTC midnight.
 func parseDay(s string) (time.Time, error) {
-	return time.ParseInLocation("2006-01-02", s, time.UTC)
+	return time.ParseInLocation(dateLayoutISO, s, time.UTC)
 }

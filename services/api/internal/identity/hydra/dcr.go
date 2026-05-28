@@ -19,13 +19,12 @@ type SanitizingDCRProxy struct {
 	HTTP     *http.Client
 }
 
-// ServeHTTP forwards POST /oauth2/register (and PUT/GET/DELETE for the
-// registration_client_uri lifecycle) to Hydra and sanitises the response.
-func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// buildUpstreamRequest reads the inbound body, expands the DCR scope when
+// applicable, and returns the upstream request pointed at Hydra.
+func (p *SanitizingDCRProxy) buildUpstreamRequest(r *http.Request) (*http.Request, error) {
 	upstream, err := url.Parse(p.HydraURL)
 	if err != nil {
-		http.Error(w, "hydra url parse: "+err.Error(), http.StatusBadGateway)
-		return
+		return nil, fmt.Errorf("hydra url parse: %w", err)
 	}
 	upstream.Path = strings.TrimRight(upstream.Path, "/") + r.URL.Path
 	upstream.RawQuery = r.URL.RawQuery
@@ -35,19 +34,15 @@ func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		body, _ = io.ReadAll(r.Body)
 		_ = r.Body.Close()
 	}
-
 	if r.Method == http.MethodPost || r.Method == http.MethodPut {
 		if expanded, changed := expandRegistrationScope(body); changed {
 			body = expanded
 		}
 	}
-
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstream.String(), bytes.NewReader(body))
 	if err != nil {
-		http.Error(w, "build upstream req: "+err.Error(), http.StatusBadGateway)
-		return
+		return nil, fmt.Errorf("build upstream req: %w", err)
 	}
-	// Copy headers except Host (Hydra needs its own Host for URL resolution).
 	for k, vs := range r.Header {
 		if strings.EqualFold(k, "Host") {
 			continue
@@ -57,25 +52,16 @@ func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	req.Host = upstream.Host
+	return req, nil
+}
 
-	client := p.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		http.Error(w, "hydra DCR upstream: "+err.Error(), http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
+// writeSanitizedResponse forwards Hydra's response back to the client, scrubbing
+// JSON 2xx bodies and recomputing Content-Length.
+func writeSanitizedResponse(w http.ResponseWriter, resp *http.Response) error {
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		http.Error(w, "read upstream: "+err.Error(), http.StatusBadGateway)
-		return
+		return fmt.Errorf("read upstream: %w", err)
 	}
-
-	// Only scrub JSON 2xx; pass everything else through verbatim.
 	scrubbed := raw
 	ct := resp.Header.Get("Content-Type")
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 && strings.HasPrefix(ct, "application/json") {
@@ -83,8 +69,6 @@ func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			scrubbed = cleaned
 		}
 	}
-
-	// Copy response headers, recompute Content-Length after scrubbing.
 	for k, vs := range resp.Header {
 		if strings.EqualFold(k, "Content-Length") {
 			continue
@@ -96,6 +80,30 @@ func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(scrubbed)))
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(scrubbed)
+	return nil
+}
+
+// ServeHTTP forwards POST /oauth2/register (and PUT/GET/DELETE for the
+// registration_client_uri lifecycle) to Hydra and sanitises the response.
+func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	req, err := p.buildUpstreamRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	client := p.HTTP
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, "hydra DCR upstream: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	if err := writeSanitizedResponse(w, resp); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+	}
 }
 
 // expandRegistrationScope adds `openid` + `offline_access` to a DCR request's
@@ -138,6 +146,26 @@ func expandRegistrationScope(body []byte) ([]byte, bool) {
 	return out, true
 }
 
+// stripEmptyURIs deletes the optional URI fields whose value is "".
+func stripEmptyURIs(doc map[string]any) {
+	for _, k := range []string{"policy_uri", "tos_uri", "client_uri", "logo_uri", "jwks_uri"} {
+		if v, ok := doc[k]; ok {
+			if s, ok := v.(string); ok && s == "" {
+				delete(doc, k)
+			}
+		}
+	}
+}
+
+// stripEmptyArrayKey deletes key when doc[key] is an empty []any.
+func stripEmptyArrayKey(doc map[string]any, key string) {
+	if v, ok := doc[key]; ok {
+		if a, ok := v.([]any); ok && len(a) == 0 {
+			delete(doc, key)
+		}
+	}
+}
+
 // sanitizeDCRResponse strips fields that strict OAuth clients reject:
 // empty-string optional URIs (policy_uri/tos_uri/client_uri/logo_uri/jwks_uri),
 // `contacts: null`, and empty `audience: []`/`allowed_cors_origins: []`. All
@@ -148,31 +176,11 @@ func sanitizeDCRResponse(raw []byte) ([]byte, error) {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return nil, err
 	}
-
-	emptyURIKeys := []string{"policy_uri", "tos_uri", "client_uri", "logo_uri", "jwks_uri"}
-	for _, k := range emptyURIKeys {
-		if v, ok := doc[k]; ok {
-			if s, ok := v.(string); ok && s == "" {
-				delete(doc, k)
-			}
-		}
-	}
-
+	stripEmptyURIs(doc)
 	if v, ok := doc["contacts"]; ok && v == nil {
 		delete(doc, "contacts")
 	}
-
-	if v, ok := doc["audience"]; ok {
-		if a, ok := v.([]any); ok && len(a) == 0 {
-			delete(doc, "audience")
-		}
-	}
-
-	if v, ok := doc["allowed_cors_origins"]; ok {
-		if a, ok := v.([]any); ok && len(a) == 0 {
-			delete(doc, "allowed_cors_origins")
-		}
-	}
-
+	stripEmptyArrayKey(doc, "audience")
+	stripEmptyArrayKey(doc, "allowed_cors_origins")
 	return json.Marshal(doc)
 }

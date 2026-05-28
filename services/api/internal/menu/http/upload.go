@@ -17,6 +17,8 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
+const contentTypeHeader = "Content-Type"
+
 // PublicURL assembles the permanent browser-reachable URL for an object key.
 // MinIO path-style: {publicBaseURL}/{bucket}/{key}.
 func (a *API) PublicURL(key string) string {
@@ -56,7 +58,7 @@ func (a *API) HandleDirectUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 
-	ext, verr := validateImageUpload(fh.Header.Get("Content-Type"), fh.Size)
+	ext, verr := validateImageUpload(fh.Header.Get(contentTypeHeader), fh.Size)
 	if verr != nil {
 		status := http.StatusBadRequest
 		if he, ok := verr.(huma.StatusError); ok {
@@ -67,7 +69,7 @@ func (a *API) HandleDirectUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := imageObjectKey(vendorID, ext)
-	contentType := fh.Header.Get("Content-Type")
+	contentType := fh.Header.Get(contentTypeHeader)
 
 	limited := io.LimitReader(f, maxImageBytes+1)
 	if _, err := a.Storage.PutObject(r.Context(), key, limited, contentType); err != nil {
@@ -76,13 +78,13 @@ func (a *API) HandleDirectUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	publicURL := a.PublicURL(key)
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(contentTypeHeader, "application/json")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `{"url":%q}`, publicURL)
 }
 
 func writeJSONErr(w http.ResponseWriter, status int, detail string) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(contentTypeHeader, "application/json")
 	w.WriteHeader(status)
 	fmt.Fprintf(w, `{"status":%d,"detail":%q}`, status, detail)
 }

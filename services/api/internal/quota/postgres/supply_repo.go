@@ -12,6 +12,8 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
 )
 
+const errQuotaNNotPositive = "quota: n must be positive (got %d)"
+
 type SupplyRepo struct{ pool *pgxpool.Pool }
 
 func NewSupplyRepo(p *pgxpool.Pool) *SupplyRepo { return &SupplyRepo{pool: p} }
@@ -91,7 +93,7 @@ UPDATE meal_supply SET sold_out=$3, updated_at=now()
 // Conditional UPDATE: only decrements when remain >= n. Returns new remain or ErrOutOfStock.
 func (r *SupplyRepo) Decrement(ctx context.Context, itemID string, date time.Time, n int) (int, error) {
 	if n <= 0 {
-		return 0, fmt.Errorf("quota: n must be positive (got %d)", n)
+		return 0, fmt.Errorf(errQuotaNNotPositive, n)
 	}
 	var newRemain int
 	err := r.pool.QueryRow(ctx, `
@@ -125,7 +127,7 @@ SELECT EXISTS (SELECT 1 FROM meal_supply WHERE menu_item_id=$1 AND supply_date=$
 // Restore increments remain, capped at capacity. Used for cancellations.
 func (r *SupplyRepo) Restore(ctx context.Context, itemID string, date time.Time, n int) error {
 	if n <= 0 {
-		return fmt.Errorf("quota: n must be positive (got %d)", n)
+		return fmt.Errorf(errQuotaNNotPositive, n)
 	}
 	_, err := r.pool.Exec(ctx, `
 UPDATE meal_supply
@@ -141,7 +143,7 @@ UPDATE meal_supply
 // on tx rollback the decrement is also reverted.
 func (r *SupplyRepo) DecrementTx(ctx context.Context, tx pgx.Tx, itemID string, date time.Time, n int) (int, error) {
 	if n <= 0 {
-		return 0, fmt.Errorf("quota: n must be positive (got %d)", n)
+		return 0, fmt.Errorf(errQuotaNNotPositive, n)
 	}
 	var newRemain int
 	err := tx.QueryRow(ctx, `
@@ -174,7 +176,7 @@ SELECT EXISTS (SELECT 1 FROM meal_supply WHERE menu_item_id=$1 AND supply_date=$
 // RestoreTx is the transactional variant of Restore.
 func (r *SupplyRepo) RestoreTx(ctx context.Context, tx pgx.Tx, itemID string, date time.Time, n int) error {
 	if n <= 0 {
-		return fmt.Errorf("quota: n must be positive (got %d)", n)
+		return fmt.Errorf(errQuotaNNotPositive, n)
 	}
 	_, err := tx.Exec(ctx, `
 UPDATE meal_supply

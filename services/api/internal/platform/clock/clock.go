@@ -2,7 +2,8 @@ package clock
 
 import "time"
 
-type Clock interface {
+// Nower returns the current time. Single-method abstraction so tests can pin "now".
+type Nower interface {
 	Now() time.Time
 }
 

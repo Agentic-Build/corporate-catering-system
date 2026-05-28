@@ -19,8 +19,21 @@ import (
 	vendor "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors"
 )
 
+// Shared tool-error strings (kept in one place so wording matches across tools).
+const (
+	errNotAuthenticated        = "not authenticated"
+	errMenuNotConfigured       = "menu service not configured"
+	errOrderNotConfigured      = "order service not configured"
+	errPayrollNotConfigured    = "payroll service not configured"
+	errVendorNotConfigured     = "vendor service not configured"
+	errComplianceNotConfigured = "compliance service not configured"
+	errPlantRequired           = "plant required (no home plant on user)"
+	errRoleCannotReadMenu      = "role %s cannot read menu"
+	dateLayoutISO              = "2006-01-02"
+)
+
 // AuditTx is the audit_event write surface mcpserver depends on.
-type AuditTx interface {
+type AuditTxWriter interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
 
@@ -33,7 +46,7 @@ type txBeginner interface {
 // Pool + Audit are optional: when nil, the per-tool audit row is skipped.
 type Deps struct {
 	Pool       txBeginner
-	Audit      AuditTx
+	Audit      AuditTxWriter
 	Order      *order.Service
 	Vendor     *vendor.Service
 	Menu       *menu.Service

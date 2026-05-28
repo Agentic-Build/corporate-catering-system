@@ -21,8 +21,8 @@ type txBeginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-// objectStore is the blob-write surface of *storage.S3Client.
-type objectStore interface {
+// objectPutter is the blob-write surface of *storage.S3Client.
+type objectPutter interface {
 	PutObject(ctx context.Context, key string, body io.Reader, contentType string) (string, error)
 }
 
@@ -32,20 +32,20 @@ type VendorSuspender interface {
 }
 
 // Clock lets tests pin "now".
-type Clock interface{ Now() time.Time }
+type Nower interface{ Now() time.Time }
 
 // AuditTx mirrors the audit-repo shape used by order/payroll services.
-type AuditTx interface {
+type AuditTxWriter interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
 
 // OutboxTx mirrors the outbox-repo shape used by order/payroll services.
-type OutboxTx interface {
+type OutboxAppender interface {
 	AppendTx(ctx context.Context, tx pgx.Tx, aggregateType, aggregateID, subject string, payload map[string]any, headers map[string]any) error
 }
 
-// AuditQuery is the minimal read-side interface for /api/admin/audit.
-type AuditQuery interface {
+// AuditLister is the minimal read-side interface for /api/admin/audit.
+type AuditLister interface {
 	List(ctx context.Context, filter AuditFilter) ([]AuditRow, error)
 }
 
@@ -57,7 +57,7 @@ type AuditFilter struct {
 	Limit      int
 }
 
-// AuditRow is a single row returned by AuditQuery.List.
+// AuditRow is a single row returned by AuditLister.List.
 type AuditRow struct {
 	ID         int64
 	ActorID    *string
@@ -76,11 +76,11 @@ type Service struct {
 	Pool     txBeginner
 	Docs     DocumentRepository
 	Anomaly  AnomalyRepository
-	Storage  objectStore
-	Audit    AuditTx
-	Outbox   OutboxTx
-	AuditQry AuditQuery
-	Clock    Clock
+	Storage  objectPutter
+	Audit    AuditTxWriter
+	Outbox   OutboxAppender
+	AuditQry AuditLister
+	Clock    Nower
 	// Vendors backs the merchant compliance self-view (GET /api/merchant/compliance).
 	Vendors VendorReader
 	// VendorGov executes anomaly-triage governance actions (suspend). Optional;
@@ -240,6 +240,24 @@ const (
 	ActionSuspend = "suspend"
 )
 
+// applyTriageTx writes the triage row + audit + optional warning row inside the
+// caller's tx. Split out so TriageAnomaly stays under the cognitive-complexity
+// threshold.
+func (s *Service) applyTriageTx(ctx context.Context, tx pgx.Tx, a *Anomaly, id, by, notes, action, role string) error {
+	if err := s.Anomaly.TriageTx(ctx, tx, id, by, notes); err != nil {
+		return err
+	}
+	payload := map[string]any{"anomaly_id": id, "notes": notes, "action": action}
+	if err := s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.triage", "anomaly_alert", id, payload, ""); err != nil {
+		return err
+	}
+	if action == ActionWarn && a.TargetKind == "vendor" {
+		wp := map[string]any{"anomaly_id": id, "anomaly_kind": a.Kind, "notes": notes}
+		return s.Audit.WriteTx(ctx, tx, &by, &role, "vendor.warning", "vendor", a.TargetID, wp, "")
+	}
+	return nil
+}
+
 // TriageAnomaly marks an open anomaly as triaged, writes an audit row, and
 // optionally carries out a governance action against the anomaly's target
 // vendor: "warn" records a warning, "suspend" suspends the vendor. Suspending
@@ -253,22 +271,10 @@ func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes, action strin
 		return err
 	}
 	role := "welfare_admin"
-	auditErr := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		if err := s.Anomaly.TriageTx(ctx, tx, id, by, notes); err != nil {
-			return err
-		}
-		payload := map[string]any{"anomaly_id": id, "notes": notes, "action": action}
-		if werr := s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.triage", "anomaly_alert", id, payload, ""); werr != nil {
-			return werr
-		}
-		if action == ActionWarn && a.TargetKind == "vendor" {
-			wp := map[string]any{"anomaly_id": id, "anomaly_kind": a.Kind, "notes": notes}
-			return s.Audit.WriteTx(ctx, tx, &by, &role, "vendor.warning", "vendor", a.TargetID, wp, "")
-		}
-		return nil
-	})
-	if auditErr != nil {
-		return auditErr
+	if err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		return s.applyTriageTx(ctx, tx, a, id, by, notes, action, role)
+	}); err != nil {
+		return err
 	}
 	if action == ActionSuspend && a.TargetKind == "vendor" && s.VendorGov != nil {
 		// Already-suspended/terminated vendor → ErrInvalidStatus is a no-op success.

@@ -5,7 +5,7 @@ import { API_BASE_URL } from "$lib/server/env";
 // SSE proxy: EventSource can't send bearer tokens, so inject it server-side.
 // Forward the downstream AbortSignal so a client disconnect cancels upstream.
 export const GET: RequestHandler = async ({ locals, request }) => {
-  if (!locals.user || locals.user.role !== "vendor_operator") {
+  if (locals.user?.role !== "vendor_operator") {
     throw error(403, "vendor operator required");
   }
   const upstream = await fetch(`${API_BASE_URL}/api/merchant/orders/events`, {

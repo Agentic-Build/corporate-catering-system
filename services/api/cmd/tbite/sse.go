@@ -21,6 +21,34 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 )
 
+// pumpBoardSSE writes board events / heartbeats until the client or hub goes
+// away. Returns the SSE disconnect reason for the metric.
+func pumpBoardSSE(r *http.Request, w http.ResponseWriter, flusher http.Flusher, ch <-chan order.BoardEvent, label string) string {
+	hb := time.NewTicker(20 * time.Second)
+	defer hb.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return "client_closed"
+		case <-hb.C:
+			if err := writeSSE(w, order.BoardEvent{Kind: "ping"}); err != nil {
+				return "write_error"
+			}
+			flusher.Flush()
+		case ev, open := <-ch:
+			if !open {
+				return "hub_closed"
+			}
+			start := time.Now()
+			if err := writeSSE(w, ev); err != nil {
+				return "write_error"
+			}
+			flusher.Flush()
+			sseRecordFanoutLag(r.Context(), label, time.Since(start))
+		}
+	}
+}
+
 // boardSSEHandler returns the merchant prep-board SSE endpoint. The
 // caller must be authenticated as a vendor operator with VendorID set;
 // the AuthMiddleware in roles.go performs that check.
@@ -43,34 +71,35 @@ func boardSSEHandler(hub *order.BoardHub) http.HandlerFunc {
 		defer unsub()
 
 		sseOnConnect(r.Context(), "board")
-		reason := "client_closed"
-		defer func() { sseOnDisconnect(r.Context(), "board", reason) }()
+		reason := pumpBoardSSE(r, w, flusher, ch, "board")
+		sseOnDisconnect(r.Context(), "board", reason)
+	}
+}
 
-		hb := time.NewTicker(20 * time.Second)
-		defer hb.Stop()
-		for {
-			select {
-			case <-r.Context().Done():
-				return
-			case <-hb.C:
-				if err := writeSSE(w, order.BoardEvent{Kind: "ping"}); err != nil {
-					reason = "write_error"
-					return
-				}
-				flusher.Flush()
-			case ev, open := <-ch:
-				if !open {
-					reason = "hub_closed"
-					return
-				}
-				start := time.Now()
-				if err := writeSSE(w, ev); err != nil {
-					reason = "write_error"
-					return
-				}
-				flusher.Flush()
-				sseRecordFanoutLag(r.Context(), "board", time.Since(start))
+// pumpMenuSSE writes menu changed-events / heartbeats until the client or hub
+// goes away. Returns the SSE disconnect reason for the metric.
+func pumpMenuSSE(r *http.Request, w http.ResponseWriter, flusher http.Flusher, ch <-chan struct{}) string {
+	hb := time.NewTicker(20 * time.Second)
+	defer hb.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return "client_closed"
+		case <-hb.C:
+			if err := writeSSE(w, order.BoardEvent{Kind: "ping"}); err != nil {
+				return "write_error"
 			}
+			flusher.Flush()
+		case _, open := <-ch:
+			if !open {
+				return "hub_closed"
+			}
+			start := time.Now()
+			if err := writeSSE(w, order.BoardEvent{Kind: "changed"}); err != nil {
+				return "write_error"
+			}
+			flusher.Flush()
+			sseRecordFanoutLag(r.Context(), "menu", time.Since(start))
 		}
 	}
 }
@@ -96,35 +125,8 @@ func menuSSEHandler(hub *order.MenuHub) http.HandlerFunc {
 		defer unsub()
 
 		sseOnConnect(r.Context(), "menu")
-		reason := "client_closed"
-		defer func() { sseOnDisconnect(r.Context(), "menu", reason) }()
-
-		hb := time.NewTicker(20 * time.Second)
-		defer hb.Stop()
-		for {
-			select {
-			case <-r.Context().Done():
-				return
-			case <-hb.C:
-				if err := writeSSE(w, order.BoardEvent{Kind: "ping"}); err != nil {
-					reason = "write_error"
-					return
-				}
-				flusher.Flush()
-			case _, open := <-ch:
-				if !open {
-					reason = "hub_closed"
-					return
-				}
-				start := time.Now()
-				if err := writeSSE(w, order.BoardEvent{Kind: "changed"}); err != nil {
-					reason = "write_error"
-					return
-				}
-				flusher.Flush()
-				sseRecordFanoutLag(r.Context(), "menu", time.Since(start))
-			}
-		}
+		reason := pumpMenuSSE(r, w, flusher, ch)
+		sseOnDisconnect(r.Context(), "menu", reason)
 	}
 }
 

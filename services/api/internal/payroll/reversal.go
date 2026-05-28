@@ -41,25 +41,7 @@ func (s *Service) ReverseOrder(ctx context.Context, orderID string) error {
 	hasEntry := err == nil
 
 	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		if err := s.OrderTx.UpdateStatusTx(ctx, tx, orderID, o.Status, order.StatusRefunded); err != nil {
-			return err
-		}
-		if hasEntry {
-			if err := s.Entries.IncrementRefundedTx(ctx, tx, entryID, o.TotalPriceMinor); err != nil {
-				return err
-			}
-		}
-		sysRole := "welfare_admin"
-		payload := map[string]any{
-			"order_id":     orderID,
-			"user_id":      o.UserID,
-			"entry_id":     entryID,
-			"refund_minor": o.TotalPriceMinor,
-		}
-		if err := s.Outbox.AppendTx(ctx, tx, "order", orderID, "payroll.order_reversed.v1", payload, map[string]any{}); err != nil {
-			return err
-		}
-		return s.Audit.WriteTx(ctx, tx, nil, &sysRole, "payroll.order_reverse", "order", orderID, payload, "")
+		return s.applyReverseOrderTx(ctx, tx, o, orderID, entryID, hasEntry)
 	})
 	if err != nil {
 		return err
@@ -70,4 +52,28 @@ func (s *Service) ReverseOrder(ctx context.Context, orderID string) error {
 	}
 	observability.RecordPayrollReversal(ctx, reason)
 	return nil
+}
+
+// applyReverseOrderTx writes the status flip + entry refund-bump + outbox +
+// audit row inside the caller's tx.
+func (s *Service) applyReverseOrderTx(ctx context.Context, tx pgx.Tx, o *order.Order, orderID, entryID string, hasEntry bool) error {
+	if err := s.OrderTx.UpdateStatusTx(ctx, tx, orderID, o.Status, order.StatusRefunded); err != nil {
+		return err
+	}
+	if hasEntry {
+		if err := s.Entries.IncrementRefundedTx(ctx, tx, entryID, o.TotalPriceMinor); err != nil {
+			return err
+		}
+	}
+	sysRole := "welfare_admin"
+	payload := map[string]any{
+		"order_id":     orderID,
+		"user_id":      o.UserID,
+		"entry_id":     entryID,
+		"refund_minor": o.TotalPriceMinor,
+	}
+	if err := s.Outbox.AppendTx(ctx, tx, "order", orderID, "payroll.order_reversed.v1", payload, map[string]any{}); err != nil {
+		return err
+	}
+	return s.Audit.WriteTx(ctx, tx, nil, &sysRole, "payroll.order_reverse", "order", orderID, payload, "")
 }

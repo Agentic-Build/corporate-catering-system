@@ -6,14 +6,14 @@ import { API_BASE_URL } from "$lib/server/env";
 
 type ComplaintCategory = components["schemas"]["FileComplaintInputBody"]["category"];
 
-const COMPLAINT_CATEGORIES: ComplaintCategory[] = [
+const COMPLAINT_CATEGORIES: ReadonlySet<ComplaintCategory> = new Set([
   "wrong_item",
   "missing_item",
   "quality",
   "portion",
   "hygiene",
   "other",
-];
+]);
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
   if (!locals.user) {
@@ -128,7 +128,7 @@ export const actions: Actions = {
     const fd = await request.formData();
     const category = String(fd.get("category") ?? "") as ComplaintCategory;
     const description = String(fd.get("description") ?? "").trim();
-    if (!COMPLAINT_CATEGORIES.includes(category)) {
+    if (!COMPLAINT_CATEGORIES.has(category)) {
       return fail(400, { complaintError: "請選擇問題類型" });
     }
     if (description.length < 5 || description.length > 1000) {

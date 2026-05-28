@@ -36,7 +36,7 @@ const (
 
 func sp(s string) *string { return &s }
 
-// Fakes cover the four payroll repos plus CurrentLinesRepository, the order
+// Fakes cover the four payroll repos plus CurrentLinesLister, the order
 // repos, audit + outbox. Pool=fakeBeginner so the pgx.BeginFunc write paths
 // (BuildDraft/Lock/ResolveDispute/FlagException/ResolveException) run without
 // a real DB.

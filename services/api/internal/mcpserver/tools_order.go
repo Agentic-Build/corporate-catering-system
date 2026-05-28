@@ -21,37 +21,13 @@ import (
 )
 
 func registerOrderTools(s *server.MCPServer, deps Deps) {
-	// === order.list_mine ===
 	s.AddTool(
 		mcp.NewTool("order.list_mine",
 			mcp.WithDescription("List the authenticated employee's recent orders (last 30 days)"),
 			annoReadOnly(),
 		),
-		func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleEmployee {
-				return mcp.NewToolResultError(fmt.Sprintf("role %s cannot list employee orders", u.Role)), nil
-			}
-			if deps.Order == nil {
-				return mcp.NewToolResultError("order service not configured"), nil
-			}
-			orders, err := deps.Order.ListByUser(ctx, u.ID)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("list orders: %v", err)), nil
-			}
-			auditAfter(ctx, deps, "order.list_mine", "order", "list", nil, u)
-			data, _ := json.Marshal(map[string]any{
-				"count":  len(orders),
-				"orders": orders,
-			})
-			return mcp.NewToolResultText(string(data)), nil
-		},
+		orderListMineHandler(deps),
 	)
-
-	// === order.get ===
 	s.AddTool(
 		mcp.NewTool("order.get",
 			mcp.WithDescription("Get an order by ID (owner only)"),
@@ -61,32 +37,8 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 			),
 			annoReadOnly(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleEmployee {
-				return mcp.NewToolResultError("only employee can use this tool"), nil
-			}
-			if deps.Order == nil {
-				return mcp.NewToolResultError("order service not configured"), nil
-			}
-			orderID, err := req.RequireString("order_id")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			o, err := deps.Order.Get(ctx, orderID, u.ID)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			auditAfter(ctx, deps, "order.get", "order", o.ID, nil, u)
-			data, _ := json.Marshal(o)
-			return mcp.NewToolResultText(string(data)), nil
-		},
+		orderGetHandler(deps),
 	)
-
-	// === order.place ===
 	s.AddTool(
 		mcp.NewTool("order.place",
 			mcp.WithDescription("Place a new order for the authenticated employee"),
@@ -115,69 +67,8 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 			),
 			annoCreate(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleEmployee {
-				return mcp.NewToolResultError("only employee can place orders"), nil
-			}
-			if deps.Order == nil {
-				return mcp.NewToolResultError("order service not configured"), nil
-			}
-			plant, err := req.RequireString("plant")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			dayStr, err := req.RequireString("supply_date")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			day, err := time.Parse("2006-01-02", dayStr)
-			if err != nil {
-				return mcp.NewToolResultError("invalid supply_date (YYYY-MM-DD)"), nil
-			}
-			// mcp-go v0.53 has no RequireSlice for arrays of objects; pull from
-			// GetArguments() directly. JSON arrays decode as []any whose entries
-			// are map[string]any with JSON numbers arriving as float64.
-			args := req.GetArguments()
-			rawItems, ok := args["items"].([]any)
-			if !ok || len(rawItems) == 0 {
-				return mcp.NewToolResultError("items required (non-empty array)"), nil
-			}
-			items := make([]order.PlaceItem, 0, len(rawItems))
-			for _, raw := range rawItems {
-				m, ok := raw.(map[string]any)
-				if !ok {
-					return mcp.NewToolResultError("items entry must be an object"), nil
-				}
-				id, _ := m["menu_item_id"].(string)
-				qty, _ := m["qty"].(float64)
-				items = append(items, order.PlaceItem{MenuItemID: id, Qty: int(qty)})
-			}
-			notes, _ := args["notes"].(string)
-			o, err := deps.Order.Place(ctx, order.PlaceOrderInput{
-				UserID:     u.ID,
-				Plant:      plant,
-				SupplyDate: day,
-				Items:      items,
-				Notes:      notes,
-			})
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			auditAfter(ctx, deps, "order.place", "order", o.ID, map[string]any{
-				"plant":       plant,
-				"supply_date": dayStr,
-				"items_count": len(items),
-			}, u)
-			data, _ := json.Marshal(o)
-			return mcp.NewToolResultText(string(data)), nil
-		},
+		orderPlaceHandler(deps),
 	)
-
-	// === order.cancel ===
 	s.AddTool(
 		mcp.NewTool("order.cancel",
 			mcp.WithDescription("Cancel an order owned by the authenticated employee"),
@@ -187,30 +78,8 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 			),
 			annoReversible(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleEmployee {
-				return mcp.NewToolResultError("only employee can cancel orders"), nil
-			}
-			if deps.Order == nil {
-				return mcp.NewToolResultError("order service not configured"), nil
-			}
-			orderID, err := req.RequireString("order_id")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			if err := deps.Order.Cancel(ctx, orderID, u.ID); err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			auditAfter(ctx, deps, "order.cancel", "order", orderID, nil, u)
-			return mcp.NewToolResultText(`{"status":"cancelled"}`), nil
-		},
+		orderCancelHandler(deps),
 	)
-
-	// === order.modify ===
 	s.AddTool(
 		mcp.NewTool("order.modify",
 			mcp.WithDescription("Replace the items of a PLACED order owned by the authenticated employee (before cutoff)"),
@@ -235,51 +104,182 @@ func registerOrderTools(s *server.MCPServer, deps Deps) {
 			),
 			annoStateChange(),
 		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			u, ok := userFromCtx(ctx)
-			if !ok {
-				return mcp.NewToolResultError("not authenticated"), nil
-			}
-			if u.Role != identity.RoleEmployee {
-				return mcp.NewToolResultError("only employee can modify orders"), nil
-			}
-			if deps.Order == nil {
-				return mcp.NewToolResultError("order service not configured"), nil
-			}
-			orderID, err := req.RequireString("order_id")
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			args := req.GetArguments()
-			rawItems, ok := args["items"].([]any)
-			if !ok || len(rawItems) == 0 {
-				return mcp.NewToolResultError("items required (non-empty array)"), nil
-			}
-			items := make([]order.PlaceItem, 0, len(rawItems))
-			for _, raw := range rawItems {
-				m, ok := raw.(map[string]any)
-				if !ok {
-					return mcp.NewToolResultError("items entry must be an object"), nil
-				}
-				id, _ := m["menu_item_id"].(string)
-				qty, _ := m["qty"].(float64)
-				items = append(items, order.PlaceItem{MenuItemID: id, Qty: int(qty)})
-			}
-			notes, _ := args["notes"].(string)
-			o, err := deps.Order.Modify(ctx, order.ModifyOrderInput{
-				OrderID: orderID,
-				UserID:  u.ID,
-				Items:   items,
-				Notes:   notes,
-			})
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			auditAfter(ctx, deps, "order.modify", "order", o.ID, map[string]any{
-				"items_count": len(items),
-			}, u)
-			data, _ := json.Marshal(o)
-			return mcp.NewToolResultText(string(data)), nil
-		},
+		orderModifyHandler(deps),
 	)
+}
+
+// orderEmployeePrelude validates auth, role, and order-service wiring shared by
+// every order tool. Returns the user (for auditAfter) plus an error result.
+func orderEmployeePrelude(ctx context.Context, deps Deps, denyMsg string) (*identity.User, *mcp.CallToolResult) {
+	u, ok := userFromCtx(ctx)
+	if !ok {
+		return nil, mcp.NewToolResultError(errNotAuthenticated)
+	}
+	if u.Role != identity.RoleEmployee {
+		return nil, mcp.NewToolResultError(denyMsg)
+	}
+	if deps.Order == nil {
+		return nil, mcp.NewToolResultError(errOrderNotConfigured)
+	}
+	return u, nil
+}
+
+func orderListMineHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, ok := userFromCtx(ctx)
+		if !ok {
+			return mcp.NewToolResultError(errNotAuthenticated), nil
+		}
+		if u.Role != identity.RoleEmployee {
+			return mcp.NewToolResultError(fmt.Sprintf("role %s cannot list employee orders", u.Role)), nil
+		}
+		if deps.Order == nil {
+			return mcp.NewToolResultError(errOrderNotConfigured), nil
+		}
+		orders, err := deps.Order.ListByUser(ctx, u.ID)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("list orders: %v", err)), nil
+		}
+		auditAfter(ctx, deps, "order.list_mine", "order", "list", nil, u)
+		data, _ := json.Marshal(map[string]any{
+			"count":  len(orders),
+			"orders": orders,
+		})
+		return mcp.NewToolResultText(string(data)), nil
+	}
+}
+
+func orderGetHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := orderEmployeePrelude(ctx, deps, "only employee can use this tool")
+		if errRes != nil {
+			return errRes, nil
+		}
+		orderID, err := req.RequireString("order_id")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		o, err := deps.Order.Get(ctx, orderID, u.ID)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		auditAfter(ctx, deps, "order.get", "order", o.ID, nil, u)
+		data, _ := json.Marshal(o)
+		return mcp.NewToolResultText(string(data)), nil
+	}
+}
+
+// parseOrderItems decodes the MCP "items" arg ([]{menu_item_id, qty}). Returns
+// (items, nil) on success or (nil, errResult) when the shape is invalid.
+func parseOrderItems(args map[string]any) ([]order.PlaceItem, *mcp.CallToolResult) {
+	rawItems, ok := args["items"].([]any)
+	if !ok || len(rawItems) == 0 {
+		return nil, mcp.NewToolResultError("items required (non-empty array)")
+	}
+	items := make([]order.PlaceItem, 0, len(rawItems))
+	for _, raw := range rawItems {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			return nil, mcp.NewToolResultError("items entry must be an object")
+		}
+		id, _ := m["menu_item_id"].(string)
+		qty, _ := m["qty"].(float64)
+		items = append(items, order.PlaceItem{MenuItemID: id, Qty: int(qty)})
+	}
+	return items, nil
+}
+
+func orderPlaceHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := orderEmployeePrelude(ctx, deps, "only employee can place orders")
+		if errRes != nil {
+			return errRes, nil
+		}
+		plant, err := req.RequireString("plant")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		dayStr, err := req.RequireString("supply_date")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		day, err := time.Parse(dateLayoutISO, dayStr)
+		if err != nil {
+			return mcp.NewToolResultError("invalid supply_date (YYYY-MM-DD)"), nil
+		}
+		args := req.GetArguments()
+		items, errRes := parseOrderItems(args)
+		if errRes != nil {
+			return errRes, nil
+		}
+		notes, _ := args["notes"].(string)
+		o, err := deps.Order.Place(ctx, order.PlaceOrderInput{
+			UserID:     u.ID,
+			Plant:      plant,
+			SupplyDate: day,
+			Items:      items,
+			Notes:      notes,
+		})
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		auditAfter(ctx, deps, "order.place", "order", o.ID, map[string]any{
+			"plant":       plant,
+			"supply_date": dayStr,
+			"items_count": len(items),
+		}, u)
+		data, _ := json.Marshal(o)
+		return mcp.NewToolResultText(string(data)), nil
+	}
+}
+
+func orderCancelHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := orderEmployeePrelude(ctx, deps, "only employee can cancel orders")
+		if errRes != nil {
+			return errRes, nil
+		}
+		orderID, err := req.RequireString("order_id")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		if err := deps.Order.Cancel(ctx, orderID, u.ID); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		auditAfter(ctx, deps, "order.cancel", "order", orderID, nil, u)
+		return mcp.NewToolResultText(`{"status":"cancelled"}`), nil
+	}
+}
+
+func orderModifyHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		u, errRes := orderEmployeePrelude(ctx, deps, "only employee can modify orders")
+		if errRes != nil {
+			return errRes, nil
+		}
+		orderID, err := req.RequireString("order_id")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		args := req.GetArguments()
+		items, errRes := parseOrderItems(args)
+		if errRes != nil {
+			return errRes, nil
+		}
+		notes, _ := args["notes"].(string)
+		o, err := deps.Order.Modify(ctx, order.ModifyOrderInput{
+			OrderID: orderID,
+			UserID:  u.ID,
+			Items:   items,
+			Notes:   notes,
+		})
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		auditAfter(ctx, deps, "order.modify", "order", o.ID, map[string]any{
+			"items_count": len(items),
+		}, u)
+		data, _ := json.Marshal(o)
+		return mcp.NewToolResultText(string(data)), nil
+	}
 }

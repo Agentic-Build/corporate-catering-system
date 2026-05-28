@@ -83,49 +83,7 @@ func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(c
 	}
 
 	if mcp != nil {
-		// MCP Streamable HTTP transport at /mcp per spec 2025-03-26.
-		streamOpts := []mcpsrv.StreamableHTTPOption{
-			mcpsrv.WithEndpointPath("/mcp"),
-			mcpsrv.WithStateLess(true),
-			// Wildcard CORS is safe — Bearer auth still required to do anything.
-			mcpsrv.WithStreamableHTTPCORS(
-				mcpsrv.WithCORSAllowedOrigins("*"),
-				mcpsrv.WithCORSAllowedHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
-				mcpsrv.WithCORSExposedHeaders("Mcp-Session-Id"),
-			),
-		}
-		// OAuth Protected Resource Metadata (RFC 9728) for clients that
-		// probe /mcp without a token.
-		if mcpOpts.PublicBaseURL != "" && len(mcpOpts.AuthorizationServers) > 0 {
-			streamOpts = append(streamOpts, mcpsrv.WithProtectedResourceMetadata(mcpsrv.ProtectedResourceMetadataConfig{
-				Resource:               strings.TrimRight(mcpOpts.PublicBaseURL, "/") + "/mcp",
-				AuthorizationServers:   mcpOpts.AuthorizationServers,
-				BearerMethodsSupported: []string{"header"},
-				ResourceName:           "T-Bite MCP",
-				ScopesSupported:        []string{"openid", "profile", "email"},
-			}))
-		}
-		stream := mcpsrv.NewStreamableHTTPServer(mcp, streamOpts...)
-		r.Handle("/mcp", mcpAuthEnforce(stream, mcpOpts, "/mcp"))
-
-		// Mount well-known path on chi without auth — discovery must work
-		// before the client has a token.
-		if mcpOpts.PublicBaseURL != "" && len(mcpOpts.AuthorizationServers) > 0 {
-			meta := mcpsrv.NewProtectedResourceMetadataHandler(mcpsrv.ProtectedResourceMetadataConfig{
-				Resource:               strings.TrimRight(mcpOpts.PublicBaseURL, "/") + "/mcp",
-				AuthorizationServers:   mcpOpts.AuthorizationServers,
-				BearerMethodsSupported: []string{"header"},
-				ResourceName:           "T-Bite MCP",
-				ScopesSupported:        []string{"openid", "profile", "email"},
-			})
-			r.Handle("/.well-known/oauth-protected-resource", meta)
-			r.Handle("/.well-known/oauth-protected-resource/mcp", meta)
-		}
-
-		logger.Info("mcp server mounted",
-			"streamable_http", "/mcp",
-			"oauth_metadata", mcpOpts.PublicBaseURL != "" && len(mcpOpts.AuthorizationServers) > 0,
-		)
+		mountMCP(r, logger, mcp, mcpOpts)
 	}
 
 	if extraRoutes != nil {
@@ -138,6 +96,50 @@ func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(c
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	return &Server{addr: addr, logger: logger, srv: srv}
+}
+
+// mcpResourceConfig builds the shared RFC 9728 metadata config so the stream
+// option and the well-known handler stay in sync.
+func mcpResourceConfig(mcpOpts MCPOpts) mcpsrv.ProtectedResourceMetadataConfig {
+	return mcpsrv.ProtectedResourceMetadataConfig{
+		Resource:               strings.TrimRight(mcpOpts.PublicBaseURL, "/") + "/mcp",
+		AuthorizationServers:   mcpOpts.AuthorizationServers,
+		BearerMethodsSupported: []string{"header"},
+		ResourceName:           "T-Bite MCP",
+		ScopesSupported:        []string{"openid", "profile", "email"},
+	}
+}
+
+// mountMCP wires the Streamable HTTP transport at /mcp plus the well-known
+// OAuth protected-resource metadata when configured.
+func mountMCP(r chi.Router, logger *slog.Logger, mcp *mcpsrv.MCPServer, mcpOpts MCPOpts) {
+	hasMetadata := mcpOpts.PublicBaseURL != "" && len(mcpOpts.AuthorizationServers) > 0
+	streamOpts := []mcpsrv.StreamableHTTPOption{
+		mcpsrv.WithEndpointPath("/mcp"),
+		mcpsrv.WithStateLess(true),
+		// Wildcard CORS is safe — Bearer auth still required to do anything.
+		mcpsrv.WithStreamableHTTPCORS(
+			mcpsrv.WithCORSAllowedOrigins("*"),
+			mcpsrv.WithCORSAllowedHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
+			mcpsrv.WithCORSExposedHeaders("Mcp-Session-Id"),
+		),
+	}
+	if hasMetadata {
+		streamOpts = append(streamOpts, mcpsrv.WithProtectedResourceMetadata(mcpResourceConfig(mcpOpts)))
+	}
+	stream := mcpsrv.NewStreamableHTTPServer(mcp, streamOpts...)
+	r.Handle("/mcp", mcpAuthEnforce(stream, mcpOpts, "/mcp"))
+
+	if hasMetadata {
+		meta := mcpsrv.NewProtectedResourceMetadataHandler(mcpResourceConfig(mcpOpts))
+		r.Handle("/.well-known/oauth-protected-resource", meta)
+		r.Handle("/.well-known/oauth-protected-resource/mcp", meta)
+	}
+
+	logger.Info("mcp server mounted",
+		"streamable_http", "/mcp",
+		"oauth_metadata", hasMetadata,
+	)
 }
 
 // mcpAuthEnforce wraps the MCP transport so unauthenticated POSTs return a
