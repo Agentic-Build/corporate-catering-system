@@ -23,8 +23,18 @@ func setupJetStream(t *testing.T) (jetstream.JetStream, func()) {
 	url, err := c.ConnectionString(ctx)
 	require.NoError(t, err)
 
-	nc, err := nats.Connect(url)
-	require.NoError(t, err)
+	var nc *nats.Conn
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		nc, err = nats.Connect(url)
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			require.NoError(t, err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 	js, err := jetstream.New(nc)
 	require.NoError(t, err)
 	_, err = js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
