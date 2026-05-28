@@ -45,7 +45,7 @@ export const actions: Actions = {
   uploadDocument: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { uploadError: "unauthenticated" });
     const fd = await request.formData();
-    const kind = (fd.get("kind")?.toString()) ?? "";
+    const kind = fd.get("kind")?.toString() ?? "";
     const file = fd.get("file");
     const expiresAt = (fd.get("expires_at")?.toString() ?? "").trim();
     const supersedes = (fd.get("supersedes")?.toString() ?? "").trim();
