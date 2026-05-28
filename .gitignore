@@ -80,3 +80,6 @@ playwright-report/
 # (bitnami, jetstack, victoriametrics, ...) on every reconcile — and
 # so a single registry outage does not block a sync. Update procedure:
 # `make chart-deps` then commit both Chart.lock and the new .tgz set.
+
+# Claude Code per-agent isolated worktrees (harness-managed, never commit).
+.claude/worktrees/

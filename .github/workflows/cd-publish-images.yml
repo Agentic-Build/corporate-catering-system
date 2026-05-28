@@ -5,6 +5,10 @@ on:
     branches: [main]
     tags: ['v*']
 
+concurrency:
+  group: cd-publish-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
