@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
 )
 
 type BatchRepo struct{ pool *pgxpool.Pool }

@@ -19,13 +19,13 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
-	mpg "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	opg "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
-	qpg "github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
-	vpg "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
+	mpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
+	opg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
+	qpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota/postgres"
+	vpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors/postgres"
 )
 
 // itemRepoAdapter bridges *mpg.ItemRepo (menu.Item) → order.ReorderMenuItem,

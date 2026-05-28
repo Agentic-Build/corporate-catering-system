@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
-	ppg "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
+	ppg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll/postgres"
 )
 
 const missingUUID = "00000000-0000-0000-0000-000000000000"

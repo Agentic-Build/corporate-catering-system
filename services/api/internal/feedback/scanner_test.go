@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
-	cpg "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/feedback"
-	fpg "github.com/takalawang/corporate-catering-system/services/api/internal/feedback/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
+	cpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/feedback"
+	fpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/feedback/postgres"
 )
 
 func newScanner(pool *pgxpool.Pool) (*feedback.FeedbackScanner, *cpg.AnomalyRepo) {

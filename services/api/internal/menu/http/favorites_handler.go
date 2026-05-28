@@ -9,9 +9,9 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
 )
 
 // FavoritesAPI registers the employee-facing favorites endpoints. It is

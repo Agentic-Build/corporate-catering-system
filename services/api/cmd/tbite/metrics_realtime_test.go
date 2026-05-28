@@ -9,7 +9,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
 )
 
 // newReader installs a MeterProvider backed by a ManualReader as the

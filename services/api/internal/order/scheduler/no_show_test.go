@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	opg "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order/scheduler"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
+	opg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/scheduler"
 )
 
 func seedVendor(t *testing.T, pool *pgxpool.Pool) string {

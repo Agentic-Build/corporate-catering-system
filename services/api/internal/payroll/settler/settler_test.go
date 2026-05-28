@@ -29,12 +29,12 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	orderpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
-	payrollpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/payroll/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll/settler"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
+	orderpgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
+	payrollpgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll/settler"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/messaging"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/storage"
 )
 
 func setupPostgres(t *testing.T) (*pgxpool.Pool, func()) {

@@ -14,8 +14,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/feedback"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/feedback"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 )
 
 func registerFeedbackTools(s *server.MCPServer, deps Deps) {

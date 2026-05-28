@@ -5,7 +5,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 )
 
 // Role gates shared by every bounded context's HTTP layer. These are the single

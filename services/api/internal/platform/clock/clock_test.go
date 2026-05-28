@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/clock"
 )
 
 func TestSystemClock_NowIsUTCAndMonotonic(t *testing.T) {

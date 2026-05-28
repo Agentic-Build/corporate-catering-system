@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
 )
 
 type SupplyRepo struct{ pool *pgxpool.Pool }

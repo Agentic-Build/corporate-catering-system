@@ -11,7 +11,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	pgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/dlq/postgres"
+	pgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/dlq/postgres"
 )
 
 // int64GaugePoints returns the int64 gauge data points for the named instrument,

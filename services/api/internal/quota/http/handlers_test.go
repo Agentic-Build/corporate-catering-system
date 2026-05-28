@@ -16,11 +16,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
-	qhttp "github.com/takalawang/corporate-catering-system/services/api/internal/quota/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
+	qhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota/http"
 )
 
 const (

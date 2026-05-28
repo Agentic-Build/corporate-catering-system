@@ -19,12 +19,12 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	mpg "github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	opg "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	qmod "github.com/takalawang/corporate-catering-system/services/api/internal/quota"
-	qpg "github.com/takalawang/corporate-catering-system/services/api/internal/quota/postgres"
-	vpg "github.com/takalawang/corporate-catering-system/services/api/internal/vendors/postgres"
+	mpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
+	opg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
+	qmod "github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
+	qpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota/postgres"
+	vpg "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors/postgres"
 )
 
 func migrationsDir() string {

@@ -11,9 +11,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/feedback"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/feedback"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 )
 
 // API exposes feedback endpoints across employee / vendor / admin roles.

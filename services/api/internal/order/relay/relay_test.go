@@ -24,9 +24,9 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order/relay"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/relay"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/messaging"
 )
 
 func migrationsDir() string {

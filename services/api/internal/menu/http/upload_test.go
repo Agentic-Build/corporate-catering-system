@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/storage"
 )
 
 // --- helpers ----------------------------------------------------------------

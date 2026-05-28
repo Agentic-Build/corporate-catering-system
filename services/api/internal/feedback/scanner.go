@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
 )
 
 // scanner thresholds (design §3.5).

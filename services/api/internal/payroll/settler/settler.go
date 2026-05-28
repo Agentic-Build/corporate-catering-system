@@ -21,9 +21,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/messaging"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/storage"
 )
 
 // UserLookup resolves a user_id to the subset of "user" columns the HR CSV needs.

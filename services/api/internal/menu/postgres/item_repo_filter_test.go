@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu/postgres"
 )
 
 // employeeMenuFixture seeds one approved vendor mapped to a plant with four

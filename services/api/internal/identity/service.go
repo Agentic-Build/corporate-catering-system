@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/oidc"
 )
 
 type Service struct {

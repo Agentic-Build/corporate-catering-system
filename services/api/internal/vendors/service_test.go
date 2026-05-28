@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	vendor "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors"
 )
 
 type fakeVendorRepo struct {

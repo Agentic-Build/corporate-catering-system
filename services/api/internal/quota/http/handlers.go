@@ -8,10 +8,10 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/quota"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
 )
 
 // API exposes vendor-facing quota endpoints (set/list supply for the merchant).

@@ -11,16 +11,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/feedback"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/mcpserver"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/settlement"
-	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/feedback"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/mcpserver"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/settlement"
+	vendor "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors"
 )
 
 func sp(s string) *string { return &s }

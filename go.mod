@@ -1,4 +1,4 @@
-module github.com/takalawang/corporate-catering-system
+module github.com/Agentic-Build/corporate-catering-system
 
 go 1.26.3
 

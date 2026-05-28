@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	pgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/order/postgres"
+	pgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/order/postgres"
 )
 
 func TestAuditRepo_WriteInsert(t *testing.T) {

@@ -18,11 +18,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
-	chttp "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/http"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
-	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
+	chttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
+	vendor "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors"
 )
 
 // Valid UUIDs — huma validates path params tagged format:"uuid" before the

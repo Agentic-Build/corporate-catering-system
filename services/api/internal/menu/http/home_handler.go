@@ -7,10 +7,10 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu/readmodel"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu/readmodel"
 )
 
 // HomeAPI exposes the employee landing-page aggregate endpoint plus "see more"

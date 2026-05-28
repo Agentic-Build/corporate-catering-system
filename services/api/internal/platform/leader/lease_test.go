@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/leader"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/leader"
 )
 
 // When not running inside a K8s cluster, RunWithLease should invoke onLeading

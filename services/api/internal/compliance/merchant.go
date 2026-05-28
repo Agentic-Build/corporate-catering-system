@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
+	vendor "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors"
 )
 
 // VendorReader is the minimal vendor read dependency the merchant compliance

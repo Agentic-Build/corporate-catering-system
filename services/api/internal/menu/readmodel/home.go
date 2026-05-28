@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
 )
 
 const (

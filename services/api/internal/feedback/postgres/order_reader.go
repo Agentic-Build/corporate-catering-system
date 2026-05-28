@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/feedback"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/feedback"
 )
 
 // OrderReader reads the minimal order projection feedback needs to validate

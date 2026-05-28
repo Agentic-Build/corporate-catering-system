@@ -11,7 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 )
 
 const tokenPrefix = "tb_"

@@ -13,9 +13,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/clock"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/clock"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/observability"
 )
 
 // DocumentExpiryScanner runs every Interval and:

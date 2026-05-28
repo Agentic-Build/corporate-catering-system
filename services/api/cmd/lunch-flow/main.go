@@ -38,9 +38,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
-	idredis "github.com/takalawang/corporate-catering-system/services/api/internal/identity/redis"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/cache"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
+	idredis "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/redis"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/cache"
 )
 
 const (

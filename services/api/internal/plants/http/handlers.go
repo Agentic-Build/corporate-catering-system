@@ -7,9 +7,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/plants"
-	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
+	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/plants"
+	vendor "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors"
 )
 
 // API exposes plant registry endpoints.

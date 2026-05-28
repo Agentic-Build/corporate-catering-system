@@ -23,10 +23,10 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance/evaluator"
-	cpgrepo "github.com/takalawang/corporate-catering-system/services/api/internal/compliance/postgres"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance/evaluator"
+	cpgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance/postgres"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/messaging"
 )
 
 func setupPostgres(t *testing.T) (*pgxpool.Pool, func()) {

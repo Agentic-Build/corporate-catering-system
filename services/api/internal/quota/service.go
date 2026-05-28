@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/menu"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/observability"
 )
 
 // Service exposes vendor-facing quota operations (capacity management + reads).

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/takalawang/corporate-catering-system/services/api/internal/order"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
 )
 
 // NoShowSweep periodically transitions READY orders older than MaxAge to NO_SHOW.
