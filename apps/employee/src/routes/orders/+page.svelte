@@ -1,5 +1,6 @@
 <script lang="ts">
   import { PageHeader, Tabs, StateTag, EmptyState, Icon } from "@tbite/ui";
+  import { taipeiDateTime } from "@tbite/web-shared";
 
   type Order = {
     id: string;
@@ -67,9 +68,7 @@
   function itemCount(o: Order): number {
     return (o.items ?? []).reduce((s, it) => s + it.qty, 0);
   }
-  function fmtCutoff(iso: string): string {
-    return iso ? iso.slice(0, 16).replace("T", " ") : "";
-  }
+  const fmtCutoff = taipeiDateTime;
 </script>
 
 <PageHeader

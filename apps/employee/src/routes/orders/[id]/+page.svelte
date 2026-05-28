@@ -1,5 +1,6 @@
 <script lang="ts">
   import { PageHeader, Card, StateTag, Button, Icon, Modal } from "@tbite/ui";
+  import { taipeiDateTime } from "@tbite/web-shared";
 
   let { data, form } = $props();
   const o = $derived(data.order);
@@ -51,10 +52,6 @@
     escalated: "已升級福委會",
     resolved: "已結案",
   };
-
-  function fmt(iso: string | undefined): string {
-    return iso ? iso.slice(0, 16).replace("T", " ") : "-";
-  }
 
   const complaint = $derived(form?.complaint ?? data.complaint);
 
@@ -144,7 +141,7 @@
         <Icon name="pin" class="h-3.5 w-3.5 text-tb-red-600" />{o.plant}
       </dd>
       <dt class="text-tb-slate-500">截單時間</dt>
-      <dd class="font-jetbrains-mono">{fmt(o.cutoff_at)}</dd>
+      <dd class="font-jetbrains-mono">{taipeiDateTime(o.cutoff_at)}</dd>
       {#if o.notes}
         <dt class="text-tb-slate-500">特殊需求</dt>
         <dd class="text-tb-slate-700">{o.notes}</dd>

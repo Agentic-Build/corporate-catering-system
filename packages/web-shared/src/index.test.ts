@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { taipeiISO, dayId } from "./date";
+import { taipeiISO, dayId, taipeiDateTime } from "./date";
 import { formatMinor } from "./money";
 import { problemMessage } from "./problem";
 import { statusEntry } from "./status";
@@ -14,6 +14,22 @@ describe("taipeiISO", () => {
     const today = taipeiISO();
     expect(dayId(0)).toBe(today);
     expect(dayId(1)).not.toBe(today);
+  });
+});
+
+describe("taipeiDateTime", () => {
+  it("renders a UTC instant as Asia/Taipei wall-clock", () => {
+    // 09:00Z == 17:00 Taipei — the cutoff bug: a 17:00 cutoff must not show 09:00.
+    expect(taipeiDateTime("2026-05-29T09:00:00Z")).toBe("2026-05-29 17:00");
+  });
+  it("rolls to the next Taipei day past 16:00Z", () => {
+    expect(taipeiDateTime("2026-05-29T17:00:00Z")).toBe("2026-05-30 01:00");
+  });
+  it("returns '-' for missing or unparseable input", () => {
+    expect(taipeiDateTime(undefined)).toBe("-");
+    expect(taipeiDateTime(null)).toBe("-");
+    expect(taipeiDateTime("")).toBe("-");
+    expect(taipeiDateTime("not-a-date")).toBe("-");
   });
 });
 

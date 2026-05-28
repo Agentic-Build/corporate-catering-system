@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	defaultPickupWindow = "11:50-12:10"
+	defaultPickupWindow = "全天"
 	defaultPriceMinor   = int64(100)
 	emptyJSON           = "{}"
 )
