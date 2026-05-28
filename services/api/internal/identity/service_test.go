@@ -140,6 +140,18 @@ func TestService_CompleteLogin_StateExpired(t *testing.T) {
 	assert.ErrorIs(t, err, oidc.ErrStateNotFound)
 }
 
+func TestService_CompleteLogin_StateAlreadyConsumedKeepsAppContext(t *testing.T) {
+	svc, _, _, _, st, _ := buildSvc()
+	st.consumed["S9"] = &oidc.StatePayload{App: "merchant", Provider: "authentik", PKCEVerifier: "v", Nonce: "n"}
+
+	_, err := svc.CompleteLogin(context.Background(), identity.CompleteLoginInput{Provider: "authentik", State: "S9", Code: "C"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, oidc.ErrStateConsumed)
+	var cbErr *identity.CallbackError
+	require.ErrorAs(t, err, &cbErr)
+	assert.Equal(t, "merchant", cbErr.App)
+}
+
 func employeeInfo(sub, email string) *oidc.Userinfo {
 	return userInfo(sub, email, identity.RoleEmployee, map[string]any{
 		"tbite_employee_id": "E001",

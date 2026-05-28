@@ -10,6 +10,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
 )
 
 // AppBaseURLs maps app names ("employee"|"merchant"|"admin") to their public base URLs.
@@ -223,6 +224,9 @@ func callbackErrorCode(err error) string {
 		return "role_mismatch"
 	case errors.Is(err, identity.ErrAccountSuspended):
 		return "account_suspended"
+	case errors.Is(err, oidc.ErrStateConsumed),
+		errors.Is(err, oidc.ErrStateNotFound):
+		return "auth_expired"
 	default:
 		return "auth_failed"
 	}
@@ -277,7 +281,9 @@ func mapErr(err error) error {
 		return huma.NewError(http.StatusLocked, err.Error())
 	case errors.Is(err, identity.ErrInvalidProvider),
 		errors.Is(err, identity.ErrInvalidRole),
-		errors.Is(err, identity.ErrInvalidClaims):
+		errors.Is(err, identity.ErrInvalidClaims),
+		errors.Is(err, oidc.ErrStateNotFound),
+		errors.Is(err, oidc.ErrStateConsumed):
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, identity.ErrUserNotFound),
 		errors.Is(err, identity.ErrSessionNotFound):

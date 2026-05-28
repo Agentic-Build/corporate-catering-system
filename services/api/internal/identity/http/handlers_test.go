@@ -156,7 +156,10 @@ func (fakeIdentities) ListByUser(context.Context, string) ([]*identity.UserIdent
 }
 
 // fakeStates is an in-memory oidc.StateStore.
-type fakeStates struct{ m map[string]*oidc.StatePayload }
+type fakeStates struct {
+	m        map[string]*oidc.StatePayload
+	consumed map[string]*oidc.StatePayload
+}
 
 func (s *fakeStates) Put(_ context.Context, state string, p *oidc.StatePayload) error {
 	s.m[state] = p
@@ -166,9 +169,18 @@ func (s *fakeStates) Get(_ context.Context, state string) (*oidc.StatePayload, e
 	if p, ok := s.m[state]; ok {
 		return p, nil
 	}
+	if p, ok := s.consumed[state]; ok {
+		return p, oidc.ErrStateConsumed
+	}
 	return nil, oidc.ErrStateNotFound
 }
 func (s *fakeStates) Consume(_ context.Context, state string) error {
+	if p, ok := s.m[state]; ok {
+		if s.consumed == nil {
+			s.consumed = map[string]*oidc.StatePayload{}
+		}
+		s.consumed[state] = p
+	}
 	delete(s.m, state)
 	return nil
 }
@@ -269,4 +281,39 @@ func TestCompleteLogin_RoleMismatchRedirectsToAppLogin(t *testing.T) {
 	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
 	loc := resp.Header.Get("Location")
 	assert.Equal(t, "http://merchant.tbite.test/login?error=role_mismatch", loc)
+}
+
+func TestCompleteLogin_ReplayedCallbackRedirectsToAppLogin(t *testing.T) {
+	states := &fakeStates{
+		m: map[string]*oidc.StatePayload{},
+		consumed: map[string]*oidc.StatePayload{
+			"st1": {App: "merchant", Provider: "authentik", ReturnTo: "/menu", PKCEVerifier: "v", Nonce: "n"},
+		},
+	}
+	svc := &identity.Service{
+		Users:      &fakeUsers{byID: map[string]*identity.User{}},
+		Identities: fakeIdentities{},
+		Sessions:   newFakeSessions(),
+		Providers:  map[string]oidc.Provider{"authentik": fakeProvider{}},
+		States:     states,
+	}
+	api := &idhttp.API{
+		Svc:      svc,
+		Sessions: newFakeSessions(),
+		Users:    &fakeUsers{byID: map[string]*identity.User{}},
+		AppURLs:  idhttp.AppBaseURLs{"merchant": "http://merchant.tbite.test"},
+	}
+	srv := httptest.NewServer(buildHandler(api))
+	defer srv.Close()
+
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	req, _ := http.NewRequest("GET", srv.URL+"/auth/authentik/callback?state=st1&code=C", nil)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Equal(t, "http://merchant.tbite.test/login?error=auth_expired", resp.Header.Get("Location"))
 }
