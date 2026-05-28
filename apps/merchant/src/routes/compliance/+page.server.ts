@@ -7,13 +7,13 @@ type UploadDocBody =
   operations["uploadMerchantDocument"]["requestBody"]["content"]["application/json"];
 type DocKind = UploadDocBody["kind"];
 
-const DOC_KINDS: readonly DocKind[] = [
+const DOC_KINDS: ReadonlySet<DocKind> = new Set([
   "business_license",
   "food_safety_permit",
   "tax_registration",
   "insurance",
   "other",
-];
+]);
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 type VendorInfoDTO = components["schemas"]["VendorInfoDTO"];
@@ -50,7 +50,7 @@ export const actions: Actions = {
     const expiresAt = String(fd.get("expires_at") ?? "").trim();
     const supersedes = String(fd.get("supersedes") ?? "").trim();
 
-    if (!DOC_KINDS.includes(kind as DocKind)) return fail(400, { uploadError: "請選擇文件種類" });
+    if (!DOC_KINDS.has(kind as DocKind)) return fail(400, { uploadError: "請選擇文件種類" });
     if (!(file instanceof File) || file.size === 0) {
       return fail(400, { uploadError: "請選擇要上傳的檔案" });
     }

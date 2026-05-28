@@ -21,7 +21,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const days = Array.from({ length: 7 }, (_, i) => {
     const id = dayId(i);
     const d = new Date(id + "T00:00:00");
-    const head = i === 0 ? "今天" : i === 1 ? "明天" : `${id.slice(5).replace("-", "/")}`;
+    let head: string;
+    if (i === 0) head = "今天";
+    else if (i === 1) head = "明天";
+    else head = id.slice(5).replace("-", "/");
     return { id, head, weekday: WEEKDAY[d.getDay()] ?? "", offset: i };
   });
 

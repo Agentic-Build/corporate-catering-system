@@ -8,7 +8,7 @@ type VendorDTO = components["schemas"]["VendorDTO"];
 type VendorStatus = NonNullable<operations["listVendors"]["parameters"]["query"]>["status"];
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-  if (!locals.user || locals.user.role !== "welfare_admin") throw redirect(303, "/login");
+  if (locals.user?.role !== "welfare_admin") throw redirect(303, "/login");
   const status = (url.searchParams.get("status") ?? "") as VendorStatus;
   const client = apiFor(locals.apiToken);
   let vendors: VendorDTO[] = [];
