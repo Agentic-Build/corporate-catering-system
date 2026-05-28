@@ -76,15 +76,12 @@ type Settler struct {
 	Outbox     OutboxAppender
 }
 
-// Run blocks until ctx is cancelled or an unrecoverable error occurs. The
-// consumer is a durable pull consumer named "payroll-settler" so it survives
-// worker restarts and resumes from the last acked sequence.
-func (s *Settler) Run(ctx context.Context) error {
+// setupSettlerConsumer resolves the durable payroll-settler consumer.
+func (s *Settler) setupSettlerConsumer(ctx context.Context) (jetstream.Consumer, error) {
 	stream, err := s.JS.Stream(ctx, "PAYROLL_V1")
 	if err != nil {
-		return fmt.Errorf("get stream: %w", err)
+		return nil, fmt.Errorf("get stream: %w", err)
 	}
-
 	cons, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
 		Name:          consumerName,
 		Durable:       consumerName,
@@ -93,47 +90,61 @@ func (s *Settler) Run(ctx context.Context) error {
 		MaxDeliver:    5,
 	})
 	if err != nil {
-		return fmt.Errorf("create consumer: %w", err)
+		return nil, fmt.Errorf("create consumer: %w", err)
 	}
+	return cons, nil
+}
 
+// nextSettlerMsg returns (msg, true) on success or (nil, shouldExit) when the
+// iterator closes / ctx cancels.
+func (s *Settler) nextSettlerMsg(ctx context.Context, it jetstream.MessagesContext) (jetstream.Msg, bool) {
+	msg, err := it.Next()
+	if err == nil {
+		return msg, true
+	}
+	if ctx.Err() != nil || errors.Is(err, jetstream.ErrMsgIteratorClosed) {
+		return nil, false
+	}
+	s.Logger.Warn("consumer next", "err", err)
+	select {
+	case <-ctx.Done():
+		return nil, false
+	case <-time.After(500 * time.Millisecond):
+	}
+	return nil, true
+}
+
+// Run blocks until ctx is cancelled or an unrecoverable error occurs. The
+// consumer is a durable pull consumer named "payroll-settler" so it survives
+// worker restarts and resumes from the last acked sequence.
+func (s *Settler) Run(ctx context.Context) error {
+	cons, err := s.setupSettlerConsumer(ctx)
+	if err != nil {
+		return err
+	}
 	s.Logger.Info("settler started, waiting for batch_locked events")
-
 	it, err := cons.Messages()
 	if err != nil {
 		return fmt.Errorf("messages: %w", err)
 	}
 	defer it.Stop()
-
-	// Stop the iterator on ctx cancellation so Run returns promptly at shutdown.
 	go func() {
 		<-ctx.Done()
 		it.Stop()
 	}()
-
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		msg, err := it.Next()
-		if err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			if errors.Is(err, jetstream.ErrMsgIteratorClosed) {
-				return ctx.Err()
-			}
-			s.Logger.Warn("consumer next", "err", err)
-			// Brief backoff to avoid busy-looping on a transient NATS hiccup.
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(500 * time.Millisecond):
-			}
+		msg, cont := s.nextSettlerMsg(ctx, it)
+		if !cont {
+			return ctx.Err()
+		}
+		if msg == nil {
 			continue
 		}
 		if err := s.handle(ctx, msg.Data()); err != nil {
 			s.Logger.Error("handle event", "err", err)
-			// MaxDeliver=5; once exhausted, DLQ + Term (don't re-Nak forever).
 			messaging.DLQOnExhaustion(ctx, msg, s.Pool, consumerName, 5, err)
 			continue
 		}
@@ -201,6 +212,61 @@ func (s *Settler) handle(ctx context.Context, data []byte) error {
 	})
 }
 
+// loadExceptionGroups returns (excluded entry IDs, kinds per entry ID) for the
+// batch's payroll exceptions.
+func (s *Settler) loadExceptionGroups(ctx context.Context, batchID string) (map[string]bool, map[string][]string, error) {
+	excluded := map[string]bool{}
+	flagged := map[string][]string{}
+	if s.Exceptions == nil {
+		return excluded, flagged, nil
+	}
+	exs, err := s.Exceptions.ListByBatch(ctx, batchID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list exceptions: %w", err)
+	}
+	for _, ex := range exs {
+		if ex.Status == payroll.ExceptionExcluded {
+			excluded[ex.EntryID] = true
+		}
+		flagged[ex.EntryID] = append(flagged[ex.EntryID], string(ex.Kind))
+	}
+	return excluded, flagged, nil
+}
+
+// writeCSVRow writes one HR-CSV row for entry e, looking up the user (with a
+// "?" placeholder fallback) and flattening the optional fields.
+func (s *Settler) writeCSVRow(ctx context.Context, w *csv.Writer, e *payroll.Entry, period string, flagged []string) error {
+	u, err := s.Users.GetByID(ctx, e.UserID)
+	if err != nil {
+		s.Logger.Warn("user lookup failed", "user_id", e.UserID, "err", err)
+		u = &PayrollUser{ID: e.UserID, PrimaryEmail: "?", DisplayName: "?"}
+	}
+	empID := ""
+	if u.EmployeeID != nil {
+		empID = *u.EmployeeID
+	}
+	plant := ""
+	if u.Plant != nil {
+		plant = *u.Plant
+	}
+	dept := ""
+	if u.Department != nil {
+		dept = *u.Department
+	}
+	return w.Write([]string{
+		empID,
+		u.PrimaryEmail,
+		u.DisplayName,
+		plant,
+		dept,
+		fmt.Sprintf("%d", e.AmountMinor),
+		fmt.Sprintf("%d", e.RefundedMinor),
+		fmt.Sprintf("%d", e.AmountMinor-e.RefundedMinor),
+		period,
+		strings.Join(flagged, ";"),
+	})
+}
+
 // renderCSV produces the bytes uploaded to S3: UTF-8 BOM (so Excel renders 中文)
 // + header + one row per entry. The `exception` column flags entries with a
 // payroll exception; rows marked `excluded` by a welfare admin are dropped
@@ -208,28 +274,14 @@ func (s *Settler) handle(ctx context.Context, data []byte) error {
 // a "?" placeholder row rather than aborting the batch.
 func (s *Settler) renderCSV(ctx context.Context, batch *payroll.Batch, entries []*payroll.Entry) ([]byte, error) {
 	var buf bytes.Buffer
-	// UTF-8 BOM (Excel encoding detection).
 	buf.WriteByte(0xEF)
 	buf.WriteByte(0xBB)
 	buf.WriteByte(0xBF)
 
-	// Group exceptions by entry: excluded → drop the row; otherwise surface
-	// kinds in the exception column.
-	excluded := map[string]bool{}
-	flagged := map[string][]string{}
-	if s.Exceptions != nil {
-		exs, err := s.Exceptions.ListByBatch(ctx, batch.ID)
-		if err != nil {
-			return nil, fmt.Errorf("list exceptions: %w", err)
-		}
-		for _, ex := range exs {
-			if ex.Status == payroll.ExceptionExcluded {
-				excluded[ex.EntryID] = true
-			}
-			flagged[ex.EntryID] = append(flagged[ex.EntryID], string(ex.Kind))
-		}
+	excluded, flagged, err := s.loadExceptionGroups(ctx, batch.ID)
+	if err != nil {
+		return nil, err
 	}
-
 	w := csv.NewWriter(&buf)
 	if err := w.Write([]string{
 		"employee_id", "primary_email", "display_name", "plant", "department",
@@ -245,35 +297,7 @@ func (s *Settler) renderCSV(ctx context.Context, batch *payroll.Batch, entries [
 		if excluded[e.ID] {
 			continue
 		}
-		u, err := s.Users.GetByID(ctx, e.UserID)
-		if err != nil {
-			s.Logger.Warn("user lookup failed", "user_id", e.UserID, "err", err)
-			u = &PayrollUser{ID: e.UserID, PrimaryEmail: "?", DisplayName: "?"}
-		}
-		empID := ""
-		if u.EmployeeID != nil {
-			empID = *u.EmployeeID
-		}
-		plant := ""
-		if u.Plant != nil {
-			plant = *u.Plant
-		}
-		dept := ""
-		if u.Department != nil {
-			dept = *u.Department
-		}
-		if err := w.Write([]string{
-			empID,
-			u.PrimaryEmail,
-			u.DisplayName,
-			plant,
-			dept,
-			fmt.Sprintf("%d", e.AmountMinor),
-			fmt.Sprintf("%d", e.RefundedMinor),
-			fmt.Sprintf("%d", e.AmountMinor-e.RefundedMinor),
-			period,
-			strings.Join(flagged[e.ID], ";"),
-		}); err != nil {
+		if err := s.writeCSVRow(ctx, w, e, period, flagged[e.ID]); err != nil {
 			return nil, err
 		}
 	}
