@@ -9,5 +9,6 @@ COPY migrations/*.sql ./
 
 FROM alpine:3.20
 RUN addgroup -S migrations && adduser -S migrations -G migrations
-COPY --chmod=0555 --chown=migrations:migrations --from=sqlfiles /sql/ /migrations/
+WORKDIR /migrations
+COPY --chown=migrations:migrations --chmod=0555 --from=sqlfiles /sql ./
 USER migrations
