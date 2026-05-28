@@ -23,7 +23,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     const id = dayId(i);
     const d = new Date(id + "T00:00:00");
     const head = i === 0 ? "今天" : i === 1 ? "明天" : `${id.slice(5).replace("-", "/")}`;
-    return { id, head, weekday: WEEKDAY[d.getDay()], offset: i };
+    return { id, head, weekday: WEEKDAY[d.getDay()] ?? "", offset: i };
   });
 
   // Library = all menu items incl. archived (drawer + name lookups).

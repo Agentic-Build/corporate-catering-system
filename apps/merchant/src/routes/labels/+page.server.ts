@@ -31,7 +31,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     menuItems.map((i) => [i.id, { name: i.name }]),
   );
 
-  const [yy, mm, dd] = todayStr.split("-").map(Number);
+  const [yy = 0, mm = 1, dd = 1] = todayStr.split("-").map(Number);
   const days: { id: string; label: string }[] = [];
   for (let i = 0; i < 7; i++) {
     const dt = new Date(Date.UTC(yy, mm - 1, dd + i));

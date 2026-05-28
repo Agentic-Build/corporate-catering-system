@@ -33,9 +33,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   // Latest batch (most recent period_start) + its entries.
   const latestBatch: BatchDTO | null =
-    batches.length > 0
-      ? [...batches].sort((a, b) => String(b.period_start).localeCompare(String(a.period_start)))[0]
-      : null;
+    [...batches].sort((a, b) => String(b.period_start).localeCompare(String(a.period_start)))[0] ??
+    null;
   let payrollBatch: BatchDTO | null = null;
   let payrollEntries: EntryDTO[] = [];
   if (latestBatch) {

@@ -21,7 +21,7 @@
       const id = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
         d.getDate(),
       ).padStart(2, "0")}`;
-      return { id, weekday: wk[d.getDay()], dom: String(d.getDate()), isToday: i === 0 };
+      return { id, weekday: wk[d.getDay()] ?? "", dom: String(d.getDate()), isToday: i === 0 };
     });
   });
   function pickDay(id: string) {
@@ -99,7 +99,7 @@
 
   const eyebrow = $derived(
     (() => {
-      const [y, m, d] = data.home.target_day.split("-").map(Number);
+      const [y = 0, m = 1, d = 1] = data.home.target_day.split("-").map(Number);
       const wk = ["日", "一", "二", "三", "四", "五", "六"];
       const date = new Date(y, m - 1, d);
       return `${y} / ${String(m).padStart(2, "0")} / ${String(d).padStart(2, "0")} · 週${wk[date.getDay()]}`;
