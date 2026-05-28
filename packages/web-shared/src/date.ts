@@ -11,6 +11,11 @@ export function taipeiISO(instant: Date | number = Date.now()): string {
   return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`;
 }
 
+/** Taipei calendar date `addDays` away from today (YYYY-MM-DD). */
+export function dayId(addDays = 0): string {
+  return taipeiISO(Date.now() + addDays * DAY_MS);
+}
+
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 export interface DayOption {

@@ -16,6 +16,7 @@
     "@tbite/tokens": "workspace:*",
     "@tbite/ui": "workspace:*",
     "@tbite/web-auth": "workspace:*",
+    "@tbite/web-shared": "workspace:*",
     "html5-qrcode": "^2.3.8"
   },
   "devDependencies": {

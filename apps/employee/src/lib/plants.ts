@@ -1,5 +1,5 @@
-// Plant + day helpers for the header LocationBar; day logic lives in ./date.
-export { buildDays, taipeiISO, type DayOption } from "./date";
+// Plant + day helpers for the header LocationBar; day logic lives in @tbite/web-shared.
+export { buildDays, taipeiISO, type DayOption } from "@tbite/web-shared";
 
 export interface PlantOption {
   id: string;

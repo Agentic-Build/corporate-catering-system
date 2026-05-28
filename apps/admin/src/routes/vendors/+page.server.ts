@@ -1,4 +1,5 @@
 import { redirect, fail } from "@sveltejs/kit";
+import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
@@ -33,7 +34,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/admin/vendors", {
       body: { display_name: displayName, legal_name: legalName, contact_email: email },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     throw redirect(303, "/vendors");
   },
 };

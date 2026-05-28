@@ -41,6 +41,9 @@ importers:
       '@tbite/web-auth':
         specifier: workspace:*
         version: link:../../packages/web-auth
+      '@tbite/web-shared':
+        specifier: workspace:*
+        version: link:../../packages/web-shared
     devDependencies:
       '@sveltejs/kit':
         specifier: ^2.61.1
@@ -90,6 +93,9 @@ importers:
       '@tbite/web-auth':
         specifier: workspace:*
         version: link:../../packages/web-auth
+      '@tbite/web-shared':
+        specifier: workspace:*
+        version: link:../../packages/web-shared
       html5-qrcode:
         specifier: ^2.3.8
         version: 2.3.8
@@ -142,6 +148,9 @@ importers:
       '@tbite/web-auth':
         specifier: workspace:*
         version: link:../../packages/web-auth
+      '@tbite/web-shared':
+        specifier: workspace:*
+        version: link:../../packages/web-shared
       html5-qrcode:
         specifier: ^2.3.8
         version: 2.3.8
@@ -249,6 +258,24 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+
+  packages/web-shared:
+    devDependencies:
+      '@tbite/ui':
+        specifier: workspace:*
+        version: link:../ui
+      svelte:
+        specifier: ^5.55.9
+        version: 5.55.9
+      svelte-check:
+        specifier: ^4.4.8
+        version: 4.4.8(picomatch@4.0.4)(svelte@5.55.9)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.7.0)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))
 
 packages:
 

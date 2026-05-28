@@ -1,4 +1,5 @@
 import { redirect, fail } from "@sveltejs/kit";
+import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
 
@@ -41,7 +42,7 @@ export const actions: Actions = {
         images,
       },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     throw redirect(303, "/menus");
   },
 };
