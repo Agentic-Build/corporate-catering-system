@@ -82,6 +82,6 @@ spec:
               {{- end }}
               echo "identity databases provisioned"
           resources:
-            requests: { cpu: 50m, memory: 64Mi }
-            limits:   { cpu: 200m, memory: 192Mi }
+            requests: { cpu: 50m, memory: 64Mi, ephemeral-storage: 64Mi }
+            limits:   { cpu: 200m, memory: 192Mi, ephemeral-storage: 256Mi }
 {{- end }}
