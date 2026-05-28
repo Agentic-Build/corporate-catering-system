@@ -16,7 +16,7 @@ jobs:
         with:
           node-version-file: ".nvmrc"
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Seed per-app .env from .env.example for build-time PUBLIC_* imports
         run: |
           shopt -s nullglob
@@ -65,7 +65,7 @@ jobs:
         with:
           node-version-file: ".nvmrc"
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Regenerate contract artifacts
         run: |
           go run ./services/api/cmd/contract-export
