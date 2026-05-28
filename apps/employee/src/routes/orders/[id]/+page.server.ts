@@ -103,7 +103,7 @@ export const actions: Actions = {
   rate: async ({ request, locals, params }) => {
     if (!locals.user) return fail(401, { ratingError: "unauthenticated" });
     const fd = await request.formData();
-    const score = parseInt(String(fd.get("score") ?? ""), 10);
+    const score = Number.parseInt(String(fd.get("score") ?? ""), 10);
     const comment = String(fd.get("comment") ?? "").trim();
     if (!Number.isInteger(score) || score < 1 || score > 5) {
       return fail(400, { ratingError: "請選擇 1 至 5 顆星的評分" });

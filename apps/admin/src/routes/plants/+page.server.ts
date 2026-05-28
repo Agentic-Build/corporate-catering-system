@@ -26,7 +26,7 @@ export const actions: Actions = {
     const code = String(fd.get("code") ?? "").trim();
     const label = String(fd.get("label") ?? "").trim();
     const address = String(fd.get("address") ?? "").trim();
-    const sortOrder = parseInt(String(fd.get("sort_order") ?? "0"), 10) || 0;
+    const sortOrder = Number.parseInt(String(fd.get("sort_order") ?? "0"), 10) || 0;
     if (!code || !label) return fail(400, { error: "code and label are required" });
 
     const client = apiFor(locals.apiToken);
@@ -43,7 +43,7 @@ export const actions: Actions = {
     const label = String(fd.get("label") ?? "").trim();
     const address = String(fd.get("address") ?? "").trim();
     const active = fd.get("active") === "true";
-    const sortOrder = parseInt(String(fd.get("sort_order") ?? "0"), 10) || 0;
+    const sortOrder = Number.parseInt(String(fd.get("sort_order") ?? "0"), 10) || 0;
     if (!code || !label) return fail(400, { error: "code and label are required" });
 
     const client = apiFor(locals.apiToken);

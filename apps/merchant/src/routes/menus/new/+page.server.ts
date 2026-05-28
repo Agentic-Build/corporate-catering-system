@@ -16,7 +16,7 @@ export const actions: Actions = {
     const priceStr = String(fd.get("price") ?? "0").trim();
     const tagsStr = String(fd.get("tags") ?? "").trim();
     if (!name) return fail(400, { error: "name 必填" });
-    const priceMinor = parseInt(priceStr, 10);
+    const priceMinor = Number.parseInt(priceStr, 10);
     if (!Number.isFinite(priceMinor) || priceMinor < 0) return fail(400, { error: "price 非數字" });
 
     let images: string[] = [];
