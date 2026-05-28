@@ -1,4 +1,5 @@
 import { redirect, fail } from "@sveltejs/kit";
+import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
@@ -103,7 +104,7 @@ export const actions: Actions = {
         cutoff_at: cutoffAt,
       },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     return { success: true };
   },
 
@@ -119,7 +120,7 @@ export const actions: Actions = {
       params: { path: { itemID: itemId, date } },
       body: { sold_out: soldOut },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     return { success: true };
   },
 
@@ -132,7 +133,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/merchant/menu-items/{id}/publish", {
       params: { path: { id } },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     return { success: true };
   },
 };

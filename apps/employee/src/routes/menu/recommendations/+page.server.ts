@@ -1,4 +1,5 @@
 import type { Actions, PageServerLoad } from "./$types";
+import { problemMessage } from "@tbite/web-shared";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
@@ -20,7 +21,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     chips: (r.data?.chips ?? []) as unknown[],
     nextCursor: r.data?.next_cursor,
     day,
-    error: r.error ? JSON.stringify(r.error) : undefined,
+    error: r.error ? problemMessage(r.error) : undefined,
   };
 };
 
@@ -34,7 +35,7 @@ export const actions: Actions = {
     const r = await client.GET("/api/employee/recommendations", {
       params: { query: { ...(day ? { day } : {}), cursor, limit: PAGE_LIMIT } },
     });
-    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(400, { error: problemMessage(r.error) });
     return {
       chips: (r.data?.chips ?? []) as unknown[],
       nextCursor: r.data?.next_cursor,
@@ -56,7 +57,7 @@ export const actions: Actions = {
         items: [{ menu_item_id: menuItemId, qty: 1 }],
       },
     });
-    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(400, { error: problemMessage(r.error) });
     const orderID = r.data?.order.id;
     if (!orderID) return fail(500, { error: "no order id in response" });
     throw redirect(303, `/orders/${orderID}`);

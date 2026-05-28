@@ -1,4 +1,5 @@
 import { redirect, fail, type Actions } from "@sveltejs/kit";
+import { problemMessage } from "@tbite/web-shared";
 import type { PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
@@ -57,7 +58,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/merchant/orders/mark-ready", {
       body: { order_ids: ids },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     return { success: true, count: ids.length };
   },
 };

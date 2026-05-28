@@ -1,4 +1,5 @@
 import { redirect, fail } from "@sveltejs/kit";
+import { problemMessage } from "@tbite/web-shared";
 import type { components } from "@tbite/api-client";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
@@ -55,7 +56,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/admin/vendor-settlements/close", {
       body: { period_start: bounds.start, period_end: bounds.end },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     throw redirect(303, `/vendor-settlements?period=${period}`);
   },
 
@@ -69,7 +70,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/admin/vendor-settlements/{id}/void", {
       params: { path: { id } },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     const period = url.searchParams.get("period") ?? "";
     throw redirect(303, period ? `/vendor-settlements?period=${period}` : "/vendor-settlements");
   },

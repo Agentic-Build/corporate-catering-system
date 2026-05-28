@@ -1,4 +1,5 @@
 import { redirect, fail } from "@sveltejs/kit";
+import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
@@ -43,7 +44,7 @@ export const actions: Actions = {
       params: { path: { id } },
       body,
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     return { ok: true };
   },
   close: async ({ request, locals }) => {
@@ -56,7 +57,7 @@ export const actions: Actions = {
       params: { path: { id } },
       body: { notes },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     return { ok: true };
   },
 };

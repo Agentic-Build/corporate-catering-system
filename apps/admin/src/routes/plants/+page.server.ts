@@ -1,4 +1,5 @@
 import { redirect, fail } from "@sveltejs/kit";
+import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
@@ -32,7 +33,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/admin/plants", {
       body: { code, label, address, sort_order: sortOrder },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     return { ok: true };
   },
 
@@ -50,7 +51,7 @@ export const actions: Actions = {
       params: { path: { code } },
       body: { label, address, active, sort_order: sortOrder },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     return { ok: true };
   },
 };

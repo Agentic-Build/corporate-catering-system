@@ -1,4 +1,5 @@
 import { redirect, fail } from "@sveltejs/kit";
+import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
@@ -29,7 +30,7 @@ export const actions: Actions = {
     if (!id) return fail(400, { error: "id required" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/dlq/{id}/replay", { params: { path: { id } } });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     return { ok: true };
   },
   resolve: async ({ request, locals }) => {
@@ -42,7 +43,7 @@ export const actions: Actions = {
       params: { path: { id } },
       body: { notes },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     return { ok: true };
   },
 };

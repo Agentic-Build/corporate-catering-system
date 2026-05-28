@@ -1,4 +1,5 @@
 import type { Actions, PageServerLoad } from "./$types";
+import { problemMessage } from "@tbite/web-shared";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
@@ -23,7 +24,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     chips: (r.data?.chips ?? []) as unknown[],
     nextCursor: r.data?.next_cursor,
     targetDay,
-    error: r.error ? JSON.stringify(r.error) : undefined,
+    error: r.error ? problemMessage(r.error) : undefined,
   };
 };
 
@@ -36,7 +37,7 @@ export const actions: Actions = {
     const r = await client.GET("/api/employee/reorders", {
       params: { query: { cursor, limit: PAGE_LIMIT } },
     });
-    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(400, { error: problemMessage(r.error) });
     return {
       chips: (r.data?.chips ?? []) as unknown[],
       nextCursor: r.data?.next_cursor,
