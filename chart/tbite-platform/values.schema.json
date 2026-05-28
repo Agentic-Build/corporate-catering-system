@@ -151,8 +151,18 @@
     "victoria-metrics-k8s-stack": { "type": "object" },
     "victoria-logs-single": { "type": "object" },
     "victoria-traces-single": { "type": "object" },
-    "opentelemetry-collector": { "type": "object" }
+    "opentelemetry-collector": { "type": "object" },
+    "cnpg-operator": { "type": "object" },
+    "minio-operator": { "type": "object" },
+    "minio-tenant": { "type": "object" },
+    "minioStandalone": { "type": "object" },
+    "cloudflared": { "type": "object" },
+    "authentikBlueprints": { "type": "object" },
+    "authentikBootstrap": { "type": "object" },
+    "crdsReady": { "type": "boolean" },
+    "tbite": { "type": "object" }
   },
+  "additionalProperties": false,
   "allOf": [
     {
       "if": {
