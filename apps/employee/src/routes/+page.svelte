@@ -187,10 +187,18 @@
   });
 
   let toast = $state<{ tone: "info" | "warning" | "danger"; text: string } | null>(null);
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
   function showToast(tone: "info" | "warning" | "danger", text: string) {
     toast = { tone, text };
-    setTimeout(() => (toast = null), 4500);
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast = null;
+      toastTimer = null;
+    }, 4500);
   }
+  $effect(() => () => {
+    if (toastTimer) clearTimeout(toastTimer);
+  });
 
   // Surface reorder partial-mode flash via query-params (do NOT clear `q`).
   $effect(() => {
