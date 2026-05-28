@@ -26,6 +26,8 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/storage"
 )
 
+const consumerName = "payroll-settler"
+
 // UserLookup resolves a user_id to the subset of "user" columns the HR CSV needs.
 type UserLookup interface {
 	GetByID(ctx context.Context, id string) (*PayrollUser, error)
@@ -84,8 +86,8 @@ func (s *Settler) Run(ctx context.Context) error {
 	}
 
 	cons, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		Name:          "payroll-settler",
-		Durable:       "payroll-settler",
+		Name:          consumerName,
+		Durable:       consumerName,
 		FilterSubject: "payroll.batch_locked.v1",
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		MaxDeliver:    5,
@@ -132,7 +134,7 @@ func (s *Settler) Run(ctx context.Context) error {
 		if err := s.handle(ctx, msg.Data()); err != nil {
 			s.Logger.Error("handle event", "err", err)
 			// MaxDeliver=5; once exhausted, DLQ + Term (don't re-Nak forever).
-			messaging.DLQOnExhaustion(ctx, msg, s.Pool, "payroll-settler", 5, err)
+			messaging.DLQOnExhaustion(ctx, msg, s.Pool, consumerName, 5, err)
 			continue
 		}
 		_ = msg.Ack()

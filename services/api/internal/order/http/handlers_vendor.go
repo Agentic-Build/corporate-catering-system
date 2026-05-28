@@ -10,6 +10,8 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
 )
 
+const dateLayout = "2006-01-02"
+
 type markReadyInput struct {
 	Body struct {
 		OrderIDs []string `json:"order_ids" minItems:"1"`
@@ -128,7 +130,7 @@ func (a *API) listMerchantOrders(ctx context.Context, in *listMerchantOrdersInpu
 	}
 	day := time.Now().UTC().Truncate(24 * time.Hour)
 	if in.Date != "" {
-		d, perr := time.Parse("2006-01-02", in.Date)
+		d, perr := time.Parse(dateLayout, in.Date)
 		if perr != nil {
 			return nil, huma.Error400BadRequest("invalid date")
 		}
@@ -143,7 +145,7 @@ func (a *API) listMerchantOrders(ctx context.Context, in *listMerchantOrdersInpu
 		return nil, mapErr(err)
 	}
 	var resp listMerchantOrdersOutput
-	resp.Body.Date = day.Format("2006-01-02")
+	resp.Body.Date = day.Format(dateLayout)
 	resp.Body.Items = make([]merchantOrderDTO, 0, len(orders))
 	for _, o := range orders {
 		if in.Plant != "" && o.Plant != in.Plant {
@@ -161,7 +163,7 @@ func (a *API) prepSheet(ctx context.Context, in *prepSheetInput) (*prepSheetOutp
 	}
 	day := time.Now().UTC().Truncate(24 * time.Hour)
 	if in.Date != "" {
-		d, perr := time.Parse("2006-01-02", in.Date)
+		d, perr := time.Parse(dateLayout, in.Date)
 		if perr != nil {
 			return nil, huma.Error400BadRequest("invalid date (want YYYY-MM-DD)")
 		}
@@ -172,7 +174,7 @@ func (a *API) prepSheet(ctx context.Context, in *prepSheetInput) (*prepSheetOutp
 		return nil, mapErr(err)
 	}
 	var resp prepSheetOutput
-	resp.Body.Date = sheet.Date.Format("2006-01-02")
+	resp.Body.Date = sheet.Date.Format(dateLayout)
 	resp.Body.TotalOrders = sheet.TotalOrders
 	resp.Body.TotalPortions = sheet.TotalPortions
 	resp.Body.Plants = make([]prepSheetPlantDTO, 0, len(sheet.Plants))

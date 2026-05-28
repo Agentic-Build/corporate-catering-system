@@ -288,46 +288,55 @@ func (s *Service) ResolveDispute(ctx context.Context, in ResolveDisputeInput) er
 			return err
 		}
 		if in.Status == DisputeStatusResolvedRefund {
-			if in.RefundMinor < 0 {
-				return fmt.Errorf("payroll: refund_minor must be >= 0")
-			}
-			o, err := s.Orders.GetByID(ctx, d.OrderID)
-			if err != nil {
+			if err := s.applyDisputeRefund(ctx, tx, in, d); err != nil {
 				return err
 			}
-			if in.RefundMinor > o.TotalPriceMinor {
-				return ErrRefundExceedsOrder
-			}
-			// Entry-less disputes (current-period) have no entry to bump; the refund
-			// is realised purely via the order → refunded transition below.
-			if d.EntryID != nil {
-				if err := s.Entries.IncrementRefundedTx(ctx, tx, *d.EntryID, in.RefundMinor); err != nil {
-					return err
-				}
-			}
-			if o.Status == order.StatusPickedUp || o.Status == order.StatusNoShow {
-				if err := s.OrderTx.UpdateStatusTx(ctx, tx, d.OrderID, o.Status, order.StatusRefunded); err != nil {
-					return err
-				}
-			}
 		}
-		adminRole := "welfare_admin"
-		payload := map[string]any{
-			"dispute_id":   in.DisputeID,
-			"order_id":     d.OrderID,
-			"status":       string(in.Status),
-			"refund_minor": in.RefundMinor,
-		}
-		if err := s.Outbox.AppendTx(ctx, tx, "payroll_dispute", in.DisputeID, "payroll.dispute_resolved.v1", payload, map[string]any{}); err != nil {
-			return err
-		}
-		return s.Audit.WriteTx(ctx, tx, &in.ResolvedBy, &adminRole, "payroll.dispute_resolve", "payroll_dispute", in.DisputeID, payload, "")
+		return s.recordDisputeResolution(ctx, tx, in, d)
 	})
 	if err != nil {
 		return err
 	}
 	observability.RecordPayrollDispute(ctx, string(in.Status))
 	return nil
+}
+
+func (s *Service) applyDisputeRefund(ctx context.Context, tx pgx.Tx, in ResolveDisputeInput, d *Dispute) error {
+	if in.RefundMinor < 0 {
+		return fmt.Errorf("payroll: refund_minor must be >= 0")
+	}
+	o, err := s.Orders.GetByID(ctx, d.OrderID)
+	if err != nil {
+		return err
+	}
+	if in.RefundMinor > o.TotalPriceMinor {
+		return ErrRefundExceedsOrder
+	}
+	// Entry-less disputes (current-period) have no entry to bump; the refund
+	// is realised purely via the order → refunded transition below.
+	if d.EntryID != nil {
+		if err := s.Entries.IncrementRefundedTx(ctx, tx, *d.EntryID, in.RefundMinor); err != nil {
+			return err
+		}
+	}
+	if o.Status == order.StatusPickedUp || o.Status == order.StatusNoShow {
+		return s.OrderTx.UpdateStatusTx(ctx, tx, d.OrderID, o.Status, order.StatusRefunded)
+	}
+	return nil
+}
+
+func (s *Service) recordDisputeResolution(ctx context.Context, tx pgx.Tx, in ResolveDisputeInput, d *Dispute) error {
+	adminRole := "welfare_admin"
+	payload := map[string]any{
+		"dispute_id":   in.DisputeID,
+		"order_id":     d.OrderID,
+		"status":       string(in.Status),
+		"refund_minor": in.RefundMinor,
+	}
+	if err := s.Outbox.AppendTx(ctx, tx, "payroll_dispute", in.DisputeID, "payroll.dispute_resolved.v1", payload, map[string]any{}); err != nil {
+		return err
+	}
+	return s.Audit.WriteTx(ctx, tx, &in.ResolvedBy, &adminRole, "payroll.dispute_resolve", "payroll_dispute", in.DisputeID, payload, "")
 }
 
 // ListBatches returns batches filtered by status (nil → all).
