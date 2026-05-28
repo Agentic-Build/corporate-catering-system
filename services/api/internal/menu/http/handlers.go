@@ -2,7 +2,6 @@ package mhttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -514,16 +513,4 @@ func toMerchantItemDTO(row *menu.MerchantItemRow) merchantItemDTO {
 		out.LastUsed = &s
 	}
 	return out
-}
-
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, menu.ErrItemNotFound),
-		errors.Is(err, menu.ErrCategoryNotFound),
-		errors.Is(err, menu.ErrImageNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, menu.ErrForbidden):
-		return huma.Error403Forbidden(err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
 }

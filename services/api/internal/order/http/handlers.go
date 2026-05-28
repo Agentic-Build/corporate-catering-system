@@ -2,9 +2,6 @@ package ohttp
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -14,7 +11,6 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
-	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/quota"
 )
 
 // API exposes employee-facing order endpoints: place / list / get / cancel.
@@ -613,34 +609,3 @@ func (a *API) streamEmployeeMenuEvents(ctx context.Context, _ *struct{}, send ss
 	streamSSE(ctx, send, ch, func(struct{}) any { return order.BoardEvent{Kind: "changed"} })
 }
 
-// mapErr translates domain errors to huma HTTP errors.
-// Conflict (409) for state / cutoff / stock; 400 for
-// bad input; 403 for ownership; 404 for missing; 500 fallback.
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, order.ErrOrderNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, order.ErrForbidden):
-		return huma.Error403Forbidden(err.Error())
-	case errors.Is(err, order.ErrInvalidTransition),
-		errors.Is(err, order.ErrCutoffPassed),
-		errors.Is(err, order.ErrConcurrentModification),
-		errors.Is(err, quota.ErrOutOfStock),
-		errors.Is(err, quota.ErrSupplyNotFound):
-		return huma.Error409Conflict(err.Error())
-	case errors.Is(err, order.ErrEmptyOrder),
-		errors.Is(err, order.ErrMultiVendor),
-		errors.Is(err, order.ErrVendorPlantMismatch),
-		errors.Is(err, order.ErrPlantMismatch),
-		errors.Is(err, order.ErrOutsidePreorderWindow):
-		return huma.Error400BadRequest(err.Error())
-	}
-	// Diagnostic: surface the unmapped error class so we can spot
-	// race-condition / leaked-tx errors in production logs. Kept permanent —
-	// a 500 from an unmapped error is always a bug we want to fix.
-	slog.Error("order http unmapped error → 500",
-		"err", err.Error(),
-		"type", fmt.Sprintf("%T", err),
-	)
-	return huma.Error500InternalServerError("internal", err)
-}

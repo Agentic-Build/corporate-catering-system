@@ -2,7 +2,6 @@ package payrollhttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
-	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
 )
 
@@ -669,25 +667,3 @@ func (a *API) getEmployeeCurrentPayroll(ctx context.Context, _ *struct{}) (*curr
 	return &resp, nil
 }
 
-// mapErr translates payroll sentinels to huma HTTP errors.
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, payroll.ErrBatchNotFound),
-		errors.Is(err, payroll.ErrEntryNotFound),
-		errors.Is(err, payroll.ErrDisputeNotFound),
-		errors.Is(err, payroll.ErrExceptionNotFound),
-		errors.Is(err, order.ErrOrderNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, payroll.ErrForbidden):
-		return huma.Error403Forbidden(err.Error())
-	case errors.Is(err, payroll.ErrInvalidException),
-		errors.Is(err, payroll.ErrRefundExceedsOrder):
-		return huma.Error400BadRequest(err.Error())
-	case errors.Is(err, payroll.ErrBatchLocked),
-		errors.Is(err, payroll.ErrBatchPeriodExists),
-		errors.Is(err, payroll.ErrInvalidTransition),
-		errors.Is(err, payroll.ErrOrderNotDisputable):
-		return huma.Error409Conflict(err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
-}

@@ -5,7 +5,6 @@ package feedbackhttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -409,25 +408,4 @@ func complaintListResponse(cs []*feedback.Complaint) *listComplaintsOutput {
 		resp.Body.Items = append(resp.Body.Items, toComplaintDTO(c))
 	}
 	return &resp
-}
-
-// mapErr translates feedback sentinels to huma HTTP errors.
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, feedback.ErrOrderNotFound),
-		errors.Is(err, feedback.ErrComplaintNotFound),
-		errors.Is(err, feedback.ErrRatingNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, feedback.ErrForbidden):
-		return huma.Error403Forbidden(err.Error())
-	case errors.Is(err, feedback.ErrValidation):
-		return huma.Error422UnprocessableEntity(err.Error())
-	case errors.Is(err, feedback.ErrOrderNotPickedUp),
-		errors.Is(err, feedback.ErrAlreadyRated),
-		errors.Is(err, feedback.ErrComplaintExists),
-		errors.Is(err, feedback.ErrInvalidTransition),
-		errors.Is(err, feedback.ErrEscalateTooEarly):
-		return huma.Error409Conflict(err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
 }

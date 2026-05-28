@@ -2,7 +2,6 @@ package vhttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -510,18 +509,4 @@ func toOperatorDTO(op *vendor.OperatorAccount) operatorDTO {
 		d.LastSyncedAt = &s
 	}
 	return d
-}
-
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, vendor.ErrVendorNotFound), errors.Is(err, vendor.ErrOperatorNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, vendor.ErrAlreadyApproved), errors.Is(err, vendor.ErrInvalidStatus):
-		return huma.Error409Conflict(err.Error())
-	case errors.Is(err, vendor.ErrInvalidOperator), errors.Is(err, vendor.ErrInvalidSettings):
-		return huma.Error400BadRequest(err.Error())
-	case errors.Is(err, vendor.ErrProvisioningSetup):
-		return huma.NewError(http.StatusBadGateway, err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
 }
