@@ -33,7 +33,7 @@ export const actions: Actions = {
     const body: UpdateItemBody = {
       name: String(fd.get("name") ?? ""),
       description: String(fd.get("description") ?? ""),
-      price_minor: parseInt(String(fd.get("price") ?? "0"), 10),
+      price_minor: Number.parseInt(String(fd.get("price") ?? "0"), 10),
       tags: String(fd.get("tags") ?? "")
         .split(/\s+/)
         .map((s) => s.trim())

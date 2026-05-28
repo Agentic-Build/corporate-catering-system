@@ -4,7 +4,7 @@ RUN corepack enable
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
 COPY apps/employee ./apps/employee
 COPY packages ./packages
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 RUN pnpm --filter @tbite/employee build
 
 FROM node:24.16.0-alpine AS runner
