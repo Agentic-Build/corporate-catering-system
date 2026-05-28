@@ -30,8 +30,6 @@ type API struct {
 	MenuHub *order.MenuHub
 }
 
-// ----- DTOs -----
-
 type orderItemDTO struct {
 	ID             string `json:"id"`
 	MenuItemID     string `json:"menu_item_id"`
@@ -87,8 +85,6 @@ func toDTO(o *order.Order) orderDTO {
 	}
 	return d
 }
-
-// ----- Inputs / Outputs -----
 
 type placeOrderInput struct {
 	Body struct {
@@ -244,8 +240,6 @@ func prepItemDTOs(items []order.PrepSheetItem) []prepSheetItemDTO {
 	return out
 }
 
-// ----- Registration -----
-
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "placeOrder",
@@ -355,34 +349,13 @@ func (a *API) Register(api huma.API) {
 	}, a.streamEmployeeMenuEvents)
 }
 
-// ----- Auth helper -----
-
 func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleEmployee {
-		return nil, huma.Error403Forbidden("employee role required")
-	}
-	return u, nil
+	return idhttp.RequireEmployee(ctx)
 }
 
 func (a *API) requireVendor(ctx context.Context) (*identity.User, string, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, "", huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleVendorOperator {
-		return nil, "", huma.Error403Forbidden("vendor operator required")
-	}
-	if u.VendorID == nil || *u.VendorID == "" {
-		return nil, "", huma.Error403Forbidden("user not bound to a vendor")
-	}
-	return u, *u.VendorID, nil
+	return idhttp.RequireVendor(ctx)
 }
-
-// ----- Handlers -----
 
 func (a *API) place(ctx context.Context, in *placeOrderInput) (*placeOrderOutput, error) {
 	u, err := a.requireEmployee(ctx)
@@ -582,21 +555,10 @@ func (a *API) prepSheet(ctx context.Context, in *prepSheetInput) (*prepSheetOutp
 	return &resp, nil
 }
 
-// streamMerchantOrderEvents streams live order events for the caller's vendor
-// over SSE. The merchant prep board re-fetches its data on each event, so the
-// payload stays minimal. A 20s keep-alive ping holds the connection open.
-func (a *API) streamMerchantOrderEvents(ctx context.Context, _ *struct{}, send sse.Sender) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok || u.Role != identity.RoleVendorOperator || u.VendorID == nil || *u.VendorID == "" {
-		return
-	}
-	if a.Board == nil {
-		<-ctx.Done()
-		return
-	}
-	ch, unsub := a.Board.Subscribe(*u.VendorID)
-	defer unsub()
-
+// streamSSE runs the shared SSE keep-alive loop: it forwards each item from ch
+// (mapped to a payload via toPayload) and emits a 20s ping, returning when the
+// context is cancelled, the channel closes, or a send fails.
+func streamSSE[T any](ctx context.Context, send sse.Sender, ch <-chan T, toPayload func(T) any) {
 	heartbeat := time.NewTicker(20 * time.Second)
 	defer heartbeat.Stop()
 	for {
@@ -611,11 +573,28 @@ func (a *API) streamMerchantOrderEvents(ctx context.Context, _ *struct{}, send s
 			if !open {
 				return
 			}
-			if send.Data(ev) != nil {
+			if send.Data(toPayload(ev)) != nil {
 				return
 			}
 		}
 	}
+}
+
+// streamMerchantOrderEvents streams live order events for the caller's vendor
+// over SSE. The merchant prep board re-fetches its data on each event, so the
+// payload stays minimal. A 20s keep-alive ping holds the connection open.
+func (a *API) streamMerchantOrderEvents(ctx context.Context, _ *struct{}, send sse.Sender) {
+	u, ok := idhttp.UserFromContext(ctx)
+	if !ok || u.Role != identity.RoleVendorOperator || u.VendorID == nil || *u.VendorID == "" {
+		return
+	}
+	if a.Board == nil {
+		<-ctx.Done()
+		return
+	}
+	ch, unsub := a.Board.Subscribe(*u.VendorID)
+	defer unsub()
+	streamSSE(ctx, send, ch, func(ev order.BoardEvent) any { return ev })
 }
 
 // streamEmployeeMenuEvents streams a "menu changed" signal to the employee
@@ -631,26 +610,7 @@ func (a *API) streamEmployeeMenuEvents(ctx context.Context, _ *struct{}, send ss
 	}
 	ch, unsub := a.MenuHub.Subscribe()
 	defer unsub()
-
-	heartbeat := time.NewTicker(20 * time.Second)
-	defer heartbeat.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-heartbeat.C:
-			if send.Data(order.BoardEvent{Kind: "ping"}) != nil {
-				return
-			}
-		case _, open := <-ch:
-			if !open {
-				return
-			}
-			if send.Data(order.BoardEvent{Kind: "changed"}) != nil {
-				return
-			}
-		}
-	}
+	streamSSE(ctx, send, ch, func(struct{}) any { return order.BoardEvent{Kind: "changed"} })
 }
 
 // mapErr translates domain errors to huma HTTP errors.

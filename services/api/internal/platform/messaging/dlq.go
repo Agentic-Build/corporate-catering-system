@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -17,10 +18,8 @@ var (
 	dlqMessagesCounter metric.Int64Counter
 )
 
-// dlqMessages returns the lazily-bound DLQ write counter, observed by Grafana
-// outbox-and-events.json. It binds on first use against the global meter
-// provider so a process that never writes the DLQ does not register it; if the
-// meter rejects the instrument it stays nil and callers no-op.
+// dlqMessages returns the lazily-bound DLQ write counter. Nil-safe: callers no-op
+// when the meter rejects the instrument or it was never bound.
 func dlqMessages() metric.Int64Counter {
 	dlqMessagesOnce.Do(func() {
 		meter := otel.GetMeterProvider().Meter("tbite.api")
@@ -33,17 +32,10 @@ func dlqMessages() metric.Int64Counter {
 	return dlqMessagesCounter
 }
 
-// WriteDLQ records an irrecoverable message failure to dlq_message.
-//
-// Workers call this when MaxDeliver is exceeded, or when processing logic
-// determines the message can't be retried (e.g. schema mismatch, missing
-// referent that will never appear). Once written, the message is visible to
-// admins via GET /api/admin/dlq and can be replayed or resolved manually.
-//
-// This is intentionally a thin helper rather than going through a repository:
-// workers already hold a *pgxpool.Pool and we want to keep DLQ writes out of
-// any per-message transaction (a DLQ write is the *escape hatch* when the
-// normal tx couldn't succeed).
+// WriteDLQ records an irrecoverable message failure to dlq_message. Workers
+// call this when MaxDeliver is exceeded or processing can't be retried.
+// Deliberately not inside any per-message tx — it's the escape hatch when
+// the normal tx couldn't succeed. Visible via GET /api/admin/dlq.
 func WriteDLQ(ctx context.Context, pool *pgxpool.Pool, stream, subject, consumer string, payload, headers map[string]any, lastError string) error {
 	if payload == nil {
 		payload = map[string]any{}
@@ -69,4 +61,24 @@ VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)`,
 		c.Add(ctx, 1, metric.WithAttributes(attribute.String("source_stream", stream)))
 	}
 	return nil
+}
+
+// DLQOnExhaustion: durable-consumer terminal-failure handler. Once
+// NumDelivered >= maxDeliver, write the DLQ and Term so JetStream stops
+// redelivering; before exhaustion, Nak for another attempt. Returns true when
+// DLQ'd. If the DLQ write itself fails, Nak instead (don't silently drop).
+func DLQOnExhaustion(ctx context.Context, msg jetstream.Msg, pool *pgxpool.Pool, consumer string, maxDeliver int, procErr error) bool {
+	meta, err := msg.Metadata()
+	if err != nil || pool == nil || meta.NumDelivered < uint64(maxDeliver) {
+		_ = msg.Nak()
+		return false
+	}
+	var payload map[string]any
+	_ = json.Unmarshal(msg.Data(), &payload)
+	if werr := WriteDLQ(ctx, pool, meta.Stream, msg.Subject(), consumer, payload, nil, procErr.Error()); werr != nil {
+		_ = msg.Nak()
+		return false
+	}
+	_ = msg.Term()
+	return true
 }

@@ -17,7 +17,6 @@
     closed: "已結帳",
   };
 
-  // 本月進行中 — per-order line status display.
   const lineStatusTone: Record<string, "info" | "neutral" | "warning" | "danger" | "success"> = {
     charged: "info",
     reversed: "neutral",
@@ -32,7 +31,6 @@
   const totalNet = $derived(data.entries.reduce((s, e) => s + e.net_minor, 0));
   const currentLines = $derived((data.currentLines as PayrollLine[]) ?? []);
 
-  // ── feedback sheet ──
   let sheetOpen = $state(false);
   let activeLine = $state<PayrollLine | null>(null);
   function openSheet(line: PayrollLine) {

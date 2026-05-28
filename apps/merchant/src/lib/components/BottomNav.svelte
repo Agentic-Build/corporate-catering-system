@@ -1,8 +1,5 @@
 <script lang="ts">
-  // Mobile bottom navigation (<md). Mirrors the design mockup's two-row tab bar
-  // (4 + 3) and is hidden at md+ where the header's horizontal nav takes over.
-  // Tabs map 1:1 to real routes; the meal-sticker page (/labels) is intentionally
-  // not surfaced here.
+  // Mobile bottom navigation; hidden at md+ where the top nav takes over.
   import { Icon, type IconName } from "@tbite/ui";
   import { page } from "$app/stores";
 

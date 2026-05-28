@@ -49,8 +49,11 @@ func TestStateStore_PutGetConsume(t *testing.T) {
 	assert.Equal(t, "vvvv", got.PKCEVerifier)
 
 	require.NoError(t, s.Consume(context.Background(), "abc123"))
-	_, err = s.Get(context.Background(), "abc123")
-	assert.ErrorIs(t, err, oidc.ErrStateNotFound)
+	consumed, err := s.Get(context.Background(), "abc123")
+	assert.ErrorIs(t, err, oidc.ErrStateConsumed)
+	require.NotNil(t, consumed)
+	assert.Equal(t, "employee", consumed.App)
+	assert.Equal(t, "vvvv", consumed.PKCEVerifier)
 }
 
 func TestStateStore_Get_NotFound(t *testing.T) {

@@ -16,7 +16,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     if (r.data) items = (r.data as any).items ?? [];
   } catch {}
 
-  // Load menu items for name lookup on stickers
   let menuItems: any[] = [];
   try {
     const r = await client.GET("/api/merchant/menu-items", {
@@ -28,7 +27,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     menuItems.map((i: any) => [i.id, { name: i.name }]),
   );
 
-  // 7-day picker (today + next 6) — mirrors the prep board.
   const [yy, mm, dd] = todayStr.split("-").map(Number);
   const days: { id: string; label: string }[] = [];
   for (let i = 0; i < 7; i++) {

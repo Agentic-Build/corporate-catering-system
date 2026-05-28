@@ -9,7 +9,6 @@
 
   const recon = $derived(data.reconciliation);
 
-  // Status-breakdown rows for the live monthly summary.
   const breakdownMeta: {
     key: keyof StatusBreakdownDTO;
     label: string;

@@ -8,7 +8,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const client = apiFor(locals.apiToken);
 
-  // Parallel load: vendors + anomalies + payroll batches + plants.
   const [vendorsRes, anomaliesRes, batchesRes, plantsRes] = await Promise.allSettled([
     client.GET("/api/admin/vendors", { params: { query: {} } }),
     client.GET("/api/admin/anomalies", { params: { query: {} } }),
@@ -25,7 +24,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const knownPlants: { code: string; label: string; active: boolean }[] =
     plantsRes.status === "fulfilled" ? ((plantsRes.value.data as any)?.items ?? []) : [];
 
-  // Latest payroll batch (most recent period_start) + its entries.
+  // Latest batch (most recent period_start) + its entries.
   const latestBatch =
     batches.length > 0
       ? [...batches].sort((a, b) => String(b.period_start).localeCompare(String(a.period_start)))[0]
@@ -48,7 +47,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const pendingVendors = vendors.filter((v) => v.status === "pending");
 
-  // 7-day anomaly window.
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const recentAnomalies = anomalies.filter((a) => {
     const t = Date.parse(a.created_at ?? "");
@@ -61,7 +59,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     .filter((a) => a.status !== "closed")
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 
-  // Payroll totals (minor units → NTD).
   let payrollTotal = 0;
   let payrollRefunded = 0;
   for (const e of payrollEntries) {
@@ -90,7 +87,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  // Approve a pending vendor with selected plants (or empty list).
   approveVendor: async ({ request, locals }) => {
     const fd = await request.formData();
     const id = String(fd.get("id") ?? "");

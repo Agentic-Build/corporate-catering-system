@@ -1,6 +1,4 @@
 <script lang="ts">
-  // Meal-library drawer — ported from MerchantView.jsx MealLibraryDrawer.
-  // The reference's kcal field has no API source, so it is omitted.
   import { Drawer, Button, Icon, SearchInput } from "@tbite/ui";
 
   interface Props {

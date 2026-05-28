@@ -1,8 +1,5 @@
 <script lang="ts">
-  // Employee home — recreated from EmployeeView.jsx: greeting header,
-  // data-driven category strip, three featured rows, full MealCard grid.
-  // Header / LocationBar / floating cart / cart drawer all live in
-  // +layout.svelte; this page owns the home content + its form actions.
+  // Employee home: greeting, category strip, featured rows, full menu grid.
   import { MealCard, StateTag, WeekCalendar } from "@tbite/ui";
   import { invalidate, invalidateAll, goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -14,7 +11,6 @@
 
   let { data, form } = $props();
 
-  // ── week-view date picker ──
   const selectedDay = $derived($page.url.searchParams.get("day") ?? data.home?.target_day ?? "");
   const weekDays = $derived.by(() => {
     const wk = ["日", "一", "二", "三", "四", "五", "六"];
@@ -34,9 +30,7 @@
     goto(u.pathname + u.search, { keepFocus: true, noScroll: true });
   }
 
-  // Live menu: an SSE stream signals when any order shifts available stock.
-  // A "changed" event refetches only the menu/home fragment (app:home),
-  // leaving the layout's order/plant data untouched.
+  // SSE: refetch only the menu/home fragment (app:home) on stock changes.
   onMount(() => {
     const es = new EventSource("/menu/events");
     es.onmessage = (e) => {
@@ -51,7 +45,6 @@
     return () => es.close();
   });
 
-  // ── typed views over the /api/employee/home payload ──
   type ReorderC = {
     source_order_id: string;
     vendor_name: string;
@@ -104,7 +97,6 @@
   const hasOrdered = $derived(data.home.has_ordered);
   const orderSummary = $derived(data.home.order_summary as OrderSummary | undefined);
 
-  // ── greeting eyebrow + cutoff countdown ──
   const eyebrow = $derived(
     (() => {
       const [y, m, d] = data.home.target_day.split("-").map(Number);
@@ -125,13 +117,10 @@
     })(),
   );
 
-  // ── header search query (set by the layout SearchInput) ──
   const query = $derived($page.url.searchParams.get("q")?.trim() ?? "");
 
-  // ── F3 — tag selection (filter bar) and any other filter live
-  //    in the URL, so an active filter means the server returns the
-  //    filtered/sorted grid; otherwise the day_menu is shown, narrowed only by
-  //    the header search box client-side. ──
+  // F3: when filter bar params are present, server returns filtered/sorted grid;
+  // otherwise client only narrows day_menu by the header search box.
   const serverFiltered = $derived(Boolean(data.filterActive));
   const filteredMenu = $derived(
     serverFiltered
@@ -142,7 +131,7 @@
         }),
   );
 
-  // ── A4 — 全部餐點 檢視切換（依餐點 / 依店家），persisted in ?view= + localStorage ──
+  // A4: 全部餐點 view toggle (meal/vendor), persisted in ?view= + localStorage.
   let menuView = $state<"meal" | "vendor">("meal");
   onMount(() => {
     const fromUrl = $page.url.searchParams.get("view");
@@ -157,7 +146,6 @@
     u.searchParams.set("view", next);
     goto(u.pathname + u.search, { keepFocus: true, noScroll: true, replaceState: true });
   }
-  // 依店家 — group the (already category/search-filtered) menu by vendor.
   const vendorGroups = $derived.by(() => {
     const groups = new Map<string, { vendorId: string; vendor: string; items: DayMenuItem[] }>();
     for (const m of filteredMenu) {
@@ -171,8 +159,7 @@
     return [...groups.values()];
   });
 
-  // ── enrich recommend / favorite chips with full MealCard data from the
-  //    day_menu when the item is on sale today (else show as unavailable). ──
+  // Enrich chips with day_menu data when on sale; else render as unavailable.
   type RecCard = { key: string } & RecommendC & { menu?: DayMenuItem };
   type FavCard = { key: string } & FavoriteC & { menu?: DayMenuItem };
   const recommendCards = $derived(
@@ -194,13 +181,11 @@
     reorderChips.map<ReorderCard>((c) => ({ key: c.source_order_id, ...c })),
   );
 
-  // ── favorites (optimistic ⭐ toggle) ──
   let favoritesSet = $state<Set<string>>(new Set());
   $effect(() => {
     favoritesSet = new Set(data.favoriteIds as string[]);
   });
 
-  // ── toast ──
   let toast = $state<{ tone: "info" | "warning" | "danger"; text: string } | null>(null);
   function showToast(tone: "info" | "warning" | "danger", text: string) {
     toast = { tone, text };
@@ -230,7 +215,6 @@
     if (f?.reorderToast) showToast("danger", f.reorderToast);
   });
 
-  // ── cart wiring ──
   function addMenuItem(m: DayMenuItem) {
     cart.add(m.id, {
       name: m.name,
@@ -264,7 +248,6 @@
       });
   }
 
-  // ── order-summary status display ──
   const orderStatusLabel: Record<string, string> = {
     draft: "草稿",
     placed: "已預訂",

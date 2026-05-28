@@ -2,6 +2,7 @@ import type { Actions, PageServerLoad } from "./$types";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { taipeiISO } from "$lib/date";
 
 const PAGE_LIMIT = 20;
 
@@ -13,9 +14,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const r = await client.GET("/api/employee/reorders", {
     params: { query: { limit: PAGE_LIMIT } },
   });
-  // Also pull target_day so chip form submit knows the supply_date.
+  // Pull target_day so chip form submit knows the supply_date.
   const h = await client.GET("/api/employee/home", { params: { query: {} } });
-  const targetDay = h.data?.target_day ?? new Date().toISOString().slice(0, 10);
+  const targetDay = h.data?.target_day ?? taipeiISO();
 
   return {
     user: locals.user,

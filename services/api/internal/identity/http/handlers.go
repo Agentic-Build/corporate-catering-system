@@ -10,6 +10,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
 )
 
 // AppBaseURLs maps app names ("employee"|"merchant"|"admin") to their public base URLs.
@@ -21,19 +22,14 @@ type API struct {
 	Users    identity.UserRepository
 	AppURLs  AppBaseURLs
 
-	// Handoff brokers the single-use login code so the session token is never
-	// placed in the callback redirect URL. When nil, completeLogin falls back
-	// to the legacy token-in-URL behaviour.
+	// Handoff brokers single-use login codes so the session token never lands
+	// in the callback URL. Nil → legacy token-in-URL behaviour.
 	Handoff identity.AuthHandoffStore
 
-	// JWT, when non-nil, lets AuthMiddleware accept JWT bearer tokens
-	// issued by Hydra in addition to T-Bite session tokens. The api role
-	// wires this; mcp-stdio leaves it nil because it speaks the
-	// session-token model only.
+	// JWT, when non-nil, lets AuthMiddleware accept Hydra-issued JWTs alongside
+	// T-Bite session tokens (api role wires it; mcp-stdio leaves nil).
 	JWT JWTVerifier
 }
-
-// ----- DTOs -----
 
 type startLoginInput struct {
 	Provider string `path:"provider" doc:"OIDC provider slug"`
@@ -82,8 +78,6 @@ type providerDTO struct {
 	Slug        string `json:"slug"`
 	DisplayName string `json:"display_name"`
 }
-
-// ----- Registration -----
 
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
@@ -156,10 +150,8 @@ func (a *API) completeLogin(ctx context.Context, in *completeLoginInput) (*compl
 		Provider: in.Provider, State: in.State, Code: in.Code,
 	})
 	if err != nil {
-		// This is a browser-facing callback: render a friendly redirect back
-		// to the app's login page rather than returning raw JSON. We can only
-		// do so once we know which app the user came from, which the service
-		// reports via CallbackError after the OIDC state is resolved.
+		// Browser-facing: render a redirect to the app's /login rather than
+		// raw JSON. We need to know which app via CallbackError.
 		var cbErr *identity.CallbackError
 		if errors.As(err, &cbErr) {
 			if base, ok := a.AppURLs[cbErr.App]; ok {
@@ -175,9 +167,8 @@ func (a *API) completeLogin(ctx context.Context, in *completeLoginInput) (*compl
 	if !ok {
 		return nil, huma.Error500InternalServerError("unknown app base url for " + out.App)
 	}
-	// Hand the session token to the app via a single-use code rather than the
-	// URL, so it never lands in browser history or proxy logs. The app server
-	// redeems the code at POST /auth/session over its server-to-API channel.
+	// Hand off via single-use code so the session token never lands in browser
+	// history or proxy logs; the app redeems it via POST /auth/session.
 	if a.Handoff != nil {
 		code, err := a.Handoff.IssueCode(ctx, out.Session.Token)
 		if err != nil {
@@ -206,10 +197,9 @@ type exchangeSessionOutput struct {
 	}
 }
 
-// exchangeSession redeems a single-use login code for its session token. It is
-// unauthenticated by design — possession of the short-lived, single-use code
-// is the credential (OAuth authorization-code style). Called server-side by
-// the app's /auth/landing endpoint.
+// exchangeSession redeems a single-use login code for its session token.
+// Unauthenticated by design — possession of the short-lived code IS the
+// credential (OAuth auth-code style). Called server-side by /auth/landing.
 func (a *API) exchangeSession(ctx context.Context, in *exchangeSessionInput) (*exchangeSessionOutput, error) {
 	if a.Handoff == nil {
 		return nil, huma.Error503ServiceUnavailable("auth handoff not configured")
@@ -234,6 +224,9 @@ func callbackErrorCode(err error) string {
 		return "role_mismatch"
 	case errors.Is(err, identity.ErrAccountSuspended):
 		return "account_suspended"
+	case errors.Is(err, oidc.ErrStateConsumed),
+		errors.Is(err, oidc.ErrStateNotFound):
+		return "auth_expired"
 	default:
 		return "auth_failed"
 	}
@@ -288,7 +281,9 @@ func mapErr(err error) error {
 		return huma.NewError(http.StatusLocked, err.Error())
 	case errors.Is(err, identity.ErrInvalidProvider),
 		errors.Is(err, identity.ErrInvalidRole),
-		errors.Is(err, identity.ErrInvalidClaims):
+		errors.Is(err, identity.ErrInvalidClaims),
+		errors.Is(err, oidc.ErrStateNotFound),
+		errors.Is(err, oidc.ErrStateConsumed):
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, identity.ErrUserNotFound),
 		errors.Is(err, identity.ErrSessionNotFound):

@@ -1,16 +1,8 @@
 import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
-
-/** Local YYYY-MM-DD for a Date offset by `addDays` from today. */
-function dayId(addDays: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + addDays);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+import { defaultCutoffAt } from "$lib/cutoff";
+import { dayId } from "$lib/date";
 
 const WEEKDAY = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
 
@@ -29,7 +21,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     return { id, head, weekday: WEEKDAY[d.getDay()], offset: i };
   });
 
-  // Meal library — all menu items incl. archived (drawer + name lookups).
+  // Library = all menu items incl. archived (drawer + name lookups).
   let items: any[] = [];
   try {
     const r = await client.GET("/api/merchant/menu-items", {
@@ -37,7 +29,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     });
     if (r.data) items = (r.data as any).items ?? [];
   } catch {}
-  // Today's orders — used for KPI stats only.
   let todayOrders: any[] = [];
   try {
     const r = await client.GET("/api/merchant/orders", {
@@ -46,7 +37,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     if (r.data) todayOrders = (r.data as any).items ?? [];
   } catch {}
 
-  // 7-day supply, fetched in parallel — one request per day.
   const supplyResults = await Promise.all(
     days.map(async (d) => {
       try {
@@ -63,7 +53,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     supplyResults.map((s) => [s.date, s.items]),
   );
 
-  // Today's totals for the StatCard row.
   const todaySupply: any[] = supplyByDate[today] ?? [];
   const totalCapacity = todaySupply.reduce((a: number, s: any) => a + s.capacity, 0);
   const totalSold = todaySupply.reduce((a: number, s: any) => a + (s.capacity - s.remain), 0);
@@ -94,7 +83,7 @@ export const actions: Actions = {
     const date = String(fd.get("date") ?? "");
     const capacity = parseInt(String(fd.get("capacity") ?? "0"), 10);
     const pickupWindow = String(fd.get("pickup_window") ?? "11:50-12:10");
-    const cutoffAt = String(fd.get("cutoff_at") ?? `${date}T17:00:00Z`);
+    const cutoffAt = String(fd.get("cutoff_at") || defaultCutoffAt(date));
 
     if (!itemId || !date) return fail(400, { error: "缺少餐點或日期" });
     if (!Number.isFinite(capacity) || capacity < 0) return fail(400, { error: "上限數值無效" });

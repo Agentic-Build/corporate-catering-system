@@ -8,18 +8,15 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/plants"
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
 // API exposes plant registry endpoints.
 type API struct {
-	Svc        *plants.Service
-	VendorSvc  *vendor.Service
+	Svc       *plants.Service
+	VendorSvc *vendor.Service
 }
-
-// ----- DTOs -----
 
 type plantDTO struct {
 	Code      string `json:"code"`
@@ -71,8 +68,6 @@ type setMerchantPlantsInput struct {
 		Plants []string `json:"plants"`
 	}
 }
-
-// ----- Registration -----
 
 func (a *API) Register(api huma.API) {
 	// Public (active only) — any authenticated user.
@@ -134,8 +129,6 @@ func (a *API) Register(api huma.API) {
 		DefaultStatus: http.StatusNoContent,
 	}, a.merchantSet)
 }
-
-// ----- Handlers -----
 
 func (a *API) listActive(ctx context.Context, _ *struct{}) (*listPlantsOutput, error) {
 	if _, ok := idhttp.UserFromContext(ctx); !ok {
@@ -231,34 +224,15 @@ func (a *API) merchantSet(ctx context.Context, in *setMerchantPlantsInput) (*str
 	return &struct{}{}, nil
 }
 
-// ----- Auth guards -----
-
 func (a *API) requireAdmin(ctx context.Context) error {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleWelfareAdmin {
-		return huma.Error403Forbidden("admin role required")
-	}
-	return nil
+	_, err := idhttp.RequireAdmin(ctx)
+	return err
 }
 
 func (a *API) requireVendor(ctx context.Context) (string, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return "", huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleVendorOperator {
-		return "", huma.Error403Forbidden("vendor operator required")
-	}
-	if u.VendorID == nil || *u.VendorID == "" {
-		return "", huma.Error403Forbidden("user is not bound to a vendor")
-	}
-	return *u.VendorID, nil
+	_, vendorID, err := idhttp.RequireVendor(ctx)
+	return vendorID, err
 }
-
-// ----- Helpers -----
 
 func toDTO(p *plants.Plant) plantDTO {
 	return plantDTO{

@@ -35,7 +35,7 @@ function pickupError(status: number): string {
 }
 
 export const actions: Actions = {
-  // Camera scan → full order id parsed from the QR. Mark it picked up directly.
+  // Camera scan: full order id from QR; mark picked up directly.
   scan: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "尚未登入" });
     const fd = await request.formData();
@@ -48,8 +48,7 @@ export const actions: Actions = {
     return { ok: true, pickedUpId: id };
   },
 
-  // Manual fallback → order-number prefix (first 8 chars printed on the sticker).
-  // Resolve against the employee's own `ready` orders before marking pickup.
+  // Manual fallback: 8-char order-number prefix; resolve against own `ready` orders.
   manual: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "尚未登入" });
     const fd = await request.formData();

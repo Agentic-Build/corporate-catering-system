@@ -10,41 +10,22 @@ import (
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 )
 
-// AccessTokenVerifier validates JWT access tokens issued by Hydra. The
-// issuer is Hydra's public URL (e.g. http://localhost:4444/); the audience
-// is set per-client via the OAuth2 token request — Hydra picks one of the
-// requested resources, or none, depending on configuration.
-//
-// We use go-oidc's verifier even though it's named for ID tokens — under the
-// hood it just resolves JWKS via OIDC discovery and validates the signature
-// and the standard claims, which is exactly what we need for access tokens
-// too. SkipClientIDCheck=true because access tokens don't carry our client
-// ID (they're issued to many possible clients via DCR).
+// AccessTokenVerifier validates JWT access tokens issued by Hydra. Uses the
+// go-oidc verifier (despite the ID-token name) since it does JWKS + standard
+// claim validation. SkipClientIDCheck=true: access tokens go to many DCR clients.
 type AccessTokenVerifier struct {
 	verifier *gooidc.IDTokenVerifier
 	issuer   string
 	// expectedAudience is this resource server's identifier (the MCP URL).
-	// When set, a token carrying an audience must include it. Empty disables
-	// the check.
+	// When set, a token carrying an audience must include it; empty disables.
 	expectedAudience string
 }
 
-// NewAccessTokenVerifier resolves Hydra's discovery document at boot and
-// caches the resulting JWKS-backed verifier.
-//
-//   - reachableURL is the URL the Go process can hit to reach Hydra (e.g.
-//     http://hydra:4444 inside docker, http://localhost:4444 from the host).
-//   - publicIssuer is the URL Hydra advertises as the issuer in the JWTs
-//     it signs (set via URLS_SELF_ISSUER). When the API reverse-proxies
-//     Hydra under its own host this differs from reachableURL — the JWT
-//     iss claim is "http://localhost:8080/" while the OIDC discovery
-//     fetch goes to "http://localhost:4444". InsecureIssuerURLContext is
-//     go-oidc's mechanism for that exact mismatch.
-//
-// When publicIssuer is empty we fall back to single-URL mode (no proxy).
-//   - expectedAudience is this resource server's identifier (the MCP URL).
-//     When non-empty, a token that carries an audience must include it; see
-//     audienceAllowed for the exact (DCR-safe) semantics.
+// NewAccessTokenVerifier resolves Hydra's discovery doc at boot and caches the
+// JWKS-backed verifier. reachableURL is what the Go process can hit;
+// publicIssuer (optional) is what Hydra advertises as the iss claim when the
+// API reverse-proxies Hydra under its own host — these can differ, and
+// InsecureIssuerURLContext is go-oidc's mechanism for that.
 func NewAccessTokenVerifier(ctx context.Context, reachableURL, publicIssuer, expectedAudience string) (*AccessTokenVerifier, error) {
 	if reachableURL == "" {
 		return nil, errors.New("hydra: reachable URL is required")
@@ -78,10 +59,8 @@ type AccessTokenClaims struct {
 	Audience []string  `json:"-"`
 	ClientID string    `json:"client_id"`
 
-	// Extra claims forwarded from our consent step. These mirror what the
-	// Authentik claim mapper produces so downstream code (e.g. tools_menu
-	// resolvePlant fallback) can pick them up without an extra DB lookup
-	// later if we ever want to skip the user lookup.
+	// Extra claims forwarded from our consent step (mirror the Authentik
+	// claim mapper) so downstream can skip the user lookup.
 	Email      string `json:"email"`
 	Name       string `json:"name"`
 	TBiteRole  string `json:"tbite_role"`
@@ -89,9 +68,8 @@ type AccessTokenClaims struct {
 	TBiteDept  string `json:"tbite_department"`
 }
 
-// SubjectVerifier is the small surface idhttp.AuthMiddleware needs — a
-// raw-token-to-subject mapping. AccessTokenVerifier satisfies it via the
-// Verify method below; tests can substitute a stub without dragging in OIDC.
+// SubjectVerifier is the raw-token-to-subject surface idhttp.AuthMiddleware
+// needs. Tests can substitute a stub without dragging in OIDC.
 type SubjectVerifier struct {
 	V *AccessTokenVerifier
 }
@@ -109,10 +87,7 @@ func (s SubjectVerifier) Verify(ctx context.Context, raw string) (string, error)
 // Verify validates the JWT and returns its decoded claims, or an error when
 // the token is unsigned by Hydra, expired, or otherwise malformed.
 func (v *AccessTokenVerifier) Verify(ctx context.Context, raw string) (*AccessTokenClaims, error) {
-	// go-oidc.Verify rejects tokens with `typ: at+jwt` (RFC 9068) by
-	// default because it's the ID-token verifier; Hydra emits exactly
-	// that. Strip the bearer prefix defensively in case callers passed
-	// the full header value.
+	// Strip the bearer prefix in case callers passed the full header value.
 	raw = strings.TrimSpace(strings.TrimPrefix(raw, "Bearer "))
 
 	idt, err := v.verifier.Verify(ctx, raw)
@@ -123,19 +98,18 @@ func (v *AccessTokenVerifier) Verify(ctx context.Context, raw string) (*AccessTo
 	// Pull extra claims; ignore decoder errors so unrelated fields don't
 	// break otherwise-valid tokens.
 	var raw_claims struct {
-		Audience  any    `json:"aud"`
-		Scope     string `json:"scope"`
-		Subject   string `json:"sub"`
-		ClientID  string `json:"client_id"`
-		Ext       struct {
+		Audience any    `json:"aud"`
+		Scope    string `json:"scope"`
+		Subject  string `json:"sub"`
+		ClientID string `json:"client_id"`
+		Ext      struct {
 			Email      string `json:"email"`
 			Name       string `json:"name"`
 			TBiteRole  string `json:"tbite_role"`
 			TBitePlant string `json:"tbite_plant"`
 			TBiteDept  string `json:"tbite_department"`
 		} `json:"ext"`
-		// Hydra also surfaces top-level customs depending on session
-		// shape; we accept both placement options.
+		// Hydra also surfaces top-level customs; accept both placements.
 		EmailTop      string `json:"email"`
 		NameTop       string `json:"name"`
 		TBiteRoleTop  string `json:"tbite_role"`
@@ -182,11 +156,9 @@ func pick(a, b string) string {
 	return b
 }
 
-// audienceAllowed implements "validate the audience when present". A token
-// with no aud is accepted (our single-tenant Hydra mints tokens without one,
-// and DCR clients don't request our resource), but a token explicitly scoped
-// to a different resource is rejected — closing the cross-resource token
-// confusion path (RFC 9068) without breaking the common DCR case.
+// audienceAllowed: validate audience only when present. No aud → accept (our
+// single-tenant Hydra mints without one); aud scoped to a different resource
+// → reject, closing the RFC 9068 cross-resource token-confusion path.
 func audienceAllowed(tokenAud []string, expected string) bool {
 	if expected == "" || len(tokenAud) == 0 {
 		return true

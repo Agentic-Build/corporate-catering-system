@@ -118,6 +118,8 @@ func TestOutboxRepo_MarkFailed_IncrementsAttempts(t *testing.T) {
 	id := events[0].ID
 
 	require.NoError(t, repo.MarkFailed(ctx, tx, id, "publish: nats unreachable"))
+	// MarkFailed only stages the update; MarkPublished commits the cycle.
+	require.NoError(t, repo.MarkPublished(ctx, tx, nil))
 
 	// Re-lock and verify attempts incremented + last_error set
 	events2, tx2, err := repo.LockBatch(ctx, 1)
@@ -130,6 +132,48 @@ func TestOutboxRepo_MarkFailed_IncrementsAttempts(t *testing.T) {
 	assert.Equal(t, "publish: nats unreachable", *events2[0].LastError)
 
 	// Release the lock
+	require.NoError(t, repo.MarkPublished(ctx, tx2, nil))
+}
+
+// Regression: a mid-batch publish failure must not re-deliver already-published
+// events. MarkFailed previously committed the cycle tx, so the cycle-final
+// MarkPublished ran on a closed tx, errored, and left the published event's
+// published_at NULL — re-publishing it next cycle. The fix makes MarkPublished
+// the single commit point covering both the failure and the success.
+func TestOutboxRepo_Cycle_PartialFailure_CommitsSuccessAndStagedFailure(t *testing.T) {
+	pool, cleanup := setupPostgres(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := pgrepo.NewOutboxRepo(pool)
+
+	require.NoError(t, pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		if err := repo.AppendTx(ctx, tx, "order", newAggregateUUID(210), "order.placed.v1",
+			map[string]any{}, map[string]any{}); err != nil {
+			return err
+		}
+		return repo.AppendTx(ctx, tx, "order", newAggregateUUID(211), "order.placed.v1",
+			map[string]any{}, map[string]any{})
+	}))
+
+	events, tx, err := repo.LockBatch(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	failedID := events[0].ID
+	publishedID := events[1].ID
+
+	// Simulate one event failing to publish mid-batch...
+	require.NoError(t, repo.MarkFailed(ctx, tx, failedID, "publish: nats unreachable"))
+	// ...then the cycle's single commit for the event that did publish. Before
+	// the fix this errored because MarkFailed had already committed/closed tx.
+	require.NoError(t, repo.MarkPublished(ctx, tx, []int64{publishedID}))
+
+	// Next cycle: only the failed event remains, with attempts incremented; the
+	// published event is gone (not re-delivered).
+	events2, tx2, err := repo.LockBatch(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, events2, 1)
+	assert.Equal(t, failedID, events2[0].ID)
+	assert.Equal(t, 1, events2[0].Attempts)
 	require.NoError(t, repo.MarkPublished(ctx, tx2, nil))
 }
 

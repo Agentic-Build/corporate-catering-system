@@ -12,35 +12,31 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/observability"
 )
 
-// txBeginner is the slice of *pgxpool.Pool the service uses: Begin for the
-// pgx.BeginFunc write paths and Query for the current-lines read fallback.
-// Depending on this interface (not the concrete pool) lets tests inject a fake
-// that hands the write closure a no-op pgx.Tx; the repo fakes ignore the tx.
+// txBeginner is the pool subset Service needs: Begin for write paths, Query
+// for the current-lines read fallback. Interface (not concrete pool) lets
+// tests inject fakes.
 type txBeginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// AuditTx mirrors the audit-repo shape used by order.Service so we can share
-// the same postgres implementation across services.
+// AuditTx mirrors the audit-repo shape used by order.Service.
 type AuditTx interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
 
-// OutboxTx mirrors the outbox-repo shape used by order.Service so payroll
-// transitions can append events inside the same transaction.
+// OutboxTx mirrors the outbox-repo shape used by order.Service.
 type OutboxTx interface {
 	AppendTx(ctx context.Context, tx pgx.Tx, aggregateType, aggregateID, subject string, payload map[string]any, headers map[string]any) error
 }
 
 // OrderTx is the order repo subset Service needs inside a transaction
-// (specifically: refund transitions picked_up/no_show → refunded).
+// (refund transitions picked_up/no_show → refunded).
 type OrderTx interface {
 	UpdateStatusTx(ctx context.Context, tx pgx.Tx, id string, from, to order.Status) error
 }
 
-// OrderRepo is the order repo subset Service needs outside a transaction:
-// loading the order for a dispute and listing orders to aggregate into a batch.
+// OrderRepo is the order repo subset Service needs outside a transaction.
 type OrderRepo interface {
 	GetByID(ctx context.Context, id string) (*order.Order, error)
 	ListPickedOrNoShowInPeriod(ctx context.Context, from, to time.Time) ([]*order.Order, error)
@@ -49,9 +45,8 @@ type OrderRepo interface {
 // Clock lets tests pin "now".
 type Clock interface{ Now() time.Time }
 
-// Service orchestrates payroll Build / Lock / OpenDispute / ResolveDispute
-// across batch / entry / dispute repos plus audit + outbox. All multi-row
-// writes happen inside pgx.BeginFunc so partial failure rolls back atomically.
+// Service orchestrates payroll Build / Lock / OpenDispute / ResolveDispute.
+// All multi-row writes run inside pgx.BeginFunc so partial failure rolls back atomically.
 type Service struct {
 	Pool         txBeginner
 	Batches      BatchRepository
@@ -73,16 +68,14 @@ type BuildDraftInput struct {
 }
 
 // BuildDraft aggregates every picked_up / no_show order in [PeriodStart,
-// PeriodEnd] into per-user entries and inserts them under a fresh draft batch.
-// The batch + all entries commit in a single transaction so a half-built batch
-// cannot survive a crash.
+// PeriodEnd] into per-user entries under a fresh draft batch. Batch + entries
+// commit in one transaction so a half-built batch cannot survive a crash.
 func (s *Service) BuildDraft(ctx context.Context, in BuildDraftInput) (*Batch, error) {
 	if in.PeriodStart.After(in.PeriodEnd) {
 		return nil, fmt.Errorf("payroll: period_start must be <= period_end")
 	}
 
-	// Reject duplicate periods up front so the unique-index error surfaces as
-	// a typed sentinel instead of a generic pg error.
+	// Surface duplicate periods as a typed sentinel, not a generic pg error.
 	existing, err := s.Batches.GetByPeriod(ctx, in.PeriodStart, in.PeriodEnd)
 	if err != nil && !errors.Is(err, ErrBatchNotFound) {
 		return nil, err
@@ -132,8 +125,7 @@ func (s *Service) BuildDraft(ctx context.Context, in BuildDraftInput) (*Batch, e
 				return err
 			}
 		}
-		// Flag entries whose employee is no longer active so the welfare
-		// admin sees the exception list straight away.
+		// Flag entries whose employee is no longer active.
 		if s.Exceptions != nil {
 			if err := s.Exceptions.UpsertDepartedTx(ctx, tx, batch.ID); err != nil {
 				return err
@@ -221,15 +213,10 @@ func (s *Service) OpenDispute(ctx context.Context, in OpenDisputeInput) (*Disput
 	return d, nil
 }
 
-// OpenDisputeByOrder is the employee-friendly entry point: callers don't need
-// to know the entry_id — we look it up from the order. This keeps the public
-// API surface (POST /api/employee/disputes) minimal at the cost of one extra
-// indexable query per submission.
-//
-// When the order hasn't been settled into a payroll entry yet (current period),
-// FindByOrderForUser returns ErrEntryNotFound; in that case we still open the
-// dispute against the order alone (entry_id NULL). The entry link is established
-// later at resolution time once the order rolls into a batch.
+// OpenDisputeByOrder is the employee entry point: callers don't need the
+// entry_id (looked up from the order). When the order isn't yet in an entry
+// (current period), open an entry-less dispute (entry_id NULL); the link is
+// established at resolution time once the order rolls into a batch.
 func (s *Service) OpenDisputeByOrder(ctx context.Context, orderID, openedBy, reason string) (*Dispute, error) {
 	entryID, err := s.Entries.FindByOrderForUser(ctx, openedBy, orderID)
 	if err == nil {
@@ -243,14 +230,22 @@ func (s *Service) OpenDisputeByOrder(ctx context.Context, orderID, openedBy, rea
 	if !errors.Is(err, ErrEntryNotFound) {
 		return nil, err
 	}
-	// No payroll entry yet: open an entry-less dispute against the order, after
-	// verifying the order exists and belongs to the requester.
+	// No payroll entry yet: open an entry-less dispute, after verifying
+	// the order exists and belongs to the requester.
 	o, err := s.Orders.GetByID(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}
 	if o.UserID != openedBy {
 		return nil, ErrForbidden
+	}
+	// Only a charge is disputable: picked_up (received) or no_show (charged for
+	// a missed pickup). Orders not yet resolved (draft/placed/cutoff/ready) or
+	// never charged (cancelled/refunded) must be rejected here — otherwise the
+	// dispute records a refund that ResolveDispute can never actually apply
+	// (it only transitions picked_up/no_show orders to refunded).
+	if o.Status != order.StatusPickedUp && o.Status != order.StatusNoShow {
+		return nil, ErrOrderNotDisputable
 	}
 	d := &Dispute{
 		OrderID:  orderID,
@@ -273,10 +268,9 @@ type ResolveDisputeInput struct {
 	RefundMinor int64
 }
 
-// ResolveDispute atomically resolves an open dispute. For resolved_refund it
-// also bumps the entry's refunded_minor and transitions the disputed order to
-// refunded (if it's still in picked_up/no_show). Same transaction means partial
-// failure rolls back the entire resolution.
+// ResolveDispute resolves an open dispute atomically. For resolved_refund it
+// also bumps the entry's refunded_minor and transitions the order to refunded
+// (if still picked_up/no_show), all in one transaction.
 func (s *Service) ResolveDispute(ctx context.Context, in ResolveDisputeInput) error {
 	if in.Status != DisputeStatusResolvedRefund && in.Status != DisputeStatusResolvedReject {
 		return fmt.Errorf("payroll: invalid resolution status %q", in.Status)
@@ -304,9 +298,8 @@ func (s *Service) ResolveDispute(ctx context.Context, in ResolveDisputeInput) er
 			if in.RefundMinor > o.TotalPriceMinor {
 				return ErrRefundExceedsOrder
 			}
-			// Entry-less disputes (current-period orders) have no payroll entry to
-			// bump; the refund is realised purely via the order → refunded transition
-			// below, and the order never rolls into a future batch.
+			// Entry-less disputes (current-period) have no entry to bump; the refund
+			// is realised purely via the order → refunded transition below.
 			if d.EntryID != nil {
 				if err := s.Entries.IncrementRefundedTx(ctx, tx, *d.EntryID, in.RefundMinor); err != nil {
 					return err
@@ -369,19 +362,10 @@ func (s *Service) ListMyEntries(ctx context.Context, userID string) ([]*Employee
 }
 
 // ListCurrentLines returns the per-order lines for the employee's in-progress
-// (not-yet-locked) payroll period.
-//
-// "Current period" is defined as every chargeable order of the employee whose
-// supply_date falls *after* the latest locked batch's period_end (or all such
-// orders when no locked batch exists yet). We deliberately do NOT key off a
-// draft batch row: draft batches are built ad-hoc by a welfare admin via
-// BuildDraft, so until an admin acts there is no draft to read — yet the
-// employee still has accumulating deductions to show. Anchoring to the last
-// *locked* boundary keeps the view correct regardless of whether a draft has
-// been built, and never double-counts orders already locked into HR export.
-//
-// When CurrentLines is left unset, the query runs directly against Pool —
-// keeping the endpoint functional without extra wiring.
+// payroll period. "Current period" = chargeable orders with supply_date after
+// the latest *locked* batch's period_end (or all such orders if none locked).
+// Anchoring to locked (not draft) keeps the view correct regardless of whether
+// a welfare admin has built a draft, and never double-counts locked orders.
 func (s *Service) ListCurrentLines(ctx context.Context, userID string) ([]CurrentPayrollLine, error) {
 	if s.CurrentLines != nil {
 		return s.CurrentLines.ListCurrentLines(ctx, userID)

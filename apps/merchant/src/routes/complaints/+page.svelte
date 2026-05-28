@@ -43,7 +43,6 @@
     });
   }
 
-  // Which complaint's reply box is open.
   let replyingID = $state("");
 </script>
 

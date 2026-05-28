@@ -134,8 +134,8 @@ Application you want on a cluster that already runs ArgoCD.
 
 ```
 apps/{employee,merchant,admin}/      SvelteKit frontends
-packages/{ui,tokens,api-client,web-auth}/   shared
-services/api/                        Go modular monolith (12 roles via --role=<name>)
+packages/{ui,tokens,api-client,web-auth,pickup}/   shared
+services/api/                        Go modular monolith (11 roles via --role=<name>)
 migrations/                          golang-migrate SQL
 chart/tbite-platform/                Helm umbrella chart (canonical deployment)
 ops/argocd/                          ArgoCD AppProject + Application

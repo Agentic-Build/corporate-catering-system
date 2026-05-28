@@ -1,6 +1,5 @@
 <script lang="ts">
-  // Order-progress bar — ported from MerchantView.jsx OrderProgress.
-  // Shows 已訂/上限; high fill is good for the merchant.
+  // 已訂/上限 progress bar.
   interface Props {
     ordered: number;
     cap: number;

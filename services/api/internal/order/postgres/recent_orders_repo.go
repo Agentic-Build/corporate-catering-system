@@ -11,27 +11,17 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/menu"
 )
 
-// RecentOrdersRepo serves the read-only queries that back the employee Home
-// page's "再點一次" (reorder) chips and the target-day order check. It lives
-// alongside OrderRepo but stays separate so the existing order CRUD surface
-// (and its tests) is not touched.
-//
-// Cross-package types: the read projections are defined in the menu package
-// (RecentOrderRow, UserOrderToday) so the home service can consume them
-// without importing order/postgres (which would create a cycle:
-// menu → order/postgres → order → menu).
+// RecentOrdersRepo serves the read-only queries behind the employee Home
+// "再點一次" chips and target-day order check. Projections live in menu
+// (RecentOrderRow, UserOrderToday) to break a menu→order/postgres→order→menu cycle.
 type RecentOrdersRepo struct{ pool *pgxpool.Pool }
 
 func NewRecentOrdersRepo(p *pgxpool.Pool) *RecentOrdersRepo { return &RecentOrdersRepo{pool: p} }
 
-// RecentOrdersByUser returns one row per (vendor) the user ordered from in
-// the last 30 days — picking the user's most-recent order with that vendor —
-// and ranks by frequency descending. Used for "再點一次" chips and the
-// see-more page.
-//
-// Status set: only orders that materialised (cutoff, ready, picked_up) count.
-// 'placed' is pre-cutoff (could still be cancelled); 'no_show' / 'cancelled'
-// don't represent successful experiences worth re-offering.
+// RecentOrdersByUser returns one row per vendor the user ordered from in the
+// last 30 days (most-recent order with that vendor), ranked by frequency.
+// Status set: cutoff/ready/picked_up (excludes placed = pre-cutoff and
+// no_show/cancelled = not worth re-offering).
 func (r *RecentOrdersRepo) RecentOrdersByUser(
 	ctx context.Context, userID string, limit, offset int,
 ) ([]menu.RecentOrderRow, error) {
@@ -96,9 +86,8 @@ SELECT id, vendor_id, status::text, total_price_minor, cutoff_at, picked_up_at
 	return &u, nil
 }
 
-// ItemNamesByOrderIDs returns up to `cap` item names per order_id, sorted by
-// menu_item.name for stability. Used for the items_preview on reorder chips.
-// Single batched IN query — not N round-trips.
+// ItemNamesByOrderIDs returns up to `cap` item names per order_id (sorted by
+// menu_item.name). Single batched query for items_preview.
 func (r *RecentOrdersRepo) ItemNamesByOrderIDs(
 	ctx context.Context, orderIDs []string, cap int,
 ) (map[string][]string, error) {

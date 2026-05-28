@@ -1,15 +1,8 @@
 package readmodel
 
-// Cached wrappers around the two raw-orders aggregates that back the
-// recommendation chips: plant popularity (order_item qty sum per plant/date)
-// and per-user vendor affinity (order count per vendor, last 30 days). Both
-// were recomputed from the order tables on every /home and /recommendations
-// request; these wrappers memoise them under a short TTL and let the
-// outbox-driven Invalidator drop affected keys on order events.
-//
-// Popularity is plant/date keyed and shared by every employee in the plant,
-// so it is the canonical read-model aggregate. Affinity is user keyed (its
-// source is the user's own 30-day order history).
+// Cached wrappers around the two recommendation-chip aggregates: plant
+// popularity (plant/date keyed, shared per plant) and per-user vendor
+// affinity (user keyed). Short TTL + outbox-driven invalidation.
 
 import (
 	"context"
@@ -39,9 +32,8 @@ type AffinityComputer interface {
 	UserVendorAffinity(ctx context.Context, userID string) (map[string]float64, error)
 }
 
-// CachedPopularity wraps PlantPopularity with a read-model cache keyed by
-// plant/date. The TTL bounds staleness; the Invalidator pre-empts it when an
-// order event arrives for the affected plant/date.
+// CachedPopularity caches PlantPopularity keyed by plant/date. The
+// Invalidator pre-empts TTL when an order event lands for that plant/date.
 type CachedPopularity struct {
 	Inner   PlantPopularityComputer
 	Cache   Cache
@@ -72,9 +64,8 @@ func PopularityKeyPattern(plant, day string) string {
 	return fmt.Sprintf(popularityKeyFormat, plant, day)
 }
 
-// CachedAffinity wraps UserVendorAffinity with a read-model cache keyed by
-// user. The TTL is longer than popularity's because the underlying signal is
-// a 30-day rolling window — a single new order barely moves it; the
+// CachedAffinity caches UserVendorAffinity keyed by user. TTL is longer than
+// popularity (30-day rolling window — a single order barely moves it); the
 // Invalidator still drops the user's key on their order events.
 type CachedAffinity struct {
 	Inner   AffinityComputer
@@ -102,9 +93,7 @@ func AffinityKeyPattern(userID string) string {
 	return fmt.Sprintf(affinityKeyFormat, userID)
 }
 
-// getOrRecompute is the shared cache-aside flow for the two map-valued
-// aggregates: serve a decoded hit, else recompute, record metrics, and
-// best-effort Set. Mirrors CachedHome.Compute.
+// getOrRecompute is the shared cache-aside flow for the two map aggregates.
 func getOrRecompute(
 	ctx context.Context, cache Cache, m Metrics, model, key string, ttl time.Duration,
 	recompute func() (map[string]float64, error),

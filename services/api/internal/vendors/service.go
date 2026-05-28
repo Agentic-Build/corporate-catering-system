@@ -161,11 +161,9 @@ func (s *Service) UpdateSettings(ctx context.Context, id string, cutoffHour, pre
 	return s.Vendors.GetByID(ctx, id)
 }
 
-// UpdateProfile lets an admin update a vendor's contact email and/or its plant
-// set. Both fields are optional: a nil pointer leaves that aspect untouched.
-// The plant set fully replaces the vendor's active mappings (reusing the same
-// path as Approve), so removed plants are deactivated and added plants get a
-// default window; retained plants keep their service_window.
+// UpdateProfile updates a vendor's contact email and/or plant set (nil =
+// untouched). plants fully replaces the active mappings: removed → deactivated,
+// added → default window, retained → keep service_window.
 func (s *Service) UpdateProfile(ctx context.Context, id, adminUserID string, email *string, plants *[]string) (*Vendor, error) {
 	if _, err := s.Vendors.GetByID(ctx, id); err != nil {
 		return nil, err

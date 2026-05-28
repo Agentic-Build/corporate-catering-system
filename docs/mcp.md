@@ -44,8 +44,9 @@ so MCP clients can run a standard OAuth 2.0 / PKCE flow before retrying.
 
 ## Tools
 
-27 tools across 9 categories. Employee-facing read tools work for the
+26 tools across 9 categories. Employee-facing read tools work for the
 `employee` and `welfare_admin` roles; write tools are role-gated as marked.
+The live, authoritative list is whatever `tools/list` returns.
 
 ### Discovery — for "what can I eat today?" prompts
 
@@ -62,7 +63,6 @@ so MCP clients can run a standard OAuth 2.0 / PKCE flow before retrying.
 |---|---|---|
 | `order.list_mine` | employee | List the caller's orders in the last 30 days |
 | `order.get` | employee | Fetch one order by id (owner check enforced) |
-| `order.get_pickup_code` | employee | Generate the current TOTP for a `READY` order |
 | `order.place` | employee | Place a new order (same quota / cutoff rules as HTTP) |
 | `order.modify` | employee | Replace a placed order's items before cutoff |
 | `order.cancel` | employee | Cancel an own order (only when state allows) |

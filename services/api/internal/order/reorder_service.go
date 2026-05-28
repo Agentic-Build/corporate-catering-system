@@ -8,11 +8,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
-// ReorderMenuItem is the menu_item view ReorderService needs. We mirror just
-// the fields used here to avoid an import cycle with the menu package (which
-// already imports order indirectly via P9 Task 2's favorites wiring).
+// ReorderMenuItem is the menu_item view ReorderService needs, mirrored locally
+// to avoid an import cycle with the menu package.
 type ReorderMenuItem struct {
 	ID         string
 	Name       string
@@ -35,14 +36,13 @@ var ErrReorderSupplyNotFound = errors.New("reorder: supply not found")
 var ErrReorderItemNotFound = errors.New("reorder: menu item not found")
 
 // reorderOrderRepo is the smallest order-repo surface ReorderService needs.
-// Concrete *opg.OrderRepo satisfies this via structural typing.
 type reorderOrderRepo interface {
 	GetByID(ctx context.Context, id string) (*Order, error)
 	CreateTx(ctx context.Context, tx pgx.Tx, o *Order) error
 }
 
 // reorderSupplyRepo is the smallest meal_supply surface ReorderService needs.
-// Callers adapt their concrete *qpg.SupplyRepo with a tiny shim that maps
+// Callers adapt their *qpg.SupplyRepo with a shim that maps
 // quota.ErrSupplyNotFound → ErrReorderSupplyNotFound.
 type reorderSupplyRepo interface {
 	Get(ctx context.Context, itemID string, date time.Time) (*ReorderSupply, error)
@@ -50,7 +50,6 @@ type reorderSupplyRepo interface {
 }
 
 // reorderItemRepo is the smallest menu_item surface ReorderService needs.
-// Callers adapt their concrete *mpg.ItemRepo with a tiny shim.
 type reorderItemRepo interface {
 	GetByID(ctx context.Context, id string) (*ReorderMenuItem, error)
 }
@@ -65,34 +64,43 @@ type ReorderService struct {
 	orders  reorderOrderRepo
 	supply  reorderSupplyRepo
 	items   reorderItemRepo
+	vendors VendorReader
+	plants  vendor.PlantMappingRepository
 	state   StateEventTx
 	audit   AuditTx
 	outbox  OutboxTx
 	clock   Clock
+	// loc is the timezone for computing the order-level cutoff_at, matching
+	// Service.Location. Nil means UTC.
+	loc *time.Location
 }
 
-// NewReorderService wires the service. Each repo argument can be the concrete
-// type already in use elsewhere (e.g. *opg.OrderRepo, *qpg.SupplyRepo) — Go's
-// structural typing lets them satisfy the small local interfaces above.
+// NewReorderService wires the service.
 func NewReorderService(
 	pool *pgxpool.Pool,
 	orders reorderOrderRepo,
 	supply reorderSupplyRepo,
 	items reorderItemRepo,
+	vendors VendorReader,
+	plants vendor.PlantMappingRepository,
 	state StateEventTx,
 	audit AuditTx,
 	outbox OutboxTx,
 	clock Clock,
+	loc *time.Location,
 ) *ReorderService {
 	return &ReorderService{
-		pool:   pool,
-		orders: orders,
-		supply: supply,
-		items:  items,
-		state:  state,
-		audit:  audit,
-		outbox: outbox,
-		clock:  clock,
+		pool:    pool,
+		orders:  orders,
+		supply:  supply,
+		items:   items,
+		vendors: vendors,
+		plants:  plants,
+		state:   state,
+		audit:   audit,
+		outbox:  outbox,
+		clock:   clock,
+		loc:     loc,
 	}
 }
 
@@ -126,11 +134,9 @@ const (
 )
 
 // Reorder clones the source order's surviving items into a new placed order.
-// The whole survivors-decrement-and-insert path runs in a single transaction
-// so a mid-flight failure leaves no partial order and restores any quota that
-// was decremented. Availability checks (supply/cutoff/archived) run outside
-// the tx — those are read-only and never produce DB writes that would need
-// rolling back.
+// Decrement-and-insert runs in one transaction so a mid-flight failure leaves
+// no partial order and restores any quota decremented. Availability checks
+// (supply/cutoff/archived) run outside the tx — read-only, no rollback needed.
 func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*ReorderResult, error) {
 	targetDay, err := time.Parse("2006-01-02", in.SupplyDate)
 	if err != nil {
@@ -145,9 +151,23 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 		return nil, ErrForbidden
 	}
 
-	// First pass: classify each source item without touching quota. This lets
-	// us decide whether to open a transaction at all, and what items it should
-	// contain.
+	// Source vendor must still serve the employee's (possibly changed) plant.
+	servingPlants, err := s.plants.ListByVendor(ctx, src.VendorID)
+	if err != nil {
+		return nil, err
+	}
+	served := false
+	for _, p := range servingPlants {
+		if p.Plant == in.Plant {
+			served = true
+			break
+		}
+	}
+	if !served {
+		return nil, ErrVendorPlantMismatch
+	}
+
+	// First pass: classify each source item without touching quota.
 	type candidate struct {
 		item  *ReorderMenuItem
 		qty   int
@@ -160,8 +180,7 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 	for _, it := range src.Items {
 		mi, err := s.items.GetByID(ctx, it.MenuItemID)
 		if err != nil {
-			// If the menu_item row is gone we can't even render a name; treat
-			// as archived (closest semantic match — item is no longer orderable).
+			// menu_item gone → treat as archived (no name to render).
 			if errors.Is(err, ErrReorderItemNotFound) {
 				unavailable = append(unavailable, UnavailableItem{
 					MenuItemID: it.MenuItemID,
@@ -200,12 +219,9 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 			})
 			continue
 		}
-		// Pre-check capacity using the snapshot from supply.Get so the partial-
-		// fallback UI can show "out_of_quota" even when no order is ever created.
-		// The authoritative atomic check still happens inside the tx via
-		// DecrementTx; if a concurrent placement exhausts the quota between the
-		// snapshot read and the tx, DecrementTx returns ErrOutOfStock and the
-		// whole tx rolls back (no partial state).
+		// Pre-check capacity from sup.Get so the partial-fallback UI can show
+		// "out_of_quota" even when no order is created. The authoritative atomic
+		// check still happens inside the tx via DecrementTx.
 		if sup.Remain < it.Qty {
 			unavailable = append(unavailable, UnavailableItem{
 				MenuItemID: mi.ID,
@@ -221,7 +237,7 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 		return &ReorderResult{NewOrderID: "", UnavailableItems: unavailable}, nil
 	}
 
-	// Build the new order shell. ID/CreatedAt/UpdatedAt are filled in by CreateTx.
+	// Build the new order shell; CreateTx fills ID/CreatedAt/UpdatedAt.
 	domainItems := make([]Item, 0, len(survivors))
 	var totalPrice int64
 	for _, c := range survivors {
@@ -233,11 +249,17 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 		totalPrice += c.price * int64(c.qty)
 	}
 	placedAt := now
-	// Use the source order's cutoff_at as the new order's cutoff_at. The
-	// supply-level cutoff already gated each item; the order-level cutoff_at
-	// is informational (Service.Place uses prev-day 17:00 UTC by convention,
-	// which matches the supply cutoff for the same target day).
-	newCutoff := time.Date(targetDay.Year(), targetDay.Month(), targetDay.Day()-1, 17, 0, 0, 0, time.UTC)
+	// Order cutoff_at gates a later Modify; compute it the same way Service.Place
+	// does (vendor cutoff hour, service tz, day before supply_date).
+	v, err := s.vendors.GetByID(ctx, src.VendorID)
+	if err != nil {
+		return nil, err
+	}
+	loc := s.loc
+	if loc == nil {
+		loc = time.UTC
+	}
+	newCutoff := time.Date(targetDay.Year(), targetDay.Month(), targetDay.Day()-1, v.CutoffHour, 0, 0, 0, loc)
 	o := &Order{
 		UserID:          in.UserID,
 		VendorID:        src.VendorID,
@@ -250,14 +272,10 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 		Items:           domainItems,
 	}
 
-	// One transaction: decrement quota for every survivor, insert order +
-	// items, write state event + outbox + audit. If quota for any survivor is
-	// exhausted between the read-only check and the tx, DecrementTx returns
-	// ErrOutOfStock and the whole tx rolls back, releasing any earlier
-	// decrements and leaving no partial state behind. The caller then sees the
-	// error and can retry — we deliberately do NOT convert this race to a
-	// per-item "out_of_quota" entry because there is no safe way to drop one
-	// survivor and keep the rest without re-running the whole pipeline.
+	// Single tx: decrement quota for each survivor, insert order + items,
+	// state event + outbox + audit. Quota race on any survivor → ErrOutOfStock
+	// rolls back the whole tx (we don't try to drop one survivor and keep the
+	// rest — caller retries).
 	role := "employee"
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		for _, it := range o.Items {
@@ -287,8 +305,7 @@ func (s *ReorderService) Reorder(ctx context.Context, in ReorderInput) (*Reorder
 		return s.audit.WriteTx(ctx, tx, &in.UserID, &role, "order.reorder", "order", o.ID, payload, "")
 	})
 	if err != nil {
-		// If quota was exhausted between the pre-check and the tx, surface a
-		// clean error to the caller — handler maps quota.ErrOutOfStock to 409.
+		// Handler maps quota.ErrOutOfStock to 409.
 		return nil, err
 	}
 

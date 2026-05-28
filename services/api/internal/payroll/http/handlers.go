@@ -21,8 +21,6 @@ type API struct {
 	Svc *payroll.Service
 }
 
-// ----- DTOs -----
-
 type batchDTO struct {
 	ID          string  `json:"id"`
 	PeriodStart string  `json:"period_start"`
@@ -156,8 +154,6 @@ func toExceptionDTO(e *payroll.Exception) exceptionDTO {
 	return out
 }
 
-// ----- Inputs / Outputs -----
-
 type createBatchInput struct {
 	Body struct {
 		PeriodStart string `json:"period_start"`
@@ -288,8 +284,6 @@ type currentPayrollOutput struct {
 	}
 }
 
-// ----- Registration -----
-
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "createPayrollBatch",
@@ -415,36 +409,18 @@ func (a *API) Register(api huma.API) {
 	}, a.resolveException)
 }
 
-// ----- Auth helpers -----
-
 func (a *API) requireAdmin(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleWelfareAdmin {
-		return nil, huma.Error403Forbidden("admin role required")
-	}
-	return u, nil
+	return idhttp.RequireAdmin(ctx)
 }
 
 func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleEmployee {
-		return nil, huma.Error403Forbidden("employee role required")
-	}
-	return u, nil
+	return idhttp.RequireEmployee(ctx)
 }
 
 // parseDay parses YYYY-MM-DD into UTC midnight.
 func parseDay(s string) (time.Time, error) {
 	return time.ParseInLocation("2006-01-02", s, time.UTC)
 }
-
-// ----- Handlers -----
 
 func (a *API) createBatch(ctx context.Context, in *createBatchInput) (*batchOutput, error) {
 	if _, err := a.requireAdmin(ctx); err != nil {
@@ -709,7 +685,8 @@ func mapErr(err error) error {
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, payroll.ErrBatchLocked),
 		errors.Is(err, payroll.ErrBatchPeriodExists),
-		errors.Is(err, payroll.ErrInvalidTransition):
+		errors.Is(err, payroll.ErrInvalidTransition),
+		errors.Is(err, payroll.ErrOrderNotDisputable):
 		return huma.Error409Conflict(err.Error())
 	}
 	return huma.Error500InternalServerError("internal", err)

@@ -1,6 +1,5 @@
 <script lang="ts">
-  // 員工登入 — design-language pass. Centred card with the brand eyebrow +
-  // big title style, SSO via ProviderButton.
+  // 員工登入
   import { Card, ProviderButton, TBiteLogo } from "@tbite/ui";
   let { data } = $props();
   const returnTo = $derived(encodeURIComponent(data.returnTo));

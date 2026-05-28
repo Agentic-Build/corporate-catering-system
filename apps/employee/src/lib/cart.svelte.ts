@@ -1,7 +1,5 @@
-// Rune-based shared cart store. The cart is purely client-side state — the
-// backend has no cart table; checkout fires a one-shot `?/placeOrder` action.
-// Imported as a singleton so the header badge, floating bar, drawer and the
-// home grid all read/write the same instance.
+// Singleton rune-based cart store. Client-side only; checkout fires a one-shot
+// `?/placeOrder` action — there is no backend cart table.
 
 interface CartLine {
   qty: number;

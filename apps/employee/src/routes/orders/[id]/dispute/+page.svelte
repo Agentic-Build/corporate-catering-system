@@ -1,5 +1,5 @@
 <script lang="ts">
-  // 提出申訴 — design-language pass. PageHeader + Card + StateTag.
+  // 提出申訴
   import { PageHeader, Card, StateTag, Button, Icon } from "@tbite/ui";
   import { enhance } from "$app/forms";
 

@@ -1,22 +1,11 @@
-// Package mcpserver — tool annotation presets.
-//
-// MCP `tools/list` includes per-tool annotations the host model uses to
-// decide whether to surface a confirmation prompt before invoking the
-// tool (see modelcontextprotocol.io spec — ToolAnnotations).
-//
-// mcp-go defaults to the most pessimistic combination
-// (readOnly=false, destructive=true, idempotent=false, openWorld=true).
-// Claude treats `destructive=true` as "ask the user first", so without
-// these presets every menu.search and order.get prompts for confirmation —
-// pure friction with no safety benefit. The classifications below are
-// chosen per-tool to match the actual side-effects of each operation.
+// Tool annotation presets (mcp-go defaults are pessimistic and trigger a
+// confirmation prompt on every tool — including read-only ones). The presets
+// below classify each tool to its actual side-effects.
 package mcpserver
 
 import "github.com/mark3labs/mcp-go/mcp"
 
-// annoReadOnly is for tools that don't change any state: list, search,
-// get, query. Idempotent by definition, no destructive risk, scope is
-// limited to the T-Bite domain (openWorld=false).
+// annoReadOnly: list/search/get/query — no state change.
 func annoReadOnly() mcp.ToolOption {
 	return mcp.WithToolAnnotation(mcp.ToolAnnotation{
 		ReadOnlyHint:    boolPtr(true),
@@ -26,9 +15,8 @@ func annoReadOnly() mcp.ToolOption {
 	})
 }
 
-// annoCreate is for tools that add new rows but never modify or delete
-// existing ones: order.place, feedback.rate_order, feedback.file_complaint.
-// Not idempotent (each call inserts a fresh row), not destructive.
+// annoCreate: inserts new rows only (not idempotent, not destructive).
+// order.place, feedback.rate_order, feedback.file_complaint.
 func annoCreate() mcp.ToolOption {
 	return mcp.WithToolAnnotation(mcp.ToolAnnotation{
 		ReadOnlyHint:    boolPtr(false),
@@ -38,11 +26,9 @@ func annoCreate() mcp.ToolOption {
 	})
 }
 
-// annoStateChange is for tools that flip an existing row's state — order
-// modify, payroll dispute resolve, document.review, anomaly.triage. The
-// final state is reached idempotently (same args twice ends in the same
-// place) and the change is destructive in the MCP sense (overwrites
-// existing data).
+// annoStateChange: flips an existing row's state (idempotent, destructive in
+// the MCP sense). order.modify, payroll.dispute_resolve, document.review,
+// anomaly.triage.
 func annoStateChange() mcp.ToolOption {
 	return mcp.WithToolAnnotation(mcp.ToolAnnotation{
 		ReadOnlyHint:    boolPtr(false),
@@ -52,10 +38,9 @@ func annoStateChange() mcp.ToolOption {
 	})
 }
 
-// annoHighRiskAdmin is for irreversible-ish admin actions: vendor.suspend,
-// payroll.lock_batch, settlement.close_period, anomaly.close. Same shape
-// as annoStateChange — the distinct preset documents intent so adding
-// a future "require human confirmation" gate is a one-grep change.
+// annoHighRiskAdmin: irreversible-ish admin actions (vendor.suspend, payroll.lock_batch,
+// settlement.close_period, anomaly.close). Shape matches annoStateChange — distinct
+// preset so a future "require human confirmation" gate is a one-grep change.
 func annoHighRiskAdmin() mcp.ToolOption {
 	return mcp.WithToolAnnotation(mcp.ToolAnnotation{
 		ReadOnlyHint:    boolPtr(false),
@@ -65,11 +50,8 @@ func annoHighRiskAdmin() mcp.ToolOption {
 	})
 }
 
-// annoReversible is for tools whose effect can be undone by calling the
-// inverse tool — vendor.reinstate (inverse of suspend), order.cancel
-// (employees can re-place if before cutoff). MCP doesn't have a "reversible"
-// hint per se, but classifying these as non-destructive matches the spec's
-// definition: they don't permanently destroy data.
+// annoReversible: undoable via an inverse tool (vendor.reinstate, order.cancel).
+// Classified non-destructive — no permanent data loss.
 func annoReversible() mcp.ToolOption {
 	return mcp.WithToolAnnotation(mcp.ToolAnnotation{
 		ReadOnlyHint:    boolPtr(false),

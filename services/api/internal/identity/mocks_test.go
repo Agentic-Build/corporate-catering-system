@@ -174,11 +174,17 @@ func (r *fakeSessions) RevokeAllForUser(ctx context.Context, userID string) erro
 
 // ---- State store ----
 type fakeStates struct {
-	mu sync.Mutex
-	m  map[string]*oidc.StatePayload
+	mu       sync.Mutex
+	m        map[string]*oidc.StatePayload
+	consumed map[string]*oidc.StatePayload
 }
 
-func newFakeStates() *fakeStates { return &fakeStates{m: map[string]*oidc.StatePayload{}} }
+func newFakeStates() *fakeStates {
+	return &fakeStates{
+		m:        map[string]*oidc.StatePayload{},
+		consumed: map[string]*oidc.StatePayload{},
+	}
+}
 
 func (s *fakeStates) Put(ctx context.Context, state string, p *oidc.StatePayload) error {
 	s.mu.Lock()
@@ -193,12 +199,18 @@ func (s *fakeStates) Get(ctx context.Context, state string) (*oidc.StatePayload,
 	if p, ok := s.m[state]; ok {
 		return p, nil
 	}
+	if p, ok := s.consumed[state]; ok {
+		return p, oidc.ErrStateConsumed
+	}
 	return nil, oidc.ErrStateNotFound
 }
 
 func (s *fakeStates) Consume(ctx context.Context, state string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if p, ok := s.m[state]; ok {
+		s.consumed[state] = p
+	}
 	delete(s.m, state)
 	return nil
 }

@@ -1,7 +1,6 @@
 <script lang="ts">
-  // Self-service pickup. The camera scan posts the order id to the `scan`
-  // action; the `manual` order-number fallback covers desktops / denied camera
-  // permission. html5-qrcode is imported client-side (avoids SSR).
+  // Self-service pickup: camera scan with manual order-number fallback.
+  // html5-qrcode is imported client-side (avoids SSR).
   import { PageHeader, Card, Button, Icon } from "@tbite/ui";
   import { enhance } from "$app/forms";
   import { onMount, onDestroy, tick } from "svelte";
@@ -14,7 +13,6 @@
   let cameraError = $state<string | null>(null);
   let scanning = $state(false);
 
-  // Hidden form used to submit a scanned order id through the `scan` action.
   let scanForm: HTMLFormElement;
   let scannedId = $state("");
   let submitting = $state(false);
@@ -24,8 +22,7 @@
     submitting = true;
     scannedId = orderId;
     void stopScanner();
-    // Let Svelte flush scannedId into the hidden input's value before submit,
-    // otherwise the form posts an empty orderId and the action rejects it.
+    // Flush scannedId into the hidden input before submit; else action rejects.
     await tick();
     scanForm.requestSubmit();
   }
@@ -162,7 +159,6 @@
     </div>
   {/if}
 
-  <!-- Hidden form: scanned full order id → `scan` action. -->
   <form
     bind:this={scanForm}
     method="POST"

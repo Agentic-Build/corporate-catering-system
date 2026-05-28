@@ -6,9 +6,7 @@
 
   let { data, form } = $props();
 
-  // Live updates: an SSE stream pushes order events the moment they happen;
-  // each event refetches only the order board fragment (app:orders). A slow
-  // fallback poll keeps the board fresh if SSE is unavailable (NATS down / proxy issue).
+  // SSE refetches the order board fragment; 60s poll fallback if SSE down.
   onMount(() => {
     const es = new EventSource("/orders/events");
     es.onmessage = (e) => {
@@ -44,16 +42,14 @@
     cancelled: "已取消",
   } as Record<string, string>;
 
-  // Scan-to-serve: open the camera, decode the meal-sticker QR, mark that
-  // single order ready (placed/cutoff → ready). html5-qrcode is loaded only
-  // in the browser to avoid SSR failures.
+  // Scan-to-serve: decode meal sticker QR, mark order ready. html5-qrcode is
+  // dynamically imported to avoid SSR failures.
   let scanOpen = $state(false);
   let scanError = $state("");
   let markReadyForm = $state<HTMLFormElement>();
   let scannedID = $state("");
   let scanner: import("html5-qrcode").Html5Qrcode | null = null;
-  // Guards against html5-qrcode's decode callback firing again before
-  // stopScan() resolves, which would submit mark-ready twice.
+  // Guards re-entry: decode callback can fire again before stopScan() resolves.
   let scanBusy = false;
 
   const SCAN_REGION_ID = "serve-scan-region";
@@ -102,7 +98,7 @@
     });
   }
 
-  // Open the scan modal and mount the camera once the region exists.
+  // Mount the camera once the scan region exists.
   $effect(() => {
     if (scanOpen) {
       requestAnimationFrame(() => startScan());

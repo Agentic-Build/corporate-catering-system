@@ -13,11 +13,8 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
-	"github.com/takalawang/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/takalawang/corporate-catering-system/services/api/internal/identity/http"
 )
-
-// ----- DTOs -----
 
 type vendorInfoDTO struct {
 	ID          string `json:"id"`
@@ -47,25 +44,12 @@ func warningToDTO(w compliance.Warning) warningDTO {
 	}
 }
 
-// ----- Auth -----
-
 // requireVendor enforces a vendor_operator bound to a vendor and returns the
 // resolved vendor_id from the session (never a path param).
 func (a *API) requireVendor(ctx context.Context) (string, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return "", huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleVendorOperator {
-		return "", huma.Error403Forbidden("vendor operator required")
-	}
-	if u.VendorID == nil || *u.VendorID == "" {
-		return "", huma.Error403Forbidden("user is not bound to a vendor")
-	}
-	return *u.VendorID, nil
+	_, vendorID, err := idhttp.RequireVendor(ctx)
+	return vendorID, err
 }
-
-// ----- Registration -----
 
 // registerMerchant attaches the merchant compliance self-view + self-service
 // document upload routes. Called from API.Register so main.go needs no extra
@@ -103,8 +87,6 @@ type merchantUploadDocumentInput struct {
 		Supersedes    *string `json:"supersedes,omitempty" format:"uuid" doc:"ID of the document this upload replaces (resupply)"`
 	}
 }
-
-// ----- Handlers -----
 
 func (a *API) merchantCompliance(ctx context.Context, _ *struct{}) (*merchantComplianceOutput, error) {
 	vendorID, err := a.requireVendor(ctx)

@@ -1,7 +1,5 @@
 <script lang="ts">
-  // Cart drawer — ported from EmployeeView.jsx TbCartDrawer. Item rows with
-  // qty steppers, subtotal, and a checkout button that submits the existing
-  // `?/placeOrder` action on the home route via a hidden form.
+  // Cart drawer; submits `?/placeOrder` on the home route via hidden form.
   import { Drawer, Icon, Button } from "@tbite/ui";
   import { enhance } from "$app/forms";
   import { cart } from "$lib/cart.svelte";
@@ -16,8 +14,7 @@
 
   const entries = $derived(Object.entries(cart.items));
 
-  // Surface a failed `?/placeOrder` (e.g. duplicate same-day order) inside the
-  // drawer, where the user is looking — the home page's error banner sits behind it.
+  // Show `?/placeOrder` errors inside the drawer, not behind on the page.
   let submitError = $state<string | null>(null);
   let submitting = $state(false);
 </script>

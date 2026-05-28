@@ -2,6 +2,7 @@ import type { Actions, PageServerLoad } from "./$types";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { taipeiISO } from "$lib/date";
 
 const PAGE_LIMIT = 20;
 
@@ -46,7 +47,7 @@ export const actions: Actions = {
     if (!menuItemId) return fail(400, { error: "menu_item_id required" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const h = await client.GET("/api/employee/home", { params: { query: {} } });
-    const supplyDate = h.data?.target_day ?? new Date().toISOString().slice(0, 10);
+    const supplyDate = h.data?.target_day ?? taipeiISO();
     const plant = locals.user.plant ?? "tn-a";
     const r = await client.POST("/api/employee/orders", {
       body: {

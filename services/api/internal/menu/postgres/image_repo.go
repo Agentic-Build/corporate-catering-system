@@ -66,3 +66,28 @@ SELECT id, menu_item_id, blob_uri, alt, sort_order, created_at
 	}
 	return out, rows.Err()
 }
+
+// ListByItems loads images for many items in a single query, grouped by
+// menu_item_id (menu.BatchImageRepository). Avoids the N+1 in
+// menu.Service.ListForEmployee. Items with no images are simply absent.
+func (r *ImageRepo) ListByItems(ctx context.Context, itemIDs []string) (map[string][]*menu.Image, error) {
+	out := make(map[string][]*menu.Image, len(itemIDs))
+	if len(itemIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+SELECT id, menu_item_id, blob_uri, alt, sort_order, created_at
+  FROM menu_item_image WHERE menu_item_id = ANY($1) ORDER BY menu_item_id, sort_order, created_at`, itemIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var img menu.Image
+		if err := rows.Scan(&img.ID, &img.ItemID, &img.BlobURI, &img.Alt, &img.SortOrder, &img.CreatedAt); err != nil {
+			return nil, err
+		}
+		out[img.ItemID] = append(out[img.ItemID], &img)
+	}
+	return out, rows.Err()
+}

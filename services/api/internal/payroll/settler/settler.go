@@ -22,11 +22,11 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/payroll"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
 	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/storage"
 )
 
-// UserLookup resolves a user_id to the subset of "user" columns the HR CSV
-// needs. Kept as an interface so tests can stub it without a real Postgres.
+// UserLookup resolves a user_id to the subset of "user" columns the HR CSV needs.
 type UserLookup interface {
 	GetByID(ctx context.Context, id string) (*PayrollUser, error)
 }
@@ -42,14 +42,13 @@ type PayrollUser struct {
 	Department   *string
 }
 
-// AuditWriter is the shape Settler needs to record audit events inside the
-// same tx that persists export info.
+// AuditWriter records audit events inside the export-info tx.
 type AuditWriter interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
 
-// OutboxAppender appends an outbox row inside the export-info tx. Letting the
-// existing relay publish it keeps export_ready delivery exactly-once.
+// OutboxAppender appends an outbox row inside the export-info tx. Reusing the
+// outbox relay keeps export_ready delivery exactly-once.
 type OutboxAppender interface {
 	AppendTx(ctx context.Context, tx pgx.Tx, aggregateType, aggregateID, subject string, payload map[string]any, headers map[string]any) error
 }
@@ -60,8 +59,8 @@ type ExceptionLister interface {
 	ListByBatch(ctx context.Context, batchID string) ([]*payroll.Exception, error)
 }
 
-// Settler wires together the NATS consumer, repos, storage, and audit/outbox
-// dependencies needed to process payroll.batch_locked.v1 events.
+// Settler processes payroll.batch_locked.v1 events: render CSV, upload, mark
+// batch exported, emit payroll.export_ready.v1.
 type Settler struct {
 	JS         jetstream.JetStream
 	Pool       *pgxpool.Pool
@@ -103,9 +102,7 @@ func (s *Settler) Run(ctx context.Context) error {
 	}
 	defer it.Stop()
 
-	// it.Next blocks until a message arrives or the iterator is stopped. We
-	// spawn a goroutine to Stop() it on ctx cancellation so Run returns
-	// promptly during shutdown.
+	// Stop the iterator on ctx cancellation so Run returns promptly at shutdown.
 	go func() {
 		<-ctx.Done()
 		it.Stop()
@@ -124,8 +121,7 @@ func (s *Settler) Run(ctx context.Context) error {
 				return ctx.Err()
 			}
 			s.Logger.Warn("consumer next", "err", err)
-			// Brief backoff before re-trying — we don't want to busy-loop on a
-			// transient NATS hiccup.
+			// Brief backoff to avoid busy-looping on a transient NATS hiccup.
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -135,18 +131,16 @@ func (s *Settler) Run(ctx context.Context) error {
 		}
 		if err := s.handle(ctx, msg.Data()); err != nil {
 			s.Logger.Error("handle event", "err", err)
-			_ = msg.Nak()
+			// MaxDeliver=5; once exhausted, DLQ + Term (don't re-Nak forever).
+			messaging.DLQOnExhaustion(ctx, msg, s.Pool, "payroll-settler", 5, err)
 			continue
 		}
 		_ = msg.Ack()
 	}
 }
 
-// handle processes a single payroll.batch_locked.v1 event end-to-end:
-//   1) Load batch + entries; short-circuit if already exported (idempotent).
-//   2) Render UTF-8 BOM + CSV with one row per entry.
-//   3) Upload to S3 at payroll/<batch_id>.csv.
-//   4) In a single tx: SetExportInfo + outbox payroll.export_ready.v1 + audit.
+// handle processes one payroll.batch_locked.v1 event end-to-end. Idempotent:
+// already-exported batches short-circuit before render/upload.
 func (s *Settler) handle(ctx context.Context, data []byte) error {
 	var ev struct {
 		BatchID     string `json:"batch_id"`
@@ -205,27 +199,20 @@ func (s *Settler) handle(ctx context.Context, data []byte) error {
 	})
 }
 
-// renderCSV produces the bytes uploaded to S3. Format:
-//   - UTF-8 BOM (so Excel auto-detects encoding and renders 中文 correctly)
-//   - Header row
-//   - One row per entry, with user details resolved via Users.GetByID
-//
-// The trailing `exception` column flags entries that carry a payroll
-// exception (departed employee / failed deduction). Entries whose exception
-// a welfare admin marked `excluded` are dropped from the file entirely — HR
-// must not deduct them this period.
-//
-// A failed user lookup logs a warning and writes a "?" placeholder row rather
-// than aborting the whole batch — HR can still reconcile from order_ids.
+// renderCSV produces the bytes uploaded to S3: UTF-8 BOM (so Excel renders 中文)
+// + header + one row per entry. The `exception` column flags entries with a
+// payroll exception; rows marked `excluded` by a welfare admin are dropped
+// entirely — HR must not deduct them this period. A failed user lookup writes
+// a "?" placeholder row rather than aborting the batch.
 func (s *Settler) renderCSV(ctx context.Context, batch *payroll.Batch, entries []*payroll.Entry) ([]byte, error) {
 	var buf bytes.Buffer
-	// UTF-8 BOM: bytes 0xEF 0xBB 0xBF.
+	// UTF-8 BOM (Excel encoding detection).
 	buf.WriteByte(0xEF)
 	buf.WriteByte(0xBB)
 	buf.WriteByte(0xBF)
 
-	// Group the batch's exceptions by entry: excluded -> drop the row,
-	// otherwise surface the kinds in the exception column.
+	// Group exceptions by entry: excluded → drop the row; otherwise surface
+	// kinds in the exception column.
 	excluded := map[string]bool{}
 	flagged := map[string][]string{}
 	if s.Exceptions != nil {

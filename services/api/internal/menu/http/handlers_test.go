@@ -206,8 +206,8 @@ func (r *fakeRecentOrders) OrderAvailability(_ context.Context, _ []string, _ ti
 }
 
 type fakePopularity struct {
-	popularity map[string]float64
-	meta       []menu.MenuItemMeta
+	popularity        map[string]float64
+	meta              []menu.MenuItemMeta
 	cutoffs           bool
 	cutoffsPassedDays map[string]bool
 	popErr            error

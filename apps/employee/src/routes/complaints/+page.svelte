@@ -1,8 +1,5 @@
 <script lang="ts">
-  // 我的客訴 — F1 員工回饋. Lists the employee's complaints with status,
-  // vendor response and resolution. The 升級福委會 button only enables once
-  // 24h have passed since filing (backend also enforces this); the 結案
-  // button lets the employee close a complaint they are satisfied with.
+  // 我的客訴 (F1 員工回饋): list, escalate after 24h, resolve.
   import { PageHeader, Card, StateTag, EmptyState, Button } from "@tbite/ui";
   import type { components } from "@tbite/api-client";
 
@@ -39,8 +36,7 @@
     return iso ? iso.slice(0, 16).replace("T", " ") : "-";
   }
 
-  // 24h gate — the escalate button stays disabled until a full day has
-  // passed since the complaint was filed.
+  // 24h gate (also enforced by backend).
   function canEscalate(c: MealComplaint): boolean {
     if (c.status !== "open" && c.status !== "vendor_responded") return false;
     return Date.now() - new Date(c.created_at).getTime() >= DAY_MS;

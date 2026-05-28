@@ -12,53 +12,32 @@ import (
 	"github.com/takalawang/corporate-catering-system/services/api/internal/identity/oidc"
 )
 
-// Bridge serves the login + consent + OIDC callback endpoints that connect
-// Hydra's OAuth surface to the T-Bite identity model. The user-auth leg is
-// delegated to Authentik via OIDC; no password ever touches T-Bite or
-// Hydra, and there is no "paste your token" step.
-//
-// Flow:
-//   1. Hydra GET /oauth/login?login_challenge=xxx
-//      Bridge.LoginHandler asks Hydra for the request. If Hydra says skip
-//      (existing remembered subject), accept immediately. Otherwise the
-//      handler builds an Authentik authorize URL with state stuffing the
-//      login_challenge into the OIDC state-store payload, then 302s the
-//      browser to Authentik.
-//   2. Authentik GET /oauth/callback?state=…&code=…
-//      Bridge.CallbackHandler looks up the state, exchanges the code via
-//      the OIDC provider, finds/creates the matching T-Bite user, accepts
-//      the Hydra login with user.ID as subject, and 302s back to Hydra's
-//      consent endpoint.
-//   3. Hydra GET /oauth/consent?consent_challenge=xxx
-//      Bridge.ConsentHandler auto-approves with the user's role/plant
-//      claims forwarded into Hydra's session so they land in the JWT.
+// Bridge serves login + consent + OIDC callback endpoints that connect Hydra's
+// OAuth surface to the T-Bite identity model. The user-auth leg is delegated
+// to Authentik via OIDC; no password ever touches T-Bite or Hydra. Flow:
+// Hydra /oauth/login → Authentik authorize → /oauth/callback → accept Hydra
+// login with the resolved user ID → Hydra /oauth/consent (auto-approved).
 type Bridge struct {
 	Hydra      *AdminClient
 	Sessions   identity.SessionStore
 	Users      identity.UserRepository
 	Identities identity.UserIdentityRepository
 
-	// OIDCProvider is the Authentik provider used for user authentication.
-	// We use it directly rather than going through identity.Service.StartLogin
-	// because we don't want a SvelteKit-frontend session at the end — only
-	// the user ID, which becomes the Hydra subject claim.
+	// OIDCProvider is used directly (not via identity.Service.StartLogin) since
+	// we want only the user ID for the Hydra subject claim, not a frontend session.
 	OIDCProvider *oidc.OIDCProvider
-	// OIDCProviderName is the Provider slug used to key UserIdentity rows
-	// (matches AUTH_PROVIDER_SLUGS).
+	// OIDCProviderName matches the slug used for UserIdentity rows (AUTH_PROVIDER_SLUGS).
 	OIDCProviderName string
 
-	// States is the same Redis-backed OIDC state store identity.Service
-	// uses, just with our own keyspace prefix avoiding collisions.
+	// States is the shared Redis-backed OIDC state store, with its own keyspace prefix.
 	States oidc.StateStore
 
-	// PublicBaseURL is the externally-reachable URL of the T-Bite API; we
-	// use it to build the Authentik redirect_uri (must match what's
-	// configured on the OAuth provider).
+	// PublicBaseURL is the externally-reachable URL of the T-Bite API; used to
+	// build the Authentik redirect_uri.
 	PublicBaseURL string
 }
 
-const bridgeStateApp = "mcp" // marker so we don't confuse this state with
-//                              SvelteKit frontends in shared stores
+const bridgeStateApp = "mcp" // disambiguate from SvelteKit flows in shared stores
 
 // LoginHandler answers Hydra's redirect to /oauth/login?login_challenge=xxx.
 // No HTML form, no token-paste — we always kick off the Authentik OIDC
@@ -76,8 +55,7 @@ func (b *Bridge) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if loginReq.Skip {
-		// Hydra recognised the same subject from a previous remember-me
-		// approval; accept with that subject and continue.
+		// Hydra recognised a remembered subject; accept and continue.
 		b.acceptLoginAndRedirect(w, r, challenge, loginReq.Subject)
 		return
 	}
@@ -87,8 +65,8 @@ func (b *Bridge) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build an Authentik authorize URL. We pin the redirect_uri to our own
-	// /oauth/callback (must match the Authentik client config).
+	// Build an Authentik authorize URL; redirect_uri is /oauth/callback
+	// (must match the Authentik client config).
 	state := uuid.NewString()
 	auth, err := b.OIDCProvider.BuildAuthURL(r.Context(), state)
 	if err != nil {
@@ -96,9 +74,7 @@ func (b *Bridge) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stash login_challenge + PKCE verifier + nonce keyed by our state.
-	// 5-minute TTL matches the identity package default — OIDC flows that
-	// take longer than that are almost certainly abandoned.
+	// Stash login_challenge + PKCE verifier + nonce keyed by our state (5m TTL).
 	if err := b.States.Put(r.Context(), state, &oidc.StatePayload{
 		App:          bridgeStateApp,
 		Provider:     b.OIDCProviderName,
@@ -131,8 +107,7 @@ func (b *Bridge) CallbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if payload.App != bridgeStateApp {
-		// This state belongs to a different flow (employee web login).
-		// Forward to the regular callback path to avoid silent failures.
+		// State belongs to a different flow (e.g. employee web login).
 		http.Error(w, "state app mismatch", http.StatusBadRequest)
 		return
 	}
@@ -162,13 +137,13 @@ func (b *Bridge) CallbackHandler(w http.ResponseWriter, r *http.Request) {
 	b.acceptLoginAndRedirect(w, r, loginChallenge, user.ID)
 }
 
-// resolveOrProvisionUser finds a T-Bite user matching the OIDC subject. It
-// uses the same lookup-then-link logic identity.Service.CompleteLogin uses,
-// minus the role gate (MCP supports every role).
+// resolveOrProvisionUser finds a T-Bite user matching the OIDC subject. Uses
+// the same lookup-then-link logic as identity.Service.CompleteLogin minus the
+// role gate (MCP supports every role).
 func (b *Bridge) resolveOrProvisionUser(ctx context.Context, ui *oidc.Userinfo) (*identity.User, error) {
 	provider := identity.Provider(b.OIDCProviderName)
 
-	// 1) Already linked via user_identity.
+	// Already linked via user_identity.
 	link, err := b.Identities.GetByProviderSubject(ctx, provider, ui.ExternalSubject)
 	if err == nil {
 		return b.Users.GetByID(ctx, link.UserID)
@@ -177,7 +152,7 @@ func (b *Bridge) resolveOrProvisionUser(ctx context.Context, ui *oidc.Userinfo) 
 		return nil, err
 	}
 
-	// 2) Same email exists from a prior provider — link the identity.
+	// Same email exists from a prior provider — link the identity.
 	existing, err := b.Users.GetByEmail(ctx, ui.Email)
 	if err == nil {
 		if err := b.Identities.Link(ctx, &identity.UserIdentity{
@@ -194,9 +169,7 @@ func (b *Bridge) resolveOrProvisionUser(ctx context.Context, ui *oidc.Userinfo) 
 		return nil, err
 	}
 
-	// 3) Auto-provision from Authentik claims. We replicate the role +
-	// claim validation identity.Service.CompleteLogin does — without the
-	// app-vs-role gate, since MCP accepts every role the user is granted.
+	// Auto-provision from Authentik claims (no app-vs-role gate).
 	user, err := userFromOIDCClaims(ui)
 	if err != nil {
 		return nil, err
@@ -216,15 +189,12 @@ func (b *Bridge) resolveOrProvisionUser(ctx context.Context, ui *oidc.Userinfo) 
 }
 
 // userFromOIDCClaims maps Authentik OIDC userinfo to a fresh identity.User.
-// Mirrors the logic in identity.Service.userFromClaims minus the app-role
-// gate. The Authentik blueprint already populates tbite_* claims for every
-// dev user via the T-Bite claim mapper.
+// Mirrors identity.Service.userFromClaims minus the app-role gate.
 func userFromOIDCClaims(ui *oidc.Userinfo) (*identity.User, error) {
 	roleStr := claimString(ui.Raw, "tbite_role")
 	role := identity.Role(roleStr)
 	switch role {
 	case identity.RoleEmployee, identity.RoleVendorOperator, identity.RoleWelfareAdmin:
-		// ok
 	default:
 		return nil, fmt.Errorf("oidc claims missing or invalid tbite_role (got %q)", roleStr)
 	}
@@ -269,10 +239,9 @@ func claimString(claims map[string]any, key string) string {
 	return ""
 }
 
-// ConsentHandler answers /oauth/consent?consent_challenge=xxx. We always
-// auto-approve: MCP clients in our deployment are first-party agents
-// acting for the calling employee, so adding a consent screen would only
-// be friction. The granted scopes are exactly what the client requested.
+// ConsentHandler answers /oauth/consent?consent_challenge=xxx. Auto-approves
+// with the user's role/plant claims forwarded into Hydra's session — MCP
+// clients are first-party agents, so a consent screen would only add friction.
 func (b *Bridge) ConsentHandler(w http.ResponseWriter, r *http.Request) {
 	challenge := r.URL.Query().Get("consent_challenge")
 	if challenge == "" {
@@ -285,9 +254,8 @@ func (b *Bridge) ConsentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build the claim set Hydra will embed in the JWT access token. We
-	// lift role / plant / department off the user so our MCP tools can
-	// authorise without an extra DB lookup.
+	// Claim set Hydra embeds in the JWT; lifting role/plant/department off
+	// the user lets MCP tools authorise without an extra DB lookup.
 	claims := map[string]any{}
 	if user, err := b.Users.GetByID(r.Context(), consentReq.Subject); err == nil {
 		claims["email"] = user.PrimaryEmail
@@ -319,8 +287,7 @@ func (b *Bridge) acceptLoginAndRedirect(w http.ResponseWriter, r *http.Request, 
 }
 
 // isNotFound returns true for the identity package's NotFound sentinels.
-// We can't import the exact error types without a cycle, so match on
-// error string — cheap and resilient.
+// Matches on error string to avoid an import cycle on the typed sentinels.
 func isNotFound(err error) bool {
 	if err == nil {
 		return false
@@ -330,4 +297,3 @@ func isNotFound(err error) bool {
 		err == identity.ErrUserNotFound ||
 		err == identity.ErrIdentityNotFound
 }
-

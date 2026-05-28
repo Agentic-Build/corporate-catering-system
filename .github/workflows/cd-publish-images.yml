@@ -91,6 +91,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # Serialize the write-back so two main builds (e.g. PRs merged close
+    # together) never push to main concurrently. cancel-in-progress: false
+    # queues rather than drops, so every build's tag bump still lands.
+    concurrency:
+      group: cd-bump-main
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -100,13 +106,26 @@ jobs:
           set -euo pipefail
           SHA="sha-${GITHUB_SHA::7}"
           f=chart/tbite-platform/values.yaml
-          sed -i -E "s|^(  tag: )\"sha-[0-9a-f]+\"|\\1\"${SHA}\"|" "$f"
-          if git diff --quiet -- "$f"; then
-            echo "image tag already at ${SHA}; nothing to commit"
-            exit 0
-          fi
           git config user.name "tbite-ci[bot]"
           git config user.email "tbite-ci@users.noreply.github.com"
-          git add "$f"
-          git commit -m "chore(cd): chart image.tag -> ${SHA} [skip ci]"
-          git push origin HEAD:main
+          # Re-apply the bump on top of the freshest main each attempt and retry
+          # on a racing push (non-fast-forward). reset+re-sed avoids rebase
+          # conflicts on the tag line; last writer wins, which is the intent.
+          for attempt in 1 2 3 4 5; do
+            git fetch --quiet origin main
+            git reset --hard --quiet origin/main
+            sed -i -E "s|^(  tag: )\"sha-[0-9a-f]+\"|\\1\"${SHA}\"|" "$f"
+            if git diff --quiet -- "$f"; then
+              echo "image tag already at ${SHA}; nothing to commit"
+              exit 0
+            fi
+            git add "$f"
+            git commit -m "chore(cd): chart image.tag -> ${SHA} [skip ci]"
+            if git push origin HEAD:main; then
+              echo "pushed tag bump on attempt ${attempt}"
+              exit 0
+            fi
+            echo "push raced (attempt ${attempt}); retrying"
+          done
+          echo "::error::failed to push image tag bump after retries" >&2
+          exit 1

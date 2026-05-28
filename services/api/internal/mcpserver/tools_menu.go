@@ -1,11 +1,6 @@
-// Package mcpserver — menu/vendor discovery tools.
-//
-// Employees use these tools to browse and search the daily menu before
-// placing an order through the order.* tools. Every handler:
-//   1. Authenticates via context (set by idhttp.AuthMiddleware or stdio bootstrap).
-//   2. Enforces employee-only access (welfare_admin is allowed to read too).
-//   3. Delegates to menu.Service / vendor.Service so business rules stay shared.
-//   4. Returns compact JSON results suitable for LLM tool-use.
+// menu/vendor discovery tools. Each handler: authenticates via context,
+// gates on employee/welfare_admin, delegates to menu.Service / vendor.Service,
+// returns compact JSON for LLM tool-use.
 package mcpserver
 
 import (
@@ -25,14 +20,11 @@ import (
 )
 
 // canReadMenu returns true when the role can read employee-facing menus.
-// Employees use this every day; admins occasionally use it for QA/support.
 func canReadMenu(r identity.Role) bool {
 	return r == identity.RoleEmployee || r == identity.RoleWelfareAdmin
 }
 
-// resolvePlant takes an explicit plant argument and falls back to the user's
-// home plant when omitted. Returns an empty string when neither is available
-// so the caller can return a clear error.
+// resolvePlant returns arg, falling back to the user's home plant ("" when neither).
 func resolvePlant(arg string, u *identity.User) string {
 	if arg != "" {
 		return arg
@@ -44,7 +36,6 @@ func resolvePlant(arg string, u *identity.User) string {
 }
 
 func registerMenuTools(s *server.MCPServer, deps Deps) {
-	// -------- menu.list_for_day --------
 	s.AddTool(
 		mcp.NewTool("menu.list_for_day",
 			mcp.WithDescription("List available menu items for the caller's plant on a given supply date. Returns vendor name, price, capacity, sold-out flag, and pickup window."),
@@ -90,10 +81,6 @@ func registerMenuTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- menu.search --------
-	// Searches the employee menu by keyword. Supports tag/price filters and
-	// in-stock-only mode. The most generally useful tool for "what can I eat
-	// today" prompts.
 	s.AddTool(
 		mcp.NewTool("menu.search",
 			mcp.WithDescription("Search the day's menu by keyword. Filters by tags / price range / in-stock. Returns ranked items with vendor and pickup info."),
@@ -156,11 +143,11 @@ func registerMenuTools(s *server.MCPServer, deps Deps) {
 				Sort:  menu.EmployeeMenuSort(stringArg(args, "sort")),
 			}
 			if v, ok := args["price_min"].(float64); ok {
-				minV := int64(v * 100) // convert TWD → minor units (cents)
+				minV := int64(v) // price_minor is whole NTD, not cents — no *100
 				filter.PriceMin = &minV
 			}
 			if v, ok := args["price_max"].(float64); ok {
-				maxV := int64(v * 100)
+				maxV := int64(v)
 				filter.PriceMax = &maxV
 			}
 			if v, ok := args["in_stock"].(bool); ok {
@@ -188,9 +175,6 @@ func registerMenuTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- menu.get_item --------
-	// Look up one menu item by ID. Used after menu.search returns IDs the
-	// LLM wants to inspect further.
 	s.AddTool(
 		mcp.NewTool("menu.get_item",
 			mcp.WithDescription("Fetch a single menu item by ID, including images and supply info for a given date+plant."),
@@ -244,9 +228,8 @@ func registerMenuTools(s *server.MCPServer, deps Deps) {
 		},
 	)
 
-	// -------- vendor.list_open --------
-	// Employee-friendly vendor listing: which approved vendors serve the
-	// caller's plant. Distinct from the admin vendor.list (any status).
+	// vendor.list_open — approved vendors serving the caller's plant
+	// (distinct from admin vendor.list, which spans any status).
 	s.AddTool(
 		mcp.NewTool("vendor.list_open",
 			mcp.WithDescription("List approved vendors serving the caller's plant, with their cutoff hour and preorder window."),
@@ -300,15 +283,13 @@ func registerMenuTools(s *server.MCPServer, deps Deps) {
 	)
 }
 
-// stringArg extracts a string field from MCP arguments. Returns "" when
-// missing or wrong type; callers decide whether that's an error.
+// stringArg extracts a string field from MCP arguments ("" when missing).
 func stringArg(args map[string]any, key string) string {
 	v, _ := args[key].(string)
 	return v
 }
 
-// stringSliceArg pulls a []string out of MCP arguments. JSON arrays decode as
-// []any whose elements are individual strings; we tolerate both forms.
+// stringSliceArg pulls a []string from MCP arguments (JSON arrays decode as []any).
 func stringSliceArg(args map[string]any, key string) []string {
 	raw, ok := args[key].([]any)
 	if !ok {
@@ -323,8 +304,7 @@ func stringSliceArg(args map[string]any, key string) []string {
 	return out
 }
 
-// parseDayOrToday parses YYYY-MM-DD; on empty input it returns today
-// truncated to midnight in the server's local zone.
+// parseDayOrToday parses YYYY-MM-DD; empty input → today at midnight local.
 func parseDayOrToday(s string) (time.Time, error) {
 	if s == "" {
 		now := time.Now()

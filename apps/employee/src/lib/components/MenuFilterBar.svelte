@@ -1,8 +1,5 @@
 <script lang="ts">
-  // F3 菜單搜尋與篩選 — filter bar above the full-menu grid. All filter
-  // state is mirrored into the URL query (q / tags / price_min / price_max /
-  // in_stock / sort) so a reload preserves it. The server reads those params
-  // and serves a filtered grid from /api/employee/menu.
+  // F3 菜單搜尋與篩選: filter state mirrored to URL params for server filtering.
   import { Icon, Toggle } from "@tbite/ui";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -18,7 +15,6 @@
   }
   let { tags, q, selectedTags, priceMin, priceMax, inStock, sort }: Props = $props();
 
-  // Local editable copies — committed to the URL on apply / toggle.
   let keyword = $state(q);
   let priceMinInput = $state(priceMin > 0 ? String(priceMin) : "");
   let priceMaxInput = $state(priceMax > 0 ? String(priceMax) : "");
@@ -49,7 +45,6 @@
       sort !== "",
   );
 
-  // Rebuild the URL preserving plant/day, applying the current filter values.
   function apply(overrides: Partial<Record<string, string | string[] | boolean>> = {}) {
     const url = new URL($page.url);
     const sp = url.searchParams;

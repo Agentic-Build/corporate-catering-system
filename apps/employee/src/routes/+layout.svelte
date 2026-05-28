@@ -1,7 +1,5 @@
 <script lang="ts">
-  // Employee app shell — ported from EmployeeView.jsx without the role
-  // switcher: sticky header (top-0), 240px sidebar + main body, with the
-  // cart drawer mounted globally.
+  // Employee app shell: sticky header, sidebar, main body, global cart drawer.
   import "../app.css";
   import { TBiteLogo, LocationBar, SearchInput, Button, Icon } from "@tbite/ui";
   import { goto } from "$app/navigation";
@@ -11,12 +9,12 @@
   import CartDrawer from "$lib/components/CartDrawer.svelte";
   import FloatingCartBar from "$lib/components/FloatingCartBar.svelte";
   import { cart } from "$lib/cart.svelte";
-  import { buildDays } from "$lib/plants";
+  import { buildDays, taipeiISO } from "$lib/plants";
 
   let { data, children } = $props();
 
-  // ── plant / day — driven by URL search params, user.plant as fallback ──
-  const today = new Date().toISOString().slice(0, 10);
+  // Plant/day driven by URL search params, with user.plant as fallback.
+  const today = taipeiISO();
   const selectedPlant = $derived(
     $page.url.searchParams.get("plant") ?? data.user?.plant ?? data.plants[0]?.id ?? "",
   );
@@ -29,7 +27,7 @@
     goto(url.pathname + url.search);
   }
 
-  // ── header search — only routes the home grid; navigate home then filter ──
+  // Header search only routes the home grid; navigate home then filter.
   let search = $state("");
   function onSearch(v: string) {
     search = v;
@@ -39,12 +37,10 @@
     else url.searchParams.delete("q");
     goto(url.pathname + url.search, { keepFocus: true });
   }
-  // Keep the header box in sync with the active query param.
   $effect(() => {
     search = $page.url.searchParams.get("q") ?? "";
   });
 
-  // ── global overlays ──
   let cartOpen = $state(false);
 
   // cart-bump animation on the header cart button when the count changes

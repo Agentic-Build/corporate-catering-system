@@ -1,12 +1,7 @@
 // Package evaluator hosts streaming compliance evaluators that subscribe to
-// domain events on JetStream and emit anomalies when a vendor's behaviour
-// crosses a threshold.
-//
-// OnTimeRateEvaluator maintains a per-vendor rolling window of order pickup
-// outcomes (picked_up vs. no_show) and opens an `on_time_rate_drop` anomaly
-// when the pickup rate falls below Threshold. State is kept in-memory, so a
-// single replica is assumed for P6. A multi-replica deployment would need a
-// shared store (Redis ZSET keyed by vendor) — explicitly out of scope here.
+// JetStream domain events and emit anomalies when vendor behaviour crosses
+// a threshold. State is in-memory: a single replica is assumed (a multi-
+// replica deployment would need a shared store keyed by vendor).
 package evaluator
 
 import (
@@ -18,9 +13,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/takalawang/corporate-catering-system/services/api/internal/compliance"
+	"github.com/takalawang/corporate-catering-system/services/api/internal/platform/messaging"
 )
 
 // onTimeEvent is the minimal record kept in the rolling window.
@@ -29,13 +26,14 @@ type onTimeEvent struct {
 	pickedUp  bool
 }
 
-// OnTimeRateEvaluator subscribes to order.picked_up.v1 + order.no_show.v1
-// on ORDERS_V1, maintains a rolling Window per vendor, and opens an anomaly
-// when the on-time rate (picked_up / total) falls below Threshold. The
-// evaluator only emits once at least MinSamples events are in the window
-// to avoid early false positives.
+// OnTimeRateEvaluator subscribes to order.picked_up.v1 / order.no_show.v1 on
+// ORDERS_V1, keeps a per-vendor rolling Window, and opens an anomaly when the
+// on-time rate (picked_up/total) falls below Threshold once at least
+// MinSamples events are in-window.
 type OnTimeRateEvaluator struct {
-	JS         jetstream.JetStream
+	JS jetstream.JetStream
+	// Pool backs DLQ writes when a message exhausts delivery; nil → Nak instead.
+	Pool       *pgxpool.Pool
 	Anomaly    compliance.AnomalyRepository
 	Window     time.Duration
 	Threshold  float64
@@ -47,9 +45,8 @@ type OnTimeRateEvaluator struct {
 	data map[string][]onTimeEvent
 }
 
-// Run subscribes to the order events and processes them serially until ctx
-// is cancelled. The consumer is a durable pull consumer so it survives
-// worker restarts — but the in-memory window does NOT survive restart.
+// Run subscribes and processes events serially until ctx is cancelled.
+// Durable consumer survives worker restarts; the in-memory window does NOT.
 func (e *OnTimeRateEvaluator) Run(ctx context.Context) error {
 	if e.Window <= 0 {
 		e.Window = 7 * 24 * time.Hour
@@ -121,16 +118,17 @@ func (e *OnTimeRateEvaluator) Run(ctx context.Context) error {
 		}
 		if err := e.handle(ctx, msg.Subject(), msg.Data()); err != nil {
 			e.Logger.Warn("handle event", "subject", msg.Subject(), "err", err)
-			_ = msg.Nak()
+			// MaxDeliver=5; once exhausted, DLQ + Term so a poison event
+			// stops being redelivered (and double-counted) forever.
+			messaging.DLQOnExhaustion(ctx, msg, e.Pool, "on-time-evaluator", 5, err)
 			continue
 		}
 		_ = msg.Ack()
 	}
 }
 
-// handle parses a single event, updates the per-vendor rolling window, and
-// opens an anomaly if the rate has dropped below Threshold (with at least
-// MinSamples events in-window).
+// handle updates the per-vendor rolling window and opens an anomaly if the
+// rate has dropped below Threshold (with at least MinSamples events).
 func (e *OnTimeRateEvaluator) handle(ctx context.Context, subject string, data []byte) error {
 	var payload struct {
 		VendorID string `json:"vendor_id"`
@@ -139,7 +137,6 @@ func (e *OnTimeRateEvaluator) handle(ctx context.Context, subject string, data [
 		return fmt.Errorf("decode payload: %w", err)
 	}
 	if payload.VendorID == "" {
-		// No vendor on the event — nothing to evaluate. Ack as a no-op.
 		return nil
 	}
 	pickedUp := subject == "order.picked_up.v1"
@@ -155,8 +152,7 @@ func (e *OnTimeRateEvaluator) handle(ctx context.Context, subject string, data [
 			pruned = append(pruned, ev)
 		}
 	}
-	// Reallocate so the slice's underlying array doesn't grow unboundedly
-	// even when the window keeps shifting.
+	// Reallocate so the backing array doesn't grow unboundedly as the window shifts.
 	stored := make([]onTimeEvent, len(pruned))
 	copy(stored, pruned)
 	e.data[payload.VendorID] = stored

@@ -291,4 +291,3 @@ func TestSettler_BatchLockedToCSVExport(t *testing.T) {
 		t.Fatal("settler did not stop within 5s of ctx cancel")
 	}
 }
-

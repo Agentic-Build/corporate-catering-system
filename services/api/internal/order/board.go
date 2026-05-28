@@ -147,9 +147,8 @@ func kindFromSubject(subject string) string {
 	return subject
 }
 
-// sanitizeConsumerToken replaces every character that is invalid in a NATS
-// durable consumer name (anything outside [A-Za-z0-9_-], e.g. the '.' in a
-// macOS hostname like "host.local") with '-'. NATS rejects '.' in names.
+// sanitizeConsumerToken replaces NATS-invalid characters (anything outside
+// [A-Za-z0-9_-], e.g. '.' in "host.local") with '-'.
 func sanitizeConsumerToken(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
@@ -161,21 +160,16 @@ func sanitizeConsumerToken(s string) string {
 	}, s)
 }
 
-// RunBoardConsumer taps the ORDERS_V1 stream and feeds order events into the
-// per-vendor board hub and (if non-nil) the broadcast menu hub, until ctx is
-// cancelled. It uses an ephemeral, ack-none, deliver-new consumer: the board
-// is a live view, so missed or replayed events are undesirable — only events
-// that occur while a board is open matter.
+// RunBoardConsumer taps ORDERS_V1 and fans order events into the per-vendor
+// board hub (and menu hub if non-nil). Ephemeral, ack-none, deliver-new: the
+// board is a live view, so missed/replayed events are undesirable.
 func RunBoardConsumer(ctx context.Context, js jetstream.JetStream, hub *BoardHub, menuHub *MenuHub, logger *slog.Logger) error {
 	stream, err := js.Stream(ctx, "ORDERS_V1")
 	if err != nil {
 		return err
 	}
-	// Name the consumer deterministically so multiple API replicas show up as
-	// distinct entries in monitoring (one per pod), and shorten
-	// InactiveThreshold so a crashed pod's consumer reaps fast — otherwise the
-	// JetStream consumer-lag panel would point at zombie consumers from
-	// previously-restarted pods for up to an hour and inflate "lag" metrics.
+	// Name per-pod so monitoring shows distinct entries; short InactiveThreshold
+	// reaps crashed-pod consumers fast (else they zombie for ~1h and inflate lag).
 	hostname, _ := os.Hostname()
 	cons, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
 		Name:              "board-fanout-" + sanitizeConsumerToken(hostname),

@@ -79,10 +79,10 @@ func migrationsDirReorder() string {
 // reorderTestEnv bundles the dependencies a ReorderService needs plus the
 // Service used to seed a source order.
 type reorderTestEnv struct {
-	Pool     *pgxpool.Pool
-	Reorder  *order.ReorderService
-	Place    *order.Service
-	Cleanup  func()
+	Pool    *pgxpool.Pool
+	Reorder *order.ReorderService
+	Place   *order.Service
+	Cleanup func()
 }
 
 const reorderTestPlant = "F12B-3F"
@@ -93,7 +93,7 @@ var (
 	// Clock is mid-day on the day before reorderSourceDate so we are well within
 	// the 17:00 prev-day cutoff that Service.Place enforces, AND well before
 	// reorderTargetDate's cutoff for typical supplies (cutoff_at = day before 17:00 UTC).
-	reorderClockTime  = time.Date(2026, 5, 12, 10, 0, 0, 0, time.UTC)
+	reorderClockTime = time.Date(2026, 5, 12, 10, 0, 0, 0, time.UTC)
 	// targetCutoff is the meal_supply.cutoff_at for reorderTargetDate supplies.
 	// Setting it AFTER reorderClockTime keeps target items available.
 	reorderTargetCutoff = time.Date(2026, 5, 13, 17, 0, 0, 0, time.UTC)
@@ -157,10 +157,13 @@ func setupReorder(t *testing.T) reorderTestEnv {
 		orderRepo,
 		supplyRepoAdapter{inner: supplyRepo},
 		itemRepoAdapter{inner: itemRepo},
+		vpg.NewVendorRepo(pool),
+		plantRepo,
 		stateRepo,
 		auditRepo,
 		outboxRepo,
 		fixedClock{T: reorderClockTime},
+		nil,
 	)
 
 	cleanup := func() {
@@ -278,6 +281,27 @@ func TestReorder_AllAvailable(t *testing.T) {
 		itemIDs[1], reorderTargetDate).Scan(&remain1))
 	assert.Equal(t, 3, remain0)
 	assert.Equal(t, 4, remain1)
+}
+
+func TestReorder_VendorPlantMismatch_Forbidden(t *testing.T) {
+	env := setupReorder(t)
+	defer env.Cleanup()
+
+	_, itemIDs, userID := seedReorderScenario(t, env.Pool, []string{"A"})
+	addSupply(t, env.Pool, itemIDs[0], reorderSourceDate, 5, 5, reorderSourceCutoff)
+	addSupply(t, env.Pool, itemIDs[0], reorderTargetDate, 5, 5, reorderTargetCutoff)
+
+	src := placeSourceOrder(t, env, userID, []order.PlaceItem{{MenuItemID: itemIDs[0], Qty: 1}})
+
+	// Reorder from a plant the vendor does not serve (e.g. the employee was
+	// transferred). Must fail before creating anything, like Service.Place.
+	_, err := env.Reorder.Reorder(context.Background(), order.ReorderInput{
+		UserID:        userID,
+		SourceOrderID: src.ID,
+		SupplyDate:    reorderTargetDate.Format("2006-01-02"),
+		Plant:         "OTHER-PLANT",
+	})
+	assert.ErrorIs(t, err, order.ErrVendorPlantMismatch)
 }
 
 func TestReorder_PartialUnavailable_NoSupply(t *testing.T) {

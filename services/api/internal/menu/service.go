@@ -52,7 +52,7 @@ func (s *Service) ListCategories(ctx context.Context, vendorID string) ([]*Categ
 }
 
 // CreateItem creates an active menu item owned by the supplied vendor.
-// Nil tag slices are normalized to empty slices so JSON encoding emits [].
+// Nil tag slices are normalised to [] so JSON encoding emits [].
 func (s *Service) CreateItem(ctx context.Context, in CreateItemInput) (*Item, error) {
 	item := &Item{
 		VendorID:    in.VendorID,
@@ -106,11 +106,8 @@ func (s *Service) UpdateItem(ctx context.Context, itemID, vendorID string, in Up
 	return existing, nil
 }
 
-// CopyItem duplicates an existing menu item into a fresh draft owned by the
-// same vendor — the merchant's quick "上架改量" path. The copy always starts
-// as a draft (even when the source is active) and its name is suffixed so the
-// two are distinguishable in the meal library. Returns ErrForbidden when the
-// source item does not belong to the supplied vendor.
+// CopyItem duplicates an item into a fresh draft owned by the same vendor
+// (merchant's "上架改量"). Name is suffixed so the two are distinguishable.
 func (s *Service) CopyItem(ctx context.Context, itemID, vendorID string) (*Item, error) {
 	src, err := s.Items.GetByID(ctx, itemID)
 	if err != nil {
@@ -190,26 +187,23 @@ type EmployeeMenuItem struct {
 	ETALabel     string
 }
 
-// ListForEmployee returns active menu items available at the plant/day in the
-// filter, including supply data and images. The plant filter ensures employees
-// only see vendors that serve their plant (per vendor_plant_mapping). The
-// optional search/filter/sort criteria on the filter are pushed down to the
-// repository SQL; a filter carrying only Plant/Day behaves identically to the
-// historical unfiltered listing.
+// ListForEmployee returns active items at the filter's plant/day with supply
+// data and images. Plant filter (vendor_plant_mapping) hides vendors that
+// don't serve the employee's plant. Search/filter/sort push down to SQL.
 func (s *Service) ListForEmployee(ctx context.Context, f EmployeeMenuFilter) ([]EmployeeMenuItem, error) {
 	rows, err := s.Items.ListActiveByPlant(ctx, f)
 	if err != nil {
 		return nil, err
 	}
+	imagesByItem, err := s.imageURIsForRows(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]EmployeeMenuItem, 0, len(rows))
 	for _, r := range rows {
-		imgs, err := s.Images.ListByItem(ctx, r.Item.ID)
-		if err != nil {
-			return nil, err
-		}
-		uris := make([]string, 0, len(imgs))
-		for _, im := range imgs {
-			uris = append(uris, im.BlobURI)
+		uris := imagesByItem[r.Item.ID]
+		if uris == nil {
+			uris = []string{}
 		}
 		tags := r.Item.Tags
 		if tags == nil {
@@ -230,6 +224,47 @@ func (s *Service) ListForEmployee(ctx context.Context, f EmployeeMenuFilter) ([]
 			PickupWindow: r.PickupWindow,
 			ETALabel:     r.ETALabel,
 		})
+	}
+	return out, nil
+}
+
+// BatchImageRepository is an optional capability (postgres ImageRepo): load
+// images for many items in one query, avoiding ListForEmployee's N+1.
+type BatchImageRepository interface {
+	ListByItems(ctx context.Context, itemIDs []string) (map[string][]*Image, error)
+}
+
+// imageURIsForRows returns item ID → ordered blob URIs for the given rows,
+// using a single batched query when the image repo supports it.
+func (s *Service) imageURIsForRows(ctx context.Context, rows []*ActiveItemRow) (map[string][]string, error) {
+	out := make(map[string][]string, len(rows))
+	toURIs := func(imgs []*Image) []string {
+		uris := make([]string, 0, len(imgs))
+		for _, im := range imgs {
+			uris = append(uris, im.BlobURI)
+		}
+		return uris
+	}
+	if batch, ok := s.Images.(BatchImageRepository); ok {
+		ids := make([]string, len(rows))
+		for i, r := range rows {
+			ids[i] = r.Item.ID
+		}
+		byItem, err := batch.ListByItems(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for id, imgs := range byItem {
+			out[id] = toURIs(imgs)
+		}
+		return out, nil
+	}
+	for _, r := range rows {
+		imgs, err := s.Images.ListByItem(ctx, r.Item.ID)
+		if err != nil {
+			return nil, err
+		}
+		out[r.Item.ID] = toURIs(imgs)
 	}
 	return out, nil
 }

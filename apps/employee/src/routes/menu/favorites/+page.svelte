@@ -1,8 +1,5 @@
 <script lang="ts">
-  // 我的常點 — design-language pass. FavoritesPage style from
-  // EmployeePages.jsx: a No.1 hero card plus the remaining favourites as
-  // rows. The favourites API has no frequency/last-ordered/photo fields, so
-  // those reference embellishments are omitted (no fabricated data).
+  // 我的常點
   import { onMount } from "svelte";
   import { deserialize } from "$app/forms";
   import { PageHeader, EmptyState, Button, Icon } from "@tbite/ui";

@@ -1,7 +1,4 @@
 <script lang="ts">
-  // Calibrated against reference_src/ui.jsx + components.jsx StateTag —
-  // adds the `pending` tone (reference has 6 tones). The leading dot +
-  // `pulse` are kept; existing callers depend on them.
   interface Props {
     tone?: "success" | "warning" | "danger" | "info" | "pending" | "neutral";
     pulse?: boolean;

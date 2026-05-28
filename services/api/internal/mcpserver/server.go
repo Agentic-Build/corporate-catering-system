@@ -1,7 +1,5 @@
-// Package mcpserver wires the MCP (Model Context Protocol) server that lets AI
-// agents call T-Bite business operations through the same Service layer the
-// HTTP API uses. Task 1 ships the skeleton only — tools are registered in
-// subsequent P7 tasks.
+// Package mcpserver wires the MCP server that lets AI agents call T-Bite
+// business operations through the same Service layer the HTTP API uses.
 package mcpserver
 
 import (
@@ -21,27 +19,18 @@ import (
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
-// AuditTx is the minimal interface mcpserver depends on for audit_event writes.
-// The concrete *order/postgres.AuditRepo (re-used by every other Service)
-// satisfies it. Kept tiny so tests can stub without dragging in pgxpool.
+// AuditTx is the audit_event write surface mcpserver depends on.
 type AuditTx interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
 
-// txBeginner is the transaction-starting surface of *pgxpool.Pool. auditAfter
-// depends on this interface (not the concrete pool) so tests can inject a fake
-// that hands the write closure a no-op pgx.Tx; *pgxpool.Pool satisfies it so
-// cmd wiring is unchanged.
+// txBeginner is the transaction-starting surface of *pgxpool.Pool.
 type txBeginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-// Deps carries the underlying services the MCP layer reuses. MCP tools call
-// these Services directly so business rules stay identical to the HTTP path.
-//
-// Pool + Audit are used by auditAfter to write the per-tool audit_event row
-// with request_id="mcp:<tool>". They're optional: when nil, audit is skipped
-// (the business operation itself already succeeded).
+// Deps carries underlying services so MCP tools share HTTP business rules.
+// Pool + Audit are optional: when nil, the per-tool audit row is skipped.
 type Deps struct {
 	Pool       txBeginner
 	Audit      AuditTx
@@ -56,12 +45,10 @@ type Deps struct {
 	Sessions   identity.SessionStore
 }
 
-// New constructs the MCP server with all tools registered.
-//
-// New registers 21 tools total: 8 read-only + 5 employee write + 8 admin
-// write. Each handler parses arguments, enforces the same role rules used by
-// HTTP handlers, delegates to the underlying Service, and then writes an
-// audit_event row via auditAfter (request_id="mcp:<tool>").
+// New constructs the MCP server with all tools registered. Each handler
+// parses args, enforces the same role rules as HTTP, delegates to the
+// underlying Service, then writes an audit row via auditAfter
+// (request_id="mcp:<tool>"). tools/list is the authoritative runtime list.
 func New(deps Deps) *server.MCPServer {
 	s := server.NewMCPServer(
 		"T-Bite MCP",
@@ -81,19 +68,15 @@ func New(deps Deps) *server.MCPServer {
 	return s
 }
 
-// userFromCtx returns the authenticated user attached by idhttp.AuthMiddleware.
-// In stdio mode (P7 Task 6) the entrypoint will pre-attach the user the same
-// way before invoking tool handlers, so handlers can call this uniformly.
+// userFromCtx returns the user attached by idhttp.AuthMiddleware (stdio mode
+// pre-attaches the same way so handlers stay uniform).
 func userFromCtx(ctx context.Context) (*identity.User, bool) {
 	return idhttp.UserFromContext(ctx)
 }
 
-// auditAfter writes an audit_event row attributing the MCP tool invocation
-// to the authenticated user. Failures are best-effort: the business operation
-// has already succeeded, so we never fail the tool because of an audit miss.
-//
-// action     = "mcp.<toolName>"
-// request_id = "mcp:<toolName>"  (lets admins filter MCP-originated actions)
+// auditAfter writes an audit_event for the MCP tool invocation
+// (action="mcp.<tool>", request_id="mcp:<tool>"). Best-effort: a failed audit
+// never fails the tool.
 func auditAfter(ctx context.Context, deps Deps, toolName, targetKind, targetID string, payload map[string]any, user *identity.User) {
 	if deps.Pool == nil || deps.Audit == nil || user == nil {
 		return

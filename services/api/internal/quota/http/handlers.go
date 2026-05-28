@@ -21,8 +21,6 @@ type API struct {
 	Svc *quota.Service
 }
 
-// ----- DTOs -----
-
 type supplyDTO struct {
 	ID           string `json:"id"`
 	MenuItemID   string `json:"menu_item_id"`
@@ -48,8 +46,6 @@ func toDTO(s *quota.Supply) supplyDTO {
 		CutoffAt:     s.CutoffAt.UTC().Format(time.RFC3339),
 	}
 }
-
-// ----- Inputs / Outputs -----
 
 type setCapacityInput struct {
 	ItemID string `path:"itemID" format:"uuid"`
@@ -87,8 +83,6 @@ type listSupplyOutput struct {
 	}
 }
 
-// ----- Registration -----
-
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "setMerchantSupply",
@@ -118,20 +112,8 @@ func (a *API) Register(api huma.API) {
 	}, a.setSoldOut)
 }
 
-// ----- Auth helper -----
-
 func (a *API) requireVendor(ctx context.Context) (*identity.User, string, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, "", huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleVendorOperator {
-		return nil, "", huma.Error403Forbidden("vendor operator required")
-	}
-	if u.VendorID == nil || *u.VendorID == "" {
-		return nil, "", huma.Error403Forbidden("user is not bound to a vendor")
-	}
-	return u, *u.VendorID, nil
+	return idhttp.RequireVendor(ctx)
 }
 
 func parseDate(s string, fallback time.Time) (time.Time, error) {
@@ -144,8 +126,6 @@ func parseDate(s string, fallback time.Time) (time.Time, error) {
 	}
 	return t.UTC(), nil
 }
-
-// ----- Handlers -----
 
 func (a *API) setCapacity(ctx context.Context, in *setCapacityInput) (*supplyOutput, error) {
 	_, vendorID, err := a.requireVendor(ctx)

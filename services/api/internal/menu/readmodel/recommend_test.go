@@ -134,7 +134,7 @@ func TestCachedPopularityKeyedByPlantDate(t *testing.T) {
 	ctx := context.Background()
 
 	_, _ = p.PlantPopularity(ctx, "plant-a", testDay)
-	_, _ = p.PlantPopularity(ctx, "plant-b", testDay)              // different plant -> miss
+	_, _ = p.PlantPopularity(ctx, "plant-b", testDay)                  // different plant -> miss
 	_, _ = p.PlantPopularity(ctx, "plant-a", testDay.AddDate(0, 0, 1)) // different day -> miss
 	if inner.calls != 3 {
 		t.Fatalf("inner.calls = %d, want 3 (distinct plant/date keys all miss)", inner.calls)

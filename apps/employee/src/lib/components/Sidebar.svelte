@@ -1,7 +1,4 @@
 <script lang="ts">
-  // Left navigation rail — ported from EmployeeView.jsx TbSidebar, with the
-  // reference's no-backend items (薪資代扣/通知中心/設定) dropped. Items map
-  // 1:1 to real routes.
   import { Icon, type IconName } from "@tbite/ui";
   import { page } from "$app/stores";
 

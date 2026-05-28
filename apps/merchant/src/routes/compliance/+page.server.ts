@@ -37,8 +37,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 export const actions: Actions = {
-  // Self-service document upload / resupply. When `supersedes` is present the
-  // backend treats it as a resupply replacing that document.
+  // Document upload / resupply (`supersedes` triggers backend replace).
   uploadDocument: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { uploadError: "unauthenticated" });
     const fd = await request.formData();

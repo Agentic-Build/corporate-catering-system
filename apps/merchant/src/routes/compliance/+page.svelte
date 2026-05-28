@@ -13,11 +13,10 @@
     { id: "other", label: "其他" },
   ];
 
-  // When set, the upload form is locked to resupplying this specific document.
+  // When set, the upload form is locked to resupplying this document.
   let resupplyDoc = $state<{ id: string; kind: string } | null>(null);
 
-  // A document can be resupplied once it has been reviewed — rejected and
-  // expired docs need a fix; an approved doc may be renewed proactively.
+  // Resupply is allowed for rejected/expired (fix) or approved (renew).
   function canResupply(status: string): boolean {
     return status === "rejected" || status === "expired" || status === "approved";
   }
@@ -27,7 +26,6 @@
     document.getElementById("doc-upload-card")?.scrollIntoView({ behavior: "smooth" });
   }
 
-  // Vendor-status banner copy — one entry per `vendor.status` enum value.
   const statusBanner = {
     pending: {
       label: "待審核",

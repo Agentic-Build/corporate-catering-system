@@ -1,6 +1,5 @@
 <script lang="ts" module>
-  // T-Bite stroke icon set — ported 1:1 from reference_src/ui.jsx (I.*)
-  // and ui_kits/tbite/components.jsx (I.*). 24×24 viewBox, stroke-only.
+  // T-Bite stroke icon set. 24×24 viewBox, stroke-only.
   export type IconName =
     | "cart"
     | "qr"

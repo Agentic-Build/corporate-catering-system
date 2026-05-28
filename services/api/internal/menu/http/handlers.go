@@ -29,8 +29,6 @@ type API struct {
 	StorageBucket        string
 }
 
-// ----- DTOs -----
-
 type categoryDTO struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -80,8 +78,6 @@ type employeeMenuItemDTO struct {
 	ETALabel     string   `json:"eta_label"`
 	SoldOut      bool     `json:"sold_out"`
 }
-
-// ----- Inputs / Outputs -----
 
 type listCategoriesOutput struct {
 	Body struct {
@@ -161,8 +157,6 @@ type listEmployeeMenuOutput struct {
 		Items []employeeMenuItemDTO `json:"items"`
 	}
 }
-
-// ----- Registration -----
 
 func (a *API) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
@@ -256,37 +250,15 @@ func (a *API) Register(api huma.API) {
 	// endpoints.
 }
 
-// ----- Auth helpers -----
-
 // requireVendor enforces vendor_operator role + a non-empty vendor binding.
-// Returns (user, vendorID, error).
 func (a *API) requireVendor(ctx context.Context) (*identity.User, string, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, "", huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleVendorOperator {
-		return nil, "", huma.Error403Forbidden("vendor operator required")
-	}
-	if u.VendorID == nil || *u.VendorID == "" {
-		return nil, "", huma.Error403Forbidden("user is not bound to a vendor")
-	}
-	return u, *u.VendorID, nil
+	return idhttp.RequireVendor(ctx)
 }
 
 // requireEmployee enforces employee role.
 func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
-	u, ok := idhttp.UserFromContext(ctx)
-	if !ok {
-		return nil, huma.Error401Unauthorized("not authenticated")
-	}
-	if u.Role != identity.RoleEmployee {
-		return nil, huma.Error403Forbidden("employee role required")
-	}
-	return u, nil
+	return idhttp.RequireEmployee(ctx)
 }
-
-// ----- Handlers -----
 
 func (a *API) listCategories(ctx context.Context, _ *struct{}) (*listCategoriesOutput, error) {
 	_, vendorID, err := a.requireVendor(ctx)
@@ -503,8 +475,6 @@ func (a *API) listEmployeeMenu(ctx context.Context, in *listEmployeeMenuInput) (
 	}
 	return &resp, nil
 }
-
-// ----- helpers -----
 
 func toItemDTO(i *menu.Item) itemDTO {
 	tags := i.Tags

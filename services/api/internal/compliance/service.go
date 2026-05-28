@@ -16,22 +16,17 @@ import (
 	vendor "github.com/takalawang/corporate-catering-system/services/api/internal/vendors"
 )
 
-// txBeginner is the transaction-starting surface of *pgxpool.Pool. The service
-// depends on this interface (not the concrete pool) so tests can inject a fake
-// that hands the write closure a no-op pgx.Tx; the repo fakes ignore the tx.
+// txBeginner is the transaction-starting surface of *pgxpool.Pool.
 type txBeginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-// objectStore is the blob-write surface of *storage.S3Client used by the upload
-// paths. Depending on the interface (not the concrete client) lets tests inject
-// a fake that returns a synthetic URI without reaching S3.
+// objectStore is the blob-write surface of *storage.S3Client.
 type objectStore interface {
 	PutObject(ctx context.Context, key string, body io.Reader, contentType string) (string, error)
 }
 
-// VendorSuspender lets anomaly governance suspend a vendor. *vendor.Service
-// satisfies it; kept narrow to avoid pulling the whole vendor service in.
+// VendorSuspender lets anomaly governance suspend a vendor.
 type VendorSuspender interface {
 	Suspend(ctx context.Context, vendorID, adminUserID string) error
 }
@@ -39,8 +34,7 @@ type VendorSuspender interface {
 // Clock lets tests pin "now".
 type Clock interface{ Now() time.Time }
 
-// AuditTx mirrors the audit-repo shape used by order/payroll services so the
-// same postgres impl serves compliance writes.
+// AuditTx mirrors the audit-repo shape used by order/payroll services.
 type AuditTx interface {
 	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
 }
@@ -77,8 +71,7 @@ type AuditRow struct {
 }
 
 // Service orchestrates vendor document lifecycle, anomaly triage, and audit
-// query. Document upload writes blob to S3 then row to DB then audit row.
-// Review and anomaly transitions emit outbox events + audit rows in one tx.
+// query. Review/anomaly transitions emit outbox + audit rows in one tx.
 type Service struct {
 	Pool     txBeginner
 	Docs     DocumentRepository
@@ -111,17 +104,15 @@ type UploadInput struct {
 	Supersedes *string
 }
 
-// UploadDocument streams Body to S3 at vendor-docs/{vendor}/{ts}-{name},
-// then inserts a pending vendor_document row and emits an audit event.
-// Body is buffered fully so size + audit reflect the same bytes uploaded.
-//
-// When in.Supersedes is set the upload is a resupply: the referenced document
-// must belong to the same vendor and already be reviewed (validateResupplyTarget),
-// and the new row links back to it via vendor_document.supersedes.
+// UploadDocument streams Body to S3 at vendor-docs/{vendor}/{ts}-{name}, then
+// inserts a pending vendor_document row and emits an audit event. Body is
+// buffered fully so size + audit reflect the same bytes uploaded. When
+// in.Supersedes is set, the target must belong to the same vendor and already
+// be reviewed; the new row links back via vendor_document.supersedes.
 const maxDocumentBytes int64 = 10 << 20
 
-// sanitizeDocFilename strips path components so a filename like
-// "../../payroll/x.csv" can't escape the vendor-docs/{vendor}/ key prefix.
+// sanitizeDocFilename strips path components so e.g. "../../payroll/x.csv"
+// can't escape the vendor-docs/{vendor}/ key prefix.
 func sanitizeDocFilename(name string) (string, error) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
@@ -176,8 +167,8 @@ func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document
 		role = "welfare_admin"
 	}
 	// Row insert + audit in one tx so a failed audit can't leave an orphan
-	// document row. (The S3 object is written above and is outside the tx;
-	// orphan blobs are handled by storage reconciliation, not this path.)
+	// document row. Orphan blobs (S3 write is outside the tx) are handled by
+	// storage reconciliation.
 	auditErr := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		if err := s.Docs.CreateTx(ctx, tx, d); err != nil {
 			return err
@@ -280,8 +271,7 @@ func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes, action strin
 		return auditErr
 	}
 	if action == ActionSuspend && a.TargetKind == "vendor" && s.VendorGov != nil {
-		// An already-suspended/terminated vendor surfaces ErrInvalidStatus —
-		// the goal (vendor not operating) is already met, so treat as success.
+		// Already-suspended/terminated vendor → ErrInvalidStatus is a no-op success.
 		if err := s.VendorGov.Suspend(ctx, a.TargetID, by); err != nil && !errors.Is(err, vendor.ErrInvalidStatus) {
 			return err
 		}
