@@ -36,10 +36,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # svelte-kit sync generates .svelte-kit/tsconfig.json, which the app
+      # tsconfigs extend; without it vitest --coverage aborts ("Tsconfig not found").
+      - run: pnpm -r --filter "./apps/*" exec svelte-kit sync
+
       - name: Frontend coverage
         run: |
           pnpm --filter @tbite/merchant exec vitest run --coverage || true
           pnpm --filter @tbite/pickup exec vitest run --coverage || true
+          pnpm --filter @tbite/web-shared exec vitest run --coverage || true
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6

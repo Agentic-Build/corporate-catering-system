@@ -1,5 +1,6 @@
 export { taipeiISO, dayId, taipeiDateTime, buildDays, type DayOption } from "./date";
 export { formatMinor } from "./money";
+export { formStr } from "./form";
 export { problemMessage } from "./problem";
 export {
   STATUS_TABLES,

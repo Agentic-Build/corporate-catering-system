@@ -2,6 +2,7 @@ import { redirect, fail, type Actions } from "@sveltejs/kit";
 import type { components, operations } from "@tbite/api-client";
 import type { PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type UploadDocBody =
   operations["uploadMerchantDocument"]["requestBody"]["content"]["application/json"];
@@ -45,10 +46,10 @@ export const actions: Actions = {
   uploadDocument: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { uploadError: "unauthenticated" });
     const fd = await request.formData();
-    const kind = fd.get("kind")?.toString() ?? "";
+    const kind = formStr(fd, "kind");
     const file = fd.get("file");
-    const expiresAt = (fd.get("expires_at")?.toString() ?? "").trim();
-    const supersedes = (fd.get("supersedes")?.toString() ?? "").trim();
+    const expiresAt = formStr(fd, "expires_at").trim();
+    const supersedes = formStr(fd, "supersedes").trim();
 
     if (!DOC_KINDS.has(kind as DocKind)) return fail(400, { uploadError: "請選擇文件種類" });
     if (!(file instanceof File) || file.size === 0) {

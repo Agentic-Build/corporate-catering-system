@@ -8,10 +8,7 @@ export function problemMessage(err: unknown): string {
     if (typeof o.detail === "string" && o.detail) return o.detail;
     if (typeof o.title === "string" && o.title) return o.title;
     if (typeof o.message === "string" && o.message) return o.message;
-  }
-  try {
-    return (err as object).toString();
-  } catch {
     return "未知錯誤";
   }
+  return String(err);
 }
