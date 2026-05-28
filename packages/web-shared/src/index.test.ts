@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { taipeiISO, dayId, taipeiDateTime } from "./date";
 import { formatMinor } from "./money";
 import { problemMessage } from "./problem";
+import { formStr } from "./form";
 import { statusEntry } from "./status";
 
 describe("taipeiISO", () => {
@@ -51,6 +52,17 @@ describe("problemMessage", () => {
     expect(problemMessage(null)).toBe("未知錯誤");
     expect(problemMessage({})).toBe("未知錯誤");
     expect(problemMessage(42)).toBe("42");
+  });
+});
+
+describe("formStr", () => {
+  it("returns the string value, or empty for missing/non-string fields", () => {
+    const fd = new FormData();
+    fd.append("name", "  taco  ");
+    fd.append("doc", new File(["x"], "x.txt"));
+    expect(formStr(fd, "name")).toBe("  taco  ");
+    expect(formStr(fd, "missing")).toBe("");
+    expect(formStr(fd, "doc")).toBe("");
   });
 });
 
