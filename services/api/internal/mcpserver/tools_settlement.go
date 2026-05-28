@@ -36,6 +36,31 @@ func registerSettlementTools(s *server.MCPServer, deps Deps) {
 	)
 }
 
+func parsePeriodInput(req mcp.CallToolRequest) (startStr, endStr string, start, end time.Time, errRes *mcp.CallToolResult) {
+	var err error
+	startStr, err = req.RequireString("period_start")
+	if err != nil {
+		errRes = mcp.NewToolResultError(err.Error())
+		return
+	}
+	endStr, err = req.RequireString("period_end")
+	if err != nil {
+		errRes = mcp.NewToolResultError(err.Error())
+		return
+	}
+	start, err = time.Parse(dateLayoutISO, startStr)
+	if err != nil {
+		errRes = mcp.NewToolResultError("invalid period_start (YYYY-MM-DD)")
+		return
+	}
+	end, err = time.Parse(dateLayoutISO, endStr)
+	if err != nil {
+		errRes = mcp.NewToolResultError("invalid period_end (YYYY-MM-DD)")
+		return
+	}
+	return
+}
+
 func settlementClosePeriodHandler(deps Deps) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		u, ok := userFromCtx(ctx)
@@ -48,21 +73,9 @@ func settlementClosePeriodHandler(deps Deps) func(context.Context, mcp.CallToolR
 		if deps.Settlement == nil {
 			return mcp.NewToolResultError("settlement service not configured"), nil
 		}
-		startStr, err := req.RequireString("period_start")
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		endStr, err := req.RequireString("period_end")
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		start, err := time.Parse(dateLayoutISO, startStr)
-		if err != nil {
-			return mcp.NewToolResultError("invalid period_start (YYYY-MM-DD)"), nil
-		}
-		end, err := time.Parse(dateLayoutISO, endStr)
-		if err != nil {
-			return mcp.NewToolResultError("invalid period_end (YYYY-MM-DD)"), nil
+		startStr, endStr, start, end, errRes := parsePeriodInput(req)
+		if errRes != nil {
+			return errRes, nil
 		}
 		settlements, err := deps.Settlement.CloseSettlement(ctx, settlement.CloseSettlementInput{
 			PeriodStart: start,

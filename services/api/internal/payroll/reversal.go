@@ -3,6 +3,7 @@ package payroll
 import (
 	"context"
 	"errors"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 
 	"github.com/jackc/pgx/v5"
 
@@ -75,5 +76,5 @@ func (s *Service) applyReverseOrderTx(ctx context.Context, tx pgx.Tx, o *order.O
 	if err := s.Outbox.AppendTx(ctx, tx, "order", orderID, "payroll.order_reversed.v1", payload, map[string]any{}); err != nil {
 		return err
 	}
-	return s.Audit.WriteTx(ctx, tx, nil, &sysRole, "payroll.order_reverse", "order", orderID, payload, "")
+	return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: nil, ActorRole: &sysRole, Action: "payroll.order_reverse", TargetKind: "order", TargetID: orderID, Payload: payload, RequestID: ""})
 }

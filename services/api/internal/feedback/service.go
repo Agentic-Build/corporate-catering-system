@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"strings"
 	"time"
 
@@ -366,7 +367,7 @@ type auditEntry struct {
 func (s *Service) writeAudit(ctx context.Context, tx pgx.Tx, e auditEntry) error {
 	aID := e.ActorID
 	aRole := e.ActorRole
-	return s.Audit.WriteTx(ctx, tx, &aID, &aRole, e.Action, e.TargetKind, e.TargetID, e.Payload, "")
+	return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &aID, ActorRole: &aRole, Action: e.Action, TargetKind: e.TargetKind, TargetID: e.TargetID, Payload: e.Payload, RequestID: ""})
 }
 
 func validCategory(c ComplaintCategory) bool {

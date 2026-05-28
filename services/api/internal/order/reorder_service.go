@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -313,6 +314,6 @@ func (s *ReorderService) persistReorderTx(ctx context.Context, in ReorderInput, 
 		if err := s.outbox.AppendTx(ctx, tx, "order", o.ID, "order.placed.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
-		return s.audit.WriteTx(ctx, tx, &in.UserID, &role, "order.reorder", "order", o.ID, payload, "")
+		return s.audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &in.UserID, ActorRole: &role, Action: "order.reorder", TargetKind: "order", TargetID: o.ID, Payload: payload, RequestID: ""})
 	})
 }

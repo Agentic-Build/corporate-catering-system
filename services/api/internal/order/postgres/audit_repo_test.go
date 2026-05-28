@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,8 +20,7 @@ func TestAuditRepo_WriteInsert(t *testing.T) {
 	role := "welfare_admin"
 	repo := pgrepo.NewAuditRepo(pool)
 
-	err := repo.Write(ctx, &uid, &role, "order.place", "order", "00000000-0000-0000-0000-000000000001",
-		map[string]any{"total": 24000}, "req-abc")
+	err := repo.Write(ctx, plaudit.Entry{ActorID: &uid, ActorRole: &role, Action: "order.place", TargetKind: "order", TargetID: "00000000-0000-0000-0000-000000000001", Payload: map[string]any{"total": 24000}, RequestID: "req-abc"})
 	require.NoError(t, err)
 
 	var count int
@@ -37,8 +37,7 @@ func TestAuditRepo_AppendOnly_UpdateFails(t *testing.T) {
 	ctx := context.Background()
 
 	repo := pgrepo.NewAuditRepo(pool)
-	require.NoError(t, repo.Write(ctx, nil, nil, "system.boot", "system", "tbite",
-		map[string]any{"v": 1}, "req-1"))
+	require.NoError(t, repo.Write(ctx, plaudit.Entry{ActorID: nil, ActorRole: nil, Action: "system.boot", TargetKind: "system", TargetID: "tbite", Payload: map[string]any{"v": 1}, RequestID: "req-1"}))
 
 	_, err := pool.Exec(ctx, `UPDATE audit_event SET action='tampered' WHERE action='system.boot'`)
 	require.Error(t, err)

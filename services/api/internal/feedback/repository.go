@@ -2,6 +2,7 @@ package feedback
 
 import (
 	"context"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -60,5 +61,5 @@ type OrderReverser interface {
 
 // AuditTx mirrors the audit-repo shape used by other services.
 type AuditTxWriter interface {
-	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
+	WriteTx(ctx context.Context, tx pgx.Tx, e plaudit.Entry) error
 }

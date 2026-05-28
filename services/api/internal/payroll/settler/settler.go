@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"log/slog"
 	"strings"
 	"time"
@@ -46,7 +47,7 @@ type PayrollUser struct {
 
 // AuditWriter records audit events inside the export-info tx.
 type AuditWriter interface {
-	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
+	WriteTx(ctx context.Context, tx pgx.Tx, e plaudit.Entry) error
 }
 
 // OutboxAppender appends an outbox row inside the export-info tx. Reusing the
@@ -208,7 +209,7 @@ func (s *Settler) handle(ctx context.Context, data []byte) error {
 		if err := s.Outbox.AppendTx(ctx, tx, "payroll_batch", batch.ID, "payroll.export_ready.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
-		return s.Audit.WriteTx(ctx, tx, nil, &sysRole, "payroll.export", "payroll_batch", batch.ID, payload, "")
+		return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: nil, ActorRole: &sysRole, Action: "payroll.export", TargetKind: "payroll_batch", TargetID: batch.ID, Payload: payload, RequestID: ""})
 	})
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -22,7 +23,7 @@ type txBeginner interface {
 
 // AuditTx mirrors the audit-repo shape used by order.Service.
 type AuditTxWriter interface {
-	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
+	WriteTx(ctx context.Context, tx pgx.Tx, e plaudit.Entry) error
 }
 
 // OutboxTx mirrors the outbox-repo shape used by order.Service.
@@ -178,7 +179,7 @@ func (s *Service) Lock(ctx context.Context, batchID, adminUserID string) error {
 		if err := s.Outbox.AppendTx(ctx, tx, "payroll_batch", batchID, "payroll.batch_locked.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
-		return s.Audit.WriteTx(ctx, tx, &adminUserID, &adminRole, "payroll.lock", "payroll_batch", batchID, payload, "")
+		return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &adminUserID, ActorRole: &adminRole, Action: "payroll.lock", TargetKind: "payroll_batch", TargetID: batchID, Payload: payload, RequestID: ""})
 	})
 }
 
@@ -347,7 +348,7 @@ func (s *Service) recordDisputeResolution(ctx context.Context, tx pgx.Tx, in Res
 	if err := s.Outbox.AppendTx(ctx, tx, "payroll_dispute", in.DisputeID, "payroll.dispute_resolved.v1", payload, map[string]any{}); err != nil {
 		return err
 	}
-	return s.Audit.WriteTx(ctx, tx, &in.ResolvedBy, &adminRole, "payroll.dispute_resolve", "payroll_dispute", in.DisputeID, payload, "")
+	return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &in.ResolvedBy, ActorRole: &adminRole, Action: "payroll.dispute_resolve", TargetKind: "payroll_dispute", TargetID: in.DisputeID, Payload: payload, RequestID: ""})
 }
 
 // ListBatches returns batches filtered by status (nil → all).
@@ -436,8 +437,7 @@ func (s *Service) FlagException(ctx context.Context, in FlagExceptionInput) (*Ex
 	}
 	role := "welfare_admin"
 	auditErr := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		return s.Audit.WriteTx(ctx, tx, &in.FlaggedBy, &role, "payroll.exception_flag", "payroll_exception", e.ID,
-			map[string]any{"batch_id": in.BatchID, "entry_id": in.EntryID, "kind": string(ExceptionDeductionFailed)}, "")
+		return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &in.FlaggedBy, ActorRole: &role, Action: "payroll.exception_flag", TargetKind: "payroll_exception", TargetID: e.ID, Payload: map[string]any{"batch_id": in.BatchID, "entry_id": in.EntryID, "kind": string(ExceptionDeductionFailed)}, RequestID: ""})
 	})
 	if auditErr != nil {
 		return nil, auditErr
@@ -460,7 +460,6 @@ func (s *Service) ResolveException(ctx context.Context, id string, status Except
 	}
 	role := "welfare_admin"
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		return s.Audit.WriteTx(ctx, tx, &resolvedBy, &role, "payroll.exception_resolve", "payroll_exception", id,
-			map[string]any{"batch_id": ex.BatchID, "status": string(status)}, "")
+		return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &resolvedBy, ActorRole: &role, Action: "payroll.exception_resolve", TargetKind: "payroll_exception", TargetID: id, Payload: map[string]any{"batch_id": ex.BatchID, "status": string(status)}, RequestID: ""})
 	})
 }

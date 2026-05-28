@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"net/mail"
 	"strings"
 	"time"
@@ -19,7 +20,7 @@ const (
 // AuditWriter records an admin action against the append-only audit log.
 // *order/postgres.AuditRepo satisfies it.
 type AuditWriter interface {
-	Write(ctx context.Context, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
+	Write(ctx context.Context, e plaudit.Entry) error
 }
 
 // Service orchestrates admin operations over vendors, plant mappings, and the
@@ -42,7 +43,7 @@ func (s *Service) writeAudit(ctx context.Context, actorID, action, vendorID stri
 		return nil
 	}
 	role := auditRole
-	return s.Audit.Write(ctx, &actorID, &role, action, "vendor", vendorID, payload, "")
+	return s.Audit.Write(ctx, plaudit.Entry{ActorID: &actorID, ActorRole: &role, Action: action, TargetKind: "vendor", TargetID: vendorID, Payload: payload, RequestID: ""})
 }
 
 // CreatePending creates a vendor in pending status. Approval (and plant mapping)

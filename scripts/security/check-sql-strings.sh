@@ -16,10 +16,10 @@ if grep -rEn \
     --exclude='*_test.go' \
     "$PATTERN" \
     services/api/internal; then
-  echo
-  echo "::error::Possible SQL injection: SQL keywords inside fmt.Sprintf format string."
-  echo "Use pgx parameterized queries instead:"
-  echo '  r.pool.Exec(ctx, `INSERT INTO t (a) VALUES ($1)`, value)'
+  echo >&2
+  echo "::error::Possible SQL injection: SQL keywords inside fmt.Sprintf format string." >&2
+  echo "Use pgx parameterized queries instead:" >&2
+  echo '  r.pool.Exec(ctx, `INSERT INTO t (a) VALUES ($1)`, value)' >&2
   exit 1
 fi
 

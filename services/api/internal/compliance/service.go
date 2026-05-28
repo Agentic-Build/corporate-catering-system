@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"io"
 	"path"
 	"strings"
@@ -36,7 +37,7 @@ type Nower interface{ Now() time.Time }
 
 // AuditTx mirrors the audit-repo shape used by order/payroll services.
 type AuditTxWriter interface {
-	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
+	WriteTx(ctx context.Context, tx pgx.Tx, e plaudit.Entry) error
 }
 
 // OutboxTx mirrors the outbox-repo shape used by order/payroll services.
@@ -183,7 +184,7 @@ func (s *Service) UploadDocument(ctx context.Context, in UploadInput) (*Document
 		if in.Supersedes != nil {
 			payload["supersedes"] = *in.Supersedes
 		}
-		return s.Audit.WriteTx(ctx, tx, &uploadedBy, &role, "vendor_document.upload", "vendor_document", d.ID, payload, "")
+		return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &uploadedBy, ActorRole: &role, Action: "vendor_document.upload", TargetKind: "vendor_document", TargetID: d.ID, Payload: payload, RequestID: ""})
 	})
 	if auditErr != nil {
 		return nil, auditErr
@@ -210,7 +211,7 @@ func (s *Service) ReviewDocument(ctx context.Context, docID, reviewerID string, 
 		if err := s.Outbox.AppendTx(ctx, tx, "vendor_document", docID, "vendor.document_reviewed.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
-		return s.Audit.WriteTx(ctx, tx, &reviewerID, &role, "vendor_document.review", "vendor_document", docID, payload, "")
+		return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &reviewerID, ActorRole: &role, Action: "vendor_document.review", TargetKind: "vendor_document", TargetID: docID, Payload: payload, RequestID: ""})
 	})
 }
 
@@ -240,20 +241,23 @@ const (
 	ActionSuspend = "suspend"
 )
 
+type triageArgs struct{ id, by, notes, action, role string }
+
 // applyTriageTx writes the triage row + audit + optional warning row inside the
 // caller's tx. Split out so TriageAnomaly stays under the cognitive-complexity
 // threshold.
-func (s *Service) applyTriageTx(ctx context.Context, tx pgx.Tx, a *Anomaly, id, by, notes, action, role string) error {
+func (s *Service) applyTriageTx(ctx context.Context, tx pgx.Tx, a *Anomaly, args triageArgs) error {
+	id, by, notes, action, role := args.id, args.by, args.notes, args.action, args.role
 	if err := s.Anomaly.TriageTx(ctx, tx, id, by, notes); err != nil {
 		return err
 	}
 	payload := map[string]any{"anomaly_id": id, "notes": notes, "action": action}
-	if err := s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.triage", "anomaly_alert", id, payload, ""); err != nil {
+	if err := s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &by, ActorRole: &role, Action: "anomaly.triage", TargetKind: "anomaly_alert", TargetID: id, Payload: payload, RequestID: ""}); err != nil {
 		return err
 	}
 	if action == ActionWarn && a.TargetKind == "vendor" {
 		wp := map[string]any{"anomaly_id": id, "anomaly_kind": a.Kind, "notes": notes}
-		return s.Audit.WriteTx(ctx, tx, &by, &role, "vendor.warning", "vendor", a.TargetID, wp, "")
+		return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &by, ActorRole: &role, Action: "vendor.warning", TargetKind: "vendor", TargetID: a.TargetID, Payload: wp, RequestID: ""})
 	}
 	return nil
 }
@@ -272,7 +276,7 @@ func (s *Service) TriageAnomaly(ctx context.Context, id, by, notes, action strin
 	}
 	role := "welfare_admin"
 	if err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		return s.applyTriageTx(ctx, tx, a, id, by, notes, action, role)
+		return s.applyTriageTx(ctx, tx, a, triageArgs{id: id, by: by, notes: notes, action: action, role: role})
 	}); err != nil {
 		return err
 	}
@@ -293,7 +297,7 @@ func (s *Service) CloseAnomaly(ctx context.Context, id, by, notes string) error 
 		}
 		role := "welfare_admin"
 		payload := map[string]any{"anomaly_id": id, "notes": notes}
-		return s.Audit.WriteTx(ctx, tx, &by, &role, "anomaly.close", "anomaly_alert", id, payload, "")
+		return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &by, ActorRole: &role, Action: "anomaly.close", TargetKind: "anomaly_alert", TargetID: id, Payload: payload, RequestID: ""})
 	})
 }
 

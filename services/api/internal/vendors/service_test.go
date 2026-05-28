@@ -3,6 +3,7 @@ package vendor_test
 import (
 	"context"
 	"errors"
+	audit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"strconv"
 	"sync"
 	"testing"
@@ -298,14 +299,14 @@ type fakeAuditWriter struct {
 	entries []auditEntry
 }
 
-func (w *fakeAuditWriter) Write(_ context.Context, actorID, _ *string, action, targetKind, targetID string, _ map[string]any, _ string) error {
+func (w *fakeAuditWriter) Write(_ context.Context, e audit.Entry) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	id := ""
-	if actorID != nil {
-		id = *actorID
+	if e.ActorID != nil {
+		id = *e.ActorID
 	}
-	w.entries = append(w.entries, auditEntry{actorID: id, action: action, targetKind: targetKind, targetID: targetID})
+	w.entries = append(w.entries, auditEntry{actorID: id, action: e.Action, targetKind: e.TargetKind, targetID: e.TargetID})
 	return nil
 }
 

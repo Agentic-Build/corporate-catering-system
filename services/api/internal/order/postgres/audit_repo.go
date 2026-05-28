@@ -10,33 +10,31 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 )
 
 type AuditRepo struct{ pool *pgxpool.Pool }
 
 func NewAuditRepo(p *pgxpool.Pool) *AuditRepo { return &AuditRepo{pool: p} }
 
-func (r *AuditRepo) WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error {
-	raw, err := json.Marshal(payload)
+func (r *AuditRepo) WriteTx(ctx context.Context, tx pgx.Tx, e plaudit.Entry) error {
+	raw, err := json.Marshal(e.Payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 	_, err = tx.Exec(ctx, `
 INSERT INTO audit_event (actor_id, actor_role, action, target_kind, target_id, payload, request_id)
 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		actorID, actorRole, action, targetKind, targetID, raw, requestID)
+		e.ActorID, e.ActorRole, e.Action, e.TargetKind, e.TargetID, raw, e.RequestID)
 	return err
 }
 
-func (r *AuditRepo) Write(ctx context.Context, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error {
+func (r *AuditRepo) Write(ctx context.Context, e plaudit.Entry) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		return r.WriteTx(ctx, tx, actorID, actorRole, action, targetKind, targetID, payload, requestID)
+		return r.WriteTx(ctx, tx, e)
 	})
 }
 
-// List satisfies compliance.AuditLister so /api/admin/audit can read back
-// recent rows. We cap limit at 200 to keep responses bounded; callers paginate
-// by tightening Since on subsequent requests.
 func (r *AuditRepo) List(ctx context.Context, filter compliance.AuditFilter) ([]compliance.AuditRow, error) {
 	limit := filter.Limit
 	if limit <= 0 || limit > 200 {

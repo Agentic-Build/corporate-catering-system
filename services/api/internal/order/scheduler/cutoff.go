@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"log/slog"
 	"time"
 
@@ -23,7 +24,7 @@ type StateAppender interface {
 
 // AuditTx is the audit-repo subset used inside a transaction.
 type AuditTxWriter interface {
-	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
+	WriteTx(ctx context.Context, tx pgx.Tx, e plaudit.Entry) error
 }
 
 // OutboxTx is the outbox-repo subset used inside a transaction.
@@ -95,7 +96,7 @@ func (c *Cutoff) transitionOne(ctx context.Context, o *order.Order) error {
 		if err := c.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.cutoff.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
-		if err := c.AuditTx.WriteTx(ctx, tx, nil, nil, "order.cutoff", "order", o.ID, payload, ""); err != nil {
+		if err := c.AuditTx.WriteTx(ctx, tx, plaudit.Entry{ActorID: nil, ActorRole: nil, Action: "order.cutoff", TargetKind: "order", TargetID: o.ID, Payload: payload, RequestID: ""}); err != nil {
 			return err
 		}
 		return nil

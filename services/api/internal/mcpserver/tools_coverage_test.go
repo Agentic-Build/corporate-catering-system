@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	audit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"testing"
 	"time"
 
@@ -54,8 +55,8 @@ type auditCall struct {
 	targetID   string
 }
 
-func (a *fakeAuditTx) WriteTx(_ context.Context, _ pgx.Tx, _, _ *string, action, targetKind, targetID string, _ map[string]any, _ string) error {
-	a.calls = append(a.calls, auditCall{action, targetKind, targetID})
+func (a *fakeAuditTx) WriteTx(_ context.Context, _ pgx.Tx, e audit.Entry) error {
+	a.calls = append(a.calls, auditCall{e.Action, e.TargetKind, e.TargetID})
 	return a.err
 }
 

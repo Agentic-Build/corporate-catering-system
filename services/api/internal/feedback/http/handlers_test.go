@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	audit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -175,7 +176,7 @@ func (r *fakeReverser) ReverseOrder(_ context.Context, orderID string) error {
 // fakeAudit is the no-op audit sink every write path writes through.
 type fakeAudit struct{}
 
-func (fakeAudit) WriteTx(context.Context, pgx.Tx, *string, *string, string, string, string, map[string]any, string) error {
+func (fakeAudit) WriteTx(context.Context, pgx.Tx, audit.Entry) error {
 	return nil
 }
 
