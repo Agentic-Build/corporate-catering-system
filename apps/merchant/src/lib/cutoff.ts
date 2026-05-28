@@ -10,7 +10,7 @@
  * @param supplyDate pickup date as YYYY-MM-DD
  */
 export function defaultCutoffAt(supplyDate: string): string {
-  const [y, m, d] = supplyDate.split("-").map(Number);
+  const [y = 0, m = 1, d = 1] = supplyDate.split("-").map(Number);
   // Date.UTC arithmetic subtracts one calendar day independent of host timezone
   // (handles month/year rollover, e.g. the 1st → last day of the previous month).
   const prev = new Date(Date.UTC(y, m - 1, d - 1));

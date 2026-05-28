@@ -168,7 +168,7 @@ export const actions: Actions = {
 
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.POST("/api/employee/orders", {
-      body: { plant, supply_date: supplyDate, notes, items } as never,
+      body: { plant, supply_date: supplyDate, notes, items },
     });
     if (r.error) {
       // RFC 9457 problem-details — surface a calm Chinese message, not raw JSON.
@@ -179,7 +179,7 @@ export const actions: Actions = {
           : (err.detail ?? "送出預訂失敗，請稍後再試。");
       return fail(err.status ?? 409, { error: msg });
     }
-    const orderID = (r.data as { order?: { id?: string } } | undefined)?.order?.id;
+    const orderID = r.data?.order.id;
     if (!orderID) return fail(500, { error: "no order id in response" });
     throw redirect(303, `/orders/${orderID}`);
   },
@@ -195,7 +195,7 @@ export const actions: Actions = {
 
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.POST("/api/employee/orders/reorder", {
-      body: { source_order_id: sourceOrderId, supply_date: supplyDate } as never,
+      body: { source_order_id: sourceOrderId, supply_date: supplyDate },
     });
 
     if (r.error) {
@@ -210,12 +210,9 @@ export const actions: Actions = {
       });
     }
 
-    const data = r.data as
-      | { new_order_id?: string; unavailable_items?: Array<{ name: string }> | null }
-      | undefined;
-    const newOrderId = data?.new_order_id;
+    const newOrderId = r.data?.new_order_id;
     if (!newOrderId) return fail(500, { error: "no new_order_id in response" });
-    const unavailable = data?.unavailable_items ?? [];
+    const unavailable = r.data?.unavailable_items ?? [];
 
     if (unavailable.length > 0) {
       const names = unavailable.map((i) => i.name).join("、");
@@ -239,7 +236,7 @@ export const actions: Actions = {
 
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.POST("/api/employee/favorites", {
-      body: { menu_item_id: menuItemId } as never,
+      body: { menu_item_id: menuItemId },
     });
     if (r.error) return fail(400, { error: JSON.stringify(r.error) });
     return { ok: true };

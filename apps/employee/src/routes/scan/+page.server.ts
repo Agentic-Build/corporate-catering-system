@@ -82,8 +82,10 @@ export const actions: Actions = {
       });
     }
 
-    const status = await pickup(client, matches[0].id);
+    const match = matches[0];
+    if (!match) return fail(500, { error: "internal", manual: true });
+    const status = await pickup(client, match.id);
     if (status !== null) return fail(400, { error: pickupError(status), manual: true });
-    return { ok: true, pickedUpId: matches[0].id };
+    return { ok: true, pickedUpId: match.id };
   },
 };

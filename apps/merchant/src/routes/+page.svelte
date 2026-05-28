@@ -8,7 +8,7 @@
 
   let { data, form } = $props();
 
-  const todayDay = $derived(data.days[0]);
+  const todayDay = $derived(data.days[0]!);
   const dashboardSub = $derived(
     `${data.today.replace(/-/g, " / ")} · ${todayDay.weekday} · 合計 ${data.stats.totalCapacity} 份`,
   );
@@ -19,13 +19,15 @@
   );
 
   // Default to tomorrow when present, else today.
-  let selectedDay = $state(data.days[1]?.id ?? data.days[0].id);
+  let selectedDay = $state(data.days[1]?.id ?? data.days[0]!.id);
   let libraryOpen = $state(false);
 
   const itemById = $derived(
     Object.fromEntries(data.items.map((i: any) => [i.id, i])) as Record<string, any>,
   );
-  const selectedDayDef = $derived(data.days.find((d: any) => d.id === selectedDay) ?? data.days[0]);
+  const selectedDayDef = $derived(
+    data.days.find((d: any) => d.id === selectedDay) ?? data.days[0]!,
+  );
 
   /** Enrich a date's supply rows with menu-item detail; drop removed (cap 0). */
   function slotsFor(date: string) {

@@ -31,10 +31,10 @@ export const actions: Actions = {
       return fail(400, { error: "period_start and period_end required" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/payroll/batches", {
-      body: { period_start: periodStart, period_end: periodEnd } as any,
+      body: { period_start: periodStart, period_end: periodEnd },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
-    const id = (r.data as any)?.batch?.id;
+    const id = r.data?.batch.id;
     if (!id) return fail(500, { error: "no batch id in response" });
     throw redirect(303, `/payroll/${id}`);
   },

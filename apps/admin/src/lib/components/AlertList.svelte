@@ -17,12 +17,13 @@
   }
   let { anomalies }: Props = $props();
 
-  const toneMap: Record<string, { dot: string; border: string; bg: string }> = {
+  type Tone = { dot: string; border: string; bg: string };
+  const toneMap = {
     danger: { dot: "bg-tb-rose-500", border: "border-tb-rose-200", bg: "bg-tb-rose-50/60" },
     warning: { dot: "bg-tb-amber-500", border: "border-tb-amber-200", bg: "bg-tb-amber-50/60" },
     info: { dot: "bg-tb-emerald-500", border: "border-tb-emerald-200", bg: "bg-tb-emerald-50/60" },
-  };
-  function toneFor(severity: string) {
+  } satisfies Record<string, Tone>;
+  function toneFor(severity: string): Tone {
     if (severity === "critical" || severity === "high") return toneMap.danger;
     if (severity === "medium") return toneMap.warning;
     return toneMap.info;

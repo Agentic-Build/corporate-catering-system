@@ -1,6 +1,13 @@
 import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+
+type VendorDTO = components["schemas"]["VendorDTO"];
+type AnomalyDTO = components["schemas"]["AnomalyDTO"];
+type BatchDTO = components["schemas"]["BatchDTO"];
+type EntryDTO = components["schemas"]["EntryDTO"];
+type PlantDTO = components["schemas"]["PlantDTO"];
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
@@ -15,30 +22,29 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     client.GET("/api/admin/plants"),
   ]);
 
-  const vendors: any[] =
-    vendorsRes.status === "fulfilled" ? ((vendorsRes.value.data as any)?.items ?? []) : [];
-  const anomalies: any[] =
-    anomaliesRes.status === "fulfilled" ? ((anomaliesRes.value.data as any)?.items ?? []) : [];
-  const batches: any[] =
-    batchesRes.status === "fulfilled" ? ((batchesRes.value.data as any)?.items ?? []) : [];
-  const knownPlants: { code: string; label: string; active: boolean }[] =
-    plantsRes.status === "fulfilled" ? ((plantsRes.value.data as any)?.items ?? []) : [];
+  const vendors: VendorDTO[] =
+    vendorsRes.status === "fulfilled" ? (vendorsRes.value.data?.items ?? []) : [];
+  const anomalies: AnomalyDTO[] =
+    anomaliesRes.status === "fulfilled" ? (anomaliesRes.value.data?.items ?? []) : [];
+  const batches: BatchDTO[] =
+    batchesRes.status === "fulfilled" ? (batchesRes.value.data?.items ?? []) : [];
+  const knownPlants: PlantDTO[] =
+    plantsRes.status === "fulfilled" ? (plantsRes.value.data?.items ?? []) : [];
 
   // Latest batch (most recent period_start) + its entries.
-  const latestBatch =
-    batches.length > 0
-      ? [...batches].sort((a, b) => String(b.period_start).localeCompare(String(a.period_start)))[0]
-      : null;
-  let payrollBatch: any = null;
-  let payrollEntries: any[] = [];
+  const latestBatch: BatchDTO | null =
+    [...batches].sort((a, b) => String(b.period_start).localeCompare(String(a.period_start)))[0] ??
+    null;
+  let payrollBatch: BatchDTO | null = null;
+  let payrollEntries: EntryDTO[] = [];
   if (latestBatch) {
     try {
       const detail = await client.GET("/api/admin/payroll/batches/{id}", {
         params: { path: { id: latestBatch.id } },
       });
       if (detail.data) {
-        payrollBatch = (detail.data as any).batch ?? latestBatch;
-        payrollEntries = (detail.data as any).entries ?? [];
+        payrollBatch = detail.data.batch ?? latestBatch;
+        payrollEntries = detail.data.entries ?? [];
       }
     } catch {
       payrollBatch = latestBatch;
@@ -95,7 +101,7 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendors/{id}/approve", {
       params: { path: { id } },
-      body: { plants } as any,
+      body: { plants },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { ok: true, approved: id };

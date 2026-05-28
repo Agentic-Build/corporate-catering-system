@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     params: { path: { id: params.id } },
   });
   if (r.error || !r.data) throw error(404, "order not found");
-  const order = (r.data as any).order;
+  const order = r.data.order;
   return { user: locals.user, order, disputable: DISPUTABLE.has(order.status) };
 };
 
@@ -26,7 +26,7 @@ export const actions: Actions = {
     if (!reason) return fail(400, { error: "請填寫申訴原因" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.POST("/api/employee/disputes", {
-      body: { order_id: params.id, reason } as any,
+      body: { order_id: params.id, reason },
     });
     if (r.error) {
       // RFC 9457 problem-details: surface a calm Chinese message, not raw backend.

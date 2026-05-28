@@ -1,6 +1,11 @@
 import { redirect, fail, error } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+
+type MerchantItemDTO = components["schemas"]["MerchantItemDTO"];
+type UpdateItemBody =
+  operations["updateMerchantMenuItem"]["requestBody"]["content"]["application/json"];
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
@@ -8,8 +13,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
   const r = await client.GET("/api/merchant/menu-items", {
     params: { query: { include_archived: true } },
   });
-  const items = (r.data as any)?.items ?? [];
-  const item = items.find((i: any) => i.id === params.id);
+  const items: MerchantItemDTO[] = r.data?.items ?? [];
+  const item = items.find((i) => i.id === params.id);
   if (!item) throw error(404, "not found");
   return { user: locals.user, item };
 };
@@ -24,7 +29,7 @@ export const actions: Actions = {
     } catch {
       images = [];
     }
-    const body = {
+    const body: UpdateItemBody = {
       name: String(fd.get("name") ?? ""),
       description: String(fd.get("description") ?? ""),
       price_minor: parseInt(String(fd.get("price") ?? "0"), 10),
@@ -37,7 +42,7 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.PATCH("/api/merchant/menu-items/{id}", {
       params: { path: { id: params.id } },
-      body: body as any,
+      body,
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     throw redirect(303, "/menus");

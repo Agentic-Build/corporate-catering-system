@@ -55,7 +55,11 @@
     const next = idx + delta;
     if (next < 0 || next >= images.length) return;
     const copy = [...images];
-    [copy[idx], copy[next]] = [copy[next], copy[idx]];
+    const a = copy[idx];
+    const b = copy[next];
+    if (a === undefined || b === undefined) return;
+    copy[idx] = b;
+    copy[next] = a;
     images = copy;
   }
 </script>

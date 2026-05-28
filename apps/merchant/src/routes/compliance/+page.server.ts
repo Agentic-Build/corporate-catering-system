@@ -1,9 +1,13 @@
 import { redirect, fail, type Actions } from "@sveltejs/kit";
-import type { components } from "@tbite/api-client";
+import type { components, operations } from "@tbite/api-client";
 import type { PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
 
-const DOC_KINDS = [
+type UploadDocBody =
+  operations["uploadMerchantDocument"]["requestBody"]["content"]["application/json"];
+type DocKind = UploadDocBody["kind"];
+
+const DOC_KINDS: readonly DocKind[] = [
   "business_license",
   "food_safety_permit",
   "tax_registration",
@@ -46,7 +50,7 @@ export const actions: Actions = {
     const expiresAt = String(fd.get("expires_at") ?? "").trim();
     const supersedes = String(fd.get("supersedes") ?? "").trim();
 
-    if (!DOC_KINDS.includes(kind)) return fail(400, { uploadError: "請選擇文件種類" });
+    if (!DOC_KINDS.includes(kind as DocKind)) return fail(400, { uploadError: "請選擇文件種類" });
     if (!(file instanceof File) || file.size === 0) {
       return fail(400, { uploadError: "請選擇要上傳的檔案" });
     }
@@ -55,8 +59,8 @@ export const actions: Actions = {
     }
 
     const contentBase64 = Buffer.from(await file.arrayBuffer()).toString("base64");
-    const body: Record<string, string> = {
-      kind,
+    const body: UploadDocBody = {
+      kind: kind as DocKind,
       filename: file.name,
       content_base64: contentBase64,
     };
@@ -64,7 +68,7 @@ export const actions: Actions = {
     if (supersedes) body.supersedes = supersedes;
 
     const client = apiFor(locals.apiToken);
-    const r = await client.POST("/api/merchant/documents", { body: body as never });
+    const r = await client.POST("/api/merchant/documents", { body });
     if (r.error) {
       const err = r.error as { status?: number; detail?: string };
       return fail(err.status ?? 400, {

@@ -1,7 +1,11 @@
 import { redirect, fail, type Actions } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
+import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
 import { taipeiISO, dayId } from "$lib/date";
+
+type MerchantOrderDTO = components["schemas"]["MerchantOrderDTO"];
+type MerchantItemDTO = components["schemas"]["MerchantItemDTO"];
 
 export const load: PageServerLoad = async ({ locals, url, depends }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
@@ -11,25 +15,25 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
 
   const date = url.searchParams.get("date") ?? taipeiISO();
   const client = apiFor(locals.apiToken);
-  let items: any[] = [];
+  let items: MerchantOrderDTO[] = [];
   try {
-    const r = await client.GET("/api/merchant/orders", { params: { query: { date } as any } });
-    if (r.data) items = (r.data as any).items ?? [];
+    const r = await client.GET("/api/merchant/orders", { params: { query: { date } } });
+    if (r.data) items = r.data.items ?? [];
   } catch {}
 
   // Menu items for name lookup; include_archived so old orders still resolve.
-  let menuItems: any[] = [];
+  let menuItems: MerchantItemDTO[] = [];
   try {
     const r = await client.GET("/api/merchant/menu-items", {
-      params: { query: { include_archived: true } as any },
+      params: { query: { include_archived: true } },
     });
-    if (r.data) menuItems = (r.data as any).items ?? [];
+    if (r.data) menuItems = r.data.items ?? [];
   } catch {}
   const itemsById: Record<string, { name: string }> = Object.fromEntries(
-    menuItems.map((i: any) => [i.id, { name: i.name }]),
+    menuItems.map((i) => [i.id, { name: i.name }]),
   );
 
-  const byPlant: Record<string, any[]> = {};
+  const byPlant: Record<string, MerchantOrderDTO[]> = {};
   for (const o of items) {
     (byPlant[o.plant] ??= []).push(o);
   }
@@ -51,7 +55,7 @@ export const actions: Actions = {
     if (ids.length === 0) return fail(400, { error: "no orders selected" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/merchant/orders/mark-ready", {
-      body: { order_ids: ids } as any,
+      body: { order_ids: ids },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { success: true, count: ids.length };

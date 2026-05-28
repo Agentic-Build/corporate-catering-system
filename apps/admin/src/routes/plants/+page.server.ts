@@ -1,16 +1,19 @@
 import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+
+type PlantDTO = components["schemas"]["PlantDTO"];
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
   if (locals.user.role !== "welfare_admin") throw redirect(303, "/login");
 
   const client = apiFor(locals.apiToken);
-  let plants: any[] = [];
+  let plants: PlantDTO[] = [];
   try {
     const r = await client.GET("/api/admin/plants");
-    if (r.data) plants = (r.data as any).items ?? [];
+    if (r.data) plants = r.data.items ?? [];
   } catch {}
 
   return { user: locals.user, plants };
@@ -27,7 +30,7 @@ export const actions: Actions = {
 
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/plants", {
-      body: { code, label, address, sort_order: sortOrder } as any,
+      body: { code, label, address, sort_order: sortOrder },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { ok: true };
@@ -45,7 +48,7 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.PUT("/api/admin/plants/{code}", {
       params: { path: { code } },
-      body: { label, address, active, sort_order: sortOrder } as any,
+      body: { label, address, active, sort_order: sortOrder },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     return { ok: true };

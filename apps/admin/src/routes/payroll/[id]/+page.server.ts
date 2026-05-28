@@ -1,6 +1,9 @@
 import { redirect, fail, error } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+
+type ExceptionDTO = components["schemas"]["ExceptionDTO"];
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
@@ -11,19 +14,18 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     params: { path: { id: params.id } },
   });
   if (r.error || !r.data) throw error(404, "batch not found");
-  const body = r.data as any;
 
   // Settlement exception list — the GET re-runs departed-employee detection.
-  let exceptions: any[] = [];
+  let exceptions: ExceptionDTO[] = [];
   const ex = await client.GET("/api/admin/payroll/batches/{id}/exceptions", {
     params: { path: { id: params.id } },
   });
-  if (ex.data) exceptions = (ex.data as any).items ?? [];
+  if (ex.data) exceptions = ex.data.items ?? [];
 
   return {
     user: locals.user,
-    batch: body.batch,
-    entries: body.entries ?? [],
+    batch: r.data.batch,
+    entries: r.data.entries ?? [],
     exceptions,
   };
 };
@@ -47,7 +49,7 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/payroll/batches/{id}/exceptions", {
       params: { path: { id: params.id } },
-      body: { entry_id: entryId, detail } as never,
+      body: { entry_id: entryId, detail },
     });
     if (r.error) {
       const err = r.error as { detail?: string };
@@ -68,7 +70,7 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/payroll/exceptions/{id}/resolve", {
       params: { path: { id: exId } },
-      body: { status, resolution } as never,
+      body: { status, resolution },
     });
     if (r.error) {
       const err = r.error as { detail?: string };

@@ -1,6 +1,11 @@
 import { redirect, fail, error } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+
+type VendorDTO = components["schemas"]["VendorDTO"];
+type OperatorDTO = components["schemas"]["OperatorDTO"];
+type PlantDTO = components["schemas"]["PlantDTO"];
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
   if (!locals.user || locals.user.role !== "welfare_admin") throw redirect(303, "/login");
@@ -10,14 +15,14 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
     client.GET("/api/admin/vendors/{id}/operators", { params: { path: { id: params.id } } }),
     client.GET("/api/admin/plants"),
   ]);
-  const all =
-    vendorsRes.status === "fulfilled" ? ((vendorsRes.value.data as any)?.items ?? []) : [];
-  const vendor = all.find((v: any) => v.id === params.id);
+  const all: VendorDTO[] =
+    vendorsRes.status === "fulfilled" ? (vendorsRes.value.data?.items ?? []) : [];
+  const vendor = all.find((v) => v.id === params.id);
   if (!vendor) throw error(404, "vendor not found");
-  const operators =
-    operatorsRes.status === "fulfilled" ? ((operatorsRes.value.data as any)?.items ?? []) : [];
-  const knownPlants: { code: string; label: string; active: boolean }[] =
-    plantsRes.status === "fulfilled" ? ((plantsRes.value.data as any)?.items ?? []) : [];
+  const operators: OperatorDTO[] =
+    operatorsRes.status === "fulfilled" ? (operatorsRes.value.data?.items ?? []) : [];
+  const knownPlants: PlantDTO[] =
+    plantsRes.status === "fulfilled" ? (plantsRes.value.data?.items ?? []) : [];
   return { user: locals.user, vendor, operators, knownPlants };
 };
 
@@ -28,7 +33,7 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendors/{id}/approve", {
       params: { path: { id: params.id } },
-      body: { plants } as any,
+      body: { plants },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
@@ -41,7 +46,7 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.PATCH("/api/admin/vendors/{id}", {
       params: { path: { id: params.id } },
-      body: { contact_email: contactEmail, plants } as any,
+      body: { contact_email: contactEmail, plants },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
@@ -54,7 +59,7 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.PUT("/api/admin/vendors/{id}/plants/{plant}/window", {
       params: { path: { id: params.id, plant } },
-      body: { service_window: serviceWindow } as never,
+      body: { service_window: serviceWindow },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
@@ -86,10 +91,10 @@ export const actions: Actions = {
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendors/{id}/operators", {
       params: { path: { id: params.id } },
-      body: { email, display_name: displayName } as any,
+      body: { email, display_name: displayName },
     });
     if (r.error) return fail(500, { error: JSON.stringify(r.error) });
-    return { setupUrl: (r.data as any)?.operator?.setup_url as string };
+    return { setupUrl: r.data?.operator.setup_url };
   },
   suspendOperator: async ({ request, params, locals }) => {
     const fd = await request.formData();
