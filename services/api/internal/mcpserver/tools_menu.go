@@ -131,12 +131,12 @@ func menuPrelude(ctx context.Context, deps Deps, plantArg string) (string, *mcp.
 	if !canReadMenu(u.Role) {
 		return "", mcp.NewToolResultError(fmt.Sprintf(errRoleCannotReadMenu, u.Role))
 	}
-	if deps.Menu == nil {
-		return "", mcp.NewToolResultError(errMenuNotConfigured)
-	}
 	plant := resolvePlant(plantArg, u)
 	if plant == "" {
 		return "", mcp.NewToolResultError(errPlantRequired)
+	}
+	if deps.Menu == nil {
+		return "", mcp.NewToolResultError(errMenuNotConfigured)
 	}
 	return plant, nil
 }
