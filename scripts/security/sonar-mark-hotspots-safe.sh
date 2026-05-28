@@ -37,7 +37,7 @@ done
 remaining=$(curl -fsS -u "${SONAR_TOKEN}:" \
   "https://sonarcloud.io/api/hotspots/search?projectKey=${PROJECT}&status=TO_REVIEW&ps=100" \
   | jq -r '.hotspots[] | "\(.ruleKey) \(.component | split(":")[-1]):\(.line // "?")"')
-if [ -n "$remaining" ]; then
+if [[ -n "$remaining" ]]; then
   echo "Remaining:"
   echo "$remaining"
 else

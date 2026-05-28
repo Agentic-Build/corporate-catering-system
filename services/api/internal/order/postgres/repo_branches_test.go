@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"testing"
 	"time"
 
@@ -22,12 +23,9 @@ func TestAuditRepo_List_FiltersAndCap(t *testing.T) {
 	repo := pgrepo.NewAuditRepo(pool)
 
 	before := time.Now().Add(-time.Hour)
-	require.NoError(t, repo.Write(ctx, &uid, &role, "order.place", "order", "order-1",
-		map[string]any{"total": 24000}, "req-1"))
-	require.NoError(t, repo.Write(ctx, &uid, &role, "order.cancel", "order", "order-2",
-		map[string]any{}, "req-2"))
-	require.NoError(t, repo.Write(ctx, &uid, &role, "vendor.review", "vendor", "vendor-1",
-		map[string]any{}, "req-3"))
+	require.NoError(t, repo.Write(ctx, plaudit.Entry{ActorID: &uid, ActorRole: &role, Action: "order.place", TargetKind: "order", TargetID: "order-1", Payload: map[string]any{"total": 24000}, RequestID: "req-1"}))
+	require.NoError(t, repo.Write(ctx, plaudit.Entry{ActorID: &uid, ActorRole: &role, Action: "order.cancel", TargetKind: "order", TargetID: "order-2", Payload: map[string]any{}, RequestID: "req-2"}))
+	require.NoError(t, repo.Write(ctx, plaudit.Entry{ActorID: &uid, ActorRole: &role, Action: "vendor.review", TargetKind: "vendor", TargetID: "vendor-1", Payload: map[string]any{}, RequestID: "req-3"}))
 
 	// No filter → all three, payload round-trips.
 	all, err := repo.List(ctx, compliance.AuditFilter{})

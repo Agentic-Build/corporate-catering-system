@@ -42,7 +42,7 @@ export function buildDays(from: Date = new Date(), selectedISO?: string): DayOpt
     const head = labels[i] ?? `${m}/${day}(${w})`;
     out.push({ id, head, sub: i < 2 ? `${m}/${day}(${w})` : undefined });
   }
-  if (selectedISO && !out.find((d) => d.id === selectedISO)) {
+  if (selectedISO && !out.some((d) => d.id === selectedISO)) {
     out.unshift({ id: selectedISO, head: selectedISO });
   }
   return out;

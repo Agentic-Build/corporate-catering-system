@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -47,7 +48,7 @@ type StateEventAppender interface {
 
 // AuditTx is the audit repo subset used inside a transaction.
 type AuditTxWriter interface {
-	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
+	WriteTx(ctx context.Context, tx pgx.Tx, e plaudit.Entry) error
 }
 
 // OutboxTx is the outbox repo subset used inside a transaction.
@@ -212,7 +213,7 @@ func (s *Service) persistPlacedOrder(ctx context.Context, in PlaceOrderInput, o 
 		if err := s.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.placed.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
-		return s.AuditTx.WriteTx(ctx, tx, &in.UserID, &role, "order.place", "order", o.ID, payload, "")
+		return s.AuditTx.WriteTx(ctx, tx, plaudit.Entry{ActorID: &in.UserID, ActorRole: &role, Action: "order.place", TargetKind: "order", TargetID: o.ID, Payload: payload, RequestID: ""})
 	}))
 }
 
@@ -303,7 +304,7 @@ func (s *Service) persistCancelOrder(ctx context.Context, o *Order, userID strin
 		if err := s.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.cancelled.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
-		return s.AuditTx.WriteTx(ctx, tx, &userID, &role, "order.cancel", "order", o.ID, payload, "")
+		return s.AuditTx.WriteTx(ctx, tx, plaudit.Entry{ActorID: &userID, ActorRole: &role, Action: "order.cancel", TargetKind: "order", TargetID: o.ID, Payload: payload, RequestID: ""})
 	}))
 }
 
@@ -377,21 +378,29 @@ func quotaDeltaForModify(current, desired []Item) map[string]int {
 	return delta
 }
 
+// applyQuotaDelta adjusts quota inside tx: positive d = decrement, negative = restore.
+func (s *Service) applyQuotaDelta(ctx context.Context, tx pgx.Tx, supplyDate time.Time, delta map[string]int) error {
+	for itemID, d := range delta {
+		switch {
+		case d > 0:
+			if _, err := s.QuotaTx.DecrementTx(ctx, tx, itemID, supplyDate, d); err != nil {
+				return err
+			}
+		case d < 0:
+			if err := s.QuotaTx.RestoreTx(ctx, tx, itemID, supplyDate, -d); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // persistModifiedOrder applies the quota delta, swaps the item rows + total +
 // notes, then writes outbox + audit, all inside a single tx.
 func (s *Service) persistModifiedOrder(ctx context.Context, in ModifyOrderInput, o *Order, newItems []Item, totalPrice int64, delta map[string]int) error {
 	return MaybeConcurrencyErr(pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		for itemID, d := range delta {
-			switch {
-			case d > 0:
-				if _, err := s.QuotaTx.DecrementTx(ctx, tx, itemID, o.SupplyDate, d); err != nil {
-					return err
-				}
-			case d < 0:
-				if err := s.QuotaTx.RestoreTx(ctx, tx, itemID, o.SupplyDate, -d); err != nil {
-					return err
-				}
-			}
+		if err := s.applyQuotaDelta(ctx, tx, o.SupplyDate, delta); err != nil {
+			return err
 		}
 		if err := s.OrdersTx.ReplaceItemsTx(ctx, tx, o.ID, newItems, totalPrice, in.Notes); err != nil {
 			return err
@@ -404,7 +413,7 @@ func (s *Service) persistModifiedOrder(ctx context.Context, in ModifyOrderInput,
 			return err
 		}
 		role := "employee"
-		return s.AuditTx.WriteTx(ctx, tx, &in.UserID, &role, "order.modify", "order", o.ID, payload, "")
+		return s.AuditTx.WriteTx(ctx, tx, plaudit.Entry{ActorID: &in.UserID, ActorRole: &role, Action: "order.modify", TargetKind: "order", TargetID: o.ID, Payload: payload, RequestID: ""})
 	}))
 }
 
@@ -497,7 +506,7 @@ func (s *Service) markOneReady(ctx context.Context, tx pgx.Tx, id, vendorID, act
 	if err := s.OutboxTx.AppendTx(ctx, tx, "order", id, "order.ready.v1", payload, map[string]any{}); err != nil {
 		return err
 	}
-	return s.AuditTx.WriteTx(ctx, tx, &actorID, &evRole, "order.ready", "order", id, payload, "")
+	return s.AuditTx.WriteTx(ctx, tx, plaudit.Entry{ActorID: &actorID, ActorRole: &evRole, Action: "order.ready", TargetKind: "order", TargetID: id, Payload: payload, RequestID: ""})
 }
 
 // MarkReady transitions orders from cutoff/placed → ready (vendor side).
@@ -568,7 +577,7 @@ func (s *Service) Pickup(ctx context.Context, orderID, employeeID string) (err e
 		if err := s.OutboxTx.AppendTx(ctx, tx, "order", orderID, "order.picked_up.v1", payload, map[string]any{}); err != nil {
 			return err
 		}
-		return s.AuditTx.WriteTx(ctx, tx, &employeeID, &evRole, "order.picked_up", "order", orderID, payload, "")
+		return s.AuditTx.WriteTx(ctx, tx, plaudit.Entry{ActorID: &employeeID, ActorRole: &evRole, Action: "order.picked_up", TargetKind: "order", TargetID: orderID, Payload: payload, RequestID: ""})
 	}))
 	if err != nil {
 		switch {
@@ -617,7 +626,7 @@ func (s *Service) MarkNoShow(ctx context.Context, cutoffAge time.Duration) (int,
 			if err := s.OutboxTx.AppendTx(ctx, tx, "order", o.ID, "order.no_show.v1", payload, map[string]any{}); err != nil {
 				return err
 			}
-			return s.AuditTx.WriteTx(ctx, tx, nil, &sysRole, "order.no_show", "order", o.ID, payload, "")
+			return s.AuditTx.WriteTx(ctx, tx, plaudit.Entry{ActorID: nil, ActorRole: &sysRole, Action: "order.no_show", TargetKind: "order", TargetID: o.ID, Payload: payload, RequestID: ""})
 		}))
 		if err == nil {
 			n++

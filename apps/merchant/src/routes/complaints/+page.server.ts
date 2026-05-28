@@ -34,8 +34,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   respond: async ({ request, locals }) => {
     const fd = await request.formData();
-    const id = String(fd.get("complaint_id") ?? "");
-    const response = String(fd.get("response") ?? "").trim();
+    const id = fd.get("complaint_id")?.toString() ?? "";
+    const response = fd.get("response")?.toString() ?? "".trim();
     if (!id) return fail(400, { error: "缺少客訴編號" });
     if (response.length < 5) return fail(400, { error: "回覆內容至少需 5 個字", complaintID: id });
 

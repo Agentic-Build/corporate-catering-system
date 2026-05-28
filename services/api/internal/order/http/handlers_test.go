@@ -3,6 +3,7 @@ package ohttp_test
 import (
 	"context"
 	"encoding/json"
+	audit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -126,10 +127,10 @@ func (fakeStateRepo) AppendTx(context.Context, pgx.Tx, *order.StateEvent) error 
 // fakeAuditRepo implements order.AuditWriter + order.AuditTx.
 type fakeAuditRepo struct{}
 
-func (fakeAuditRepo) Write(context.Context, *string, *string, string, string, string, map[string]any, string) error {
+func (fakeAuditRepo) Write(context.Context, audit.Entry) error {
 	return nil
 }
-func (fakeAuditRepo) WriteTx(context.Context, pgx.Tx, *string, *string, string, string, string, map[string]any, string) error {
+func (fakeAuditRepo) WriteTx(context.Context, pgx.Tx, audit.Entry) error {
 	return nil
 }
 

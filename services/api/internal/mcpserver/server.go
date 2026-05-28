@@ -4,6 +4,7 @@ package mcpserver
 
 import (
 	"context"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/mark3labs/mcp-go/server"
@@ -34,7 +35,7 @@ const (
 
 // AuditTx is the audit_event write surface mcpserver depends on.
 type AuditTxWriter interface {
-	WriteTx(ctx context.Context, tx pgx.Tx, actorID, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
+	WriteTx(ctx context.Context, tx pgx.Tx, e plaudit.Entry) error
 }
 
 // txBeginner is the transaction-starting surface of *pgxpool.Pool.
@@ -97,7 +98,6 @@ func auditAfter(ctx context.Context, deps Deps, toolName, targetKind, targetID s
 	actorID := user.ID
 	actorRole := string(user.Role)
 	_ = pgx.BeginFunc(ctx, deps.Pool, func(tx pgx.Tx) error {
-		return deps.Audit.WriteTx(ctx, tx, &actorID, &actorRole,
-			"mcp."+toolName, targetKind, targetID, payload, "mcp:"+toolName)
+		return deps.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &actorID, ActorRole: &actorRole, Action: "mcp." + toolName, TargetKind: targetKind, TargetID: targetID, Payload: payload, RequestID: "mcp:" + toolName})
 	})
 }

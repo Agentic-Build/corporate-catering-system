@@ -18,5 +18,5 @@ export async function pickTomorrow(page: Page) {
   const t = new Date();
   t.setDate(t.getDate() + 1);
   const wd = ["日", "一", "二", "三", "四", "五", "六"][t.getDay()];
-  await page.getByRole("button", { name: new RegExp(`^週${wd}\\s+${t.getDate()}$`) }).click();
+  await page.getByRole("button", { name: new RegExp(String.raw`^週${wd}\s+${t.getDate()}$`) }).click();
 }

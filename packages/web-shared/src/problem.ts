@@ -10,7 +10,7 @@ export function problemMessage(err: unknown): string {
     if (typeof o.message === "string" && o.message) return o.message;
   }
   try {
-    return String(err);
+    return (err as object).toString();
   } catch {
     return "未知錯誤";
   }

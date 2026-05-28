@@ -3,6 +3,7 @@ package compliance_test
 import (
 	"context"
 	"errors"
+	audit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -29,7 +30,7 @@ import (
 // audit write inside the same transaction fails.
 type failingAudit struct{}
 
-func (failingAudit) WriteTx(_ context.Context, _ pgx.Tx, _, _ *string, _, _, _ string, _ map[string]any, _ string) error {
+func (failingAudit) WriteTx(_ context.Context, _ pgx.Tx, _ audit.Entry) error {
 	return errors.New("audit boom")
 }
 

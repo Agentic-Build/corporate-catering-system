@@ -2,6 +2,7 @@ package settlement
 
 import (
 	"context"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -80,7 +81,7 @@ func (s *Service) CloseSettlement(ctx context.Context, in CloseSettlementInput) 
 			"period_end":   in.PeriodEnd.Format(dateLayoutISO),
 			"vendor_count": len(out),
 		}
-		return s.Audit.WriteTx(ctx, tx, &closedBy, &actorRole, "settlement.close", "vendor_settlement_period", in.PeriodStart.Format(dateLayoutISO)+"/"+in.PeriodEnd.Format(dateLayoutISO), payload, "")
+		return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &closedBy, ActorRole: &actorRole, Action: "settlement.close", TargetKind: "vendor_settlement_period", TargetID: in.PeriodStart.Format(dateLayoutISO) + "/" + in.PeriodEnd.Format(dateLayoutISO), Payload: payload, RequestID: ""})
 	})
 	if err != nil {
 		return nil, err
@@ -113,7 +114,7 @@ func (s *Service) VoidSettlement(ctx context.Context, id, voidedBy string) error
 			"period_start":  st.PeriodStart.Format(dateLayoutISO),
 			"period_end":    st.PeriodEnd.Format(dateLayoutISO),
 		}
-		return s.Audit.WriteTx(ctx, tx, &voidedBy, &actorRole, "settlement.void", "vendor_settlement", id, payload, "")
+		return s.Audit.WriteTx(ctx, tx, plaudit.Entry{ActorID: &voidedBy, ActorRole: &actorRole, Action: "settlement.void", TargetKind: "vendor_settlement", TargetID: id, Payload: payload, RequestID: ""})
 	})
 }
 

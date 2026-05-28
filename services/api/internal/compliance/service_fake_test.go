@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	audit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"io"
 	"strings"
 	"testing"
@@ -151,11 +152,11 @@ type recordingAudit struct {
 	err   error
 }
 
-func (a *recordingAudit) WriteTx(_ context.Context, _ pgx.Tx, _, _ *string, action, _, _ string, _ map[string]any, _ string) error {
+func (a *recordingAudit) WriteTx(_ context.Context, _ pgx.Tx, e audit.Entry) error {
 	if a.err != nil {
 		return a.err
 	}
-	a.calls = append(a.calls, action)
+	a.calls = append(a.calls, e.Action)
 	return nil
 }
 

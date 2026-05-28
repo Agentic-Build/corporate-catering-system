@@ -2,6 +2,7 @@ package order
 
 import (
 	"context"
+	plaudit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"time"
 )
 
@@ -25,7 +26,7 @@ type StateEventRepository interface {
 }
 
 type AuditWriter interface {
-	Write(ctx context.Context, actorID *string, actorRole *string, action, targetKind, targetID string, payload map[string]any, requestID string) error
+	Write(ctx context.Context, e plaudit.Entry) error
 }
 
 type OutboxRepository interface {

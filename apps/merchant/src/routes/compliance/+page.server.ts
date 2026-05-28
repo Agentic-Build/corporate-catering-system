@@ -45,10 +45,10 @@ export const actions: Actions = {
   uploadDocument: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { uploadError: "unauthenticated" });
     const fd = await request.formData();
-    const kind = String(fd.get("kind") ?? "");
+    const kind = fd.get("kind")?.toString() ?? "";
     const file = fd.get("file");
-    const expiresAt = String(fd.get("expires_at") ?? "").trim();
-    const supersedes = String(fd.get("supersedes") ?? "").trim();
+    const expiresAt = (fd.get("expires_at")?.toString() ?? "").trim();
+    const supersedes = (fd.get("supersedes")?.toString() ?? "").trim();
 
     if (!DOC_KINDS.has(kind as DocKind)) return fail(400, { uploadError: "請選擇文件種類" });
     if (!(file instanceof File) || file.size === 0) {

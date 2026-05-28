@@ -3,6 +3,7 @@ package feedback_test
 import (
 	"context"
 	"errors"
+	audit "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/audit"
 	"io"
 	"log/slog"
 	"testing"
@@ -94,7 +95,7 @@ func (r *fakeOrderReader) GetOrderInfo(context.Context, string) (*feedback.Order
 
 type fakeAudit struct{ err error }
 
-func (a fakeAudit) WriteTx(context.Context, pgx.Tx, *string, *string, string, string, string, map[string]any, string) error {
+func (a fakeAudit) WriteTx(context.Context, pgx.Tx, audit.Entry) error {
 	return a.err
 }
 

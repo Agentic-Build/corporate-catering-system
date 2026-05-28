@@ -41,7 +41,7 @@ export function createAuthHandle(opts: AuthOptions): Handle {
       const client = createApiClient(opts.apiBaseUrl, token);
       const { data, error } = await client.GET("/me", {});
       if (data && !error) {
-        user = data as unknown as SessionUser;
+        user = data as SessionUser;
       } else if (error) {
         clearSessionCookie(event, opts);
       }
