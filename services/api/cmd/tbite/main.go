@@ -184,6 +184,11 @@ func main() {
 	}
 }
 
+// noopCleanup is the no-op cleanup returned by setup helpers that haven't
+// acquired any resource yet (early-error paths and the NATS-off branch).
+// Callers can `defer cleanup()` unconditionally.
+func noopCleanup() {}
+
 type apiInfra struct {
 	pool   *pgxpool.Pool
 	roPool *pgxpool.Pool
@@ -273,21 +278,21 @@ func runAPI(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 func initAPIInfra(ctx context.Context, cfg config.Config, logger *slog.Logger) (*apiInfra, func(), error) {
 	pool, err := db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{MaxConns: cfg.DBMaxConns, MinConns: cfg.DBMinConns})
 	if err != nil {
-		return nil, func() {}, fmt.Errorf("pg pool: %w", err)
+		return nil, noopCleanup, fmt.Errorf("pg pool: %w", err)
 	}
 	_ = db.RegisterPoolMetrics(pool, "rw")
 
 	roPool, err := newROPool(ctx, cfg)
 	if err != nil {
 		pool.Close()
-		return nil, func() {}, fmt.Errorf("pg ro pool: %w", err)
+		return nil, noopCleanup, fmt.Errorf("pg ro pool: %w", err)
 	}
 
 	rdb, err := cache.NewClient(ctx, cfg.RedisURL)
 	if err != nil {
 		roPool.Close()
 		pool.Close()
-		return nil, func() {}, fmt.Errorf("redis: %w", err)
+		return nil, noopCleanup, fmt.Errorf("redis: %w", err)
 	}
 
 	s3API, err := storage.NewS3(ctx, storage.S3Config{
@@ -302,7 +307,7 @@ func initAPIInfra(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		rdb.Close()
 		roPool.Close()
 		pool.Close()
-		return nil, func() {}, fmt.Errorf("s3: %w", err)
+		return nil, noopCleanup, fmt.Errorf("s3: %w", err)
 	}
 	if err := s3API.EnsureBucket(ctx); err != nil {
 		logger.Warn("ensure bucket failed; uploads will fail until storage is reachable", "err", err)
@@ -406,12 +411,12 @@ func setupBoardSSEAndDLQ(ctx context.Context, cfg config.Config, pool *pgxpool.P
 		logger.Warn("register dlq gauges", "err", err)
 	}
 	if cfg.NATSURL == "" {
-		return dlqAPI, func() {}
+		return dlqAPI, noopCleanup
 	}
 	natsClient, err := messaging.New(ctx, cfg.NATSURL)
 	if err != nil {
 		logger.Warn("nats unavailable for dlq replay; /replay will return 503", "err", err)
-		return dlqAPI, func() {}
+		return dlqAPI, noopCleanup
 	}
 	dlqAPI.JS = natsClient.JS
 	go func() {
