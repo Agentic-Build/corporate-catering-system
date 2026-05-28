@@ -9,8 +9,9 @@ RUN pnpm --filter @tbite/admin build
 
 FROM node:24.16.0-alpine AS runner
 WORKDIR /app
-COPY --chown=node:node --chmod=0555 --from=builder /repo/apps/admin/build ./
-COPY --chown=node:node --chmod=0555 --from=builder /repo/apps/admin/package.json ./
+COPY --chown=root:root --chmod=0444 --from=builder /repo/apps/admin/build ./
+COPY --chown=root:root --chmod=0444 --from=builder /repo/apps/admin/package.json ./
+RUN chmod -R a+X /app
 ENV NODE_ENV=production
 USER node
 EXPOSE 3000
