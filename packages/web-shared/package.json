@@ -1,0 +1,31 @@
+{
+  "name": "@tbite/web-shared",
+  "version": "0.0.0",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "svelte": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "@tbite/ui": "workspace:*",
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@tbite/ui": "workspace:*",
+    "svelte": "^5.55.9",
+    "svelte-check": "^4.4.8",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  },
+  "scripts": {
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run"
+  }
+}

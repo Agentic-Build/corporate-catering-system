@@ -1,7 +1,7 @@
 <script lang="ts">
   import { PageHeader, Card, StatCard, StateTag, EmptyState } from "@tbite/ui";
   import type { components } from "@tbite/api-client";
-  import { formatMinor } from "$lib/money";
+  import { formatMinor } from "@tbite/web-shared";
 
   type StatusBreakdownDTO = components["schemas"]["StatusBreakdownDTO"];
 

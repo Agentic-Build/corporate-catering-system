@@ -2,15 +2,14 @@ package payrollhttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
-	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/order"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/payroll"
 )
 
@@ -54,6 +53,26 @@ type disputeDTO struct {
 	RefundMinor int64   `json:"refund_minor"`
 }
 
+type exceptionDTO struct {
+	ID         string  `json:"id"`
+	BatchID    string  `json:"batch_id"`
+	EntryID    string  `json:"entry_id"`
+	UserID     string  `json:"user_id"`
+	Kind       string  `json:"kind"`
+	Status     string  `json:"status"`
+	Detail     string  `json:"detail"`
+	Resolution string  `json:"resolution"`
+	ResolvedBy *string `json:"resolved_by,omitempty"`
+	ResolvedAt *string `json:"resolved_at,omitempty"`
+	CreatedAt  string  `json:"created_at"`
+}
+
+// batchIDInput is shared by batch + exception handlers (the listExceptions
+// path takes the parent batch id).
+type batchIDInput struct {
+	ID string `path:"id" format:"uuid"`
+}
+
 func toBatchDTO(b *payroll.Batch) batchDTO {
 	d := batchDTO{
 		ID:          b.ID,
@@ -61,18 +80,12 @@ func toBatchDTO(b *payroll.Batch) batchDTO {
 		PeriodEnd:   b.PeriodEnd.UTC().Format("2006-01-02"),
 		Status:      string(b.Status),
 	}
-	if b.LockedAt != nil {
-		s := b.LockedAt.UTC().Format(time.RFC3339)
-		d.LockedAt = &s
-	}
+	d.LockedAt = httpserver.FormatNullableTimePtr(b.LockedAt)
 	if b.LockedBy != nil {
 		s := *b.LockedBy
 		d.LockedBy = &s
 	}
-	if b.ExportedAt != nil {
-		s := b.ExportedAt.UTC().Format(time.RFC3339)
-		d.ExportedAt = &s
-	}
+	d.ExportedAt = httpserver.FormatNullableTimePtr(b.ExportedAt)
 	if b.ExportURI != nil {
 		s := *b.ExportURI
 		d.ExportURI = &s
@@ -110,25 +123,8 @@ func toDisputeDTO(d *payroll.Dispute) disputeDTO {
 		s := *d.ResolvedBy
 		out.ResolvedBy = &s
 	}
-	if d.ResolvedAt != nil {
-		s := d.ResolvedAt.UTC().Format(time.RFC3339)
-		out.ResolvedAt = &s
-	}
+	out.ResolvedAt = httpserver.FormatNullableTimePtr(d.ResolvedAt)
 	return out
-}
-
-type exceptionDTO struct {
-	ID         string  `json:"id"`
-	BatchID    string  `json:"batch_id"`
-	EntryID    string  `json:"entry_id"`
-	UserID     string  `json:"user_id"`
-	Kind       string  `json:"kind"`
-	Status     string  `json:"status"`
-	Detail     string  `json:"detail"`
-	Resolution string  `json:"resolution"`
-	ResolvedBy *string `json:"resolved_by,omitempty"`
-	ResolvedAt *string `json:"resolved_at,omitempty"`
-	CreatedAt  string  `json:"created_at"`
 }
 
 func toExceptionDTO(e *payroll.Exception) exceptionDTO {
@@ -147,141 +143,8 @@ func toExceptionDTO(e *payroll.Exception) exceptionDTO {
 		s := *e.ResolvedBy
 		out.ResolvedBy = &s
 	}
-	if e.ResolvedAt != nil {
-		s := e.ResolvedAt.UTC().Format(time.RFC3339)
-		out.ResolvedAt = &s
-	}
+	out.ResolvedAt = httpserver.FormatNullableTimePtr(e.ResolvedAt)
 	return out
-}
-
-type createBatchInput struct {
-	Body struct {
-		PeriodStart string `json:"period_start"`
-		PeriodEnd   string `json:"period_end"`
-	}
-}
-
-type batchOutput struct {
-	Body struct {
-		Batch batchDTO `json:"batch"`
-	}
-}
-
-type listBatchesInput struct {
-	Status string `query:"status" enum:"draft,locked,exported,closed,"`
-}
-
-type listBatchesOutput struct {
-	Body struct {
-		Items []batchDTO `json:"items"`
-	}
-}
-
-type batchIDInput struct {
-	ID string `path:"id" format:"uuid"`
-}
-
-type batchWithEntriesOutput struct {
-	Body struct {
-		Batch   batchDTO   `json:"batch"`
-		Entries []entryDTO `json:"entries"`
-	}
-}
-
-type listDisputesInput struct {
-	Status string `query:"status" enum:"open,resolved_refund,resolved_reject,cancelled,"`
-}
-
-type listDisputesOutput struct {
-	Body struct {
-		Items []disputeDTO `json:"items"`
-	}
-}
-
-type resolveDisputeInput struct {
-	ID   string `path:"id" format:"uuid"`
-	Body struct {
-		Status      string `json:"status" enum:"resolved_refund,resolved_reject"`
-		Resolution  string `json:"resolution"`
-		RefundMinor int64  `json:"refund_minor"`
-	}
-}
-
-type openDisputeInput struct {
-	Body struct {
-		OrderID string `json:"order_id" format:"uuid"`
-		Reason  string `json:"reason" minLength:"1"`
-	}
-}
-
-type disputeOutput struct {
-	Body struct {
-		Dispute disputeDTO `json:"dispute"`
-	}
-}
-
-type listExceptionsOutput struct {
-	Body struct {
-		Items []exceptionDTO `json:"items"`
-	}
-}
-
-type flagExceptionInput struct {
-	ID   string `path:"id" format:"uuid" doc:"Payroll batch id"`
-	Body struct {
-		EntryID string `json:"entry_id" format:"uuid"`
-		Detail  string `json:"detail" maxLength:"500"`
-	}
-}
-
-type resolveExceptionInput struct {
-	ID   string `path:"id" format:"uuid" doc:"Payroll exception id"`
-	Body struct {
-		Status     string `json:"status" enum:"resolved,excluded"`
-		Resolution string `json:"resolution" maxLength:"500"`
-	}
-}
-
-type exceptionOutput struct {
-	Body struct {
-		Exception exceptionDTO `json:"exception"`
-	}
-}
-
-type employeeEntryDTO struct {
-	EntryID       string `json:"entry_id"`
-	BatchID       string `json:"batch_id"`
-	PeriodStart   string `json:"period_start"`
-	PeriodEnd     string `json:"period_end"`
-	BatchStatus   string `json:"batch_status"`
-	OrderCount    int    `json:"order_count"`
-	AmountMinor   int64  `json:"amount_minor"`
-	RefundedMinor int64  `json:"refunded_minor"`
-	NetMinor      int64  `json:"net_minor"`
-}
-
-type listMyEntriesOutput struct {
-	Body struct {
-		Items []employeeEntryDTO `json:"items"`
-	}
-}
-
-type currentPayrollLineDTO struct {
-	OrderID      string  `json:"order_id"`
-	SupplyDate   string  `json:"supply_date"`
-	VendorName   string  `json:"vendor_name"`
-	ItemsSummary string  `json:"items_summary"`
-	AmountMinor  int64   `json:"amount_minor"`
-	Status       string  `json:"status"`
-	Rated        bool    `json:"rated"`
-	ComplaintID  *string `json:"complaint_id,omitempty"`
-}
-
-type currentPayrollOutput struct {
-	Body struct {
-		Lines      []currentPayrollLineDTO `json:"lines"`
-		TotalMinor int64                   `json:"total_minor"`
-	}
 }
 
 func (a *API) Register(api huma.API) {
@@ -420,274 +283,4 @@ func (a *API) requireEmployee(ctx context.Context) (*identity.User, error) {
 // parseDay parses YYYY-MM-DD into UTC midnight.
 func parseDay(s string) (time.Time, error) {
 	return time.ParseInLocation("2006-01-02", s, time.UTC)
-}
-
-func (a *API) createBatch(ctx context.Context, in *createBatchInput) (*batchOutput, error) {
-	if _, err := a.requireAdmin(ctx); err != nil {
-		return nil, err
-	}
-	start, err := parseDay(in.Body.PeriodStart)
-	if err != nil {
-		return nil, huma.Error400BadRequest("invalid period_start (YYYY-MM-DD)")
-	}
-	end, err := parseDay(in.Body.PeriodEnd)
-	if err != nil {
-		return nil, huma.Error400BadRequest("invalid period_end (YYYY-MM-DD)")
-	}
-	b, err := a.Svc.BuildDraft(ctx, payroll.BuildDraftInput{PeriodStart: start, PeriodEnd: end})
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	var resp batchOutput
-	resp.Body.Batch = toBatchDTO(b)
-	return &resp, nil
-}
-
-func (a *API) listBatches(ctx context.Context, in *listBatchesInput) (*listBatchesOutput, error) {
-	if _, err := a.requireAdmin(ctx); err != nil {
-		return nil, err
-	}
-	var statuses []payroll.BatchStatus
-	if in.Status != "" {
-		statuses = []payroll.BatchStatus{payroll.BatchStatus(in.Status)}
-	}
-	bs, err := a.Svc.ListBatches(ctx, statuses)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	var resp listBatchesOutput
-	resp.Body.Items = make([]batchDTO, 0, len(bs))
-	for _, b := range bs {
-		resp.Body.Items = append(resp.Body.Items, toBatchDTO(b))
-	}
-	return &resp, nil
-}
-
-func (a *API) getBatch(ctx context.Context, in *batchIDInput) (*batchWithEntriesOutput, error) {
-	if _, err := a.requireAdmin(ctx); err != nil {
-		return nil, err
-	}
-	b, err := a.Svc.GetBatch(ctx, in.ID)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	entries, err := a.Svc.ListBatchEntries(ctx, in.ID)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	var resp batchWithEntriesOutput
-	resp.Body.Batch = toBatchDTO(b)
-	resp.Body.Entries = make([]entryDTO, 0, len(entries))
-	for _, e := range entries {
-		resp.Body.Entries = append(resp.Body.Entries, toEntryDTO(e))
-	}
-	return &resp, nil
-}
-
-func (a *API) lockBatch(ctx context.Context, in *batchIDInput) (*struct{}, error) {
-	u, err := a.requireAdmin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := a.Svc.Lock(ctx, in.ID, u.ID); err != nil {
-		return nil, mapErr(err)
-	}
-	return &struct{}{}, nil
-}
-
-func (a *API) listDisputes(ctx context.Context, in *listDisputesInput) (*listDisputesOutput, error) {
-	if _, err := a.requireAdmin(ctx); err != nil {
-		return nil, err
-	}
-	var statuses []payroll.DisputeStatus
-	if in.Status != "" {
-		statuses = []payroll.DisputeStatus{payroll.DisputeStatus(in.Status)}
-	}
-	ds, err := a.Svc.ListDisputes(ctx, statuses)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	var resp listDisputesOutput
-	resp.Body.Items = make([]disputeDTO, 0, len(ds))
-	for _, d := range ds {
-		resp.Body.Items = append(resp.Body.Items, toDisputeDTO(d))
-	}
-	return &resp, nil
-}
-
-func (a *API) resolveDispute(ctx context.Context, in *resolveDisputeInput) (*struct{}, error) {
-	u, err := a.requireAdmin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := a.Svc.ResolveDispute(ctx, payroll.ResolveDisputeInput{
-		DisputeID:   in.ID,
-		ResolvedBy:  u.ID,
-		Status:      payroll.DisputeStatus(in.Body.Status),
-		Resolution:  in.Body.Resolution,
-		RefundMinor: in.Body.RefundMinor,
-	}); err != nil {
-		return nil, mapErr(err)
-	}
-	return &struct{}{}, nil
-}
-
-func (a *API) openDispute(ctx context.Context, in *openDisputeInput) (*disputeOutput, error) {
-	u, err := a.requireEmployee(ctx)
-	if err != nil {
-		return nil, err
-	}
-	d, err := a.Svc.OpenDisputeByOrder(ctx, in.Body.OrderID, u.ID, in.Body.Reason)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	var resp disputeOutput
-	resp.Body.Dispute = toDisputeDTO(d)
-	return &resp, nil
-}
-
-func (a *API) listMyDisputes(ctx context.Context, _ *struct{}) (*listDisputesOutput, error) {
-	u, err := a.requireEmployee(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ds, err := a.Svc.ListMyDisputes(ctx, u.ID)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	var resp listDisputesOutput
-	resp.Body.Items = make([]disputeDTO, 0, len(ds))
-	for _, d := range ds {
-		resp.Body.Items = append(resp.Body.Items, toDisputeDTO(d))
-	}
-	return &resp, nil
-}
-
-func (a *API) listExceptions(ctx context.Context, in *batchIDInput) (*listExceptionsOutput, error) {
-	if _, err := a.requireAdmin(ctx); err != nil {
-		return nil, err
-	}
-	exs, err := a.Svc.ListExceptions(ctx, in.ID)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	var resp listExceptionsOutput
-	resp.Body.Items = make([]exceptionDTO, 0, len(exs))
-	for _, e := range exs {
-		resp.Body.Items = append(resp.Body.Items, toExceptionDTO(e))
-	}
-	return &resp, nil
-}
-
-func (a *API) flagException(ctx context.Context, in *flagExceptionInput) (*exceptionOutput, error) {
-	u, err := a.requireAdmin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	e, err := a.Svc.FlagException(ctx, payroll.FlagExceptionInput{
-		BatchID:   in.ID,
-		EntryID:   in.Body.EntryID,
-		Detail:    in.Body.Detail,
-		FlaggedBy: u.ID,
-	})
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	var resp exceptionOutput
-	resp.Body.Exception = toExceptionDTO(e)
-	return &resp, nil
-}
-
-func (a *API) resolveException(ctx context.Context, in *resolveExceptionInput) (*struct{}, error) {
-	u, err := a.requireAdmin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := a.Svc.ResolveException(ctx, in.ID, payroll.ExceptionStatus(in.Body.Status), in.Body.Resolution, u.ID); err != nil {
-		return nil, mapErr(err)
-	}
-	return &struct{}{}, nil
-}
-
-func (a *API) listMyEntries(ctx context.Context, _ *struct{}) (*listMyEntriesOutput, error) {
-	u, err := a.requireEmployee(ctx)
-	if err != nil {
-		return nil, err
-	}
-	entries, err := a.Svc.ListMyEntries(ctx, u.ID)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	var resp listMyEntriesOutput
-	resp.Body.Items = make([]employeeEntryDTO, 0, len(entries))
-	for _, e := range entries {
-		resp.Body.Items = append(resp.Body.Items, employeeEntryDTO{
-			EntryID:       e.EntryID,
-			BatchID:       e.BatchID,
-			PeriodStart:   e.PeriodStart.UTC().Format("2006-01-02"),
-			PeriodEnd:     e.PeriodEnd.UTC().Format("2006-01-02"),
-			BatchStatus:   string(e.BatchStatus),
-			OrderCount:    e.OrderCount,
-			AmountMinor:   e.AmountMinor,
-			RefundedMinor: e.RefundedMinor,
-			NetMinor:      e.AmountMinor - e.RefundedMinor,
-		})
-	}
-	return &resp, nil
-}
-
-// getEmployeeCurrentPayroll returns the calling employee's in-progress
-// (not-yet-locked) payroll period as per-order lines. total_minor sums only
-// the charged lines — no_show / reversed lines are excluded from the running
-// deduction total.
-func (a *API) getEmployeeCurrentPayroll(ctx context.Context, _ *struct{}) (*currentPayrollOutput, error) {
-	u, err := a.requireEmployee(ctx)
-	if err != nil {
-		return nil, err
-	}
-	lines, err := a.Svc.ListCurrentLines(ctx, u.ID)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	var resp currentPayrollOutput
-	resp.Body.Lines = make([]currentPayrollLineDTO, 0, len(lines))
-	for _, l := range lines {
-		resp.Body.Lines = append(resp.Body.Lines, currentPayrollLineDTO{
-			OrderID:      l.OrderID,
-			SupplyDate:   l.SupplyDate,
-			VendorName:   l.VendorName,
-			ItemsSummary: l.ItemsSummary,
-			AmountMinor:  l.AmountMinor,
-			Status:       l.Status,
-			Rated:        l.Rated,
-			ComplaintID:  l.ComplaintID,
-		})
-		if l.Status == "charged" {
-			resp.Body.TotalMinor += l.AmountMinor
-		}
-	}
-	return &resp, nil
-}
-
-// mapErr translates payroll sentinels to huma HTTP errors.
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, payroll.ErrBatchNotFound),
-		errors.Is(err, payroll.ErrEntryNotFound),
-		errors.Is(err, payroll.ErrDisputeNotFound),
-		errors.Is(err, payroll.ErrExceptionNotFound),
-		errors.Is(err, order.ErrOrderNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, payroll.ErrForbidden):
-		return huma.Error403Forbidden(err.Error())
-	case errors.Is(err, payroll.ErrInvalidException),
-		errors.Is(err, payroll.ErrRefundExceedsOrder):
-		return huma.Error400BadRequest(err.Error())
-	case errors.Is(err, payroll.ErrBatchLocked),
-		errors.Is(err, payroll.ErrBatchPeriodExists),
-		errors.Is(err, payroll.ErrInvalidTransition),
-		errors.Is(err, payroll.ErrOrderNotDisputable):
-		return huma.Error409Conflict(err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
 }

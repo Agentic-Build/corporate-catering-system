@@ -2,7 +2,6 @@ package phttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -250,16 +249,4 @@ func toDTOs(list []*plants.Plant) []plantDTO {
 		out = append(out, toDTO(p))
 	}
 	return out
-}
-
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, plants.ErrInvalid):
-		return huma.Error400BadRequest(err.Error())
-	case errors.Is(err, plants.ErrPlantNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, plants.ErrDuplicateCode):
-		return huma.Error409Conflict(err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
 }

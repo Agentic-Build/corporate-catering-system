@@ -1,4 +1,5 @@
 import { redirect, fail, error } from "@sveltejs/kit";
+import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import { createApiClient, type components } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
@@ -57,7 +58,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/employee/orders/{id}/cancel", {
       params: { path: { id: params.id } },
     });
-    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(400, { error: problemMessage(r.error) });
     throw redirect(303, `/orders/${params.id}`);
   },
 

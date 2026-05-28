@@ -1,8 +1,9 @@
 import type { Actions, PageServerLoad } from "./$types";
+import { problemMessage } from "@tbite/web-shared";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient, type operations } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
-import { buildDays, taipeiISO } from "$lib/date";
+import { buildDays, taipeiISO } from "@tbite/web-shared";
 
 type MenuQuery = NonNullable<operations["listEmployeeMenu"]["parameters"]["query"]>;
 type MenuSort = NonNullable<MenuQuery["sort"]>;
@@ -83,7 +84,7 @@ export const load: PageServerLoad = async ({ locals, url, parent, depends }) => 
         day_menu: (d.day_menu ?? []) as NonNullable<unknown>[],
       };
     } else if (res.error) {
-      error = JSON.stringify(res.error);
+      error = problemMessage(res.error);
     }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
@@ -110,7 +111,7 @@ export const load: PageServerLoad = async ({ locals, url, parent, depends }) => 
       if (mr.data) {
         filteredMenu = (mr.data.items ?? []) as NonNullable<unknown>[];
       } else if (mr.error && !error) {
-        error = JSON.stringify(mr.error);
+        error = problemMessage(mr.error);
       }
     } catch (e) {
       if (!error) error = e instanceof Error ? e.message : String(e);
@@ -238,7 +239,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/employee/favorites", {
       body: { menu_item_id: menuItemId },
     });
-    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(400, { error: problemMessage(r.error) });
     return { ok: true };
   },
 
@@ -253,7 +254,7 @@ export const actions: Actions = {
     const r = await client.DELETE("/api/employee/favorites/{menu_item_id}", {
       params: { path: { menu_item_id: menuItemId } },
     });
-    if (r.error) return fail(400, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(400, { error: problemMessage(r.error) });
     return { ok: true };
   },
 };

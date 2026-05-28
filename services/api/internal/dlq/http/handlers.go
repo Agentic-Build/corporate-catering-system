@@ -10,7 +10,6 @@ package dlqhttp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/dlq"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
 )
@@ -190,23 +190,7 @@ func toDTO(m *dlq.Message) messageDTO {
 		FirstSeenAt:    m.FirstSeenAt.UTC().Format(time.RFC3339),
 		ResolvedNotes:  m.ResolvedNotes,
 	}
-	if m.ReplayedAt != nil {
-		s := m.ReplayedAt.UTC().Format(time.RFC3339)
-		out.ReplayedAt = &s
-	}
-	if m.ResolvedAt != nil {
-		s := m.ResolvedAt.UTC().Format(time.RFC3339)
-		out.ResolvedAt = &s
-	}
+	out.ReplayedAt = httpserver.FormatNullableTimePtr(m.ReplayedAt)
+	out.ResolvedAt = httpserver.FormatNullableTimePtr(m.ResolvedAt)
 	return out
-}
-
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, dlq.ErrMessageNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, dlq.ErrAlreadyResolved):
-		return huma.Error409Conflict(err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
 }

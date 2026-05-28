@@ -6,7 +6,6 @@ package chttp
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -14,9 +13,9 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/httpserver"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 	idhttp "github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity/http"
-	vendor "github.com/Agentic-Build/corporate-catering-system/services/api/internal/vendors"
 )
 
 // API exposes compliance admin endpoints. All routes require welfare_admin.
@@ -91,10 +90,7 @@ func docToDTO(d *compliance.Document) documentDTO {
 		s := *d.ReviewedBy
 		out.ReviewedBy = &s
 	}
-	if d.ReviewedAt != nil {
-		s := d.ReviewedAt.UTC().Format(time.RFC3339)
-		out.ReviewedAt = &s
-	}
+	out.ReviewedAt = httpserver.FormatNullableTimePtr(d.ReviewedAt)
 	return out
 }
 
@@ -119,14 +115,8 @@ func anomalyToDTO(a *compliance.Anomaly) anomalyDTO {
 		Notes:       a.Notes,
 		CreatedAt:   a.CreatedAt.UTC().Format(time.RFC3339),
 	}
-	if a.TriagedAt != nil {
-		s := a.TriagedAt.UTC().Format(time.RFC3339)
-		out.TriagedAt = &s
-	}
-	if a.ClosedAt != nil {
-		s := a.ClosedAt.UTC().Format(time.RFC3339)
-		out.ClosedAt = &s
-	}
+	out.TriagedAt = httpserver.FormatNullableTimePtr(a.TriagedAt)
+	out.ClosedAt = httpserver.FormatNullableTimePtr(a.ClosedAt)
 	return out
 }
 
@@ -432,22 +422,4 @@ func (a *API) audit(ctx context.Context, in *listAuditInput) (*listAuditOutput, 
 		resp.Body.Items = append(resp.Body.Items, auditRowToDTO(r))
 	}
 	return &resp, nil
-}
-
-// mapErr translates compliance sentinels to huma HTTP errors.
-func mapErr(err error) error {
-	switch {
-	case errors.Is(err, compliance.ErrDocumentNotFound),
-		errors.Is(err, compliance.ErrAnomalyNotFound),
-		errors.Is(err, vendor.ErrVendorNotFound):
-		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, compliance.ErrInvalidStatus),
-		errors.Is(err, compliance.ErrInvalidResupply):
-		return huma.Error409Conflict(err.Error())
-	case errors.Is(err, compliance.ErrInvalidAction),
-		errors.Is(err, compliance.ErrInvalidFilename),
-		errors.Is(err, compliance.ErrFileTooLarge):
-		return huma.Error400BadRequest(err.Error())
-	}
-	return huma.Error500InternalServerError("internal", err)
 }

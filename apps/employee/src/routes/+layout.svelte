@@ -46,13 +46,21 @@
   // cart-bump animation on the header cart button when the count changes
   let bump = $state(false);
   let prevCount = $state(0);
+  let bumpTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
     const c = cart.count;
     if (c > prevCount) {
       bump = true;
-      setTimeout(() => (bump = false), 340);
+      if (bumpTimer) clearTimeout(bumpTimer);
+      bumpTimer = setTimeout(() => {
+        bump = false;
+        bumpTimer = null;
+      }, 340);
     }
     prevCount = c;
+  });
+  $effect(() => () => {
+    if (bumpTimer) clearTimeout(bumpTimer);
   });
 
   const initial = $derived((data.user?.display_name ?? "").trim().slice(0, 1) || "你");

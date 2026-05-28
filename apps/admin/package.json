@@ -14,7 +14,8 @@
     "@tbite/api-client": "workspace:*",
     "@tbite/tokens": "workspace:*",
     "@tbite/ui": "workspace:*",
-    "@tbite/web-auth": "workspace:*"
+    "@tbite/web-auth": "workspace:*",
+    "@tbite/web-shared": "workspace:*"
   },
   "devDependencies": {
     "@sveltejs/kit": "^2.61.1",

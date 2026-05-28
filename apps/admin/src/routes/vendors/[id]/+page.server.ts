@@ -1,4 +1,5 @@
 import { redirect, fail, error } from "@sveltejs/kit";
+import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
@@ -35,7 +36,7 @@ export const actions: Actions = {
       params: { path: { id: params.id } },
       body: { plants },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
   },
   update: async ({ request, params, locals }) => {
@@ -48,7 +49,7 @@ export const actions: Actions = {
       params: { path: { id: params.id } },
       body: { contact_email: contactEmail, plants },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
   },
   setPlantWindow: async ({ request, params, locals }) => {
@@ -61,7 +62,7 @@ export const actions: Actions = {
       params: { path: { id: params.id, plant } },
       body: { service_window: serviceWindow },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
   },
   suspend: async ({ params, locals }) => {
@@ -69,7 +70,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/admin/vendors/{id}/suspend", {
       params: { path: { id: params.id } },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
   },
   reinstate: async ({ params, locals }) => {
@@ -77,7 +78,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/admin/vendors/{id}/reinstate", {
       params: { path: { id: params.id } },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
   },
   createOperator: async ({ request, params, locals }) => {
@@ -93,7 +94,7 @@ export const actions: Actions = {
       params: { path: { id: params.id } },
       body: { email, display_name: displayName },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     return { setupUrl: r.data?.operator.setup_url };
   },
   suspendOperator: async ({ request, params, locals }) => {
@@ -103,7 +104,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/admin/vendors/{id}/operators/{operator_id}/suspend", {
       params: { path: { id: params.id, operator_id: operatorID } },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
   },
   reinstateOperator: async ({ request, params, locals }) => {
@@ -113,7 +114,7 @@ export const actions: Actions = {
     const r = await client.POST("/api/admin/vendors/{id}/operators/{operator_id}/reinstate", {
       params: { path: { id: params.id, operator_id: operatorID } },
     });
-    if (r.error) return fail(500, { error: JSON.stringify(r.error) });
+    if (r.error) return fail(500, { error: problemMessage(r.error) });
     throw redirect(303, `/vendors/${params.id}`);
   },
 };
