@@ -88,7 +88,7 @@ export const actions: Actions = {
     const itemId = String(fd.get("item_id") ?? "");
     const date = String(fd.get("date") ?? "");
     const capacity = Number.parseInt(String(fd.get("capacity") ?? "0"), 10);
-    const pickupWindow = String(fd.get("pickup_window") ?? "11:50-12:10");
+    const pickupWindow = String(fd.get("pickup_window") ?? "全天");
     const cutoffAt = String(fd.get("cutoff_at") || defaultCutoffAt(date));
 
     if (!itemId || !date) return fail(400, { error: "缺少餐點或日期" });

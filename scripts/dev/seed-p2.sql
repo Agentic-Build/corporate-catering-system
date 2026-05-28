@@ -651,8 +651,8 @@ SELECT
   d::date AS supply_date,
   80 AS capacity,
   80 AS remain,
-  '11:50-12:10' AS pickup_window,
-  '11:50-12:10' AS eta_label,
+  '全天' AS pickup_window,
+  '全天' AS eta_label,
   (d::date + INTERVAL '17 hours')::timestamptz AS cutoff_at
 FROM
   menu_item mi

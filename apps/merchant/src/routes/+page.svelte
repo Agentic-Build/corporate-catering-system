@@ -43,7 +43,7 @@
           price: item?.price_minor ?? 0,
           cap: s.capacity,
           ordered: Math.max(0, s.capacity - s.remain),
-          pickupWindow: s.pickup_window ?? "11:50-12:10",
+          pickupWindow: s.pickup_window ?? "全天",
           soldOut: !!s.sold_out,
         };
       });
@@ -55,7 +55,7 @@
   let capItemId = $state("");
   let capDate = $state("");
   let capValue = $state("0");
-  let capPickup = $state("11:50-12:10");
+  let capPickup = $state("全天");
 
   let publishForm = $state<HTMLFormElement>();
   let publishItemId = $state("");
@@ -103,11 +103,11 @@
   function addFromLibrary(item: any) {
     if (item.status === "archived") {
       // Publish first; capacity is submitted from publishEnhance after success.
-      pendingCap = { itemId: item.id, capacity: 50, pickupWindow: "11:50-12:10" };
+      pendingCap = { itemId: item.id, capacity: 50, pickupWindow: "全天" };
       publishItemId = item.id;
       queueMicrotask(() => publishForm?.requestSubmit());
     } else {
-      submitCap(item.id, 50, "11:50-12:10");
+      submitCap(item.id, 50, "全天");
     }
   }
 </script>

@@ -67,7 +67,7 @@ state inside a time window and writes results transactionally
 | Role | Lease | Cadence (default; env-overridable) |
 | --- | --- | --- |
 | `cutoff-sweeper` | `tbite-cutoff-sweeper` | every 60s (`CUTOFF_INTERVAL`) |
-| `no-show-sweeper` | `tbite-no-show-sweeper` | every 5m, age > 2h (`NO_SHOW_INTERVAL` / `NO_SHOW_MAX_AGE`) |
+| `no-show-sweeper` | `tbite-no-show-sweeper` | every 5m, age > 12h (`NO_SHOW_INTERVAL` / `NO_SHOW_MAX_AGE`) |
 | `document-expiry-scanner` | `tbite-doc-expiry-scanner` | every 1h, 14-day window (`DOC_EXPIRY_INTERVAL`) |
 | `feedback-scanner` | `tbite-feedback-scanner` | every 1h, 14-day window (`FEEDBACK_SCAN_INTERVAL` / `FEEDBACK_SCAN_WINDOW`) |
 

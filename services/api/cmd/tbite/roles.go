@@ -346,8 +346,9 @@ func runNoShowSweeper(ctx context.Context, logger *slog.Logger, cfg config.Confi
 	noShow := &scheduler.NoShowSweep{
 		Svc:      svc,
 		Interval: 5 * time.Minute,
-		MaxAge:   2 * time.Hour,
-		Logger:   logger.With("component", "no-show"),
+		// Ready orders stay collectable all day (override via NO_SHOW_MAX_AGE).
+		MaxAge: 12 * time.Hour,
+		Logger: logger.With("component", "no-show"),
 	}
 	if v := os.Getenv("NO_SHOW_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {

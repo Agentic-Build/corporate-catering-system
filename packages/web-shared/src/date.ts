@@ -16,6 +16,20 @@ export function dayId(addDays = 0): string {
   return taipeiISO(Date.now() + addDays * DAY_MS);
 }
 
+/**
+ * Asia/Taipei wall-clock "YYYY-MM-DD HH:mm" for an instant (e.g. a UTC RFC3339
+ * string from the API). Returns "-" when missing or unparseable. The API stores
+ * cutoff times in UTC, so a naive `iso.slice(0,16)` shows 8 hours early.
+ */
+export function taipeiDateTime(iso: string | undefined | null): string {
+  if (!iso) return "-";
+  const ms = new Date(iso).getTime();
+  if (Number.isNaN(ms)) return "-";
+  const t = new Date(ms + TAIPEI_OFFSET_MS);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${t.getUTCFullYear()}-${p(t.getUTCMonth() + 1)}-${p(t.getUTCDate())} ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
+}
+
 const WEEKDAY = ["日", "一", "二", "三", "四", "五", "六"];
 
 export interface DayOption {

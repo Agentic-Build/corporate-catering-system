@@ -1,4 +1,4 @@
-export { taipeiISO, dayId, buildDays, type DayOption } from "./date";
+export { taipeiISO, dayId, taipeiDateTime, buildDays, type DayOption } from "./date";
 export { formatMinor } from "./money";
 export { problemMessage } from "./problem";
 export {
