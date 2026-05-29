@@ -35,7 +35,9 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
 
   const byPlant: Record<string, MerchantOrderDTO[]> = {};
   for (const o of items) {
-    (byPlant[o.plant] ??= []).push(o);
+    const list = byPlant[o.plant];
+    if (list) list.push(o);
+    else byPlant[o.plant] = [o];
   }
 
   const days: { id: string; label: string }[] = [];
