@@ -18,6 +18,12 @@ spec:
   cooldownPeriod: {{ $cfg.keda.cooldownPeriod }}
   minReplicaCount: {{ $cfg.keda.minReplicas }}
   maxReplicaCount: {{ $cfg.keda.maxReplicas }}
+  {{- with $cfg.keda.hpaBehavior }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+{{- toYaml . | nindent 8 }}
+  {{- end }}
   triggers:
     - type: nats-jetstream
       metadata:

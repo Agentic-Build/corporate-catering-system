@@ -42,6 +42,7 @@ type OnTimeRateEvaluator struct {
 	HighThresh float64
 	MinSamples int
 	Logger     *slog.Logger
+	OnStarted  func()
 
 	mu   sync.Mutex
 	data map[string][]onTimeEvent
@@ -123,6 +124,9 @@ func (e *OnTimeRateEvaluator) Run(ctx context.Context) error {
 		return fmt.Errorf("messages: %w", err)
 	}
 	defer it.Stop()
+	if e.OnStarted != nil {
+		e.OnStarted()
+	}
 	go func() {
 		<-ctx.Done()
 		it.Stop()

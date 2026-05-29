@@ -10,8 +10,8 @@
       "properties": {
         "size": {
           "type": "string",
-          "enum": ["dev", "prod"],
-          "description": "Topology profile. 'dev' uses single-replica, smaller storage; 'prod' is the canonical single-enterprise sizing (ADR-0008)."
+          "enum": ["dev", "local-ha", "prod"],
+          "description": "Topology profile. 'dev' uses single-replica smaller storage, 'local-ha' preserves HA behavior at laptop scale, and 'prod' is the canonical single-enterprise sizing (ADR-0008)."
         },
         "haTopology": {
           "type": "boolean",
@@ -76,7 +76,14 @@
         "podLabels": { "type": "object" },
         "nodeSelector": { "type": "object" },
         "tolerations": { "type": "array" },
-        "affinity": { "type": "object" }
+        "affinity": { "type": "object" },
+        "topologySpread": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "constraints": { "type": "array" }
+          }
+        }
       }
     },
     "image": {
@@ -86,6 +93,12 @@
         "repository": { "type": "string", "minLength": 1 },
         "tag": { "type": "string" },
         "pullSecrets": { "type": "array" }
+      }
+    },
+    "tbite": {
+      "type": "object",
+      "properties": {
+        "affinity": { "type": "object" }
       }
     },
     "api": {
@@ -110,7 +123,14 @@
                 "name": { "type": "string" },
                 "key": { "type": "string" }
               }
-            }
+            },
+            "connectRetryTimeoutSeconds": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "redis": {
+          "type": "object",
+          "properties": {
+            "connectRetryTimeoutSeconds": { "type": "integer", "minimum": 0 }
           }
         }
       },
@@ -121,7 +141,13 @@
         }
       ]
     },
-    "realtime": { "type": "object" },
+    "realtime": {
+      "type": "object",
+      "properties": {
+        "preStopDrainSeconds": { "type": "integer", "minimum": 0 },
+        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
     "web": { "type": "object" },
     "workers": { "type": "object" },
     "scheduler": { "type": "object" },
@@ -160,7 +186,6 @@
     "authentikBlueprints": { "type": "object" },
     "authentikBootstrap": { "type": "object" },
     "crdsReady": { "type": "boolean" },
-    "tbite": { "type": "object" },
     "fullnameOverride": { "type": "string" },
     "nameOverride": { "type": "string" }
   },

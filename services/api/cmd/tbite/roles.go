@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -50,16 +51,94 @@ const (
 	checkerPostgresRW = "postgres-rw"
 )
 
+type backgroundDependency struct {
+	name    string
+	mu      sync.RWMutex
+	ready   bool
+	lastErr string
+}
+
+func newBackgroundDependency(name string) *backgroundDependency {
+	dep := &backgroundDependency{name: name}
+	dep.setNotReady(errors.New("starting"))
+	return dep
+}
+
+func (d *backgroundDependency) setReady() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.ready = true
+	d.lastErr = ""
+}
+
+func (d *backgroundDependency) setNotReady(err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.ready = false
+	if err != nil {
+		d.lastErr = err.Error()
+		return
+	}
+	d.lastErr = "not ready"
+}
+
+func (d *backgroundDependency) checker() httpserver.Checker {
+	return httpserver.CheckerFunc{N: d.name, F: func(context.Context) error {
+		d.mu.RLock()
+		defer d.mu.RUnlock()
+		if d.ready {
+			return nil
+		}
+		if d.lastErr == "" {
+			return errors.New("not ready")
+		}
+		return errors.New(d.lastErr)
+	}}
+}
+
+func runRetriedBackgroundDependency(ctx context.Context, logger *slog.Logger, dep *backgroundDependency, run func(context.Context, func()) error) {
+	retryDelay := time.Second
+	for ctx.Err() == nil {
+		dep.setNotReady(errors.New("starting"))
+		err := run(ctx, func() {
+			dep.setReady()
+			retryDelay = time.Second
+		})
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil {
+			err = errors.New("stopped without error")
+		}
+		dep.setNotReady(err)
+		logger.Warn("background dependency stopped; retrying", "dependency", dep.name, "err", err, "retry_in", retryDelay)
+
+		timer := time.NewTimer(retryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		if retryDelay < 30*time.Second {
+			retryDelay *= 2
+			if retryDelay > 30*time.Second {
+				retryDelay = 30 * time.Second
+			}
+		}
+	}
+}
+
 // newRWPool constructs the RW pgxpool with the chart-supplied budget.
 // All split roles share this constructor so a single env knob controls
 // how many backend connections one replica may open. Pool metrics are
 // registered here so every role emits tbite_db_pool_* without each
 // role needing to remember.
 func newRWPool(ctx context.Context, cfg config.Config) (*db.Pool, error) {
-	p, err := db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{
+	p, err := newPoolWithStartupRetry(ctx, cfg.DatabaseRW, db.PoolConfig{
 		MaxConns: cfg.DBMaxConns,
 		MinConns: cfg.DBMinConns,
-	})
+	}, cfg.DBConnectRetryTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -72,15 +151,87 @@ func newRWPool(ctx context.Context, cfg config.Config) (*db.Pool, error) {
 // DSN so small deployments keep one database endpoint while prod caps
 // the read budget separately.
 func newROPool(ctx context.Context, cfg config.Config) (*db.Pool, error) {
-	p, err := db.NewPoolWithConfig(ctx, cfg.EffectiveDatabaseRO(), db.PoolConfig{
+	p, err := newPoolWithStartupRetry(ctx, cfg.EffectiveDatabaseRO(), db.PoolConfig{
 		MaxConns: cfg.DBMaxConnsRO,
 		MinConns: cfg.DBMinConnsRO,
-	})
+	}, cfg.DBConnectRetryTimeout)
 	if err != nil {
 		return nil, err
 	}
 	_ = db.RegisterPoolMetrics(p, "ro")
 	return p, nil
+}
+
+func newPoolWithStartupRetry(ctx context.Context, dsn string, pc db.PoolConfig, timeout time.Duration) (*db.Pool, error) {
+	if timeout <= 0 {
+		return db.NewPoolWithConfig(ctx, dsn, pc)
+	}
+
+	retryCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	var lastErr error
+	for attempt := 1; ; attempt++ {
+		pool, err := db.NewPoolWithConfig(retryCtx, dsn, pc)
+		if err == nil {
+			return pool, nil
+		}
+		lastErr = err
+
+		if retryCtx.Err() != nil {
+			return nil, fmt.Errorf("connect database within %s: %w", timeout, lastErr)
+		}
+
+		delay := time.Duration(attempt) * time.Second
+		if delay > 5*time.Second {
+			delay = 5 * time.Second
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-retryCtx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("connect database within %s: %w", timeout, lastErr)
+		case <-timer.C:
+		}
+	}
+}
+
+func newRedisClient(ctx context.Context, cfg config.Config) (*cache.Client, error) {
+	return newRedisClientWithStartupRetry(ctx, cfg.RedisURL, cfg.RedisConnectRetryTimeout)
+}
+
+func newRedisClientWithStartupRetry(ctx context.Context, url string, timeout time.Duration) (*cache.Client, error) {
+	if timeout <= 0 {
+		return cache.NewClient(ctx, url)
+	}
+
+	retryCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	var lastErr error
+	for attempt := 1; ; attempt++ {
+		client, err := cache.NewClient(retryCtx, url)
+		if err == nil {
+			return client, nil
+		}
+		lastErr = err
+
+		if retryCtx.Err() != nil {
+			return nil, fmt.Errorf("connect redis within %s: %w", timeout, lastErr)
+		}
+
+		delay := time.Duration(attempt) * time.Second
+		if delay > 5*time.Second {
+			delay = 5 * time.Second
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-retryCtx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("connect redis within %s: %w", timeout, lastErr)
+		case <-timer.C:
+		}
+	}
 }
 
 // newNATS connects to NATS and returns the messaging client. Workers
@@ -209,15 +360,24 @@ func runPayrollSettler(ctx context.Context, logger *slog.Logger, cfg config.Conf
 		Audit:      opgrepo.NewAuditRepo(pool),
 		Outbox:     opgrepo.NewOutboxRepo(pool),
 	}
+	consumer := newBackgroundDependency("payroll-settler-consumer")
 
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		return serveProbes(egctx, logger,
 			httpserver.PostgresChecker(checkerPostgresRW, pool),
 			httpserver.NATSChecker("nats", nc.NC),
+			httpserver.ObjectStorageChecker("object-storage", s3Client),
+			consumer.checker(),
 		)
 	})
-	eg.Go(func() error { return settler.Run(egctx) })
+	eg.Go(func() error {
+		runRetriedBackgroundDependency(egctx, logger.With("component", "payroll-settler"), consumer, func(runCtx context.Context, onStarted func()) error {
+			settler.OnStarted = onStarted
+			return settler.Run(runCtx)
+		})
+		return nil
+	})
 	if err := eg.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
@@ -244,15 +404,23 @@ func runOnTimeEvaluator(ctx context.Context, logger *slog.Logger, cfg config.Con
 		Anomaly: cpgrepo.NewAnomalyRepo(pool),
 		Logger:  logger.With("component", "on-time-evaluator"),
 	}
+	consumer := newBackgroundDependency("on-time-evaluator-consumer")
 
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		return serveProbes(egctx, logger,
 			httpserver.PostgresChecker(checkerPostgresRW, pool),
 			httpserver.NATSChecker("nats", nc.NC),
+			consumer.checker(),
 		)
 	})
-	eg.Go(func() error { return eval.Run(egctx) })
+	eg.Go(func() error {
+		runRetriedBackgroundDependency(egctx, logger.With("component", "on-time-evaluator"), consumer, func(runCtx context.Context, onStarted func()) error {
+			eval.OnStarted = onStarted
+			return eval.Run(runCtx)
+		})
+		return nil
+	})
 	if err := eg.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
@@ -458,7 +626,7 @@ func runRealtimeGateway(ctx context.Context, logger *slog.Logger, cfg config.Con
 		return fmt.Errorf(errPgPoolWrap, err)
 	}
 	defer pool.Close()
-	rdb, err := cache.NewClient(ctx, cfg.RedisURL)
+	rdb, err := newRedisClient(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("redis: %w", err)
 	}
@@ -484,6 +652,7 @@ func runRealtimeGateway(ctx context.Context, logger *slog.Logger, cfg config.Con
 	boardHub := order.NewBoardHub()
 	menuHub := order.NewMenuHub()
 	RegisterSSESubscriberGauge(boardHub, menuHub)
+	boardFanout := newBackgroundDependency("jetstream-board-consumer")
 
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
@@ -499,9 +668,11 @@ func runRealtimeGateway(ctx context.Context, logger *slog.Logger, cfg config.Con
 		httpserver.PostgresChecker(checkerPostgresRW, pool),
 		httpserver.RedisChecker("valkey", rdb),
 		httpserver.NATSChecker("nats", nc.NC),
+		boardFanout.checker(),
 	)
 	r.Get("/healthz", health.LivenessHandler())
 	r.Get("/readyz", health.ReadinessHandler())
+	r.Get("/drainz", health.DrainHandler(time.Duration(cfg.RealtimePreStopDrainSeconds)*time.Second))
 
 	r.Group(func(rg chi.Router) {
 		rg.Use(authAPI.AuthMiddleware)
@@ -521,7 +692,10 @@ func runRealtimeGateway(ctx context.Context, logger *slog.Logger, cfg config.Con
 
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		return order.RunBoardConsumer(egctx, nc.JS, boardHub, menuHub, logger.With("component", "board-consumer"))
+		runRetriedBackgroundDependency(egctx, logger.With("component", "board-consumer"), boardFanout, func(runCtx context.Context, onStarted func()) error {
+			return order.RunBoardConsumer(runCtx, nc.JS, boardHub, menuHub, logger.With("component", "board-consumer"), onStarted)
+		})
+		return nil
 	})
 	eg.Go(func() error {
 		go func() {

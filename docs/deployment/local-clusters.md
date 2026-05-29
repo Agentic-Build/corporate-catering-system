@@ -9,6 +9,8 @@ it.
 
 Prerequisites: `kubectl`, `helm` (>= 3.14), and one of the cluster tools
 below. The dev profile fits **>= 8 GiB** RAM (~6 GiB of requests).
+For local multi-zone HA behavior drills, use
+[`local-ha.md`](./local-ha.md) instead of the single-node dev profile.
 
 ## Create a cluster
 

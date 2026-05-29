@@ -8,12 +8,13 @@
 #
 # Overlays:
 #   values-dev.yaml      — laptop kind/k3d/OrbStack single-replica
+#   values-local-ha.yaml — local multi-zone HA behavior drills
 #   values-prod-ha.yaml  — opt-in multi-AZ HA (>10K employees, full
 #                          Valkey Sentinel, MinIO Tenant 4x4, CNPG
 #                          3-instance, complete VictoriaMetrics stack)
 
 profile:
-  size: prod # one of: dev | prod
+  size: prod # one of: dev | local-ha | prod
   # haTopology gates the schema's HA-minima enforcement (3-instance
   # CNPG, 3-replica Valkey HA, MinIO Tenant 4x4, etc.). Default is
   # false: the chart ships single-enterprise prod sizing per
@@ -42,6 +43,9 @@ global:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpread:
+    enabled: false
+    constraints: []
   oidcIssuerURL: "https://auth.tbite.example.com/application/o/tbite/"
   authentik:
     baseURL: "http://tbite-authentik-server.tbite.svc.cluster.local:9000"
@@ -79,6 +83,9 @@ global:
     credentialsSecretRef:
       name: tbite-nats
       key: creds
+
+tbite:
+  affinity: {}
 
 image:
   repository: ghcr.io/agentic-build/tbite-api
@@ -132,6 +139,23 @@ api:
     targetConcurrency: 50
     targetRPS: 100
     targetCPUUtilizationPercentage: 70
+    behavior:
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+      scaleUp:
+        stabilizationWindowSeconds: 30
+        policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 30
+          - type: Pods
+            value: 4
+            periodSeconds: 30
+        selectPolicy: Max
   pdb:
     enabled: true
     minAvailable: 1
@@ -140,6 +164,9 @@ api:
     roUrlSecretRef: { name: tbite-db, key: roUrl }
     maxConns: 16
     maxConnsRO: 16
+    connectRetryTimeoutSeconds: 60
+  redis:
+    connectRetryTimeoutSeconds: 60
   env: {}
   envFromSecrets: []
   ingress:
@@ -154,6 +181,7 @@ realtime:
   sseIdleTimeout: 1h
   topicScope: "plant_date"
   terminationGracePeriodSeconds: 90
+  preStopDrainSeconds: 30
   resources:
     requests: { cpu: 200m, memory: 256Mi, ephemeral-storage: 64Mi }
     limits:   { cpu: 1000m, memory: 768Mi, ephemeral-storage: 512Mi }
@@ -243,6 +271,9 @@ workers:
       maxReplicas: 6
       pollingInterval: 15
       cooldownPeriod: 60
+      hpaBehavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
       pendingThreshold: 100
       database:
         connectionFromSecretRef: { name: tbite-db, key: rwUrl }
@@ -263,6 +294,9 @@ workers:
       maxReplicas: 4
       pollingInterval: 15
       cooldownPeriod: 60
+      hpaBehavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
       stream: PAYROLL_V1
       consumer: payroll-settler
       lagThreshold: 500
@@ -280,6 +314,9 @@ workers:
       maxReplicas: 4
       pollingInterval: 15
       cooldownPeriod: 60
+      hpaBehavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
       stream: ORDERS_V1
       consumer: on-time-evaluator
       lagThreshold: 500
@@ -426,6 +463,7 @@ postgres:
 
 # Used only when postgres.operator.bundled=true.
 cnpg-operator:
+  nameOverride: cloudnative-pg
   config:
     create: true
     data:
@@ -804,6 +842,12 @@ hydra:
         logout: https://app.tbite.example.com/logout
       secrets:
         system: []
+    automigration:
+      enabled: true
+      type: initContainer
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { cpu: 200m, memory: 192Mi }
   ingress:
     public:
       enabled: false

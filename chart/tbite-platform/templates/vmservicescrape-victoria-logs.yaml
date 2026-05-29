@@ -1,0 +1,28 @@
+{{- if .Values.crdsReady -}}
+{{- $vlogs := index .Values "victoria-logs-single" -}}
+{{- if and .Values.observability.victoriaMetrics.enabled (dig "server" "enabled" true $vlogs) }}
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: {{ include "tbite.fullname" . }}-victoria-logs
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: victoria-logs
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ include "tbite.namespace" . }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: server
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: victoria-logs-single
+  endpoints:
+    - port: http
+      interval: 15s
+      scrapeTimeout: 5s
+      path: /metrics
+      scheme: http
+{{- end }}
+{{- end -}}

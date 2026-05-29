@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"log/slog"
+	"os"
 	"sync"
 
 	"go.opentelemetry.io/otel"
@@ -39,6 +40,7 @@ type Metrics struct {
 	MCPToolDurationSec    metric.Float64Histogram
 	MCPToolSideEffects    metric.Int64Counter
 	MCPAuthFailure        metric.Int64Counter
+	DependencyReady       metric.Int64Gauge
 }
 
 var (
@@ -74,6 +76,17 @@ func MustInitMetrics() *Metrics {
 			}
 			return h
 		}
+		mustIntGauge := func(name, desc, unit string) metric.Int64Gauge {
+			opts := []metric.Int64GaugeOption{metric.WithDescription(desc)}
+			if unit != "" {
+				opts = append(opts, metric.WithUnit(unit))
+			}
+			g, err := m.Int64Gauge(name, opts...)
+			if err != nil {
+				panic(err)
+			}
+			return g
+		}
 		metrics = &Metrics{
 			OrderPlaced:           mustCounter("catering.order.placed.count", "Orders successfully placed", "1"),
 			OrderCancelled:        mustCounter("catering.order.cancelled.count", "Orders cancelled by user or admin", "1"),
@@ -98,6 +111,7 @@ func MustInitMetrics() *Metrics {
 			MCPToolDurationSec:    mustFloatHist("mcp.tool.duration", "MCP tool invocation latency", "s"),
 			MCPToolSideEffects:    mustCounter("mcp.tool.side_effects.count", "MCP tool invocations grouped by side-effect annotation", "1"),
 			MCPAuthFailure:        mustCounter("mcp.auth.failure.count", "MCP authentication failures", "1"),
+			DependencyReady:       mustIntGauge("tbite_dependency_ready", "Runtime dependency readiness by dependency name and pod; 1 means ready and 0 means the checker failed.", ""),
 		}
 	})
 	return metrics
@@ -106,6 +120,24 @@ func MustInitMetrics() *Metrics {
 // ───────────────────────────── Emission helpers ─────────────────────────────
 // Helpers nil-check `metrics` so domain code can call them without an extra
 // init dance in every package.
+
+func RecordDependencyReady(ctx context.Context, dependency string, ready bool) {
+	if metrics == nil {
+		return
+	}
+	value := int64(0)
+	if ready {
+		value = 1
+	}
+	attrs := []attribute.KeyValue{attribute.String("dependency", dependency)}
+	if pod := os.Getenv("HOSTNAME"); pod != "" {
+		attrs = append(attrs, attribute.String("pod", pod))
+	}
+	if role := os.Getenv("TBITE_ROLE"); role != "" {
+		attrs = append(attrs, attribute.String("role", role))
+	}
+	metrics.DependencyReady.Record(ctx, value, metric.WithAttributes(attrs...))
+}
 
 func RecordOrderPlaced(ctx context.Context, plant, vendor, mealWindow, outcome string) {
 	if metrics == nil {

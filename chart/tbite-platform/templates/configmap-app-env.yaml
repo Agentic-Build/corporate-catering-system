@@ -28,12 +28,15 @@ data:
   APP_BASE_URL_ADMIN: {{ .Values.global.baseURL.admin | quote }}
   DB_MAX_CONNS: {{ .Values.api.database.maxConns | quote }}
   DB_MAX_CONNS_RO: {{ .Values.api.database.maxConnsRO | quote }}
+  DB_CONNECT_RETRY_TIMEOUT_SECONDS: {{ .Values.api.database.connectRetryTimeoutSeconds | quote }}
+  REDIS_CONNECT_RETRY_TIMEOUT_SECONDS: {{ .Values.api.redis.connectRetryTimeoutSeconds | quote }}
   # TBITE_* mirrors of the same values for SSR/MCP roles that may
   # want a namespaced view.
   TBITE_PROFILE: {{ .Values.profile.size | quote }}
   TBITE_DOMAIN: {{ .Values.global.domain | quote }}
   TBITE_REALTIME_TOPIC_SCOPE: {{ .Values.realtime.topicScope | quote }}
   TBITE_REALTIME_SSE_IDLE_TIMEOUT: {{ .Values.realtime.sseIdleTimeout | quote }}
+  TBITE_REALTIME_PRESTOP_DRAIN_SECONDS: {{ .Values.realtime.preStopDrainSeconds | quote }}
 {{- if .Values.observability.otelCollector.enabled }}
   # HTTP/protobuf uses the collector's 4318 endpoint with a URL scheme.
   # gRPC uses the collector's 4317 endpoint as bare host:port.

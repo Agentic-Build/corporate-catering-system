@@ -7,6 +7,8 @@ CHART_DIR ?= chart/tbite-platform
 CHART_RELEASE ?= tbite
 CHART_NAMESPACE ?= tbite
 CHART_DEV_VALUES ?= $(CHART_DIR)/values-dev.yaml
+CHART_LOCAL_HA_VALUES ?= $(CHART_DIR)/values-local-ha.yaml
+LOCAL_HA_APP_POD_SELECTOR ?= app.kubernetes.io/component in (api,realtime,web-employee,web-merchant,web-admin,worker-outbox-relay,worker-payroll-settler,worker-on-time-evaluator,scheduler-cutoff,scheduler-no-show,scheduler-doc-expiry,scheduler-feedback)
 # Default is the single-enterprise prod sizing (ADR-0008, fits
 # 16 cores / 32 GiB). Override to values-dev.yaml for laptop kind
 # clusters or stack values-prod-ha.yaml on top for multi-AZ HA.
@@ -14,6 +16,9 @@ CHART_VALUES ?= $(CHART_DIR)/values.yaml
 
 .PHONY: help \
         dev dev-down dev-reset dev-logs \
+        local-ha-cluster local-ha-metrics local-ha-bootstrap local-ha-image local-ha-deploy local-ha-wait local-ha-seed \
+        local-ha-autoscale-api local-ha-autoscale-worker local-ha-zone-autoscale-api local-ha-drain-node local-ha-drain-apps local-ha-drain-stateful-blocker local-ha-drain-pdb-blocker local-ha-drain-zone local-ha-drain-zone-apps \
+        local-ha-rebalance-apps local-ha-fail-metrics-server local-ha-fail-keda-metrics local-ha-fail-cnpg local-ha-fail-cnpg-pooler local-ha-cordon-cnpg-primary local-ha-fail-nats local-ha-fail-valkey local-ha-fail-minio local-ha-fail-app-object-storage-client local-ha-fail-vmagent local-ha-fail-vmalert local-ha-fail-kube-state-metrics local-ha-restart-kube-state-metrics local-ha-fail-otel-collector local-ha-fail-victoria-traces local-ha-fail-victoria-logs local-ha-evidence \
         migrate-up migrate-down migrate-new seed seed-tsmc \
         contract-sync test-go test-web test-e2e \
         coverage coverage-go coverage-web \
@@ -44,6 +49,108 @@ dev-logs: ## Tail local Kubernetes logs (component=api|realtime|web-employee|...
 	@selector="app.kubernetes.io/instance=$(CHART_RELEASE)"; \
 	if [ -n "$(component)" ]; then selector="$$selector,app.kubernetes.io/component=$(component)"; fi; \
 	$(KUBECTL) -n $(CHART_NAMESPACE) logs -f -l "$$selector" --all-containers=true --max-log-requests=20
+
+local-ha-cluster: ## Create/use a 3-zone kind cluster for local HA drills
+	@scripts/local-ha/create-cluster.sh
+
+local-ha-metrics: ## Install metrics-server for HPA CPU metrics on kind
+	@scripts/local-ha/install-metrics-server.sh
+
+local-ha-bootstrap: ## Create local-only Secrets used by the HA chart
+	@NAMESPACE=$(CHART_NAMESPACE) scripts/local-ha/bootstrap-secrets.sh
+
+local-ha-image: ## Build and load the platform image into the local HA kind cluster (TAG=local)
+	@TAG=$${TAG:-local} scripts/local-ha/load-image.sh
+
+local-ha-deploy: ## Deploy values.yaml + values-local-ha.yaml into the current context
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) CHART_DIR=$(CHART_DIR) LOCAL_HA_VALUES=$(CHART_LOCAL_HA_VALUES) scripts/local-ha/deploy.sh
+
+local-ha-wait: ## Wait for local HA rollouts and show autoscaling state
+	@NAMESPACE=$(CHART_NAMESPACE) scripts/local-ha/wait-ready.sh
+
+local-ha-seed: ## Seed local HA workload data for behavior drills
+	@NAMESPACE=$(CHART_NAMESPACE) scripts/local-ha/seed-workload.sh
+
+local-ha-autoscale-api: ## Run API HPA load scenario (DURATION/TOTAL_RPS/CONCURRENCY override)
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-autoscale-api.sh
+
+local-ha-autoscale-worker: ## Run deterministic worker KEDA backlog scenario
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-autoscale-worker-keda.sh
+
+local-ha-zone-autoscale-api: ## Cordon one modeled zone, evacuate API pods, and verify API HPA load still scales
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-zone-drain-api-autoscale.sh
+
+local-ha-fail-metrics-server: ## Scale metrics-server to zero and verify CPU HPAs report resource metric failure
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-metrics-server.sh
+
+local-ha-fail-keda-metrics: ## Scale KEDA metrics apiserver to zero and verify KEDA HPAs report external metric failure
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-keda-metrics-apiserver.sh
+
+local-ha-drain-node: ## Drain one worker node (NODE=... optional)
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-drain-node.sh
+
+local-ha-drain-apps: ## Cordon a worker and evict only tbite app pods; avoids kind local-path PVC pinning
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) DRAIN_POD_SELECTOR='$(LOCAL_HA_APP_POD_SELECTOR)' scripts/local-ha/scenario-drain-node.sh
+
+local-ha-drain-stateful-blocker: ## Drain a node with a local StatefulSet PVC, verify blocker signals, then restore
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-drain-stateful-pvc-blocker.sh
+
+local-ha-drain-pdb-blocker: ## Cordon an app worker and verify voluntary eviction is blocked by PDB, then restore
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-drain-pdb-blocker.sh
+
+local-ha-drain-zone: ## Drain one modeled zone (ZONE=local-a|local-b|local-c)
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-drain-zone.sh
+
+local-ha-drain-zone-apps: ## Cordon a modeled zone and evict only tbite app pods
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) DRAIN_POD_SELECTOR='$(LOCAL_HA_APP_POD_SELECTOR)' scripts/local-ha/scenario-drain-zone.sh
+
+local-ha-rebalance-apps: ## Restart platform app deployments to restore topology spread after drain drills
+	@NAMESPACE=$(CHART_NAMESPACE) DEPLOYMENT_SELECTOR='app.kubernetes.io/instance=$(CHART_RELEASE),app.kubernetes.io/name=tbite-platform' scripts/local-ha/rebalance-apps.sh
+
+local-ha-fail-cnpg: ## Delete the current CNPG primary and wait for failover
+	@NAMESPACE=$(CHART_NAMESPACE) scripts/local-ha/scenario-fail-cnpg-primary.sh
+
+local-ha-fail-cnpg-pooler: ## Scale the CNPG RW pooler to zero and verify access-layer failure/recovery
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-cnpg-pooler.sh
+
+local-ha-cordon-cnpg-primary: ## Cordon the CNPG primary node and verify operator-driven switchover
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-cordon-cnpg-primary-node.sh
+
+local-ha-fail-nats: ## Delete one NATS pod and wait for the StatefulSet
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-nats-pod.sh
+
+local-ha-fail-valkey: ## Delete the current Valkey master and wait for the StatefulSet
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-valkey-primary.sh
+
+local-ha-fail-minio: ## Delete one MinIO tenant pod and wait for the StatefulSet
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-minio-pod.sh
+
+local-ha-fail-app-object-storage-client: ## Patch API object-storage endpoint and verify client-side dependency readiness signals
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-app-object-storage-client.sh
+
+local-ha-fail-vmagent: ## Suspend vmagent briefly and wait for metrics collection to recover
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-vmagent-pod.sh
+
+local-ha-fail-vmalert: ## Scale vmalert to zero and verify alerting-plane outage is surfaced without data loss
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-vmalert.sh
+
+local-ha-fail-kube-state-metrics: ## Scale kube-state-metrics to zero and verify Kubernetes inventory metric staleness/recovery
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-kube-state-metrics.sh
+
+local-ha-restart-kube-state-metrics: ## Restart kube-state-metrics and verify dashboard survives duplicate KSM series
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-restart-kube-state-metrics.sh
+
+local-ha-fail-otel-collector: ## Scale OTel Collector to zero and verify app telemetry staleness/recovery
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-otel-collector.sh
+
+local-ha-fail-victoria-traces: ## Scale VictoriaTraces to zero and verify trace export failure/recovery
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-victoria-traces.sh
+
+local-ha-fail-victoria-logs: ## Scale VictoriaLogs to zero and verify log ingest staleness/recovery
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/scenario-fail-victoria-logs.sh
+
+local-ha-evidence: ## Collect Kubernetes state for a local HA drill
+	@NAMESPACE=$(CHART_NAMESPACE) RELEASE=$(CHART_RELEASE) scripts/local-ha/collect-evidence.sh
 
 migrate-up: ## Apply pending migrations
 	@scripts/db/migrate.sh up
@@ -126,8 +233,9 @@ lunch-flow-cluster: ## Build and run lunch-flow as an in-cluster Kubernetes Job
 chart-deps: ## Resolve and download Helm subchart dependencies (offline-friendly after first run)
 	@$(HELM) dependency update $(CHART_DIR)
 
-chart-lint: ## Lint the umbrella chart against values-dev.yaml + values-prod-ha.yaml
+chart-lint: ## Lint the umbrella chart against dev, local HA, and prod HA values
 	@$(HELM) lint $(CHART_DIR) -f $(CHART_DIR)/values-dev.yaml
+	@$(HELM) lint $(CHART_DIR) -f $(CHART_DIR)/values.yaml -f $(CHART_LOCAL_HA_VALUES)
 	@$(HELM) lint $(CHART_DIR) -f $(CHART_DIR)/values-prod-ha.yaml
 
 chart-render: ## Render the chart to stdout. Usage: make chart-render CHART_VALUES=chart/tbite-platform/values-prod-ha.yaml

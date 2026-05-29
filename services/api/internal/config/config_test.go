@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestFromEnvLoadsAuthProviderRegistry(t *testing.T) {
 	t.Setenv("DATABASE_RW_URL", "postgres://tbite:tbite@localhost:5432/tbite?sslmode=disable")
@@ -67,6 +70,38 @@ func TestNATSStreamReplicasOverrideFromEnv(t *testing.T) {
 	}
 	if cfg.NATSStreamReplicas != 3 {
 		t.Fatalf("NATSStreamReplicas = %d, want 3", cfg.NATSStreamReplicas)
+	}
+}
+
+func TestFromEnvLoadsRealtimePreStopDrainSeconds(t *testing.T) {
+	t.Setenv("DATABASE_RW_URL", "postgres://tbite:tbite@localhost:5432/tbite?sslmode=disable")
+	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+	t.Setenv("TBITE_REALTIME_PRESTOP_DRAIN_SECONDS", "12")
+
+	cfg, err := FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv() error = %v", err)
+	}
+	if cfg.RealtimePreStopDrainSeconds != 12 {
+		t.Fatalf("RealtimePreStopDrainSeconds = %d, want 12", cfg.RealtimePreStopDrainSeconds)
+	}
+}
+
+func TestFromEnvLoadsConnectRetryTimeouts(t *testing.T) {
+	t.Setenv("DATABASE_RW_URL", "postgres://tbite:tbite@localhost:5432/tbite?sslmode=disable")
+	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
+	t.Setenv("DB_CONNECT_RETRY_TIMEOUT_SECONDS", "17")
+	t.Setenv("REDIS_CONNECT_RETRY_TIMEOUT_SECONDS", "19")
+
+	cfg, err := FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv() error = %v", err)
+	}
+	if cfg.DBConnectRetryTimeout != 17*time.Second {
+		t.Fatalf("DBConnectRetryTimeout = %s, want 17s", cfg.DBConnectRetryTimeout)
+	}
+	if cfg.RedisConnectRetryTimeout != 19*time.Second {
+		t.Fatalf("RedisConnectRetryTimeout = %s, want 19s", cfg.RedisConnectRetryTimeout)
 	}
 }
 

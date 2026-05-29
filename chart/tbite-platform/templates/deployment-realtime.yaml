@@ -59,6 +59,8 @@ spec:
               value: {{ .Values.realtime.topicScope | quote }}
             - name: TBITE_REALTIME_SSE_IDLE_TIMEOUT
               value: {{ .Values.realtime.sseIdleTimeout | quote }}
+            - name: TBITE_REALTIME_PRESTOP_DRAIN_SECONDS
+              value: {{ .Values.realtime.preStopDrainSeconds | quote }}
             {{- include "tbite.dbEnv" . | nindent 12 }}
             {{- include "tbite.otelEnv" . | nindent 12 }}
           readinessProbe:
@@ -68,8 +70,9 @@ spec:
           # Realtime needs a generous preStop to drain SSE connections.
           lifecycle:
             preStop:
-              exec:
-                command: ["/bin/sh", "-c", "sleep 30"]
+              httpGet:
+                path: /drainz
+                port: http
           resources:
             {{- toYaml .Values.realtime.resources | nindent 12 }}
           securityContext:
@@ -80,5 +83,5 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
-      {{- include "tbite.podScheduling" . | nindent 6 }}
+      {{- include "tbite.podScheduling" (dict "ctx" . "role" $role) | nindent 6 }}
 {{- end }}

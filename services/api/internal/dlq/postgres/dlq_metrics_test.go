@@ -57,6 +57,15 @@ func int64AttrStr(t *testing.T, dp metricdata.DataPoint[int64], key string) stri
 	return v.AsString()
 }
 
+func dlqPendingByStream(t *testing.T, rm *metricdata.ResourceMetrics) map[string]int64 {
+	t.Helper()
+	byStream := map[string]int64{}
+	for _, dp := range int64GaugePoints(t, rm, "tbite_dlq_pending") {
+		byStream[int64AttrStr(t, dp, "source_stream")] = dp.Value
+	}
+	return byStream
+}
+
 func TestRegisterDLQGauges(t *testing.T) {
 	pool, cleanup := setupPostgres(t)
 	defer cleanup()
@@ -92,11 +101,7 @@ func TestRegisterDLQGauges(t *testing.T) {
 	require.NoError(t, reader.Collect(ctx, &rm))
 
 	// tbite_dlq_pending — count per source_stream, excluding the resolved row.
-	pendingPts := int64GaugePoints(t, &rm, "tbite_dlq_pending")
-	byStream := map[string]int64{}
-	for _, dp := range pendingPts {
-		byStream[int64AttrStr(t, dp, "source_stream")] = dp.Value
-	}
+	byStream := dlqPendingByStream(t, &rm)
 	assert.Equal(t, int64(2), byStream["ORDERS_V1"], "ORDERS_V1 pending should exclude the resolved row")
 	assert.Equal(t, int64(1), byStream["PAYROLL_V1"])
 
@@ -105,4 +110,18 @@ func TestRegisterDLQGauges(t *testing.T) {
 	require.Len(t, oldestPts, 1)
 	assert.Equal(t, 0, oldestPts[0].Attributes.Len(), "oldest gauge must have no attributes")
 	assert.Greater(t, oldestPts[0].Value, 0.0)
+
+	require.NoError(t, repo.MarkResolved(ctx, pendingA.ID, admin, "drained"))
+	require.NoError(t, repo.MarkResolved(ctx, pendingB.ID, admin, "drained"))
+	require.NoError(t, repo.MarkResolved(ctx, pendingPayroll.ID, admin, "drained"))
+
+	var rmAfterDrain metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(ctx, &rmAfterDrain))
+	byStream = dlqPendingByStream(t, &rmAfterDrain)
+	assert.Equal(t, int64(0), byStream["ORDERS_V1"])
+	assert.Equal(t, int64(0), byStream["PAYROLL_V1"])
+
+	oldestAfterPts := float64GaugePoints(t, &rmAfterDrain, "tbite_dlq_oldest_seconds")
+	require.Len(t, oldestAfterPts, 1)
+	assert.Equal(t, 0.0, oldestAfterPts[0].Value)
 }

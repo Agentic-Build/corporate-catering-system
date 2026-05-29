@@ -86,5 +86,5 @@ spec:
           emptyDir: {}
         - name: cache
           emptyDir: {}
-      {{- include "tbite.podScheduling" . | nindent 6 }}
+      {{- include "tbite.podScheduling" (dict "ctx" . "role" $role) | nindent 6 }}
 {{- end }}

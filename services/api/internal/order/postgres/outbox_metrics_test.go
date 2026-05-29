@@ -40,6 +40,15 @@ func attrStr(t *testing.T, dp metricdata.DataPoint[int64], key string) string {
 	return v.AsString()
 }
 
+func outboxPendingByType(t *testing.T, rm *metricdata.ResourceMetrics) map[string]int64 {
+	t.Helper()
+	pendingByType := map[string]int64{}
+	for _, dp := range gaugePoints(t, rm, "tbite_outbox_pending") {
+		pendingByType[attrStr(t, dp, "aggregate_type")] = dp.Value
+	}
+	return pendingByType
+}
+
 // float64GaugePoints returns the float64 gauge data points for the named
 // instrument, failing if it is missing or not a Float64 gauge.
 func float64GaugePoints(t *testing.T, rm *metricdata.ResourceMetrics, name string) []metricdata.DataPoint[float64] {
@@ -86,10 +95,7 @@ VALUES
 	require.NoError(t, reader.Collect(ctx, &rm))
 
 	// tbite_outbox_pending — one point per aggregate_type.
-	pendingByType := map[string]int64{}
-	for _, dp := range gaugePoints(t, &rm, "tbite_outbox_pending") {
-		pendingByType[attrStr(t, dp, "aggregate_type")] = dp.Value
-	}
+	pendingByType := outboxPendingByType(t, &rm)
 	assert.Equal(t, int64(2), pendingByType["order"])
 	assert.Equal(t, int64(1), pendingByType["menu"])
 
@@ -103,4 +109,21 @@ VALUES
 	assert.Greater(t, oldestUnpubPts[0].Value, 0.0)
 
 	assert.Equal(t, oldestPts[0].Value, oldestUnpubPts[0].Value, "both oldest gauges must report the same value")
+
+	_, err = pool.Exec(ctx, `UPDATE outbox_event SET published_at = now() WHERE published_at IS NULL`)
+	require.NoError(t, err)
+
+	var rmAfterDrain metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(ctx, &rmAfterDrain))
+	pendingByType = outboxPendingByType(t, &rmAfterDrain)
+	assert.Equal(t, int64(0), pendingByType["order"])
+	assert.Equal(t, int64(0), pendingByType["menu"])
+
+	oldestAfterPts := float64GaugePoints(t, &rmAfterDrain, "tbite_outbox_oldest_seconds")
+	require.Len(t, oldestAfterPts, 1)
+	assert.Equal(t, 0.0, oldestAfterPts[0].Value)
+
+	oldestUnpubAfterPts := float64GaugePoints(t, &rmAfterDrain, "tbite_outbox_oldest_unpublished_seconds")
+	require.Len(t, oldestUnpubAfterPts, 1)
+	assert.Equal(t, 0.0, oldestUnpubAfterPts[0].Value)
 }

@@ -22,10 +22,20 @@ global:
     # 5-node JetStream cluster (see nats.cluster.replicas below) → run streams
     # at 3 replicas so the loss of one node never makes a stream unavailable.
     streamReplicas: 3
+  topologySpread:
+    enabled: true
+    constraints:
+      - topologyKey: topology.kubernetes.io/zone
+        maxSkew: 1
+        whenUnsatisfiable: ScheduleAnyway
+        matchLabelKeys: [pod-template-hash]
+      - topologyKey: kubernetes.io/hostname
+        maxSkew: 1
+        whenUnsatisfiable: ScheduleAnyway
+        matchLabelKeys: [pod-template-hash]
 
-# Pod anti-affinity for application roles (tbite.* templates only;
-# subcharts use their own affinity preset to avoid the Helm
-# global-merge issue where their helpers expect a string preset).
+# Pod anti-affinity for application roles. Subcharts use their own
+# scheduling values to avoid chart-specific helper contracts.
 tbite:
   affinity:
     podAntiAffinity:
@@ -250,12 +260,16 @@ victoria-metrics-k8s-stack:
   vmalert:
     enabled: true
     spec:
-      extraArgs: {}
+      extraArgs:
+        notifier.blackhole: null
   grafana:
     enabled: true
     replicas: 2
   kube-state-metrics:
     enabled: true
+    metricLabelsAllowlist:
+      - nodes=[topology.kubernetes.io/zone]
+      - pods=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component]
   prometheus-node-exporter:
     enabled: true
 
@@ -276,6 +290,19 @@ victoria-traces-single:
 opentelemetry-collector:
   mode: deployment
   replicaCount: 3
+  config:
+    exporters:
+      otlp_http/victoria:
+        traces_endpoint: http://{{ .Release.Name }}-vt-single-server.{{ .Release.Namespace }}.svc.cluster.local:10428/insert/opentelemetry/v1/traces
+        logs_endpoint: http://{{ .Release.Name }}-victoria-logs-single-server.{{ .Release.Namespace }}.svc.cluster.local:9428/insert/opentelemetry/v1/logs
+    service:
+      pipelines:
+        logs:
+          exporters:
+            - otlp_http/victoria
+        traces:
+          exporters:
+            - otlp_http/victoria
 
 keda:
   enabled: true

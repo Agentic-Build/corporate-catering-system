@@ -50,6 +50,8 @@ func main() {
 		targetPlant  = flag.String("target-plant", "hc-12a-1f", "Plant focus for lunch-crunch / focused scenarios")
 		targetVendor = flag.String("target-vendor", "a1111111-1111-1111-1111-111111111111", "Vendor focus for lunch-crunch")
 		hotItem      = flag.String("hot-item", "4f26e612-b35f-5500-8f2a-63eded235675", "Single menu item that focused scenarios prefer (drives quota exhaustion)")
+		max5xx       = flag.Int64("max-5xx", 0, "Maximum allowed HTTP 5xx responses before the run exits non-zero")
+		maxNetErrors = flag.Int64("max-net-errors", 0, "Maximum allowed client-side network errors before the run exits non-zero")
 		quiet        = flag.Bool("quiet", false, "Suppress per-request log lines (still prints summary)")
 	)
 	flag.Parse()
@@ -170,13 +172,21 @@ func main() {
 					return
 				case <-ticker.C:
 					scenarioName := picker()
-					runScenario(timed, state, scenarioName, workerID)
+					runScenario(ctx, state, scenarioName, workerID)
 				}
 			}
 		}(w)
 	}
 	wg.Wait()
 	st.print(summary, *scenario)
+	if got := st.httpStatus5xx.Load(); got > *max5xx {
+		summary.Error("HTTP 5xx budget exceeded", "5xx", got, "max_5xx", *max5xx)
+		os.Exit(1)
+	}
+	if got := st.netErrors.Load(); got > *maxNetErrors {
+		summary.Error("network error budget exceeded", "net_errors", got, "max_net_errors", *maxNetErrors)
+		os.Exit(1)
+	}
 }
 
 type userToken struct {

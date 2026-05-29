@@ -64,7 +64,7 @@ func TestRunBoardConsumer_FansOutToHubs(t *testing.T) {
 	consumerErr := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	go func() { consumerErr <- RunBoardConsumer(ctx, js, hub, menuHub, logger) }()
+	go func() { consumerErr <- RunBoardConsumer(ctx, js, hub, menuHub, logger, nil) }()
 
 	// DeliverNew only delivers messages published after the consumer exists.
 	// The consumer is created asynchronously, so publish in a retry loop until
@@ -126,6 +126,6 @@ func TestRunBoardConsumer_StreamMissing(t *testing.T) {
 	// consumer surfaces directly (the early return on line 169-173).
 	require.NoError(t, js.DeleteStream(context.Background(), "ORDERS_V1"))
 	err := RunBoardConsumer(context.Background(), js, NewBoardHub(), nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+		slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	require.Error(t, err, "missing ORDERS_V1 stream must surface an error")
 }

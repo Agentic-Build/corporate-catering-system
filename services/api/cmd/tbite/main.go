@@ -48,7 +48,6 @@ import (
 	ppgrepo "github.com/Agentic-Build/corporate-catering-system/services/api/internal/plants/postgres"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/cache"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/clock"
-	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/db"
 	messaging "github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/messaging"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/observability"
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/storage"
@@ -227,7 +226,12 @@ func runAPI(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		Sessions: cs.SessStore,
 	})
 
-	srv := httpserver.New(cfg.HTTPAddr, logger, idAPI,
+	apiHealth := httpserver.NewHealth(
+		httpserver.PostgresChecker(checkerPostgresRW, inf.pool),
+		httpserver.RedisChecker("valkey", inf.rdb),
+		httpserver.ObjectStorageChecker("object-storage", inf.s3),
+	)
+	srv := httpserver.NewWithHealth(cfg.HTTPAddr, logger, idAPI, apiHealth,
 		hydraRouter(hb, menuAPI, cfg.HydraPublicURL),
 		mcpSrv,
 		httpserver.MCPOpts{PublicBaseURL: cfg.OIDCCallbackBaseURL, AuthorizationServers: mcpAuthServers(cfg)},
@@ -253,11 +257,10 @@ func runAPI(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 }
 
 func initAPIInfra(ctx context.Context, cfg config.Config, logger *slog.Logger) (*apiInfra, func(), error) {
-	pool, err := db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{MaxConns: cfg.DBMaxConns, MinConns: cfg.DBMinConns})
+	pool, err := newRWPool(ctx, cfg)
 	if err != nil {
 		return nil, noopCleanup, fmt.Errorf("pg pool: %w", err)
 	}
-	_ = db.RegisterPoolMetrics(pool, "rw")
 
 	roPool, err := newROPool(ctx, cfg)
 	if err != nil {
@@ -265,7 +268,7 @@ func initAPIInfra(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		return nil, noopCleanup, fmt.Errorf("pg ro pool: %w", err)
 	}
 
-	rdb, err := cache.NewClient(ctx, cfg.RedisURL)
+	rdb, err := newRedisClient(ctx, cfg)
 	if err != nil {
 		roPool.Close()
 		pool.Close()
@@ -397,7 +400,7 @@ func setupBoardSSEAndDLQ(ctx context.Context, cfg config.Config, pool *pgxpool.P
 	}
 	dlqAPI.JS = natsClient.JS
 	go func() {
-		if err := order.RunBoardConsumer(ctx, natsClient.JS, boardHub, menuHub, logger); err != nil {
+		if err := order.RunBoardConsumer(ctx, natsClient.JS, boardHub, menuHub, logger, nil); err != nil {
 			logger.Warn("board consumer stopped", "err", err)
 		}
 	}()
@@ -532,12 +535,12 @@ func runMCPStdio(ctx context.Context, logger *slog.Logger, cfg config.Config) er
 		return errors.New("MCP_BEARER_TOKEN required for mcp-stdio role")
 	}
 
-	pool, err := db.NewPoolWithConfig(ctx, cfg.DatabaseRW, db.PoolConfig{MaxConns: cfg.DBMaxConns, MinConns: cfg.DBMinConns})
+	pool, err := newRWPool(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("pg pool: %w", err)
 	}
 	defer pool.Close()
-	rdb, err := cache.NewClient(ctx, cfg.RedisURL)
+	rdb, err := newRedisClient(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("redis: %w", err)
 	}

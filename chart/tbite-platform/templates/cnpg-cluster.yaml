@@ -14,6 +14,18 @@ spec:
   imageName: {{ $c.imageName | quote }}
   enableSuperuserAccess: {{ $c.enableSuperuserAccess | default true }}
   primaryUpdateStrategy: unsupervised
+  {{- if hasKey $c "failoverDelay" }}
+  failoverDelay: {{ $c.failoverDelay }}
+  {{- end }}
+  {{- if hasKey $c "smartShutdownTimeout" }}
+  smartShutdownTimeout: {{ $c.smartShutdownTimeout }}
+  {{- end }}
+  {{- if hasKey $c "stopDelay" }}
+  stopDelay: {{ $c.stopDelay }}
+  {{- end }}
+  {{- if hasKey $c "switchoverDelay" }}
+  switchoverDelay: {{ $c.switchoverDelay }}
+  {{- end }}
   storage:
     size: {{ $c.storage.size }}
     {{- with $c.storage.storageClass }}

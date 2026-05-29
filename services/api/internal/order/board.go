@@ -160,10 +160,11 @@ func sanitizeConsumerToken(s string) string {
 	}, s)
 }
 
-// RunBoardConsumer taps ORDERS_V1 and fans order events into the per-vendor
-// board hub (and menu hub if non-nil). Ephemeral, ack-none, deliver-new: the
-// board is a live view, so missed/replayed events are undesirable.
-func RunBoardConsumer(ctx context.Context, js jetstream.JetStream, hub *BoardHub, menuHub *MenuHub, logger *slog.Logger) error {
+// RunBoardConsumer taps the ORDERS_V1 stream and feeds order events into the
+// per-vendor board hub and (if non-nil) the broadcast menu hub, until ctx is
+// cancelled. It uses an ephemeral, ack-none, deliver-new consumer: the board
+// is a live view, so missed or replayed events are undesirable.
+func RunBoardConsumer(ctx context.Context, js jetstream.JetStream, hub *BoardHub, menuHub *MenuHub, logger *slog.Logger, onStarted func()) error {
 	stream, err := js.Stream(ctx, "ORDERS_V1")
 	if err != nil {
 		return err
@@ -201,6 +202,9 @@ func RunBoardConsumer(ctx context.Context, js jetstream.JetStream, hub *BoardHub
 		return err
 	}
 	defer cc.Stop()
+	if onStarted != nil {
+		onStarted()
+	}
 	logger.Info("board consumer started, tapping ORDERS_V1")
 	<-ctx.Done()
 	return nil
