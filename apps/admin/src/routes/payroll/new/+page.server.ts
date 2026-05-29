@@ -1,8 +1,7 @@
 import { redirect, fail } from "@sveltejs/kit";
-import { problemMessage } from "@tbite/web-shared";
+import { problemMessage, formStr } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
-import { formStr } from "@tbite/web-shared";
 
 function firstOfMonth(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;

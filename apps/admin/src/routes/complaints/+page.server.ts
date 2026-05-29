@@ -1,9 +1,8 @@
 import { redirect, fail } from "@sveltejs/kit";
-import { problemMessage } from "@tbite/web-shared";
+import { problemMessage, formStr } from "@tbite/web-shared";
 import type { components } from "@tbite/api-client";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
-import { formStr } from "@tbite/web-shared";
 
 type Complaint = components["schemas"]["ComplaintDTO"];
 
