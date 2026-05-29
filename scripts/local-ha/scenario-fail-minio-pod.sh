@@ -9,6 +9,8 @@ statefulset="${MINIO_STATEFULSET:-${release}-pool-0}"
 target_pod="${POD:-}"
 minio_service="${MINIO_SERVICE:-minio}"
 minio_bucket="${MINIO_BUCKET:-tbite-dev}"
+minio_endpoint_scheme="${MINIO_ENDPOINT_SCHEME:-http}"
+minio_endpoint="${MINIO_ENDPOINT:-${minio_endpoint_scheme}://${minio_service}.${namespace}.svc.cluster.local}"
 s3_secret="${S3_SECRET:-tbite-s3}"
 timeout_seconds="${TIMEOUT_SECONDS:-240}"
 poll_seconds="${POLL_SECONDS:-5}"
@@ -523,12 +525,12 @@ verify_minio_object_api() {
     set -e
     export MC_CONFIG_DIR=/tmp/mc-local-ha-probe
     rm -rf "${MC_CONFIG_DIR}"
-    mc alias set local "http://'"${minio_service}.${namespace}.svc.cluster.local"'" "$0" "$1" >/dev/null
+    mc alias set local "$4" "$0" "$1" >/dev/null
     printf "%s" "$2" > /tmp/local-ha-minio-probe.txt
     mc cp /tmp/local-ha-minio-probe.txt "local/'"${minio_bucket}"'/$3" >/dev/null
     mc cat "local/'"${minio_bucket}"'/$3"
     mc rm --force "local/'"${minio_bucket}"'/$3" >/dev/null
-  ' "${access_key}" "${secret_key}" "${value}" "${key}" | tail -n 1 | tr -d '\r')"
+  ' "${access_key}" "${secret_key}" "${value}" "${key}" "${minio_endpoint}" | tail -n 1 | tr -d '\r')"
 
   if [[ "${got}" != "${value}" ]]; then
     printf 'MinIO object API probe failed during %s: got %s want %s\n' "${phase}" "${got}" "${value}" >&2
