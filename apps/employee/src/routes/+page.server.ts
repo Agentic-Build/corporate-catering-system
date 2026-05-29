@@ -200,7 +200,10 @@ export const actions: Actions = {
     const supplyDate = formStr(fd, "supply_date");
     const notes = formStr(fd, "notes").trim();
     const itemIDs = fd.getAll("item_id").map(String);
-    const qtys = fd.getAll("qty").map((q) => Number.parseInt(String(q), 10));
+    const qtys = fd
+      .getAll("qty")
+      .map(String)
+      .map((q) => Number.parseInt(q, 10));
     if (itemIDs.length === 0) return fail(400, { error: "cart is empty" });
     if (notes.length > 500) return fail(400, { error: "備註不可超過 500 字" });
 
