@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type PlantDTO = components["schemas"]["PlantDTO"];
 
@@ -23,10 +24,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   create: async ({ request, locals }) => {
     const fd = await request.formData();
-    const code = String(fd.get("code") ?? "").trim();
-    const label = String(fd.get("label") ?? "").trim();
-    const address = String(fd.get("address") ?? "").trim();
-    const sortOrder = Number.parseInt(String(fd.get("sort_order") ?? "0"), 10) || 0;
+    const code = formStr(fd, "code").trim();
+    const label = formStr(fd, "label").trim();
+    const address = formStr(fd, "address").trim();
+    const sortOrder = Number.parseInt(formStr(fd, "sort_order", "0"), 10) || 0;
     if (!code || !label) return fail(400, { error: "code and label are required" });
 
     const client = apiFor(locals.apiToken);
@@ -39,11 +40,11 @@ export const actions: Actions = {
 
   update: async ({ request, locals }) => {
     const fd = await request.formData();
-    const code = String(fd.get("code") ?? "");
-    const label = String(fd.get("label") ?? "").trim();
-    const address = String(fd.get("address") ?? "").trim();
+    const code = formStr(fd, "code");
+    const label = formStr(fd, "label").trim();
+    const address = formStr(fd, "address").trim();
     const active = fd.get("active") === "true";
-    const sortOrder = Number.parseInt(String(fd.get("sort_order") ?? "0"), 10) || 0;
+    const sortOrder = Number.parseInt(formStr(fd, "sort_order", "0"), 10) || 0;
     if (!code || !label) return fail(400, { error: "code and label are required" });
 
     const client = apiFor(locals.apiToken);

@@ -2,6 +2,7 @@ import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { createApiClient, type components } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { formStr } from "@tbite/web-shared";
 
 type EmployeeEntry = components["schemas"]["EmployeeEntryDTO"];
 type CurrentPayrollLine = components["schemas"]["CurrentPayrollLineDTO"];
@@ -42,9 +43,9 @@ export const actions: Actions = {
   rate: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { ratingError: "unauthenticated" });
     const fd = await request.formData();
-    const orderId = String(fd.get("order_id") ?? "").trim();
-    const score = Number.parseInt(String(fd.get("score") ?? ""), 10);
-    const comment = String(fd.get("comment") ?? "").trim();
+    const orderId = formStr(fd, "order_id").trim();
+    const score = Number.parseInt(formStr(fd, "score"), 10);
+    const comment = formStr(fd, "comment").trim();
     if (!orderId) return fail(400, { ratingError: "缺少訂單資訊" });
     if (!Number.isInteger(score) || score < 1 || score > 5) {
       return fail(400, { ratingError: "請選擇 1 至 5 顆星的評分" });
@@ -70,9 +71,9 @@ export const actions: Actions = {
   complain: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { complaintError: "unauthenticated" });
     const fd = await request.formData();
-    const orderId = String(fd.get("order_id") ?? "").trim();
-    const category = String(fd.get("category") ?? "") as ComplaintCategory;
-    const description = String(fd.get("description") ?? "").trim();
+    const orderId = formStr(fd, "order_id").trim();
+    const category = formStr(fd, "category") as ComplaintCategory;
+    const description = formStr(fd, "description").trim();
     if (!orderId) return fail(400, { complaintError: "缺少訂單資訊" });
     if (!COMPLAINT_CATEGORIES.has(category)) {
       return fail(400, { complaintError: "請選擇問題類型" });

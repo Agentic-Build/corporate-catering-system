@@ -2,6 +2,7 @@ import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { formStr } from "@tbite/web-shared";
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) {
@@ -21,7 +22,7 @@ export const actions: Actions = {
   escalate: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const fd = await request.formData();
-    const id = String(fd.get("id") ?? "");
+    const id = formStr(fd, "id");
     if (!id) return fail(400, { error: "complaint id required" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.POST("/api/employee/complaints/{id}/escalate", {
@@ -41,7 +42,7 @@ export const actions: Actions = {
   resolve: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const fd = await request.formData();
-    const id = String(fd.get("id") ?? "");
+    const id = formStr(fd, "id");
     if (!id) return fail(400, { error: "complaint id required" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.POST("/api/employee/complaints/{id}/resolve", {

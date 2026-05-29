@@ -3,6 +3,7 @@ import { problemMessage, taipeiISO } from "@tbite/web-shared";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { formStr } from "@tbite/web-shared";
 
 const PAGE_LIMIT = 20;
 
@@ -43,7 +44,7 @@ export const actions: Actions = {
   addToCart: async ({ request, locals }) => {
     if (!locals.user) throw redirect(303, "/login");
     const fd = await request.formData();
-    const menuItemId = String(fd.get("menu_item_id") ?? "");
+    const menuItemId = formStr(fd, "menu_item_id");
     if (!menuItemId) return fail(400, { error: "menu_item_id required" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const h = await client.GET("/api/employee/home", { params: { query: {} } });

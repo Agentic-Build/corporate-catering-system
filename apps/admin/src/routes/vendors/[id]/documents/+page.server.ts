@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type VendorDTO = components["schemas"]["VendorDTO"];
 type DocumentDTO = components["schemas"]["DocumentDTO"];
@@ -36,10 +37,10 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 export const actions: Actions = {
   upload: async ({ request, params, locals }) => {
     const fd = await request.formData();
-    const filename = String(fd.get("filename") ?? "").trim();
-    const kind = String(fd.get("kind") ?? "") as UploadDocumentBody["kind"];
-    const expires_at = String(fd.get("expires_at") ?? "").trim();
-    const content_base64 = String(fd.get("content_base64") ?? "");
+    const filename = formStr(fd, "filename").trim();
+    const kind = formStr(fd, "kind") as UploadDocumentBody["kind"];
+    const expires_at = formStr(fd, "expires_at").trim();
+    const content_base64 = formStr(fd, "content_base64");
     if (!filename || !kind || !content_base64) {
       return fail(400, { error: "filename / kind / content required" });
     }
@@ -57,9 +58,9 @@ export const actions: Actions = {
   },
   review: async ({ request, locals }) => {
     const fd = await request.formData();
-    const id = String(fd.get("id") ?? "");
-    const status = String(fd.get("status") ?? "");
-    const notes = String(fd.get("notes") ?? "");
+    const id = formStr(fd, "id");
+    const status = formStr(fd, "status");
+    const notes = formStr(fd, "notes");
     if (!id || (status !== "approved" && status !== "rejected")) {
       return fail(400, { error: "invalid review input" });
     }

@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type VendorDTO = components["schemas"]["VendorDTO"];
 type VendorStatus = NonNullable<operations["listVendors"]["parameters"]["query"]>["status"];
@@ -24,11 +25,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   create: async ({ request, locals }) => {
     const fd = await request.formData();
-    const displayName = String(fd.get("display_name") ?? "").trim();
-    const legalName = String(fd.get("legal_name") ?? "").trim();
-    const email = String(fd.get("contact_email") ?? "")
-      .trim()
-      .toLowerCase();
+    const displayName = formStr(fd, "display_name").trim();
+    const legalName = formStr(fd, "legal_name").trim();
+    const email = formStr(fd, "contact_email").trim().toLowerCase();
     if (!displayName || !legalName || !email) return fail(400, { error: "all fields required" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendors", {

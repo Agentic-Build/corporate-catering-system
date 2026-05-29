@@ -2,6 +2,7 @@ import { redirect, fail } from "@sveltejs/kit";
 import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
@@ -11,17 +12,17 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   default: async ({ request, locals }) => {
     const fd = await request.formData();
-    const name = String(fd.get("name") ?? "").trim();
-    const description = String(fd.get("description") ?? "").trim();
-    const priceStr = String(fd.get("price") ?? "0").trim();
-    const tagsStr = String(fd.get("tags") ?? "").trim();
+    const name = formStr(fd, "name").trim();
+    const description = formStr(fd, "description").trim();
+    const priceStr = formStr(fd, "price", "0").trim();
+    const tagsStr = formStr(fd, "tags").trim();
     if (!name) return fail(400, { error: "name 必填" });
     const priceMinor = Number.parseInt(priceStr, 10);
     if (!Number.isFinite(priceMinor) || priceMinor < 0) return fail(400, { error: "price 非數字" });
 
     let images: string[] = [];
     try {
-      const parsed = JSON.parse(String(fd.get("images") ?? "[]"));
+      const parsed = JSON.parse(formStr(fd, "images", "[]"));
       if (Array.isArray(parsed)) images = parsed.filter((s) => typeof s === "string");
     } catch {
       images = [];

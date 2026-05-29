@@ -52,6 +52,7 @@ describe("problemMessage", () => {
     expect(problemMessage(null)).toBe("未知錯誤");
     expect(problemMessage({})).toBe("未知錯誤");
     expect(problemMessage(42)).toBe("42");
+    expect(problemMessage(() => {})).toBe("未知錯誤");
   });
 });
 

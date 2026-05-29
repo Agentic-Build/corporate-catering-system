@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type VendorDTO = components["schemas"]["VendorDTO"];
 type OperatorDTO = components["schemas"]["OperatorDTO"];
@@ -41,7 +42,7 @@ export const actions: Actions = {
   },
   update: async ({ request, params, locals }) => {
     const fd = await request.formData();
-    const contactEmail = String(fd.get("contact_email") ?? "").trim();
+    const contactEmail = formStr(fd, "contact_email").trim();
     const plants = fd.getAll("plants").map(String);
     if (!contactEmail) return fail(400, { error: "請填寫聯絡 email" });
     const client = apiFor(locals.apiToken);
@@ -54,8 +55,8 @@ export const actions: Actions = {
   },
   setPlantWindow: async ({ request, params, locals }) => {
     const fd = await request.formData();
-    const plant = String(fd.get("plant") ?? "");
-    const serviceWindow = String(fd.get("service_window") ?? "").trim();
+    const plant = formStr(fd, "plant");
+    const serviceWindow = formStr(fd, "service_window").trim();
     if (!plant) return fail(400, { error: "缺少廠區" });
     const client = apiFor(locals.apiToken);
     const r = await client.PUT("/api/admin/vendors/{id}/plants/{plant}/window", {
@@ -83,10 +84,8 @@ export const actions: Actions = {
   },
   createOperator: async ({ request, params, locals }) => {
     const fd = await request.formData();
-    const email = String(fd.get("email") ?? "")
-      .trim()
-      .toLowerCase();
-    const displayName = String(fd.get("display_name") ?? "").trim();
+    const email = formStr(fd, "email").trim().toLowerCase();
+    const displayName = formStr(fd, "display_name").trim();
     if (!email || !displayName)
       return fail(400, { error: "operator email and display name required" });
     const client = apiFor(locals.apiToken);
@@ -99,7 +98,7 @@ export const actions: Actions = {
   },
   suspendOperator: async ({ request, params, locals }) => {
     const fd = await request.formData();
-    const operatorID = String(fd.get("operator_id") ?? "");
+    const operatorID = formStr(fd, "operator_id");
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendors/{id}/operators/{operator_id}/suspend", {
       params: { path: { id: params.id, operator_id: operatorID } },
@@ -109,7 +108,7 @@ export const actions: Actions = {
   },
   reinstateOperator: async ({ request, params, locals }) => {
     const fd = await request.formData();
-    const operatorID = String(fd.get("operator_id") ?? "");
+    const operatorID = formStr(fd, "operator_id");
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/vendors/{id}/operators/{operator_id}/reinstate", {
       params: { path: { id: params.id, operator_id: operatorID } },

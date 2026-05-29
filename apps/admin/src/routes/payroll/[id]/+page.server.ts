@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type ExceptionDTO = components["schemas"]["ExceptionDTO"];
 
@@ -43,8 +44,8 @@ export const actions: Actions = {
 
   flagException: async ({ request, params, locals }) => {
     const fd = await request.formData();
-    const entryId = String(fd.get("entry_id") ?? "");
-    const detail = String(fd.get("detail") ?? "").trim();
+    const entryId = formStr(fd, "entry_id");
+    const detail = formStr(fd, "detail").trim();
     if (!entryId) return fail(400, { exError: "請選擇要標記的月結明細" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/payroll/batches/{id}/exceptions", {
@@ -61,9 +62,9 @@ export const actions: Actions = {
   // status=resolved still deducts; status=excluded drops from CSV.
   resolveException: async ({ request, params, locals }) => {
     const fd = await request.formData();
-    const exId = String(fd.get("exception_id") ?? "");
-    const status = String(fd.get("status") ?? "");
-    const resolution = String(fd.get("resolution") ?? "").trim();
+    const exId = formStr(fd, "exception_id");
+    const status = formStr(fd, "status");
+    const resolution = formStr(fd, "resolution").trim();
     if (!exId || (status !== "resolved" && status !== "excluded")) {
       return fail(400, { exError: "例外解決參數不正確" });
     }

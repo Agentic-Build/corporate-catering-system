@@ -3,6 +3,7 @@ import { problemMessage, taipeiISO } from "@tbite/web-shared";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { formStr } from "@tbite/web-shared";
 
 const PAGE_LIMIT = 20;
 
@@ -44,8 +45,8 @@ export const actions: Actions = {
   reorderPast: async ({ request, locals }) => {
     if (!locals.user) throw redirect(303, "/login");
     const fd = await request.formData();
-    const sourceOrderId = String(fd.get("source_order_id") ?? "");
-    const supplyDate = String(fd.get("supply_date") ?? "");
+    const sourceOrderId = formStr(fd, "source_order_id");
+    const supplyDate = formStr(fd, "supply_date");
     if (!sourceOrderId || !supplyDate)
       return fail(400, { error: "source_order_id and supply_date required" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);

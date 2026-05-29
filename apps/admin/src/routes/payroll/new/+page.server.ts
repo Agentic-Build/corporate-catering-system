@@ -2,6 +2,7 @@ import { redirect, fail } from "@sveltejs/kit";
 import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 function firstOfMonth(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
@@ -26,8 +27,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   default: async ({ request, locals }) => {
     const fd = await request.formData();
-    const periodStart = String(fd.get("period_start") ?? "").trim();
-    const periodEnd = String(fd.get("period_end") ?? "").trim();
+    const periodStart = formStr(fd, "period_start").trim();
+    const periodEnd = formStr(fd, "period_end").trim();
     if (!periodStart || !periodEnd)
       return fail(400, { error: "period_start and period_end required" });
     const client = apiFor(locals.apiToken);

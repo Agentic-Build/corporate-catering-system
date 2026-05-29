@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type AnomalyDTO = components["schemas"]["AnomalyDTO"];
 type AnomalyQuery = NonNullable<operations["listAnomalies"]["parameters"]["query"]>;
@@ -33,9 +34,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   triage: async ({ request, locals }) => {
     const fd = await request.formData();
-    const id = String(fd.get("id") ?? "");
-    const notes = String(fd.get("notes") ?? "");
-    const action = String(fd.get("action") ?? "");
+    const id = formStr(fd, "id");
+    const notes = formStr(fd, "notes");
+    const action = formStr(fd, "action");
     if (!id) return fail(400, { error: "id required" });
     const body: TriageBody = { notes };
     if (action === "warn" || action === "suspend") body.action = action;
@@ -49,8 +50,8 @@ export const actions: Actions = {
   },
   close: async ({ request, locals }) => {
     const fd = await request.formData();
-    const id = String(fd.get("id") ?? "");
-    const notes = String(fd.get("notes") ?? "");
+    const id = formStr(fd, "id");
+    const notes = formStr(fd, "notes");
     if (!id) return fail(400, { error: "id required" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/anomalies/{id}/close", {

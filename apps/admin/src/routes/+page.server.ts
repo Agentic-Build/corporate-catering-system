@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type VendorDTO = components["schemas"]["VendorDTO"];
 type AnomalyDTO = components["schemas"]["AnomalyDTO"];
@@ -95,7 +96,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   approveVendor: async ({ request, locals }) => {
     const fd = await request.formData();
-    const id = String(fd.get("id") ?? "");
+    const id = formStr(fd, "id");
     if (!id) return fail(400, { error: "vendor id required" });
     const plants = fd.getAll("plants").map(String);
     const client = apiFor(locals.apiToken);

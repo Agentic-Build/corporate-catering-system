@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type MessageDTO = components["schemas"]["MessageDTO"];
 type DLQQuery = NonNullable<operations["listDLQ"]["parameters"]["query"]>;
@@ -26,7 +27,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   replay: async ({ request, locals }) => {
     const fd = await request.formData();
-    const id = String(fd.get("id") ?? "");
+    const id = formStr(fd, "id");
     if (!id) return fail(400, { error: "id required" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/dlq/{id}/replay", { params: { path: { id } } });
@@ -35,8 +36,8 @@ export const actions: Actions = {
   },
   resolve: async ({ request, locals }) => {
     const fd = await request.formData();
-    const id = String(fd.get("id") ?? "");
-    const notes = String(fd.get("notes") ?? "");
+    const id = formStr(fd, "id");
+    const notes = formStr(fd, "notes");
     if (!id) return fail(400, { error: "id required" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/admin/dlq/{id}/resolve", {
