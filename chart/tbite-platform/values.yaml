@@ -82,7 +82,7 @@ global:
 
 image:
   repository: ghcr.io/agentic-build/tbite-api
-  tag: "sha-5a841bd"
+  tag: "sha-c809115"
   pullSecrets: []
 
 serviceAccount:
