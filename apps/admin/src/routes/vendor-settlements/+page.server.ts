@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { components } from "@tbite/api-client";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type Settlement = components["schemas"]["SettlementDTO"];
 
@@ -45,7 +46,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   close: async ({ request, locals }) => {
     const fd = await request.formData();
-    const period = String(fd.get("period") ?? "").trim();
+    const period = formStr(fd, "period").trim();
     const bounds = monthBounds(period);
     if (!bounds) return fail(400, { error: "期間格式錯誤（YYYY-MM）" });
 
@@ -59,7 +60,7 @@ export const actions: Actions = {
 
   voidSettlement: async ({ request, locals, url }) => {
     const fd = await request.formData();
-    const id = String(fd.get("id") ?? "");
+    const id = formStr(fd, "id");
     if (!id) return fail(400, { error: "缺少結算單編號" });
 
     const client = apiFor(locals.apiToken);

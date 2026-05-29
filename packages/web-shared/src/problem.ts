@@ -1,5 +1,5 @@
 // RFC 9457 Problem Details → user-facing string. Prefer `detail` > `title`;
-// fall back to a plain string or `String(err)`. Never returns raw JSON.
+// fall back to a plain primitive. Never returns raw JSON or "[object Object]".
 export function problemMessage(err: unknown): string {
   if (err == null) return "未知錯誤";
   if (typeof err === "string") return err;
@@ -10,5 +10,8 @@ export function problemMessage(err: unknown): string {
     if (typeof o.message === "string" && o.message) return o.message;
     return "未知錯誤";
   }
-  return String(err);
+  if (typeof err === "number" || typeof err === "boolean" || typeof err === "bigint") {
+    return String(err);
+  }
+  return "未知錯誤";
 }

@@ -3,6 +3,7 @@ import { problemMessage, taipeiISO } from "@tbite/web-shared";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { formStr } from "@tbite/web-shared";
 
 const PAGE_LIMIT = 20;
 
@@ -28,7 +29,7 @@ export const actions: Actions = {
   loadMore: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const fd = await request.formData();
-    const cursor = String(fd.get("cursor") ?? "");
+    const cursor = formStr(fd, "cursor");
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const day = taipeiISO();
     const r = await client.GET("/api/employee/favorites", {
@@ -43,7 +44,7 @@ export const actions: Actions = {
   removeFavorite: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const fd = await request.formData();
-    const menuItemId = String(fd.get("menu_item_id") ?? "");
+    const menuItemId = formStr(fd, "menu_item_id");
     if (!menuItemId) return fail(400, { error: "menu_item_id required" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.DELETE("/api/employee/favorites/{menu_item_id}", {
@@ -55,7 +56,7 @@ export const actions: Actions = {
   addToCart: async ({ request, locals }) => {
     if (!locals.user) throw redirect(303, "/login");
     const fd = await request.formData();
-    const menuItemId = String(fd.get("menu_item_id") ?? "");
+    const menuItemId = formStr(fd, "menu_item_id");
     if (!menuItemId) return fail(400, { error: "menu_item_id required" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const h = await client.GET("/api/employee/home", { params: { query: {} } });

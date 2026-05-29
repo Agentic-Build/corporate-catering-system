@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type MerchantItemDTO = components["schemas"]["MerchantItemDTO"];
 type UpdateItemBody =
@@ -25,16 +26,16 @@ export const actions: Actions = {
     const fd = await request.formData();
     let images: string[] = [];
     try {
-      const parsed = JSON.parse(String(fd.get("images") ?? "[]"));
+      const parsed = JSON.parse(formStr(fd, "images", "[]"));
       if (Array.isArray(parsed)) images = parsed.filter((s) => typeof s === "string");
     } catch {
       images = [];
     }
     const body: UpdateItemBody = {
-      name: String(fd.get("name") ?? ""),
-      description: String(fd.get("description") ?? ""),
-      price_minor: Number.parseInt(String(fd.get("price") ?? "0"), 10),
-      tags: String(fd.get("tags") ?? "")
+      name: formStr(fd, "name"),
+      description: formStr(fd, "description"),
+      price_minor: Number.parseInt(formStr(fd, "price", "0"), 10),
+      tags: formStr(fd, "tags")
         .split(/\s+/)
         .map((s) => s.trim())
         .filter(Boolean),

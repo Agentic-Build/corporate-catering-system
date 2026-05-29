@@ -2,6 +2,7 @@ import { redirect, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { createApiClient } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { formStr } from "@tbite/web-shared";
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) {
@@ -39,7 +40,7 @@ export const actions: Actions = {
   scan: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "尚未登入" });
     const fd = await request.formData();
-    const id = String(fd.get("orderId") ?? "").trim();
+    const id = formStr(fd, "orderId").trim();
     if (!id) return fail(400, { error: "未取得訂單編號" });
 
     const client = createApiClient(API_BASE_URL, locals.apiToken);
@@ -52,9 +53,7 @@ export const actions: Actions = {
   manual: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "尚未登入" });
     const fd = await request.formData();
-    const code = String(fd.get("code") ?? "")
-      .trim()
-      .toLowerCase();
+    const code = formStr(fd, "code").trim().toLowerCase();
     if (!code) return fail(400, { error: "請輸入訂單編號", manual: true });
 
     const client = createApiClient(API_BASE_URL, locals.apiToken);

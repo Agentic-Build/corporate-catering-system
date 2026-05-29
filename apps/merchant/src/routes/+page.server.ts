@@ -4,6 +4,7 @@ import type { Actions, PageServerLoad } from "./$types";
 import type { components } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
 import { defaultCutoffAt } from "$lib/cutoff";
+import { formStr } from "@tbite/web-shared";
 
 type MerchantItemDTO = components["schemas"]["MerchantItemDTO"];
 type MerchantOrderDTO = components["schemas"]["MerchantOrderDTO"];
@@ -85,11 +86,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   setSupply: async ({ request, locals }) => {
     const fd = await request.formData();
-    const itemId = String(fd.get("item_id") ?? "");
-    const date = String(fd.get("date") ?? "");
-    const capacity = Number.parseInt(String(fd.get("capacity") ?? "0"), 10);
-    const pickupWindow = String(fd.get("pickup_window") ?? "全天");
-    const cutoffAt = String(fd.get("cutoff_at") || defaultCutoffAt(date));
+    const itemId = formStr(fd, "item_id");
+    const date = formStr(fd, "date");
+    const capacity = Number.parseInt(formStr(fd, "capacity", "0"), 10);
+    const pickupWindow = formStr(fd, "pickup_window", "全天");
+    const cutoffAt = formStr(fd, "cutoff_at") || defaultCutoffAt(date);
 
     if (!itemId || !date) return fail(400, { error: "缺少餐點或日期" });
     if (!Number.isFinite(capacity) || capacity < 0) return fail(400, { error: "上限數值無效" });
@@ -110,9 +111,9 @@ export const actions: Actions = {
 
   toggleSoldOut: async ({ request, locals }) => {
     const fd = await request.formData();
-    const itemId = String(fd.get("item_id") ?? "");
-    const date = String(fd.get("date") ?? "");
-    const soldOut = String(fd.get("sold_out") ?? "") === "true";
+    const itemId = formStr(fd, "item_id");
+    const date = formStr(fd, "date");
+    const soldOut = formStr(fd, "sold_out") === "true";
     if (!itemId || !date) return fail(400, { error: "缺少餐點或日期" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/merchant/supply/{itemID}/{date}/sold-out", {
@@ -126,7 +127,7 @@ export const actions: Actions = {
   // Called before adding an archived item to a day.
   publishItem: async ({ request, locals }) => {
     const fd = await request.formData();
-    const id = String(fd.get("item_id") ?? "");
+    const id = formStr(fd, "item_id");
     if (!id) return fail(400, { error: "缺少餐點" });
     const client = apiFor(locals.apiToken);
     const r = await client.POST("/api/merchant/menu-items/{id}/publish", {

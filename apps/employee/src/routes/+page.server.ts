@@ -3,6 +3,7 @@ import { buildDays, problemMessage, taipeiISO } from "@tbite/web-shared";
 import { redirect, fail } from "@sveltejs/kit";
 import { createApiClient, type operations } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { formStr } from "@tbite/web-shared";
 
 type MenuQuery = NonNullable<operations["listEmployeeMenu"]["parameters"]["query"]>;
 type MenuSort = NonNullable<MenuQuery["sort"]>;
@@ -196,9 +197,9 @@ export const actions: Actions = {
   placeOrder: async ({ request, locals }) => {
     if (!locals.user) throw redirect(303, "/login");
     const fd = await request.formData();
-    const plant = String(fd.get("plant") ?? "");
-    const supplyDate = String(fd.get("supply_date") ?? "");
-    const notes = String(fd.get("notes") ?? "").trim();
+    const plant = formStr(fd, "plant");
+    const supplyDate = formStr(fd, "supply_date");
+    const notes = formStr(fd, "notes").trim();
     const itemIDs = fd.getAll("item_id").map(String);
     const qtys = fd.getAll("qty").map((q) => Number.parseInt(String(q), 10));
     if (itemIDs.length === 0) return fail(400, { error: "cart is empty" });
@@ -230,8 +231,8 @@ export const actions: Actions = {
   reorderPast: async ({ request, locals }) => {
     if (!locals.user) throw redirect(303, "/login");
     const fd = await request.formData();
-    const sourceOrderId = String(fd.get("source_order_id") ?? "");
-    const supplyDate = String(fd.get("supply_date") ?? "");
+    const sourceOrderId = formStr(fd, "source_order_id");
+    const supplyDate = formStr(fd, "supply_date");
     if (!sourceOrderId || !supplyDate)
       return fail(400, { error: "source_order_id and supply_date required" });
 
@@ -272,7 +273,7 @@ export const actions: Actions = {
   addFavorite: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const fd = await request.formData();
-    const menuItemId = String(fd.get("menu_item_id") ?? "");
+    const menuItemId = formStr(fd, "menu_item_id");
     if (!menuItemId) return fail(400, { error: "menu_item_id required" });
 
     const client = createApiClient(API_BASE_URL, locals.apiToken);
@@ -286,7 +287,7 @@ export const actions: Actions = {
   removeFavorite: async ({ request, locals }) => {
     if (!locals.user) return fail(401, { error: "unauthenticated" });
     const fd = await request.formData();
-    const menuItemId = String(fd.get("menu_item_id") ?? "");
+    const menuItemId = formStr(fd, "menu_item_id");
     if (!menuItemId) return fail(400, { error: "menu_item_id required" });
 
     const client = createApiClient(API_BASE_URL, locals.apiToken);

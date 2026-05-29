@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { components } from "@tbite/api-client";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type Complaint = components["schemas"]["ComplaintDTO"];
 
@@ -23,8 +24,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   resolve: async ({ request, locals }) => {
     const fd = await request.formData();
-    const id = String(fd.get("id") ?? "");
-    const resolution = String(fd.get("resolution") ?? "").trim();
+    const id = formStr(fd, "id");
+    const resolution = formStr(fd, "resolution").trim();
     const compensate = fd.get("compensate") === "true";
     if (!id) return fail(400, { error: "缺少客訴編號" });
     if (resolution.length < 5) return fail(400, { error: "結案說明至少需 5 個字" });

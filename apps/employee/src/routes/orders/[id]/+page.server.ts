@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import { createApiClient, type components } from "@tbite/api-client";
 import { API_BASE_URL } from "$lib/server/env";
+import { formStr } from "@tbite/web-shared";
 
 type ComplaintCategory = components["schemas"]["FileComplaintInputBody"]["category"];
 
@@ -67,7 +68,7 @@ export const actions: Actions = {
     const fd = await request.formData();
     let parsed: unknown;
     try {
-      parsed = JSON.parse(String(fd.get("items") ?? "[]"));
+      parsed = JSON.parse(formStr(fd, "items", "[]"));
     } catch {
       return fail(400, { modifyError: "資料格式錯誤，請重新操作。" });
     }
@@ -80,7 +81,7 @@ export const actions: Actions = {
     if (items.length === 0) {
       return fail(400, { modifyError: "訂單至少需保留一個餐點；若要清空請改用取消訂單。" });
     }
-    const notes = String(fd.get("notes") ?? "").trim();
+    const notes = formStr(fd, "notes").trim();
     if (notes.length > 500) return fail(400, { modifyError: "備註不可超過 500 字" });
     const client = createApiClient(API_BASE_URL, locals.apiToken);
     const r = await client.PUT("/api/employee/orders/{id}", {
@@ -101,8 +102,8 @@ export const actions: Actions = {
   rate: async ({ request, locals, params }) => {
     if (!locals.user) return fail(401, { ratingError: "unauthenticated" });
     const fd = await request.formData();
-    const score = Number.parseInt(String(fd.get("score") ?? ""), 10);
-    const comment = String(fd.get("comment") ?? "").trim();
+    const score = Number.parseInt(formStr(fd, "score"), 10);
+    const comment = formStr(fd, "comment").trim();
     if (!Number.isInteger(score) || score < 1 || score > 5) {
       return fail(400, { ratingError: "請選擇 1 至 5 顆星的評分" });
     }
@@ -126,8 +127,8 @@ export const actions: Actions = {
   complain: async ({ request, locals, params }) => {
     if (!locals.user) return fail(401, { complaintError: "unauthenticated" });
     const fd = await request.formData();
-    const category = String(fd.get("category") ?? "") as ComplaintCategory;
-    const description = String(fd.get("description") ?? "").trim();
+    const category = formStr(fd, "category") as ComplaintCategory;
+    const description = formStr(fd, "description").trim();
     if (!COMPLAINT_CATEGORIES.has(category)) {
       return fail(400, { complaintError: "請選擇問題類型" });
     }

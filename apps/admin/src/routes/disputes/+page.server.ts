@@ -3,6 +3,7 @@ import { problemMessage } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import type { components, operations } from "@tbite/api-client";
 import { apiFor } from "$lib/server/api";
+import { formStr } from "@tbite/web-shared";
 
 type DisputeDTO = components["schemas"]["DisputeDTO"];
 type DisputeStatus = NonNullable<
@@ -28,8 +29,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 export const actions: Actions = {
   resolveRefund: async ({ request, locals }) => {
     const fd = await request.formData();
-    const disputeId = String(fd.get("dispute_id") ?? "");
-    const resolution = String(fd.get("resolution") ?? "").trim();
+    const disputeId = formStr(fd, "dispute_id");
+    const resolution = formStr(fd, "resolution").trim();
     const refundMinor = Number(fd.get("refund_minor") ?? 0);
     if (!disputeId) return fail(400, { error: "dispute_id required" });
     if (!Number.isFinite(refundMinor) || refundMinor < 0) {
@@ -49,8 +50,8 @@ export const actions: Actions = {
   },
   resolveReject: async ({ request, locals }) => {
     const fd = await request.formData();
-    const disputeId = String(fd.get("dispute_id") ?? "");
-    const resolution = String(fd.get("resolution") ?? "").trim();
+    const disputeId = formStr(fd, "dispute_id");
+    const resolution = formStr(fd, "resolution").trim();
     if (!disputeId) return fail(400, { error: "dispute_id required" });
     if (!resolution) return fail(400, { error: "resolution required" });
     const client = apiFor(locals.apiToken);
