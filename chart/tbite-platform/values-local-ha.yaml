@@ -1,0 +1,449 @@
+# tbite-platform — local multi-AZ behavior overlay.
+#
+# Stack on top of values.yaml for kind/k3d clusters that model several
+# availability zones on one workstation. This profile preserves HA behavior
+# surfaces (replicas, PDBs, HPA/KEDA, quorum data planes, and full
+# observability) while shrinking memory, storage, and retention so node/zone
+# drain drills fit a 32 GiB OrbStack allocation.
+#
+#   helm upgrade --install tbite chart/tbite-platform \
+#     -f chart/tbite-platform/values.yaml \
+#     -f chart/tbite-platform/values-local-ha.yaml \
+#     --namespace tbite --create-namespace
+
+profile:
+  size: local-ha
+  haTopology: true
+
+global:
+  domain: tbite.local
+  baseURL:
+    api: http://api.tbite.local
+    employee: http://app.tbite.local
+    merchant: http://merchant.tbite.local
+    admin: http://admin.tbite.local
+  oidcIssuerURL: http://tbite-authentik-server.tbite.svc.cluster.local/application/o/tbite/
+  authentik:
+    baseURL: http://tbite-authentik-server.tbite.svc.cluster.local:80
+  s3:
+    endpoint: http://minio.tbite.svc.cluster.local
+    region: us-east-1
+    bucket: tbite-dev
+    publicBaseURL: http://minio.tbite.local
+  redisURL: redis://:local-valkey-password@tbite-valkey-primary.tbite.svc.cluster.local:6379/0
+  topologySpread:
+    enabled: true
+    constraints:
+      - topologyKey: topology.kubernetes.io/zone
+        maxSkew: 1
+        whenUnsatisfiable: ScheduleAnyway
+        matchLabelKeys: [pod-template-hash]
+      - topologyKey: kubernetes.io/hostname
+        maxSkew: 1
+        whenUnsatisfiable: ScheduleAnyway
+        matchLabelKeys: [pod-template-hash]
+
+#-----------------------------------------------------------------------------
+# Application — production-like minimum replicas with laptop requests.
+#-----------------------------------------------------------------------------
+api:
+  replicaCount: 3
+  resources:
+    requests: { cpu: 100m, memory: 160Mi }
+    limits: { cpu: 1, memory: 512Mi }
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 8
+    behavior:
+      scaleDown:
+        stabilizationWindowSeconds: 60
+  pdb: { enabled: true, minAvailable: 2 }
+  database:
+    maxConns: 8
+    maxConnsRO: 8
+
+realtime:
+  replicaCount: 3
+  resources:
+    requests: { cpu: 100m, memory: 160Mi }
+    limits: { cpu: 1, memory: 512Mi }
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 6
+  pdb: { enabled: true, minAvailable: 2 }
+  terminationGracePeriodSeconds: 90
+
+web:
+  employee:
+    replicaCount: 3
+    resources:
+      requests: { cpu: 75m, memory: 96Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+    hpa: { enabled: true, minReplicas: 3, maxReplicas: 6 }
+    pdb: { enabled: true, minAvailable: 2 }
+  merchant:
+    replicaCount: 2
+    resources:
+      requests: { cpu: 75m, memory: 96Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+    hpa: { enabled: true, minReplicas: 2, maxReplicas: 4 }
+    pdb: { enabled: true, minAvailable: 1 }
+  admin:
+    replicaCount: 2
+    resources:
+      requests: { cpu: 75m, memory: 96Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+    hpa: { enabled: true, minReplicas: 2, maxReplicas: 4 }
+    pdb: { enabled: true, minAvailable: 1 }
+
+workers:
+  outboxRelay:
+    replicaCount: 2
+    resources:
+      requests: { cpu: 75m, memory: 96Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+    keda: { enabled: true, minReplicas: 2, maxReplicas: 8 }
+  payrollSettler:
+    replicaCount: 2
+    resources:
+      requests: { cpu: 75m, memory: 96Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+    keda: { enabled: true, minReplicas: 1, maxReplicas: 6 }
+  onTimeEvaluator:
+    replicaCount: 2
+    resources:
+      requests: { cpu: 75m, memory: 96Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+    keda: { enabled: true, minReplicas: 1, maxReplicas: 6 }
+
+#-----------------------------------------------------------------------------
+# Data plane — HA quorum shape, local storage/memory.
+#-----------------------------------------------------------------------------
+postgres:
+  operator:
+    bundled: true
+  cluster:
+    instances: 3
+    failoverDelay: 0
+    smartShutdownTimeout: 15
+    stopDelay: 60
+    switchoverDelay: 60
+    storage:
+      size: 8Gi
+    pooler:
+      enabled: true
+      instances: 2
+    backup:
+      enabled: false
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits: { cpu: 2, memory: 2Gi }
+    postgresql:
+      parameters:
+        max_connections: "120"
+        shared_buffers: "256MB"
+        effective_cache_size: "768MB"
+  pitr:
+    enabled: false
+
+valkey:
+  architecture: replication
+  replicaCount: 3
+  rbac:
+    create: true
+  sentinel:
+    enabled: true
+    quorum: 2
+    service:
+      createPrimary: true
+  primary:
+    persistence:
+      enabled: true
+      size: 2Gi
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: valkey
+            app.kubernetes.io/component: node
+  replica:
+    automountServiceAccountToken: true
+    persistence:
+      enabled: true
+      size: 2Gi
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: valkey
+            app.kubernetes.io/component: node
+
+nats:
+  cluster:
+    enabled: true
+    replicas: 3
+  config:
+    cluster:
+      enabled: true
+      replicas: 3
+    jetstream:
+      fileStore:
+        pvc:
+          size: 5Gi
+  container:
+    merge:
+      resources:
+        requests: { cpu: 200m, memory: 384Mi }
+        limits: { cpu: 1, memory: 768Mi }
+  podTemplate:
+    topologySpreadConstraints:
+      topology.kubernetes.io/zone:
+        maxSkew: 1
+        whenUnsatisfiable: DoNotSchedule
+      kubernetes.io/hostname:
+        maxSkew: 1
+        whenUnsatisfiable: ScheduleAnyway
+
+minioStandalone:
+  enabled: false
+
+minio:
+  enabled: true
+  operator:
+    enabled: true
+  tenant:
+    enabled: true
+    tenant:
+      name: tbite
+      configSecret:
+        name: tbite-minio-env
+        accessKey: minio
+        secretKey: local-minio-secret
+      pools:
+        - servers: 4
+          name: pool-0
+          volumesPerServer: 1
+          size: 5Gi
+      buckets:
+        - name: tbite-dev
+          objectLock: false
+      certificate:
+        requestAutoCert: false
+      metrics:
+        enabled: true
+
+minio-tenant:
+  tenant:
+    name: tbite
+    configSecret:
+      name: tbite-minio-env
+      accessKey: minio
+      secretKey: local-minio-secret
+    pools:
+      - servers: 4
+        name: pool-0
+        volumesPerServer: 1
+        size: 5Gi
+        resources:
+          requests: { cpu: 100m, memory: 256Mi }
+          limits: { cpu: 500m, memory: 512Mi }
+        topologySpreadConstraints:
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: DoNotSchedule
+    buckets:
+      - name: tbite-dev
+        objectLock: false
+    certificate:
+      requestAutoCert: false
+    metrics:
+      enabled: true
+    env:
+      - name: MINIO_PROMETHEUS_AUTH_TYPE
+        value: "public"
+
+#-----------------------------------------------------------------------------
+# Identity — present for end-to-end behavior, reduced to local requests.
+#-----------------------------------------------------------------------------
+authentik:
+  enabled: true
+  authentik:
+    redis:
+      host: tbite-valkey-primary.tbite.svc.cluster.local
+  server:
+    replicas: 1
+    resources:
+      requests: { cpu: 200m, memory: 384Mi }
+      limits: { cpu: 1, memory: 768Mi }
+  worker:
+    replicas: 1
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: 1, memory: 512Mi }
+
+hydra:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+#-----------------------------------------------------------------------------
+# Ingress and observability — full signal chain, laptop retention.
+#-----------------------------------------------------------------------------
+ingress:
+  gateway:
+    enabled: false
+  certManager:
+    enabled: false
+    issuer:
+      name: letsencrypt-staging
+      server: https://acme-staging-v02.api.letsencrypt.org/directory
+
+traefik:
+  enabled: false
+  deployment:
+    replicas: 2
+
+certManager:
+  enabled: false
+
+cert-manager:
+  installCRDs: false
+  replicaCount: 1
+  webhook:
+    replicaCount: 1
+  cainjector:
+    replicaCount: 1
+
+observability:
+  dashboards:
+    enabled: true
+    includeDevLoop: true
+  victoriaMetrics:
+    enabled: true
+    retention: "3d"
+  victoriaLogs:
+    enabled: true
+    retention: "1d"
+  victoriaTraces:
+    enabled: true
+    retention: "1d"
+  grafana:
+    enabled: true
+    ingressHost: grafana.tbite.local
+  otelCollector:
+    enabled: true
+
+victoria-metrics-k8s-stack:
+  vmsingle:
+    spec:
+      retentionPeriod: "3d"
+      storage:
+        resources:
+          requests:
+            storage: 10Gi
+      resources:
+        requests: { cpu: 200m, memory: 512Mi }
+        limits: { cpu: 1, memory: 1Gi }
+  vmagent:
+    enabled: true
+    spec:
+      scrapeInterval: 20s
+      resources:
+        requests: { cpu: 100m, memory: 192Mi }
+        limits: { cpu: 500m, memory: 384Mi }
+  alertmanager:
+    enabled: true
+    spec:
+      replicaCount: 1
+      resources:
+        requests: { cpu: 50m, memory: 96Mi }
+        limits: { cpu: 200m, memory: 192Mi }
+  vmalert:
+    enabled: true
+    spec:
+      extraArgs:
+        notifier.blackhole: null
+      resources:
+        requests: { cpu: 100m, memory: 128Mi }
+        limits: { cpu: 500m, memory: 256Mi }
+  grafana:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: { cpu: 100m, memory: 192Mi }
+      limits: { cpu: 500m, memory: 384Mi }
+  kube-state-metrics:
+    enabled: true
+    metricLabelsAllowlist:
+      - nodes=[topology.kubernetes.io/zone]
+      - pods=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component]
+    resources:
+      requests: { cpu: 50m, memory: 96Mi }
+      limits: { cpu: 200m, memory: 192Mi }
+  prometheus-node-exporter:
+    enabled: true
+    resources:
+      requests: { cpu: 25m, memory: 48Mi }
+      limits: { cpu: 100m, memory: 96Mi }
+
+victoria-logs-single:
+  server:
+    retentionPeriod: "1d"
+    persistentVolume:
+      enabled: true
+      size: 5Gi
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+  vector:
+    enabled: true
+    resources:
+      requests: { cpu: 100m, memory: 192Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+
+victoria-traces-single:
+  server:
+    retentionPeriod: "1d"
+    persistentVolume:
+      enabled: true
+      size: 5Gi
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+
+opentelemetry-collector:
+  mode: deployment
+  replicaCount: 2
+  config:
+    exporters:
+      otlp_http/victoria:
+        traces_endpoint: http://{{ .Release.Name }}-vt-single-server.{{ .Release.Namespace }}.svc.cluster.local:10428/insert/opentelemetry/v1/traces
+        logs_endpoint: http://{{ .Release.Name }}-victoria-logs-single-server.{{ .Release.Namespace }}.svc.cluster.local:9428/insert/opentelemetry/v1/logs
+    service:
+      pipelines:
+        logs:
+          exporters:
+            - otlp_http/victoria
+        traces:
+          exporters:
+            - otlp_http/victoria
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+keda:
+  enabled: true

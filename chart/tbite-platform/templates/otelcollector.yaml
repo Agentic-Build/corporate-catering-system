@@ -38,22 +38,19 @@ spec:
       k8sattributes:
         passthrough: false
     exporters:
-      otlp/traces:
-        endpoint: vmtraces.{{ include "tbite.namespace" . }}.svc:4317
-        tls:
-          insecure: true
+      otlp_http/victoria:
+        traces_endpoint: http://{{ .Release.Name }}-vt-single-server.{{ include "tbite.namespace" . }}.svc.cluster.local:10428/insert/opentelemetry/v1/traces
+        logs_endpoint: http://{{ .Release.Name }}-victoria-logs-single-server.{{ include "tbite.namespace" . }}.svc.cluster.local:9428/insert/opentelemetry/v1/logs
       prometheusremotewrite:
         endpoint: http://vmsingle-{{ .Release.Name }}-victoria-metrics-k8s-stack.{{ include "tbite.namespace" . }}.svc.cluster.local:8428/api/v1/write
         resource_to_telemetry_conversion:
           enabled: true
-      otlphttp/logs:
-        endpoint: http://vlogs.{{ include "tbite.namespace" . }}.svc:9428/insert/opentelemetry/v1/logs
     service:
       pipelines:
         traces:
           receivers: [otlp]
           processors: [memory_limiter, k8sattributes, batch]
-          exporters: [otlp/traces]
+          exporters: [otlp_http/victoria]
         metrics:
           receivers: [otlp]
           processors: [memory_limiter, k8sattributes, batch]
@@ -61,7 +58,7 @@ spec:
         logs:
           receivers: [otlp]
           processors: [memory_limiter, k8sattributes, batch]
-          exporters: [otlphttp/logs]
+          exporters: [otlp_http/victoria]
 {{- end }}
 
 {{- end -}}

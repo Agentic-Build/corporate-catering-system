@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Role string
@@ -43,15 +44,17 @@ type Config struct {
 
 	// DatabaseRW = primary write conn string; DatabaseRO = replica fan-out
 	// (falls back to RW when empty for small deployments). ADR-0007 / #54.
-	DatabaseRW   string
-	DatabaseRO   string
-	DBMaxConns   int32
-	DBMinConns   int32
-	DBMaxConnsRO int32
-	DBMinConnsRO int32
+	DatabaseRW            string
+	DatabaseRO            string
+	DBMaxConns            int32
+	DBMinConns            int32
+	DBMaxConnsRO          int32
+	DBMinConnsRO          int32
+	DBConnectRetryTimeout time.Duration
 
-	RedisURL string
-	NATSURL  string
+	RedisURL                 string
+	RedisConnectRetryTimeout time.Duration
+	NATSURL                  string
 
 	AuthProviders []AuthProviderConfig
 
@@ -85,6 +88,8 @@ type Config struct {
 	// NATSStreamReplicas sets the JetStream stream replica count for HA deployments.
 	// Defaults to 1 (single-node dev); set to 3 in clustered production.
 	NATSStreamReplicas int
+
+	RealtimePreStopDrainSeconds int
 }
 
 type AuthProviderConfig struct {
@@ -105,14 +110,16 @@ func FromEnv() (Config, error) {
 		HTTPAddr: getenv("HTTP_ADDR", ":8080"),
 		LogLevel: getenv("LOG_LEVEL", "info"),
 
-		DatabaseRW:   os.Getenv("DATABASE_RW_URL"),
-		DatabaseRO:   os.Getenv("DATABASE_RO_URL"),
-		DBMaxConns:   envInt32("DB_MAX_CONNS", 16),
-		DBMinConns:   envInt32("DB_MIN_CONNS", 2),
-		DBMaxConnsRO: envInt32("DB_MAX_CONNS_RO", 16),
-		DBMinConnsRO: envInt32("DB_MIN_CONNS_RO", 2),
-		RedisURL:     os.Getenv("REDIS_URL"),
-		NATSURL:      os.Getenv("NATS_URL"),
+		DatabaseRW:               os.Getenv("DATABASE_RW_URL"),
+		DatabaseRO:               os.Getenv("DATABASE_RO_URL"),
+		DBMaxConns:               envInt32("DB_MAX_CONNS", 16),
+		DBMinConns:               envInt32("DB_MIN_CONNS", 2),
+		DBMaxConnsRO:             envInt32("DB_MAX_CONNS_RO", 16),
+		DBMinConnsRO:             envInt32("DB_MIN_CONNS_RO", 2),
+		DBConnectRetryTimeout:    time.Duration(envNonNegativeInt("DB_CONNECT_RETRY_TIMEOUT_SECONDS", 0)) * time.Second,
+		RedisURL:                 os.Getenv("REDIS_URL"),
+		RedisConnectRetryTimeout: time.Duration(envNonNegativeInt("REDIS_CONNECT_RETRY_TIMEOUT_SECONDS", 0)) * time.Second,
+		NATSURL:                  os.Getenv("NATS_URL"),
 
 		AuthProviders: providers,
 
@@ -139,7 +146,8 @@ func FromEnv() (Config, error) {
 		HydraPublicURL: strings.TrimRight(os.Getenv("HYDRA_PUBLIC_URL"), "/"),
 		HydraAdminURL:  strings.TrimRight(os.Getenv("HYDRA_ADMIN_URL"), "/"),
 
-		NATSStreamReplicas: envInt("NATS_STREAM_REPLICAS", 1),
+		NATSStreamReplicas:          envPositiveInt("NATS_STREAM_REPLICAS", 1),
+		RealtimePreStopDrainSeconds: envNonNegativeInt("TBITE_REALTIME_PRESTOP_DRAIN_SECONDS", 30),
 	}
 	if c.DatabaseRW == "" {
 		return c, fmt.Errorf("config: DATABASE_RW_URL is required")
@@ -172,13 +180,25 @@ func envInt32(k string, def int32) int32 {
 	return int32(n)
 }
 
-func envInt(k string, def int) int {
+func envPositiveInt(k string, def int) int {
 	v := os.Getenv(k)
 	if v == "" {
 		return def
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil || n <= 0 {
+		return def
+	}
+	return n
+}
+
+func envNonNegativeInt(k string, def int) int {
+	v := os.Getenv(k)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
 		return def
 	}
 	return n

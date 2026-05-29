@@ -32,7 +32,12 @@ ingress topology.
 | --- | --- | --- | --- | --- |
 | `values.yaml` (base) | **Single-enterprise production**, ADR-0008 sizing | ≥ 16 cores / 32 GiB single-node | ~18 GiB requests | ~5K–10K employees, ~50 orders/sec sustained, ~200/sec burst |
 | `values-dev.yaml` | Laptop kind/k3d/OrbStack iteration | ≥ 8 GiB | ~6 GiB requests | smoke only |
+| `values-local-ha.yaml` | Local multi-zone behavior drills | 32 GiB OrbStack / kind 6 workers | ~13 GiB requests | HPA/KEDA/drain/failover behavior |
 | `values-prod-ha.yaml` | Multi-AZ HA for > 10K employees | ≥ 64 GiB cluster | ~32 GiB requests | enterprise scale |
+
+The research summary for the local HA experiments and how they map into the
+production chart is in
+[`docs/deployment/ha-research-summary.md`](../../docs/deployment/ha-research-summary.md).
 
 The base sizing carries one primary CNPG instance + one hot standby
 (not three), standalone Valkey with persistence (not Sentinel HA), a
@@ -64,6 +69,9 @@ helm template tbite . -f values.yaml
 
 # Laptop / OrbStack single-node iteration
 helm template tbite . -f values.yaml -f values-dev.yaml
+
+# Local multi-zone HA behavior drills
+helm template tbite . -f values.yaml -f values-local-ha.yaml
 
 # Multi-AZ HA scale-up, Traefik+LE ingress
 helm template tbite . -f values.yaml -f values-prod-ha.yaml
@@ -165,7 +173,7 @@ HPAs, PDBs, KEDA ScaledObjects, CNPG `Cluster`, MinIO `Tenant`, OTel
 
 ## Schema-validated production fields
 
-`values.schema.json` enforces in the `prod` profile:
+`values.schema.json` enforces when `profile.haTopology=true`:
 
 - `postgres.cluster.instances >= 3`
 - `nats.cluster.replicas >= 3`

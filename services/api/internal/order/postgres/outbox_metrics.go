@@ -9,6 +9,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
@@ -39,6 +40,8 @@ SELECT COALESCE(EXTRACT(EPOCH FROM (now() - min(created_at))), 0)
 // the two dashboards reference different names for the same concept.
 func RegisterOutboxGauges(pool *pgxpool.Pool) error {
 	meter := otel.GetMeterProvider().Meter("tbite.api")
+	var pendingMu sync.Mutex
+	seenPendingTypes := map[string]struct{}{}
 
 	pendingGauge, err := meter.Int64ObservableGauge("tbite_outbox_pending",
 		metric.WithDescription("Unpublished outbox rows, by aggregate_type."))
@@ -59,6 +62,7 @@ func RegisterOutboxGauges(pool *pgxpool.Pool) error {
 	}
 
 	_, err = meter.RegisterCallback(func(ctx context.Context, o metric.Observer) error {
+		currentPending := map[string]int64{}
 		rows, err := pool.Query(ctx, outboxPendingQuery)
 		if err != nil {
 			return fmt.Errorf("outbox pending query: %w", err)
@@ -70,12 +74,12 @@ func RegisterOutboxGauges(pool *pgxpool.Pool) error {
 			if err := rows.Scan(&aggregateType, &count); err != nil {
 				return fmt.Errorf("outbox pending scan: %w", err)
 			}
-			o.ObserveInt64(pendingGauge, count, metric.WithAttributes(
-				attribute.String("aggregate_type", aggregateType)))
+			currentPending[aggregateType] = count
 		}
 		if err := rows.Err(); err != nil {
 			return fmt.Errorf("outbox pending rows: %w", err)
 		}
+		observeOutboxPending(o, pendingGauge, currentPending, seenPendingTypes, &pendingMu)
 
 		var oldest float64
 		if err := pool.QueryRow(ctx, outboxOldestQuery).Scan(&oldest); err != nil {
@@ -87,4 +91,22 @@ func RegisterOutboxGauges(pool *pgxpool.Pool) error {
 	}, pendingGauge, oldestGauge, oldestUnpublishedGauge)
 
 	return err
+}
+
+func observeOutboxPending(o metric.Observer, gauge metric.Int64ObservableGauge, current map[string]int64, seen map[string]struct{}, mu *sync.Mutex) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	for aggregateType, count := range current {
+		seen[aggregateType] = struct{}{}
+		o.ObserveInt64(gauge, count, metric.WithAttributes(
+			attribute.String("aggregate_type", aggregateType)))
+	}
+	for aggregateType := range seen {
+		if _, ok := current[aggregateType]; ok {
+			continue
+		}
+		o.ObserveInt64(gauge, 0, metric.WithAttributes(
+			attribute.String("aggregate_type", aggregateType)))
+	}
 }

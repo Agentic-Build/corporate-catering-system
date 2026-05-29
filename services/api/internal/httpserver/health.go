@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sync/atomic"
 	"time"
+
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/observability"
 )
 
 const (
@@ -39,8 +41,9 @@ func (c CheckerFunc) Check(ctx context.Context) error { return c.F(ctx) }
 // only the checkers that match its actual runtime dependencies, so a
 // pod can never become Ready while a hard dependency is unreachable.
 type Health struct {
-	live atomic.Bool
-	deps []Checker
+	live  atomic.Bool
+	ready atomic.Bool
+	deps  []Checker
 }
 
 // NewHealth constructs a Health with the provided dependency
@@ -49,6 +52,7 @@ type Health struct {
 func NewHealth(deps ...Checker) *Health {
 	h := &Health{}
 	h.live.Store(true)
+	h.ready.Store(true)
 	h.deps = deps
 	return h
 }
@@ -56,6 +60,10 @@ func NewHealth(deps ...Checker) *Health {
 // SetLive controls the liveness gauge. Failed liveness causes
 // kubelet to restart the pod; readiness is computed from deps.
 func (h *Health) SetLive(v bool) { h.live.Store(v) }
+
+// SetReady controls the readiness gate independently from dependency checks.
+// Shutdown/drain handlers use it to stop new traffic before the process exits.
+func (h *Health) SetReady(v bool) { h.ready.Store(v) }
 
 // LivenessHandler implements /healthz. It is a fast pass-through
 // independent of dependency state — kubelet uses liveness to detect
@@ -82,6 +90,12 @@ func (h *Health) ReadinessHandler() http.HandlerFunc {
 		defer cancel()
 		w.Header().Set(contentTypeHeader, contentTypeJSON)
 
+		if !h.ready.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "draining"})
+			return
+		}
+
 		type depResult struct {
 			Name  string `json:"name"`
 			OK    bool   `json:"ok"`
@@ -91,6 +105,7 @@ func (h *Health) ReadinessHandler() http.HandlerFunc {
 		ok := true
 		for _, dep := range h.deps {
 			err := dep.Check(ctx)
+			observability.RecordDependencyReady(ctx, dep.Name(), err == nil)
 			res := depResult{Name: dep.Name(), OK: err == nil}
 			if err != nil {
 				res.Error = err.Error()
@@ -110,6 +125,27 @@ func (h *Health) ReadinessHandler() http.HandlerFunc {
 			"status": status,
 			"deps":   results,
 		})
+	}
+}
+
+// DrainHandler marks the role unready and holds the preStop request long enough
+// for endpoints and upstream load balancers to stop selecting the terminating pod.
+func (h *Health) DrainHandler(delay time.Duration) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.SetReady(false)
+		w.Header().Set("content-type", "application/json")
+
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-r.Context().Done():
+				return
+			}
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "draining"})
 	}
 }
 

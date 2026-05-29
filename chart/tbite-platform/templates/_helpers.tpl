@@ -237,13 +237,23 @@ imagePullSecrets:
 {{- end }}
 {{- end -}}
 
-{{/* Standard deployment pod scheduling fragments */}}
+{{/* Standard deployment pod scheduling fragments.
+Takes either the chart context or dict{"ctx": chart context, "role": role}.
+Role-aware topology spread uses the workload selector so API, web, worker,
+and scheduler replicas spread independently across the same failure domains.
+*/}}
 {{- define "tbite.podScheduling" -}}
-{{- with .Values.global.nodeSelector }}
+{{- $ctx := . -}}
+{{- $role := "" -}}
+{{- if and (kindIs "map" .) (hasKey . "ctx") -}}
+{{- $ctx = .ctx -}}
+{{- $role = default "" .role -}}
+{{- end -}}
+{{- with $ctx.Values.global.nodeSelector }}
 nodeSelector:
 {{ toYaml . | indent 2 }}
 {{- end }}
-{{- with .Values.global.tolerations }}
+{{- with $ctx.Values.global.tolerations }}
 tolerations:
 {{ toYaml . | indent 2 }}
 {{- end }}
@@ -251,11 +261,35 @@ tolerations:
      affinity can be set without putting it under global.* — which Helm would
      propagate into subcharts whose helpers expect a string preset. Falls back
      to .Values.global.affinity. */}}
-{{- $affinity := .Values.global.affinity -}}
-{{- with .Values.tbite }}{{- with .affinity }}{{- $affinity = . }}{{- end }}{{- end }}
+{{- $affinity := $ctx.Values.global.affinity -}}
+{{- with $ctx.Values.tbite }}{{- with .affinity }}{{- $affinity = . }}{{- end }}{{- end }}
 {{- with $affinity }}
 affinity:
 {{ toYaml . | indent 2 }}
+{{- end }}
+{{- if and $role $ctx.Values.global.topologySpread.enabled }}
+topologySpreadConstraints:
+{{- range $constraint := $ctx.Values.global.topologySpread.constraints }}
+  - maxSkew: {{ $constraint.maxSkew | default 1 }}
+    topologyKey: {{ $constraint.topologyKey | quote }}
+    whenUnsatisfiable: {{ $constraint.whenUnsatisfiable | default "DoNotSchedule" }}
+    labelSelector:
+      matchLabels:
+        {{- include "tbite.roleSelectorLabels" (dict "ctx" $ctx "role" $role) | nindent 8 }}
+    {{- with $constraint.minDomains }}
+    minDomains: {{ . }}
+    {{- end }}
+    {{- with $constraint.nodeAffinityPolicy }}
+    nodeAffinityPolicy: {{ . }}
+    {{- end }}
+    {{- with $constraint.nodeTaintsPolicy }}
+    nodeTaintsPolicy: {{ . }}
+    {{- end }}
+    {{- with $constraint.matchLabelKeys }}
+    matchLabelKeys:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+{{- end }}
 {{- end }}
 {{- end -}}
 

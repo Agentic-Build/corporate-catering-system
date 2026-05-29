@@ -31,4 +31,27 @@ spec:
       path: /minio/v2/metrics/cluster
       scheme: http
 {{- end }}
+{{- if and .Values.observability.victoriaMetrics.enabled .Values.minio.enabled .Values.minio.tenant.enabled }}
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: {{ include "tbite.fullname" . }}-minio-tenant
+  namespace: {{ include "tbite.namespace" . }}
+  labels:
+    {{- include "tbite.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  jobName: {{ include "tbite.fullname" . }}-minio-tenant
+  targetEndpoints:
+    - targets:
+        - minio.{{ include "tbite.namespace" . }}.svc.cluster.local:80
+      interval: 30s
+      path: /minio/v2/metrics/cluster
+      scheme: http
+      labels:
+        namespace: {{ include "tbite.namespace" . }}
+        service: minio
+        app_kubernetes_io_component: minio
+{{- end }}
 {{- end -}}

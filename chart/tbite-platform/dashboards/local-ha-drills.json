@@ -1,0 +1,2562 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Local multi-zone behavior drill dashboard. The top overall band separates app availability, scheduler/storage placement, drain/disruption policy, data-service/operator failover risks, autoscalers, observability, fault domains, and async backlog; activity breadcrumbs stay separate from current availability. Drilldown rows expand autoscale, zone drain, storage scheduling, disruption recovery, database failover, messaging, cache, object storage, and observability details.",
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "panels": [
+    {
+      "type": "row",
+      "title": "Overall",
+      "description": "Current-state locator row. Use the availability panels first, then use activity panels only as selected-range breadcrumbs after the current fault has cleared.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "App availability",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(kube_deployment_status_replicas_unavailable{namespace=\"$namespace\",deployment=~\"$release-tbite-platform-.*\"}) or vector(0)",
+          "legendFormat": "unavailable app replicas",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\",condition=\"false\"} == 1) or vector(0)",
+          "legendFormat": "app not-ready pods",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(kube_pod_container_status_waiting_reason{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\",reason=\"CrashLoopBackOff\"}) or vector(0)",
+          "legendFormat": "app CrashLoopBackOff containers",
+          "refId": "C"
+        }
+      ],
+      "description": "Current platform app availability. Scheduler and StatefulSet placement blockers are split into the adjacent scheduler/storage panel."
+    },
+    {
+      "type": "stat",
+      "title": "Scheduler/storage availability",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 3,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(kube_pod_status_phase{namespace=\"$namespace\",phase=\"Pending\"} == 1) or vector(0)",
+          "legendFormat": "pending pods",
+          "refId": "A"
+        },
+        {
+          "expr": "sum((max by (namespace, pod) (kube_pod_status_unschedulable{namespace=\"$namespace\"}))) or vector(0)",
+          "legendFormat": "unschedulable pods",
+          "refId": "B"
+        },
+        {
+          "expr": "sum((max by (namespace, pod) (kube_pod_status_unschedulable{namespace=\"$namespace\"})) * on(namespace,pod) group_left(owner_kind,owner_name) (max by (namespace, pod, owner_kind, owner_name) (kube_pod_owner{namespace=\"$namespace\",owner_kind=~\"StatefulSet|Cluster\",owner_is_controller=\"true\"}))) or vector(0)",
+          "legendFormat": "stateful scheduling blockers",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(kube_statefulset_replicas{namespace=\"$namespace\"} - kube_statefulset_status_replicas_ready{namespace=\"$namespace\"}) or vector(0)",
+          "legendFormat": "stateful ready gap",
+          "refId": "D"
+        }
+      ],
+      "description": "Current scheduling and local-storage placement blockers. This is the top-level locator for pinned PVC drain failures."
+    },
+    {
+      "type": "stat",
+      "title": "App activity",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 0,
+        "y": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"}[10m])) or vector(0)",
+          "legendFormat": "app restarts / 10m",
+          "refId": "A"
+        },
+        {
+          "expr": "(sum_over_time(((sum(kube_deployment_status_replicas_unavailable{namespace=\"$namespace\",deployment=~\"$release-tbite-platform-.*\"}) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "unavailable app seconds / 10m",
+          "refId": "B"
+        },
+        {
+          "expr": "(sum_over_time(((sum(kube_pod_container_status_waiting_reason{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\",reason=\"CrashLoopBackOff\"}) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "app CrashLoopBackOff seconds / 10m",
+          "refId": "C"
+        }
+      ],
+      "description": "Selected-range app disruption breadcrumbs. Scheduler and storage breadcrumbs are split into their own overall panel."
+    },
+    {
+      "type": "stat",
+      "title": "Scheduler/storage activity",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 3,
+        "y": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "(sum_over_time(((sum(kube_pod_status_phase{namespace=\"$namespace\",phase=\"Pending\"} == 1) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "pending pod seconds / 10m",
+          "refId": "A"
+        },
+        {
+          "expr": "(sum_over_time(((sum((max by (namespace, pod) (kube_pod_status_unschedulable{namespace=\"$namespace\"}))) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "unschedulable pod seconds / 10m",
+          "refId": "B"
+        },
+        {
+          "expr": "(sum_over_time(((sum((max by (namespace, pod) (kube_pod_status_unschedulable{namespace=\"$namespace\"})) * on(namespace,pod) group_left(owner_kind,owner_name) (max by (namespace, pod, owner_kind, owner_name) (kube_pod_owner{namespace=\"$namespace\",owner_kind=~\"StatefulSet|Cluster\",owner_is_controller=\"true\"}))) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "stateful blocker seconds / 10m",
+          "refId": "C"
+        },
+        {
+          "expr": "(sum_over_time(((sum(kube_statefulset_replicas{namespace=\"$namespace\"} - kube_statefulset_status_replicas_ready{namespace=\"$namespace\"}) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "stateful ready gap seconds / 10m",
+          "refId": "D"
+        }
+      ],
+      "description": "Selected-range scheduler and StatefulSet placement breadcrumbs. These remain non-zero after recovery."
+    },
+    {
+      "type": "stat",
+      "title": "Data service availability",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 7,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "((((sum(cnpg_collector_up{namespace=\"$namespace\",cluster=\"$release-pg\"}) or vector(0)) < bool 3) + ((sum(1 - cnpg_pg_replication_in_recovery{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}) or vector(0)) != bool 1) + ((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\",condition=\"true\"}) or vector(0)) < bool 3) + ((max(cnpg_pg_replication_lag{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}) or vector(0)) > bool 5) + ((sum(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-pg-rw-.*\",ready=\"true\"}) or vector(0)) != bool 1) + ((sum(label_replace(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-pg-rw-.*\",ready=\"true\"}, \"pod\", \"$1\", \"targetref_name\", \"(.*)\") and on(namespace,pod) ((1 - cnpg_pg_replication_in_recovery{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}) == 1)) or vector(0)) != bool 1) + (((sum(((1 - cnpg_pg_replication_in_recovery{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}) == 1) * on(namespace,pod) group_left(node) (max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable))) or vector(0))) > bool 0) + ((sum(kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"$release-pg-pooler-rw\"}) or vector(0)) < bool clamp_min((sum(kube_deployment_spec_replicas{namespace=\"$namespace\",deployment=\"$release-pg-pooler-rw\"}) or vector(0)), 1)) + ((sum(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-pg-pooler-rw-.*\",ready=\"true\"}) or vector(0)) < bool clamp_min((sum(kube_deployment_spec_replicas{namespace=\"$namespace\",deployment=\"$release-pg-pooler-rw\"}) or vector(0)), 1))) > bool 0)",
+          "legendFormat": "database service degraded",
+          "refId": "A"
+        },
+        {
+          "expr": "((((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\",condition=\"true\"}) or vector(0)) < bool 3) + ((sum(up{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\",job=\"$namespace/$release-tbite-platform-nats\"}) or vector(0)) < bool 3) + ((count(count by (value) (nats_varz_jetstream_meta_leader{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"})) or vector(0)) != bool 1) + ((min(nats_varz_jetstream_meta_cluster_size{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}) or vector(0)) < bool 3) + ((max(nats_varz_jetstream_meta_pending{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}) or vector(0)) > bool 0)) > bool 0)",
+          "legendFormat": "messaging service degraded",
+          "refId": "B"
+        },
+        {
+          "expr": "((((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-valkey-node-[0-9]+\",condition=\"true\"}) or vector(0)) < bool 3) + ((sum(redis_up{namespace=\"$namespace\"}) or vector(0)) < bool 3) + ((sum((redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1)) or vector(0)) != bool 1) + ((sum((redis_instance_info{namespace=\"$namespace\",role=\"slave\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"slave\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1)) or vector(0)) < bool 2) + ((sum(redis_connected_slaves{namespace=\"$namespace\"} and on(pod) (redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"}))))) or vector(0)) < bool 2) + ((min(redis_master_link_up{namespace=\"$namespace\"} and on(pod) (redis_instance_info{namespace=\"$namespace\",role=\"slave\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"slave\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"}))))) or vector(1)) < bool 1) + ((sum(redis_exporter_last_scrape_error{namespace=\"$namespace\"}) or vector(0)) > bool 0) + ((sum(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-valkey-primary.*\",ready=\"true\"}) or vector(0)) != bool 1) + ((sum(label_replace(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-valkey-primary.*\",ready=\"true\"}, \"pod\", \"$1\", \"targetref_name\", \"(.*)\") and on(namespace,pod) ((redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1))) or vector(0)) != bool 1)) > bool 0)",
+          "legendFormat": "cache service degraded",
+          "refId": "C"
+        },
+        {
+          "expr": "((((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-pool-0-[0-9]+\",condition=\"true\"}) or vector(0)) < bool 4) + ((sum(kube_statefulset_replicas{namespace=\"$namespace\",statefulset=\"$release-pool-0\"} - kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-pool-0\"}) or vector(0)) > bool 0) + ((sum(up{namespace=\"$namespace\",service=\"minio\",job=~\".*minio-tenant\"}) or vector(0)) < bool 1) + ((max(minio_cluster_health_status{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) < bool 1) + ((max(minio_cluster_nodes_online_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) < bool 4) + ((max(minio_cluster_nodes_offline_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) > bool 0) + ((max(minio_cluster_drive_offline_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) > bool 0)) > bool 0)",
+          "legendFormat": "object storage service degraded",
+          "refId": "D"
+        },
+        {
+          "expr": "((sum((max by (pod, dependency) (tbite_dependency_ready{deployment_environment=\"$env\",dependency=~\"postgres-rw|postgres-ro|nats|valkey|object-storage\"} == bool 0)) and on(pod) kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"}) or vector(0)) > bool 0)",
+          "legendFormat": "app dependency clients degraded",
+          "refId": "E"
+        }
+      ],
+      "description": "Current data-service branch locator. Service branches indicate server-side CNPG/pooler, NATS, Valkey, and MinIO health. App dependency clients are separate so one upstream outage does not falsely light unrelated service branches."
+    },
+    {
+      "type": "stat",
+      "title": "Data service activity",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 7,
+        "y": 7
+      },
+      "targets": [
+        {
+          "expr": "(sum_over_time((((((sum(cnpg_collector_up{namespace=\"$namespace\",cluster=\"$release-pg\"}) or vector(0)) < bool 3) + ((sum(1 - cnpg_pg_replication_in_recovery{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}) or vector(0)) != bool 1) + ((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\",condition=\"true\"}) or vector(0)) < bool 3) + ((max(cnpg_pg_replication_lag{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}) or vector(0)) > bool 5) + ((sum(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-pg-rw-.*\",ready=\"true\"}) or vector(0)) != bool 1) + ((sum(label_replace(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-pg-rw-.*\",ready=\"true\"}, \"pod\", \"$1\", \"targetref_name\", \"(.*)\") and on(namespace,pod) ((1 - cnpg_pg_replication_in_recovery{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}) == 1)) or vector(0)) != bool 1) + (((sum(((1 - cnpg_pg_replication_in_recovery{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}) == 1) * on(namespace,pod) group_left(node) (max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable))) or vector(0))) > bool 0) + ((sum(kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"$release-pg-pooler-rw\"}) or vector(0)) < bool clamp_min((sum(kube_deployment_spec_replicas{namespace=\"$namespace\",deployment=\"$release-pg-pooler-rw\"}) or vector(0)), 1)) + ((sum(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-pg-pooler-rw-.*\",ready=\"true\"}) or vector(0)) < bool clamp_min((sum(kube_deployment_spec_replicas{namespace=\"$namespace\",deployment=\"$release-pg-pooler-rw\"}) or vector(0)), 1))) > bool 0))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "database service degraded seconds / 10m",
+          "refId": "A"
+        },
+        {
+          "expr": "(sum_over_time((((((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\",condition=\"true\"}) or vector(0)) < bool 3) + ((sum(up{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\",job=\"$namespace/$release-tbite-platform-nats\"}) or vector(0)) < bool 3) + ((count(count by (value) (nats_varz_jetstream_meta_leader{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"})) or vector(0)) != bool 1) + ((min(nats_varz_jetstream_meta_cluster_size{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}) or vector(0)) < bool 3) + ((max(nats_varz_jetstream_meta_pending{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}) or vector(0)) > bool 0)) > bool 0))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "messaging service degraded seconds / 10m",
+          "refId": "B"
+        },
+        {
+          "expr": "(sum_over_time((((((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-valkey-node-[0-9]+\",condition=\"true\"}) or vector(0)) < bool 3) + ((sum(redis_up{namespace=\"$namespace\"}) or vector(0)) < bool 3) + ((sum((redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1)) or vector(0)) != bool 1) + ((sum((redis_instance_info{namespace=\"$namespace\",role=\"slave\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"slave\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1)) or vector(0)) < bool 2) + ((sum(redis_connected_slaves{namespace=\"$namespace\"} and on(pod) (redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"}))))) or vector(0)) < bool 2) + ((min(redis_master_link_up{namespace=\"$namespace\"} and on(pod) (redis_instance_info{namespace=\"$namespace\",role=\"slave\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"slave\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"}))))) or vector(1)) < bool 1) + ((sum(redis_exporter_last_scrape_error{namespace=\"$namespace\"}) or vector(0)) > bool 0) + ((sum(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-valkey-primary.*\",ready=\"true\"}) or vector(0)) != bool 1) + ((sum(label_replace(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-valkey-primary.*\",ready=\"true\"}, \"pod\", \"$1\", \"targetref_name\", \"(.*)\") and on(namespace,pod) ((redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1))) or vector(0)) != bool 1)) > bool 0))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "cache service degraded seconds / 10m",
+          "refId": "C"
+        },
+        {
+          "expr": "(sum_over_time((((((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-pool-0-[0-9]+\",condition=\"true\"}) or vector(0)) < bool 4) + ((sum(kube_statefulset_replicas{namespace=\"$namespace\",statefulset=\"$release-pool-0\"} - kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-pool-0\"}) or vector(0)) > bool 0) + ((sum(up{namespace=\"$namespace\",service=\"minio\",job=~\".*minio-tenant\"}) or vector(0)) < bool 1) + ((max(minio_cluster_health_status{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) < bool 1) + ((max(minio_cluster_nodes_online_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) < bool 4) + ((max(minio_cluster_nodes_offline_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) > bool 0) + ((max(minio_cluster_drive_offline_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) > bool 0)) > bool 0))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "object storage service degraded seconds / 10m",
+          "refId": "D"
+        },
+        {
+          "expr": "(sum_over_time(((sum((max by (pod, dependency) (tbite_dependency_ready{deployment_environment=\"$env\",dependency=~\"postgres-rw|postgres-ro|nats|valkey|object-storage\"} == bool 0)) and on(pod) kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"}) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "app dependency clients degraded seconds / 10m",
+          "refId": "E"
+        },
+        {
+          "expr": "((((sum(changes(cnpg_pg_replication_in_recovery{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}[10m])) or vector(0)) + (sum(changes(kube_pod_created{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}[10m])) or vector(0)) + (sum(changes(kube_pod_created{namespace=\"$namespace\",pod=~\"$release-pg-pooler-rw-.*\"}[10m])) or vector(0)))) + (sum(changes(kube_pod_created{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}[10m])) or vector(0)) + (sum(increase(nats_varz_jetstream_stats_api_errors{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}[10m])) or vector(0)) + (sum(changes(redis_instance_info{namespace=\"$namespace\",role=\"master\"}[10m])) or vector(0)) + (sum(changes(kube_pod_created{namespace=\"$namespace\",pod=~\"$release-valkey-node-[0-9]+\"}[10m])) or vector(0)) + (sum(changes(kube_pod_created{namespace=\"$namespace\",pod=~\"$release-pool-0-[0-9]+\"}[10m])) or vector(0)) + (sum(increase(minio_s3_requests_5xx_errors_total{namespace=\"$namespace\",service=\"minio\"}[10m])) or vector(0)))",
+          "legendFormat": "data service failover/recreate/error events / 10m",
+          "refId": "F"
+        },
+        {
+          "expr": "sum(changes(tbite_dependency_ready{deployment_environment=\"$env\",dependency=~\"postgres-rw|postgres-ro|nats|valkey|object-storage\"}[10m])) or vector(0)",
+          "legendFormat": "app dependency client readiness changes / 10m",
+          "refId": "G"
+        }
+      ],
+      "description": "Selected-range data-service branch breadcrumbs. Detail rows retain individual CNPG, NATS, Valkey, and MinIO metrics; this panel stays branch-level for fast fault localization."
+    },
+    {
+      "type": "stat",
+      "title": "Autoscaler activity",
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 11,
+        "y": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "(sum_over_time(((sum(kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=~\"(keda-hpa-)?$release-tbite-platform-.*\",condition=~\"AbleToScale|ScalingActive\",status!=\"true\"} == 1) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "autoscaler condition failure seconds / 10m",
+          "refId": "A"
+        },
+        {
+          "expr": "(sum_over_time((clamp_max(((max(kube_deployment_status_replicas_available{namespace=\"kube-system\",deployment=\"metrics-server\"}) or vector(0)) < bool 1) + ((sum(kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\",condition=\"ScalingActive\",status=\"false\"} == 1) or vector(0)) > bool 0), 1))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "cpu metrics path unavailable seconds / 10m",
+          "refId": "B"
+        },
+        {
+          "expr": "(sum_over_time((clamp_max(((max(kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"keda-operator\"}) or vector(0)) < bool 1) + ((max(kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"keda-operator-metrics-apiserver\"}) or vector(0)) < bool 1) + ((sum(kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\",condition=\"ScalingActive\",status=\"false\"} == 1) or vector(0)) > bool 0), 1))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "keda metrics path unavailable seconds / 10m",
+          "refId": "C"
+        },
+        {
+          "expr": "(sum_over_time((clamp_max((sum(clamp_min(kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\"} - on(namespace,horizontalpodautoscaler) kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\"}, 0)) or vector(0)) + (sum(clamp_min(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\"} - on(namespace,horizontalpodautoscaler) kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\"}, 0)) or vector(0)) + (sum(clamp_min(kube_horizontalpodautoscaler_status_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\",metric_target_type=\"utilization\"} - on(namespace,horizontalpodautoscaler,metric_name,metric_target_type) kube_horizontalpodautoscaler_spec_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\",metric_target_type=\"utilization\"}, 0)) or vector(0)), 1))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "cpu workload scale pressure seconds / 10m",
+          "refId": "D"
+        },
+        {
+          "expr": "(sum_over_time((clamp_max((sum(clamp_min(kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"} - on(namespace,horizontalpodautoscaler) kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"}, 0)) or vector(0)) + (sum(clamp_min(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"} - on(namespace,horizontalpodautoscaler) kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"}, 0)) or vector(0)) + (sum(clamp_min(kube_horizontalpodautoscaler_status_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"} - on(namespace,horizontalpodautoscaler,metric_name,metric_target_type) kube_horizontalpodautoscaler_spec_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"}, 0)) or vector(0)), 1))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "keda workload scale pressure seconds / 10m",
+          "refId": "E"
+        }
+      ],
+      "description": "Selected-range autoscaling branch breadcrumbs. Metric-path outages and workload scale pressure are separated so drilldowns can identify CPU HPA, KEDA, or workload-demand causes without duplicating per-workload detail panels."
+    },
+    {
+      "type": "stat",
+      "title": "Drain/disruption activity",
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 15,
+        "y": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "count(sum by (label_topology_kubernetes_io_zone) ((max by (node) (max_over_time(kube_node_spec_unschedulable[10m]))) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"}))) > 0) or vector(0)",
+          "legendFormat": "recent cordoned zones / 10m",
+          "refId": "A"
+        },
+        {
+          "expr": "(sum_over_time(((sum((max by (node) (kube_node_spec_unschedulable)) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"}))) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "cordoned worker seconds / 10m",
+          "refId": "B"
+        },
+        {
+          "expr": "(sum_over_time(((count((count by (label_app_kubernetes_io_component) (count by (label_app_kubernetes_io_component, label_topology_kubernetes_io_zone) (kube_pod_status_phase{namespace=\"$namespace\",phase=\"Running\"} * on(namespace,pod) group_left(node) (max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\"})) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"})) * on(namespace,pod) group_left(label_app_kubernetes_io_component) (max by (namespace, pod, label_app_kubernetes_io_component) (kube_pod_labels{namespace=\"$namespace\",label_app_kubernetes_io_instance=\"$release\",label_app_kubernetes_io_name=\"tbite-platform\",label_app_kubernetes_io_component=~\"api|realtime|web-employee|web-merchant|web-admin|worker-outbox-relay|worker-payroll-settler|worker-on-time-evaluator|scheduler-cutoff|scheduler-no-show|scheduler-doc-expiry|scheduler-feedback\"}))))) < on(label_app_kubernetes_io_component) (clamp_max(max by (label_app_kubernetes_io_component) (label_replace((max by (namespace, deployment) (kube_deployment_spec_replicas{namespace=\"$namespace\",deployment=~\"$release-tbite-platform-.*\"})), \"label_app_kubernetes_io_component\", \"$1\", \"deployment\", \"$release-tbite-platform-(.*)\")), 3))) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "zone coverage gap seconds / 10m",
+          "refId": "C"
+        },
+        {
+          "expr": "clamp_max((sum_over_time(((((sum((max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\"})) * on(namespace,pod) group_left(owner_kind,owner_name) (max by (namespace, pod, owner_kind, owner_name) (kube_pod_owner{namespace=\"$namespace\",owner_kind=\"StatefulSet\",owner_is_controller=\"true\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable)) * on(namespace,owner_name) group_left() label_replace((max by (namespace, poddisruptionbudget) (kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=\"$namespace\"}) == bool 0), \"owner_name\", \"$1\", \"poddisruptionbudget\", \"(.*)\")) or vector(0)) + (sum((max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"})) * on(namespace,pod) group_left(label_app_kubernetes_io_component) (max by (namespace, pod, label_app_kubernetes_io_component) (kube_pod_labels{namespace=\"$namespace\",label_app_kubernetes_io_instance=\"$release\",label_app_kubernetes_io_name=\"tbite-platform\",label_app_kubernetes_io_component=~\"api|realtime|web-employee|web-merchant|web-admin|worker-outbox-relay|worker-payroll-settler|worker-on-time-evaluator|scheduler-cutoff|scheduler-no-show|scheduler-doc-expiry|scheduler-feedback\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable)) * on(namespace,label_app_kubernetes_io_component) group_left() label_replace((max by (namespace, poddisruptionbudget) (kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=\"$namespace\",poddisruptionbudget=~\"$release-tbite-platform-.*\"}) == bool 0), \"label_app_kubernetes_io_component\", \"$1\", \"poddisruptionbudget\", \"$release-tbite-platform-(.*)\")) or vector(0)))) > bool 0)[10m:15s]) or vector(0)) * 15, 600)",
+          "legendFormat": "voluntary disruption blocked seconds / 10m",
+          "refId": "D"
+        }
+      ],
+      "description": "Selected-range drain, zone coverage, and voluntary-disruption branch breadcrumbs. These remain non-zero after recovery; detail rows retain raw PDB blocker counts and allowed disruptions."
+    },
+    {
+      "type": "stat",
+      "title": "Drain/disruption availability",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 18,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "((min(sum by (label_topology_kubernetes_io_zone) ((max by (node) (kube_node_status_condition{condition=\"Ready\",status=\"true\"})) * on(node) group_left() (1 - (max by (node) (kube_node_spec_unschedulable))) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"})))) or vector(0)) < bool 1)",
+          "legendFormat": "zone capacity depleted",
+          "refId": "A"
+        },
+        {
+          "expr": "sum((max by (node) (kube_node_spec_unschedulable)) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"}))) or vector(0)",
+          "legendFormat": "cordoned workers",
+          "refId": "B"
+        },
+        {
+          "expr": "count((count by (label_app_kubernetes_io_component) (count by (label_app_kubernetes_io_component, label_topology_kubernetes_io_zone) (kube_pod_status_phase{namespace=\"$namespace\",phase=\"Running\"} * on(namespace,pod) group_left(node) (max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\"})) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"})) * on(namespace,pod) group_left(label_app_kubernetes_io_component) (max by (namespace, pod, label_app_kubernetes_io_component) (kube_pod_labels{namespace=\"$namespace\",label_app_kubernetes_io_instance=\"$release\",label_app_kubernetes_io_name=\"tbite-platform\",label_app_kubernetes_io_component=~\"api|realtime|web-employee|web-merchant|web-admin|worker-outbox-relay|worker-payroll-settler|worker-on-time-evaluator|scheduler-cutoff|scheduler-no-show|scheduler-doc-expiry|scheduler-feedback\"}))))) < on(label_app_kubernetes_io_component) (clamp_max(max by (label_app_kubernetes_io_component) (label_replace((max by (namespace, deployment) (kube_deployment_spec_replicas{namespace=\"$namespace\",deployment=~\"$release-tbite-platform-.*\"})), \"label_app_kubernetes_io_component\", \"$1\", \"deployment\", \"$release-tbite-platform-(.*)\")), 3))) or vector(0)",
+          "legendFormat": "zone coverage gaps",
+          "refId": "C"
+        },
+        {
+          "expr": "clamp_max(((sum((max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\"})) * on(namespace,pod) group_left(owner_kind,owner_name) (max by (namespace, pod, owner_kind, owner_name) (kube_pod_owner{namespace=\"$namespace\",owner_kind=\"StatefulSet\",owner_is_controller=\"true\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable)) * on(namespace,owner_name) group_left() label_replace((max by (namespace, poddisruptionbudget) (kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=\"$namespace\"}) == bool 0), \"owner_name\", \"$1\", \"poddisruptionbudget\", \"(.*)\")) or vector(0)) + (sum((max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"})) * on(namespace,pod) group_left(label_app_kubernetes_io_component) (max by (namespace, pod, label_app_kubernetes_io_component) (kube_pod_labels{namespace=\"$namespace\",label_app_kubernetes_io_instance=\"$release\",label_app_kubernetes_io_name=\"tbite-platform\",label_app_kubernetes_io_component=~\"api|realtime|web-employee|web-merchant|web-admin|worker-outbox-relay|worker-payroll-settler|worker-on-time-evaluator|scheduler-cutoff|scheduler-no-show|scheduler-doc-expiry|scheduler-feedback\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable)) * on(namespace,label_app_kubernetes_io_component) group_left() label_replace((max by (namespace, poddisruptionbudget) (kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=\"$namespace\",poddisruptionbudget=~\"$release-tbite-platform-.*\"}) == bool 0), \"label_app_kubernetes_io_component\", \"$1\", \"poddisruptionbudget\", \"$release-tbite-platform-(.*)\")) or vector(0))), 1)",
+          "legendFormat": "voluntary disruption blocked",
+          "refId": "D"
+        }
+      ],
+      "description": "Current drain and voluntary-disruption blockers. The top panel indicates branch-level policy blockage; the PDB drilldown keeps raw blocker counts, owner split, and allowed disruptions."
+    },
+    {
+      "type": "stat",
+      "title": "Autoscaler availability",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 11,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=~\"(keda-hpa-)?$release-tbite-platform-.*\",condition=~\"AbleToScale|ScalingActive\",status!=\"true\"} == 1) or vector(0)",
+          "legendFormat": "autoscaler condition failures",
+          "refId": "A"
+        },
+        {
+          "expr": "clamp_max(((max(kube_deployment_status_replicas_available{namespace=\"kube-system\",deployment=\"metrics-server\"}) or vector(0)) < bool 1) + ((sum(kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\",condition=\"ScalingActive\",status=\"false\"} == 1) or vector(0)) > bool 0), 1)",
+          "legendFormat": "cpu metrics path unavailable",
+          "refId": "B"
+        },
+        {
+          "expr": "clamp_max(((max(kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"keda-operator\"}) or vector(0)) < bool 1) + ((max(kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"keda-operator-metrics-apiserver\"}) or vector(0)) < bool 1) + ((sum(kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\",condition=\"ScalingActive\",status=\"false\"} == 1) or vector(0)) > bool 0), 1)",
+          "legendFormat": "keda metrics path unavailable",
+          "refId": "C"
+        },
+        {
+          "expr": "(sum(clamp_min(kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\"} - on(namespace,horizontalpodautoscaler) kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\"}, 0)) or vector(0)) + (sum(clamp_min(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\"} - on(namespace,horizontalpodautoscaler) kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\"}, 0)) or vector(0)) + (sum(clamp_min(kube_horizontalpodautoscaler_status_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\",metric_target_type=\"utilization\"} - on(namespace,horizontalpodautoscaler,metric_name,metric_target_type) kube_horizontalpodautoscaler_spec_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\",metric_target_type=\"utilization\"}, 0)) or vector(0))",
+          "legendFormat": "cpu workload scale pressure",
+          "refId": "D"
+        },
+        {
+          "expr": "(sum(clamp_min(kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"} - on(namespace,horizontalpodautoscaler) kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"}, 0)) or vector(0)) + (sum(clamp_min(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"} - on(namespace,horizontalpodautoscaler) kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"}, 0)) or vector(0)) + (sum(clamp_min(kube_horizontalpodautoscaler_status_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"} - on(namespace,horizontalpodautoscaler,metric_name,metric_target_type) kube_horizontalpodautoscaler_spec_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=~\"keda-hpa-$release-tbite-platform-.*\"}, 0)) or vector(0))",
+          "legendFormat": "keda workload scale pressure",
+          "refId": "E"
+        }
+      ],
+      "description": "Current autoscaler branch locator. Metric-path targets identify whether CPU or KEDA scaling is blocked; workload scale-pressure targets show current demand without duplicating per-workload HPA detail."
+    },
+    {
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "title": "Observability availability",
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 14,
+        "y": 1
+      },
+      "targets": [
+        {
+          "expr": "(((((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) > bool 45) + (((time() - max(max_over_time(timestamp(vmagent_remotewrite_conn_bytes_written_total{namespace=\"$namespace\"})[2m:15s]))) or vector(999999)) > bool 45) + (((sum(up{namespace=\"$namespace\",job=\"kube-state-metrics\"}) or vector(0)) < bool 1) * on() (((time() - max(max_over_time(timestamp(vmagent_remotewrite_conn_bytes_written_total{namespace=\"$namespace\"})[2m:15s]))) or vector(999999)) <= bool 45))) > bool 0)",
+          "legendFormat": "metrics ingestion degraded",
+          "refId": "A"
+        },
+        {
+          "expr": "(((time() - max(timestamp(http_server_request_duration_seconds_count{deployment_environment=~\"$env\"}))) or vector(999999)) > bool 45)",
+          "legendFormat": "app telemetry stale",
+          "refId": "B"
+        },
+        {
+          "expr": "(((sum((max by (namespace, deployment) (kube_deployment_spec_replicas{namespace=\"$namespace\",deployment=~\"vmsingle-.*|$release-grafana|$release-victoria-metrics-operator\"}) - max by (namespace, deployment) (kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=~\"vmsingle-.*|$release-grafana|$release-victoria-metrics-operator\"}))) or vector(0)) > bool 0) * on() (((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45))",
+          "legendFormat": "metrics storage/UI missing",
+          "refId": "C"
+        },
+        {
+          "expr": "(((sum(max by (namespace, deployment) (kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"$release-opentelemetry-collector\"})) or vector(0)) < bool 1) * on() (((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45))",
+          "legendFormat": "otel collector missing",
+          "refId": "D"
+        },
+        {
+          "expr": "(((((sum(max by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-vt-single-server\"})) or vector(0)) < bool 1) * on() (((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45)) + (clamp_min((sum(rate(otelcol_receiver_accepted_spans_total[1m])) or vector(0)) - (sum(rate(otelcol_exporter_sent_spans_total{exporter=\"otlp_http/victoria\"}[1m])) or vector(0)), 0) > bool 0.1)) > bool 0)",
+          "legendFormat": "trace pipeline degraded",
+          "refId": "E"
+        },
+        {
+          "expr": "(((((sum(max by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-victoria-logs-single-server\"})) or vector(0)) < bool 1) * on() (((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45)) + ((((time() - max(timestamp(vl_rows_ingested_total{type=\"elasticsearch_bulk\"}))) or vector(999999)) > bool 45) * on() (((time() - max(max_over_time(timestamp(vmagent_remotewrite_conn_bytes_written_total{namespace=\"$namespace\"})[2m:15s]))) or vector(999999)) <= bool 45) * on() (((sum(changes(kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=~\"vmagent-.*\"}[2m])) or vector(0)) == bool 0)))) > bool 0)",
+          "legendFormat": "log pipeline degraded",
+          "refId": "F"
+        },
+        {
+          "expr": "(((((sum(max by (namespace, deployment) (kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=~\"vmalert-.*\"})) or vector(0)) < bool 1) + ((sum(max by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=~\"vmalertmanager-.*\"})) or vector(0)) < bool 1)) > bool 0) * on() (((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45))",
+          "legendFormat": "alerting unavailable",
+          "refId": "G"
+        }
+      ],
+      "description": "Current observability-plane branch locator. Metrics ingest, app telemetry, collector, trace, log, and alerting branches are collapsed here; the Observability row keeps component-level details."
+    },
+    {
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "title": "Observability activity",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 7
+      },
+      "targets": [
+        {
+          "expr": "(sum_over_time(((((((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) > bool 45) + (((time() - max(max_over_time(timestamp(vmagent_remotewrite_conn_bytes_written_total{namespace=\"$namespace\"})[2m:15s]))) or vector(999999)) > bool 45) + (((sum(up{namespace=\"$namespace\",job=\"kube-state-metrics\"}) or vector(0)) < bool 1) * on() (((time() - max(max_over_time(timestamp(vmagent_remotewrite_conn_bytes_written_total{namespace=\"$namespace\"})[2m:15s]))) or vector(999999)) <= bool 45))) > bool 0))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "metrics degraded seconds / 10m",
+          "refId": "A"
+        },
+        {
+          "expr": "(sum_over_time((((time() - max(timestamp(http_server_request_duration_seconds_count{deployment_environment=~\"$env\"}))) or vector(999999)) > bool 45)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "app telemetry stale seconds / 10m",
+          "refId": "B"
+        },
+        {
+          "expr": "(sum_over_time(((((sum((max by (namespace, deployment) (kube_deployment_spec_replicas{namespace=\"$namespace\",deployment=~\"vmsingle-.*|$release-grafana|$release-victoria-metrics-operator\"}) - max by (namespace, deployment) (kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=~\"vmsingle-.*|$release-grafana|$release-victoria-metrics-operator\"}))) or vector(0)) > bool 0) * on() (((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45)))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "metrics storage/UI missing seconds / 10m",
+          "refId": "C"
+        },
+        {
+          "expr": "(sum_over_time(((((sum(max by (namespace, deployment) (kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"$release-opentelemetry-collector\"})) or vector(0)) < bool 1) * on() (((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45)))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "otel collector missing seconds / 10m",
+          "refId": "D"
+        },
+        {
+          "expr": "(sum_over_time((((((sum(max by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-vt-single-server\"})) or vector(0)) < bool 1) * on() (((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45)) + (clamp_min((sum(rate(otelcol_receiver_accepted_spans_total[1m])) or vector(0)) - (sum(rate(otelcol_exporter_sent_spans_total{exporter=\"otlp_http/victoria\"}[1m])) or vector(0)), 0) > bool 0.1)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "trace degraded seconds / 10m",
+          "refId": "E"
+        },
+        {
+          "expr": "(sum_over_time((((((sum(max by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-victoria-logs-single-server\"})) or vector(0)) < bool 1) * on() (((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45)) + ((((time() - max(timestamp(vl_rows_ingested_total{type=\"elasticsearch_bulk\"}))) or vector(999999)) > bool 45) * on() (((time() - max(max_over_time(timestamp(vmagent_remotewrite_conn_bytes_written_total{namespace=\"$namespace\"})[2m:15s]))) or vector(999999)) <= bool 45) * on() (((sum(changes(kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=~\"vmagent-.*\"}[2m])) or vector(0)) == bool 0)))) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "log degraded seconds / 10m",
+          "refId": "F"
+        },
+        {
+          "expr": "(sum_over_time(((((((sum(max by (namespace, deployment) (kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=~\"vmalert-.*\"})) or vector(0)) < bool 1) + ((sum(max by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=~\"vmalertmanager-.*\"})) or vector(0)) < bool 1)) > bool 0) * on() (((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45)))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "alerting unavailable seconds / 10m",
+          "refId": "G"
+        }
+      ],
+      "description": "Selected-range observability branch breadcrumbs. These can remain non-zero after the current availability panel has recovered; component-level history stays in the Observability row."
+    },
+    {
+      "type": "row",
+      "title": "Autoscaling",
+      "description": "Autoscaling drilldowns for API CPU HPA behavior, KEDA-backed outbox relay backlog pressure, and scheduling side effects during scale-up.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Async backlog",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 21,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "((((sum(kube_horizontalpodautoscaler_status_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)) * (sum(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0))) or vector(0)) + clamp_min((max(tbite_outbox_pending{k8s_namespace_name=\"$namespace\"} * on(k8s_pod_name) group_left() label_replace(kube_pod_status_phase{namespace=\"$namespace\",phase=\"Running\"} == 1, \"k8s_pod_name\", \"$1\", \"pod\", \"(.*)\")) or vector(0)) - (((sum(kube_horizontalpodautoscaler_status_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)) * (sum(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0))) or vector(0)), 0)) + (sum(nats_consumer_num_pending{namespace=\"$namespace\"}) or vector(0)) + (sum(tbite_dlq_pending{k8s_namespace_name=\"$namespace\"}) or vector(0))",
+          "legendFormat": "async work backlog",
+          "refId": "A"
+        },
+        {
+          "expr": "clamp_min((((sum(kube_horizontalpodautoscaler_status_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)) * (sum(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0))) or vector(0)) - ((sum(kube_horizontalpodautoscaler_spec_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)) * (sum(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0))), 0)",
+          "legendFormat": "outbox backlog above target",
+          "refId": "B"
+        },
+        {
+          "expr": "clamp_min((sum(kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)) - (sum(kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)), 0) + clamp_min((sum(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)) - (sum(kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)), 0)",
+          "legendFormat": "outbox relay autoscale above min",
+          "refId": "C"
+        },
+        {
+          "expr": "(sum(kube_pod_status_phase{namespace=\"$namespace\",pod=~\"$release-tbite-platform-worker-outbox-relay-.*\",phase=\"Pending\"}) or vector(0)) + (sum((max by (namespace, pod) (kube_pod_status_unschedulable{namespace=\"$namespace\",pod=~\"$release-tbite-platform-worker-outbox-relay-.*\"}))) or vector(0)) + (sum(kube_deployment_status_replicas_unavailable{namespace=\"$namespace\",deployment=\"$release-tbite-platform-worker-outbox-relay\"}) or vector(0))",
+          "legendFormat": "outbox relay blockers",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(tbite_dlq_pending{k8s_namespace_name=\"$namespace\"}) or vector(0)",
+          "legendFormat": "dlq pending",
+          "refId": "E"
+        }
+      ],
+      "description": "Current async-plane locator. This panel combines backlog pressure, KEDA demand, relay scheduling blockers, and terminal DLQ pressure; detail rows retain raw outbox, HPA, throughput, and pod-readiness metrics."
+    },
+    {
+      "type": "timeseries",
+      "title": "API HPA replicas",
+      "description": "API HPA current, desired, min, max, and scale-event breadcrumbs. Use this after Autoscaler activity shows API scale pressure.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)",
+          "legendFormat": "current",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)",
+          "legendFormat": "desired",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)",
+          "legendFormat": "min",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)",
+          "legendFormat": "max",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\",condition=\"ScalingActive\",status=\"false\"} == 1) or vector(0)",
+          "legendFormat": "cpu hpas inactive",
+          "refId": "E"
+        },
+        {
+          "expr": "(sum_over_time(((sum(kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=~\"$release-tbite-platform-(api|realtime|web-.*)\",condition=\"ScalingActive\",status=\"false\"} == 1) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "cpu hpa inactive seconds / 10m",
+          "refId": "I"
+        },
+        {
+          "expr": "clamp_min((sum(kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)) - (sum(kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)), 0)",
+          "legendFormat": "desired over min",
+          "refId": "F"
+        },
+        {
+          "expr": "clamp_min((sum(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)) - (sum(kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)), 0)",
+          "legendFormat": "current over min",
+          "refId": "G"
+        },
+        {
+          "expr": "(sum_over_time((((clamp_min((sum(kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)) - (sum(kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)), 0) > bool 0) + (clamp_min((sum(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)) - (sum(kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\"}) or vector(0)), 0) > bool 0) + (clamp_min((sum(kube_horizontalpodautoscaler_status_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\",metric_name=\"cpu\",metric_target_type=\"utilization\"}) or vector(0)) - (sum(kube_horizontalpodautoscaler_spec_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\",metric_name=\"cpu\",metric_target_type=\"utilization\"}) or vector(0)), 0) > bool 0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "scale event seconds / 10m",
+          "refId": "H"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "API CPU utilization vs HPA target",
+      "description": "Compares the HPA-reported CPU utilization, configured CPU target, and cAdvisor CPU/request ratio for API load drills.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_status_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\",metric_name=\"cpu\",metric_target_type=\"utilization\"}) or vector(0)",
+          "legendFormat": "hpa current cpu",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_spec_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=\"$release-tbite-platform-api\",metric_name=\"cpu\",metric_target_type=\"utilization\"}) or vector(0)",
+          "legendFormat": "hpa target",
+          "refId": "B"
+        },
+        {
+          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"$namespace\",pod=~\"$release-tbite-platform-api-.*\",container=\"api\"}[2m])) / clamp_min(sum(kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$release-tbite-platform-api-.*\",container=\"api\",resource=\"cpu\",unit=\"core\"}), 0.001)",
+          "legendFormat": "cadvisor cpu/request",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP request and 5xx rate",
+      "description": "Request throughput and 5xx rate during API autoscale or drain drills. Use this to separate scale pressure from user-visible HTTP errors.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{deployment_environment=~\"$env\"}[1m]))",
+          "legendFormat": "all",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count{deployment_environment=~\"$env\",http_response_status_code=~\"5..\"}[1m]))",
+          "legendFormat": "5xx",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox relay HPA replicas",
+      "description": "KEDA HPA replica state for the outbox relay, including inactive scaler breadcrumbs and current/desired replica movement over the minimum floor.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)",
+          "legendFormat": "current",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)",
+          "legendFormat": "desired",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)",
+          "legendFormat": "min",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)",
+          "legendFormat": "max",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\",condition=\"ScalingActive\",status=\"false\"} == 1) or vector(0)",
+          "legendFormat": "scaling inactive",
+          "refId": "E"
+        },
+        {
+          "expr": "(sum_over_time(((sum(kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\",condition=\"ScalingActive\",status=\"false\"} == 1) or vector(0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "scaling inactive seconds / 10m",
+          "refId": "H"
+        },
+        {
+          "expr": "clamp_min((sum(kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)) - (sum(kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)), 0)",
+          "legendFormat": "desired over min",
+          "refId": "F"
+        },
+        {
+          "expr": "clamp_min((sum(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)) - (sum(kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)), 0)",
+          "legendFormat": "current over min",
+          "refId": "G"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox backlog and throughput",
+      "description": "Outbox backlog, publish throughput, KEDA average backlog per pod, estimated total backlog, and target backlog per pod.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "max(tbite_outbox_pending{k8s_namespace_name=\"$namespace\"} * on(k8s_pod_name) group_left() label_replace(kube_pod_status_phase{namespace=\"$namespace\",phase=\"Running\"} == 1, \"k8s_pod_name\", \"$1\", \"pod\", \"(.*)\")) or vector(0)",
+          "legendFormat": "outbox pending",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(tbite_outbox_published_total{k8s_namespace_name=\"$namespace\"}[1m])) or vector(0)",
+          "legendFormat": "published/s",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_status_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)",
+          "legendFormat": "hpa average backlog/pod",
+          "refId": "C"
+        },
+        {
+          "expr": "((sum(kube_horizontalpodautoscaler_status_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)) * (sum(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0))) or vector(0)",
+          "legendFormat": "hpa backlog estimate",
+          "refId": "E"
+        },
+        {
+          "expr": "sum(kube_horizontalpodautoscaler_spec_target_metric{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\"}) or vector(0)",
+          "legendFormat": "target backlog/pod",
+          "refId": "D"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox relay scheduling and readiness",
+      "description": "Outbox relay Pending, unschedulable, Ready, and unavailable replica signals for separating backlog pressure from scheduler or rollout problems.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(kube_pod_status_phase{namespace=\"$namespace\",pod=~\"$release-tbite-platform-worker-outbox-relay-.*\",phase=\"Pending\"}) or vector(0)",
+          "legendFormat": "pending pods",
+          "refId": "A"
+        },
+        {
+          "expr": "sum((max by (namespace, pod) (kube_pod_status_unschedulable{namespace=\"$namespace\",pod=~\"$release-tbite-platform-worker-outbox-relay-.*\"}))) or vector(0)",
+          "legendFormat": "unschedulable pods",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-tbite-platform-worker-outbox-relay-.*\",condition=\"true\"}) or vector(0)",
+          "legendFormat": "ready pods",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(kube_deployment_status_replicas_unavailable{namespace=\"$namespace\",deployment=\"$release-tbite-platform-worker-outbox-relay\"}) or vector(0)",
+          "legendFormat": "unavailable replicas",
+          "refId": "D"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Fault Domains",
+      "description": "Zone-capacity and placement drilldowns. Use this after top-level scheduler, drain, or app availability panels indicate a fault-domain issue.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "collapsed": false
+    },
+    {
+      "type": "bargauge",
+      "title": "Worker capacity by zone",
+      "description": "Ready, schedulable, and recently cordoned worker counts per modeled local zone.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 30
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0
+        }
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (label_topology_kubernetes_io_zone) ((max by (node) (kube_node_status_condition{condition=\"Ready\",status=\"true\"})) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"})))",
+          "legendFormat": "ready / {{label_topology_kubernetes_io_zone}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (label_topology_kubernetes_io_zone) ((max by (node) (kube_node_status_condition{condition=\"Ready\",status=\"true\"})) * on(node) group_left() (1 - (max by (node) (kube_node_spec_unschedulable))) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"})))",
+          "legendFormat": "schedulable / {{label_topology_kubernetes_io_zone}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (label_topology_kubernetes_io_zone) ((max by (node) (max_over_time(kube_node_spec_unschedulable[10m]))) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"})))",
+          "legendFormat": "recent cordoned / {{label_topology_kubernetes_io_zone}}",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "API pods by zone",
+      "description": "Current running API pod spread across modeled local zones after drain or autoscale events.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 30
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0
+        }
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "count by (label_topology_kubernetes_io_zone) (kube_pod_status_phase{namespace=\"$namespace\",phase=\"Running\"} * on(namespace,pod) group_left(node) (max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-api-.*\"})) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"})))",
+          "legendFormat": "{{label_topology_kubernetes_io_zone}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "App pods by component and zone",
+      "description": "Component-by-zone running pod distribution for spotting topology-spread gaps after drains or rebalances.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 30
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "count by (label_app_kubernetes_io_component, label_topology_kubernetes_io_zone) (kube_pod_status_phase{namespace=\"$namespace\",phase=\"Running\"} * on(namespace,pod) group_left(node) (max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\"})) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"})) * on(namespace,pod) group_left(label_app_kubernetes_io_component) (max by (namespace, pod, label_app_kubernetes_io_component) (kube_pod_labels{namespace=\"$namespace\",label_app_kubernetes_io_instance=\"$release\",label_app_kubernetes_io_name=\"tbite-platform\",label_app_kubernetes_io_component=~\"api|realtime|web-employee|web-merchant|web-admin|worker-outbox-relay|worker-payroll-settler|worker-on-time-evaluator|scheduler-cutoff|scheduler-no-show|scheduler-doc-expiry|scheduler-feedback\"})))",
+          "legendFormat": "{{label_app_kubernetes_io_component}} / {{label_topology_kubernetes_io_zone}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Scheduler And Storage",
+      "description": "Scheduling and local-storage drilldowns for cordoned workers, depleted zone capacity, Pending pods, unschedulable pods, and StatefulSet ready gaps.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "collapsed": false
+    },
+    {
+      "type": "bargauge",
+      "title": "Schedulable worker headroom by zone",
+      "description": "Current schedulable worker capacity beyond the minimum one-worker floor per modeled local zone.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0
+        }
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "clamp_min(sum by (label_topology_kubernetes_io_zone) ((max by (node) (kube_node_status_condition{condition=\"Ready\",status=\"true\"})) * on(node) group_left() (1 - (max by (node) (kube_node_spec_unschedulable))) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"}))) - 1, 0)",
+          "legendFormat": "headroom / {{label_topology_kubernetes_io_zone}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Cordoned worker nodes by zone",
+      "description": "Current cordoned worker count per modeled local zone, useful for distinguishing intentional drains from scheduler capacity loss.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0
+        }
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (label_topology_kubernetes_io_zone) ((max by (node) (kube_node_spec_unschedulable)) * on(node) group_left(label_topology_kubernetes_io_zone) (max by (node, label_topology_kubernetes_io_zone) (kube_node_labels{label_topology_kubernetes_io_zone!=\"\"})))",
+          "legendFormat": "{{label_topology_kubernetes_io_zone}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Pending, unschedulable, and stateful ready gaps",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (pod) (kube_pod_status_phase{namespace=\"$namespace\",phase=\"Pending\"} == 1)",
+          "legendFormat": "pending {{pod}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (pod, owner_kind, owner_name) ((max by (namespace, pod) (kube_pod_status_unschedulable{namespace=\"$namespace\"})) * on(namespace,pod) group_left(owner_kind,owner_name) (max by (namespace, pod, owner_kind, owner_name) (kube_pod_owner{namespace=\"$namespace\",owner_kind=~\"StatefulSet|Cluster\",owner_is_controller=\"true\"})))",
+          "legendFormat": "unschedulable {{pod}} {{owner_kind}}/{{owner_name}}",
+          "refId": "B"
+        },
+        {
+          "expr": "kube_statefulset_replicas{namespace=\"$namespace\"} - kube_statefulset_status_replicas_ready{namespace=\"$namespace\"}",
+          "legendFormat": "ready gap {{statefulset}}",
+          "refId": "C"
+        }
+      ],
+      "description": "Local detail for scheduler/storage incidents. Use this after the top-level scheduler/storage stat identifies an active blocker."
+    },
+    {
+      "type": "row",
+      "title": "Disruption And Recovery",
+      "description": "Voluntary-disruption drilldowns for PDB blockers, app unavailability, recent disruption breadcrumbs, and restart side effects.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "PDB policy blockers and allowed disruptions",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 0,
+        "y": 46
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "((sum((max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\"})) * on(namespace,pod) group_left(owner_kind,owner_name) (max by (namespace, pod, owner_kind, owner_name) (kube_pod_owner{namespace=\"$namespace\",owner_kind=\"StatefulSet\",owner_is_controller=\"true\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable)) * on(namespace,owner_name) group_left() label_replace((max by (namespace, poddisruptionbudget) (kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=\"$namespace\"}) == bool 0), \"owner_name\", \"$1\", \"poddisruptionbudget\", \"(.*)\")) or vector(0)) + (sum((max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"})) * on(namespace,pod) group_left(label_app_kubernetes_io_component) (max by (namespace, pod, label_app_kubernetes_io_component) (kube_pod_labels{namespace=\"$namespace\",label_app_kubernetes_io_instance=\"$release\",label_app_kubernetes_io_name=\"tbite-platform\",label_app_kubernetes_io_component=~\"api|realtime|web-employee|web-merchant|web-admin|worker-outbox-relay|worker-payroll-settler|worker-on-time-evaluator|scheduler-cutoff|scheduler-no-show|scheduler-doc-expiry|scheduler-feedback\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable)) * on(namespace,label_app_kubernetes_io_component) group_left() label_replace((max by (namespace, poddisruptionbudget) (kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=\"$namespace\",poddisruptionbudget=~\"$release-tbite-platform-.*\"}) == bool 0), \"label_app_kubernetes_io_component\", \"$1\", \"poddisruptionbudget\", \"$release-tbite-platform-(.*)\")) or vector(0)))",
+          "legendFormat": "pdb policy blockers",
+          "refId": "A"
+        },
+        {
+          "expr": "(sum((max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\"})) * on(namespace,pod) group_left(owner_kind,owner_name) (max by (namespace, pod, owner_kind, owner_name) (kube_pod_owner{namespace=\"$namespace\",owner_kind=\"StatefulSet\",owner_is_controller=\"true\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable)) * on(namespace,owner_name) group_left() label_replace((max by (namespace, poddisruptionbudget) (kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=\"$namespace\"}) == bool 0), \"owner_name\", \"$1\", \"poddisruptionbudget\", \"(.*)\")) or vector(0))",
+          "legendFormat": "stateful protected on cordoned node",
+          "refId": "B"
+        },
+        {
+          "expr": "(sum((max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"})) * on(namespace,pod) group_left(label_app_kubernetes_io_component) (max by (namespace, pod, label_app_kubernetes_io_component) (kube_pod_labels{namespace=\"$namespace\",label_app_kubernetes_io_instance=\"$release\",label_app_kubernetes_io_name=\"tbite-platform\",label_app_kubernetes_io_component=~\"api|realtime|web-employee|web-merchant|web-admin|worker-outbox-relay|worker-payroll-settler|worker-on-time-evaluator|scheduler-cutoff|scheduler-no-show|scheduler-doc-expiry|scheduler-feedback\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable)) * on(namespace,label_app_kubernetes_io_component) group_left() label_replace((max by (namespace, poddisruptionbudget) (kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=\"$namespace\",poddisruptionbudget=~\"$release-tbite-platform-.*\"}) == bool 0), \"label_app_kubernetes_io_component\", \"$1\", \"poddisruptionbudget\", \"$release-tbite-platform-(.*)\")) or vector(0))",
+          "legendFormat": "app protected on cordoned node",
+          "refId": "C"
+        },
+        {
+          "expr": "kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=\"$namespace\"}",
+          "legendFormat": "allowed {{poddisruptionbudget}}",
+          "refId": "D"
+        }
+      ],
+      "description": "Use this after Drain/disruption availability shows a PDB policy blocker. Allowed disruptions can be zero during normal protection; the blocker series indicates protected app or StatefulSet pods still running on cordoned workers."
+    },
+    {
+      "type": "timeseries",
+      "title": "Unavailable app replicas",
+      "description": "Deployment-level unavailable replicas. During a PDB blocker this should stay zero, proving the drain is policy-blocked without app availability loss.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 6,
+        "y": 46
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "kube_deployment_status_replicas_unavailable{namespace=\"$namespace\",deployment=~\"$release-tbite-platform-.*\"}",
+          "legendFormat": "{{deployment}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Recent disruption activity",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 12,
+        "y": 46
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum((max by (node) (max_over_time(kube_node_spec_unschedulable[10m]))))",
+          "legendFormat": "cordoned nodes / 10m",
+          "refId": "A"
+        },
+        {
+          "expr": "(sum_over_time(((((sum((max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\"})) * on(namespace,pod) group_left(owner_kind,owner_name) (max by (namespace, pod, owner_kind, owner_name) (kube_pod_owner{namespace=\"$namespace\",owner_kind=\"StatefulSet\",owner_is_controller=\"true\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable)) * on(namespace,owner_name) group_left() label_replace((max by (namespace, poddisruptionbudget) (kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=\"$namespace\"}) == bool 0), \"owner_name\", \"$1\", \"poddisruptionbudget\", \"(.*)\")) or vector(0)) + (sum((max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"})) * on(namespace,pod) group_left(label_app_kubernetes_io_component) (max by (namespace, pod, label_app_kubernetes_io_component) (kube_pod_labels{namespace=\"$namespace\",label_app_kubernetes_io_instance=\"$release\",label_app_kubernetes_io_name=\"tbite-platform\",label_app_kubernetes_io_component=~\"api|realtime|web-employee|web-merchant|web-admin|worker-outbox-relay|worker-payroll-settler|worker-on-time-evaluator|scheduler-cutoff|scheduler-no-show|scheduler-doc-expiry|scheduler-feedback\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable)) * on(namespace,label_app_kubernetes_io_component) group_left() label_replace((max by (namespace, poddisruptionbudget) (kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=\"$namespace\",poddisruptionbudget=~\"$release-tbite-platform-.*\"}) == bool 0), \"label_app_kubernetes_io_component\", \"$1\", \"poddisruptionbudget\", \"$release-tbite-platform-(.*)\")) or vector(0)))) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "pdb policy blocker seconds / 10m",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(max_over_time(kube_deployment_status_replicas_unavailable{namespace=\"$namespace\",deployment=~\"$release-tbite-platform-.*\"}[10m]))",
+          "legendFormat": "unavailable app replicas / 10m",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(max_over_time(kube_pod_status_phase{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\",phase=\"Pending\"}[10m]))",
+          "legendFormat": "pending app pods / 10m",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(changes(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\",condition=\"true\"}[10m]))",
+          "legendFormat": "app readiness changes / 10m",
+          "refId": "E"
+        }
+      ],
+      "description": "Selected-range disruption breadcrumbs for cordons, PDB blockers, app unavailability, pending pods, and readiness churn. Read with the current availability panels before treating this as an active outage."
+    },
+    {
+      "type": "timeseries",
+      "title": "Container restarts / 10m",
+      "description": "Recent container restarts for release pods, used as a side-effect check after drain, failover, or observability-failure drills.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 18,
+        "y": 46
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=~\"$release-.*\"}[10m]))",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Database Failover",
+      "description": "Database drilldowns for CNPG primary identity, RW service routing, PgBouncer pooler access health, replication health, dependency readiness, and scaler side effects after Data service availability flags database trouble.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 53
+      },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "CNPG primary by pod",
+      "description": "Shows the active CNPG primary per pod, the RW endpoint target, and whether the primary is still on a cordoned node.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 54
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "1 - cnpg_pg_replication_in_recovery{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}",
+          "legendFormat": "primary / {{pod}}",
+          "refId": "A"
+        },
+        {
+          "expr": "label_replace(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-pg-rw-.*\",ready=\"true\"}, \"pod\", \"$1\", \"targetref_name\", \"(.*)\")",
+          "legendFormat": "rw endpoint / {{pod}}",
+          "refId": "B"
+        },
+        {
+          "expr": "(sum(((1 - cnpg_pg_replication_in_recovery{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}) == 1) * on(namespace,pod) group_left(node) (max by (namespace, pod, node) (kube_pod_info{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"})) * on(node) group_left() (max by (node) (kube_node_spec_unschedulable))) or vector(0))",
+          "legendFormat": "primary on cordoned node",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "CNPG instance health, service routing, and lag",
+      "description": "Checks CNPG collector coverage, ready instance count, pod recreation, replication lag, direct RW endpoint routing, and PgBouncer RW pooler availability.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 54
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(cnpg_collector_up{namespace=\"$namespace\",cluster=\"$release-pg\"}) or vector(0)",
+          "legendFormat": "collectors up",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\",condition=\"true\"}) or vector(0)",
+          "legendFormat": "ready pg pods",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\",container=\"postgres\"}[10m]))",
+          "legendFormat": "restart / {{pod}}",
+          "refId": "F"
+        },
+        {
+          "expr": "sum by (pod) (changes(kube_pod_created{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}[10m]))",
+          "legendFormat": "pod recreation / {{pod}}",
+          "refId": "G"
+        },
+        {
+          "expr": "max(cnpg_pg_replication_lag{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}) or vector(0)",
+          "legendFormat": "max replication lag",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-pg-rw-.*\",ready=\"true\"}) or vector(0)",
+          "legendFormat": "rw endpoint count",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(label_replace(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-pg-rw-.*\",ready=\"true\"}, \"pod\", \"$1\", \"targetref_name\", \"(.*)\") and on(namespace,pod) ((1 - cnpg_pg_replication_in_recovery{namespace=\"$namespace\",pod=~\"$release-pg-[0-9]+\"}) == 1)) or vector(0)",
+          "legendFormat": "rw endpoint is primary",
+          "refId": "E"
+        },
+        {
+          "expr": "sum(kube_deployment_spec_replicas{namespace=\"$namespace\",deployment=\"$release-pg-pooler-rw\"}) or vector(0)",
+          "legendFormat": "pooler spec replicas",
+          "refId": "H"
+        },
+        {
+          "expr": "sum(kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"$release-pg-pooler-rw\"}) or vector(0)",
+          "legendFormat": "pooler available",
+          "refId": "I"
+        },
+        {
+          "expr": "sum(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-pg-pooler-rw-.*\",ready=\"true\"}) or vector(0)",
+          "legendFormat": "pooler ready endpoints",
+          "refId": "J"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Dependency readiness and scaler health",
+      "description": "Breaks app dependency client readiness into database, messaging, cache, and object-storage client branches from the readiness handler dependency metric, then shows pod-level readiness and KEDA scaler side effects for localizing whether Data service trouble is server-side or client-side.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 54
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (pod) (kube_pod_status_ready{namespace=\"$namespace\",condition=\"false\",pod=~\"$release-authentik-server.*|$release-tbite-platform-(api|realtime|worker-outbox-relay|worker-payroll-settler|worker-on-time-evaluator).*|$release-pg-[0-9]+\"} == 1)",
+          "legendFormat": "not ready / {{pod}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum((max by (pod, dependency) (tbite_dependency_ready{deployment_environment=\"$env\",dependency=~\"postgres-rw|postgres-ro\"} == bool 0)) and on(pod) kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"}) or vector(0)",
+          "legendFormat": "database clients not-ready",
+          "refId": "F"
+        },
+        {
+          "expr": "sum((max by (pod, dependency) (tbite_dependency_ready{deployment_environment=\"$env\",dependency=\"nats\"} == bool 0)) and on(pod) kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"}) or vector(0)",
+          "legendFormat": "messaging clients not-ready",
+          "refId": "G"
+        },
+        {
+          "expr": "sum((max by (pod, dependency) (tbite_dependency_ready{deployment_environment=\"$env\",dependency=\"valkey\"} == bool 0)) and on(pod) kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"}) or vector(0)",
+          "legendFormat": "cache clients not-ready",
+          "refId": "H"
+        },
+        {
+          "expr": "sum((max by (pod, dependency) (tbite_dependency_ready{deployment_environment=\"$env\",dependency=\"object-storage\"} == bool 0)) and on(pod) kube_pod_info{namespace=\"$namespace\",pod=~\"$release-tbite-platform-.*\"}) or vector(0)",
+          "legendFormat": "object storage clients not-ready",
+          "refId": "I"
+        },
+        {
+          "expr": "kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\",condition=\"ScalingActive\",status=\"false\"}",
+          "legendFormat": "outbox KEDA scaling inactive",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=~\"$release-authentik-server.*|$release-tbite-platform-(api|realtime|worker-outbox-relay).*\"}[10m]))",
+          "legendFormat": "restart / {{pod}}",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(changes(tbite_dependency_ready{deployment_environment=\"$env\",dependency=~\"postgres-rw|postgres-ro|nats|valkey|object-storage\"}[10m])) or vector(0)",
+          "legendFormat": "dependency readiness changes / 10m",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(max_over_time((kube_horizontalpodautoscaler_status_condition{namespace=\"$namespace\",horizontalpodautoscaler=\"keda-hpa-$release-tbite-platform-worker-outbox-relay\",condition=\"ScalingActive\",status=\"false\"} == bool 1)[10m:])) or vector(0)",
+          "legendFormat": "outbox scaler inactive / 10m",
+          "refId": "E"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Messaging, Cache, And Object Storage",
+      "description": "Dependency drilldowns for the current data-service availability signals: NATS messaging, Valkey cache primary routing, and MinIO object storage.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 61
+      },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "NATS availability",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 62
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\",condition=\"true\"}) or vector(0)",
+          "legendFormat": "ready nats pods",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(up{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\",job=\"$namespace/$release-tbite-platform-nats\"}) or vector(0)",
+          "legendFormat": "nats scrape up",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(nats_varz_routes{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}) or vector(0)",
+          "legendFormat": "cluster routes",
+          "refId": "C"
+        },
+        {
+          "expr": "count(count by (value) (nats_varz_jetstream_meta_leader{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"})) or vector(0)",
+          "legendFormat": "jetstream meta leaders",
+          "refId": "D"
+        },
+        {
+          "expr": "min(nats_varz_jetstream_meta_cluster_size{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}) or vector(0)",
+          "legendFormat": "jetstream meta cluster min",
+          "refId": "E"
+        },
+        {
+          "expr": "max(nats_varz_jetstream_meta_pending{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}) or vector(0)",
+          "legendFormat": "jetstream meta pending",
+          "refId": "F"
+        },
+        {
+          "expr": "sum by (stream_name, consumer_name) (nats_consumer_num_pending{namespace=\"$namespace\"})",
+          "legendFormat": "{{stream_name}} / {{consumer_name}} pending",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-tbite-platform-(realtime|worker-outbox-relay|worker-payroll-settler|worker-on-time-evaluator).*\",condition=\"false\"} == 1) or vector(0)",
+          "legendFormat": "nats client not-ready pods",
+          "refId": "D"
+        }
+      ],
+      "description": "Current NATS pod readiness, scrape health, cluster route and JetStream metadata state, consumer backlog, and client readiness impact."
+    },
+    {
+      "type": "timeseries",
+      "title": "NATS activity",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 62
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(changes(kube_pod_created{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}[10m])) or vector(0)",
+          "legendFormat": "pod recreations / 10m",
+          "refId": "G"
+        },
+        {
+          "expr": "(sum_over_time(((((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\",condition=\"true\"}) or vector(0)) < bool 3) + ((sum(up{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\",job=\"$namespace/$release-tbite-platform-nats\"}) or vector(0)) < bool 3) + ((count(count by (value) (nats_varz_jetstream_meta_leader{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"})) or vector(0)) != bool 1) + ((min(nats_varz_jetstream_meta_cluster_size{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}) or vector(0)) < bool 3) + ((max(nats_varz_jetstream_meta_pending{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}) or vector(0)) > bool 0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "server degraded seconds / 10m",
+          "refId": "H"
+        },
+        {
+          "expr": "sum(increase(nats_varz_jetstream_stats_api_errors{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}[10m])) or vector(0)",
+          "legendFormat": "api errors / 10m",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=~\"$release-nats-[0-9]+\"}[10m]))",
+          "legendFormat": "restart / {{pod}}",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(changes(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-tbite-platform-(realtime|worker-outbox-relay|worker-payroll-settler|worker-on-time-evaluator).*\",condition=\"true\"}[10m])) or vector(0)",
+          "legendFormat": "nats client readiness changes / 10m",
+          "refId": "E"
+        }
+      ],
+      "description": "Selected-range NATS disruption breadcrumbs after current NATS availability has recovered."
+    },
+    {
+      "type": "timeseries",
+      "title": "Valkey role and replication health",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 62
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-valkey-node-[0-9]+\",condition=\"true\"}) or vector(0)",
+          "legendFormat": "ready valkey pods",
+          "refId": "I"
+        },
+        {
+          "expr": "sum(redis_up{namespace=\"$namespace\"}) or vector(0)",
+          "legendFormat": "valkey scrape up",
+          "refId": "A"
+        },
+        {
+          "expr": "sum((redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1)) or vector(0)",
+          "legendFormat": "masters",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(changes(redis_instance_info{namespace=\"$namespace\",role=\"master\"}[10m])) or vector(0)",
+          "legendFormat": "role changes / 10m",
+          "refId": "C"
+        },
+        {
+          "expr": "sum((redis_instance_info{namespace=\"$namespace\",role=\"slave\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"slave\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1)) or vector(0)",
+          "legendFormat": "replicas",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(redis_connected_slaves{namespace=\"$namespace\"} and on(pod) (redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"}))))) or vector(0)",
+          "legendFormat": "connected replicas",
+          "refId": "E"
+        },
+        {
+          "expr": "min(redis_master_link_up{namespace=\"$namespace\"} and on(pod) (redis_instance_info{namespace=\"$namespace\",role=\"slave\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"slave\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"}))))) or vector(1)",
+          "legendFormat": "replica link min",
+          "refId": "F"
+        },
+        {
+          "expr": "sum(redis_exporter_last_scrape_error{namespace=\"$namespace\"}) or vector(0)",
+          "legendFormat": "scrape errors",
+          "refId": "G"
+        },
+        {
+          "expr": "sum(changes(kube_pod_created{namespace=\"$namespace\",pod=~\"$release-valkey-node-[0-9]+\"}[10m])) or vector(0)",
+          "legendFormat": "pod recreations / 10m",
+          "refId": "H"
+        },
+        {
+          "expr": "(sum_over_time(((((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-valkey-node-[0-9]+\",condition=\"true\"}) or vector(0)) < bool 3) + ((sum(redis_up{namespace=\"$namespace\"}) or vector(0)) < bool 3) + ((sum((redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1)) or vector(0)) != bool 1) + ((sum((redis_instance_info{namespace=\"$namespace\",role=\"slave\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"slave\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1)) or vector(0)) < bool 2) + ((sum(redis_connected_slaves{namespace=\"$namespace\"} and on(pod) (redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"}))))) or vector(0)) < bool 2) + ((min(redis_master_link_up{namespace=\"$namespace\"} and on(pod) (redis_instance_info{namespace=\"$namespace\",role=\"slave\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"slave\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"}))))) or vector(1)) < bool 1) + ((sum(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-valkey-primary.*\",ready=\"true\"}) or vector(0)) != bool 1) + ((sum(label_replace(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-valkey-primary.*\",ready=\"true\"}, \"pod\", \"$1\", \"targetref_name\", \"(.*)\") and on(namespace,pod) ((redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1))) or vector(0)) != bool 1) + ((sum(redis_exporter_last_scrape_error{namespace=\"$namespace\"}) or vector(0)) > bool 0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "degraded seconds / 10m",
+          "refId": "N"
+        },
+        {
+          "expr": "sum(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-valkey-primary.*\",ready=\"true\"}) or vector(0)",
+          "legendFormat": "primary service endpoints",
+          "refId": "J"
+        },
+        {
+          "expr": "sum(label_replace(kube_endpointslice_endpoints{namespace=\"$namespace\",endpointslice=~\"$release-valkey-primary.*\",ready=\"true\"}, \"pod\", \"$1\", \"targetref_name\", \"(.*)\") and on(namespace,pod) ((redis_instance_info{namespace=\"$namespace\",role=\"master\"} and on(pod) (timestamp(redis_instance_info{namespace=\"$namespace\",role=\"master\"}) == on(pod) group_left max by (pod) (timestamp(redis_instance_info{namespace=\"$namespace\"})))) and on(pod) (redis_up{namespace=\"$namespace\"} == 1))) or vector(0)",
+          "legendFormat": "primary service endpoint is master",
+          "refId": "K"
+        },
+        {
+          "expr": "sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-tbite-platform-(api|realtime).*\",condition=\"false\"} == 1) or vector(0)",
+          "legendFormat": "cache client not-ready pods",
+          "refId": "L"
+        },
+        {
+          "expr": "sum(changes(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-tbite-platform-(api|realtime).*\",condition=\"true\"}[10m])) or vector(0)",
+          "legendFormat": "cache client readiness changes / 10m",
+          "refId": "M"
+        }
+      ],
+      "description": "Current Valkey cache topology and routing health. Use this panel after the top-level valkey unhealthy signal to distinguish pod readiness, exporter scrape health, master count, replica links, primary-service endpoint routing, and cache client readiness impact."
+    },
+    {
+      "type": "row",
+      "title": "Object Storage",
+      "description": "Object storage drilldown for MinIO tenant availability, quorum, S3 errors, and dependent client readiness.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 70
+      },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "MinIO tenant health",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 71
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-pool-0-[0-9]+\",condition=\"true\"}) or vector(0)",
+          "legendFormat": "ready minio pods",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(kube_statefulset_replicas{namespace=\"$namespace\",statefulset=\"$release-pool-0\"} - kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-pool-0\"}) or vector(0)",
+          "legendFormat": "stateful ready gap",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(changes(kube_pod_created{namespace=\"$namespace\",pod=~\"$release-pool-0-[0-9]+\"}[10m])) or vector(0)",
+          "legendFormat": "pod recreations / 10m",
+          "refId": "C"
+        },
+        {
+          "expr": "(sum_over_time(((((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-pool-0-[0-9]+\",condition=\"true\"}) or vector(0)) < bool 4) + ((sum(kube_statefulset_replicas{namespace=\"$namespace\",statefulset=\"$release-pool-0\"} - kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-pool-0\"}) or vector(0)) > bool 0) + ((sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-pool-0-[0-9]+\",condition=\"false\"} == 1) or vector(0)) > bool 0) + ((sum(up{namespace=\"$namespace\",service=\"minio\",job=~\".*minio-tenant\"}) or vector(0)) < bool 1) + ((max(minio_cluster_health_status{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) < bool 1) + ((max(minio_cluster_nodes_online_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) < bool 4) + ((max(minio_cluster_nodes_offline_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) > bool 0) + ((max(minio_cluster_drive_offline_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)) > bool 0)) > bool 0)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "degraded seconds / 10m",
+          "refId": "P"
+        },
+        {
+          "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=~\"$release-pool-0-[0-9]+\",container=\"minio\"}[10m]))",
+          "legendFormat": "minio restart / {{pod}}",
+          "refId": "D"
+        },
+        {
+          "expr": "sum by (pod) (kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-pool-0-[0-9]+\",condition=\"false\"} == 1)",
+          "legendFormat": "not ready / {{pod}}",
+          "refId": "E"
+        },
+        {
+          "refId": "F",
+          "legendFormat": "api scrape up",
+          "expr": "sum(up{namespace=\"$namespace\",service=\"minio\",job=~\".*minio-tenant\"}) or vector(0)"
+        },
+        {
+          "refId": "G",
+          "legendFormat": "cluster health",
+          "expr": "max(minio_cluster_health_status{namespace=\"$namespace\",service=\"minio\"}) or vector(0)"
+        },
+        {
+          "refId": "H",
+          "legendFormat": "nodes online",
+          "expr": "max(minio_cluster_nodes_online_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)"
+        },
+        {
+          "refId": "I",
+          "legendFormat": "nodes offline",
+          "expr": "max(minio_cluster_nodes_offline_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)"
+        },
+        {
+          "refId": "J",
+          "legendFormat": "drives offline",
+          "expr": "max(minio_cluster_drive_offline_total{namespace=\"$namespace\",service=\"minio\"}) or vector(0)"
+        },
+        {
+          "refId": "K",
+          "legendFormat": "write quorum",
+          "expr": "min(minio_cluster_write_quorum{namespace=\"$namespace\",service=\"minio\"}) or vector(0)"
+        },
+        {
+          "refId": "L",
+          "legendFormat": "read quorum",
+          "expr": "min(minio_cluster_health_erasure_set_read_quorum{namespace=\"$namespace\",service=\"minio\"}) or vector(0)"
+        },
+        {
+          "refId": "M",
+          "legendFormat": "s3 requests / s",
+          "expr": "sum(rate(minio_s3_requests_total{namespace=\"$namespace\",service=\"minio\"}[5m])) or vector(0)"
+        },
+        {
+          "refId": "N",
+          "legendFormat": "s3 5xx / 10m",
+          "expr": "sum(increase(minio_s3_requests_5xx_errors_total{namespace=\"$namespace\",service=\"minio\"}[10m])) or vector(0)"
+        },
+        {
+          "refId": "O",
+          "legendFormat": "object-storage client not-ready pods",
+          "expr": "sum(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-tbite-platform-(api|worker-payroll-settler).*\",condition=\"false\"} == 1) or vector(0)"
+        },
+        {
+          "refId": "P",
+          "legendFormat": "object-storage client readiness changes / 10m",
+          "expr": "sum(changes(kube_pod_status_ready{namespace=\"$namespace\",pod=~\"$release-tbite-platform-(api|worker-payroll-settler).*\",condition=\"true\"}[10m])) or vector(0)"
+        }
+      ],
+      "description": "Current MinIO tenant health and object-storage client impact. Use this panel after the top-level minio unhealthy signal to distinguish pod readiness, StatefulSet ready gaps, MinIO cluster health, online/offline nodes and drives, read/write quorum, S3 request errors, and object-storage client readiness changes."
+    },
+    {
+      "type": "row",
+      "title": "Observability",
+      "description": "Telemetry-pipeline drilldowns for distinguishing app telemetry, Kubernetes inventory, metrics ingestion, traces, logs, and backend outages.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 78
+      },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Observability pipeline health",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "VictoriaMetrics"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 79
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "(time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)",
+          "legendFormat": "k8s metrics age seconds",
+          "refId": "A"
+        },
+        {
+          "expr": "(time() - max(max_over_time(timestamp(vmagent_remotewrite_conn_bytes_written_total{namespace=\"$namespace\"})[2m:15s]))) or vector(999999)",
+          "legendFormat": "vmagent telemetry age seconds",
+          "refId": "W"
+        },
+        {
+          "expr": "sum(rate(vmagent_remotewrite_bytes_sent_total{namespace=\"$namespace\"}[1m])) or vector(0)",
+          "legendFormat": "vmagent remote-write bytes/s",
+          "refId": "X"
+        },
+        {
+          "expr": "(time() - max(timestamp(http_server_request_duration_seconds_count{deployment_environment=~\"$env\"}))) or vector(999999)",
+          "legendFormat": "app telemetry age seconds",
+          "refId": "B"
+        },
+        {
+          "expr": "((time() - max by (service_name) (timestamp(http_server_request_duration_seconds_count{deployment_environment=~\"$env\"}))) > bool 45) or vector(0)",
+          "legendFormat": "app telemetry stale / {{service_name}}",
+          "refId": "AB"
+        },
+        {
+          "expr": "sum by (deployment) (kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=~\"vmagent-.*|vmsingle-.*|vmalert-.*|$release-grafana|$release-kube-state-metrics|$release-opentelemetry-collector|$release-victoria-metrics-operator\"})",
+          "legendFormat": "available / {{deployment}}",
+          "refId": "C"
+        },
+        {
+          "expr": "(sum_over_time(((((sum(kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"$release-opentelemetry-collector\"}) or vector(0)) < bool 1) * on() ((((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45))))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "otel collector missing seconds / 10m",
+          "refId": "AC"
+        },
+        {
+          "expr": "sum by (statefulset) (kube_statefulset_replicas{namespace=\"$namespace\",statefulset=~\"$release-victoria-logs-single-server|$release-vt-single-server|vmalertmanager-.*\"} - kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=~\"$release-victoria-logs-single-server|$release-vt-single-server|vmalertmanager-.*\"})",
+          "legendFormat": "stateful ready gap / {{statefulset}}",
+          "refId": "D"
+        },
+        {
+          "expr": "(((sum(kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-victoria-logs-single-server\"}) or vector(0)) < bool 1) * on() ((((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45)))",
+          "legendFormat": "missing / VictoriaLogs",
+          "refId": "U"
+        },
+        {
+          "expr": "(sum_over_time(((((sum(kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-victoria-logs-single-server\"}) or vector(0)) < bool 1) * on() ((((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45))))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "VictoriaLogs missing seconds / 10m",
+          "refId": "AF"
+        },
+        {
+          "expr": "(((sum(kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-vt-single-server\"}) or vector(0)) < bool 1) * on() ((((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45)))",
+          "legendFormat": "missing / VictoriaTraces",
+          "refId": "V"
+        },
+        {
+          "expr": "(sum_over_time(((((sum(kube_statefulset_status_replicas_ready{namespace=\"$namespace\",statefulset=\"$release-vt-single-server\"}) or vector(0)) < bool 1) * on() ((((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) <= bool 45))))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "VictoriaTraces missing seconds / 10m",
+          "refId": "AD"
+        },
+        {
+          "expr": "sum by (daemonset) (kube_daemonset_status_desired_number_scheduled{namespace=\"$namespace\",daemonset=~\"$release-prometheus-node-exporter|$release-vector\"} - kube_daemonset_status_number_ready{namespace=\"$namespace\",daemonset=~\"$release-prometheus-node-exporter|$release-vector\"})",
+          "legendFormat": "daemonset ready gap / {{daemonset}}",
+          "refId": "E"
+        },
+        {
+          "expr": "sum(up{namespace=\"$namespace\",job=\"kube-state-metrics\"}) or vector(0)",
+          "legendFormat": "kube-state-metrics scrape up",
+          "refId": "T"
+        },
+        {
+          "expr": "(sum_over_time((((sum(up{namespace=\"$namespace\",job=\"kube-state-metrics\"}) or vector(0)) < bool 1) * on() (((time() - max(max_over_time(timestamp(vmagent_remotewrite_conn_bytes_written_total{namespace=\"$namespace\"})[2m:15s]))) or vector(999999)) <= bool 45))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "kube-state-metrics missing seconds / 10m",
+          "refId": "AA"
+        },
+        {
+          "expr": "sum(up{namespace=\"$namespace\",pod=~\"$release-victoria-logs-single-server-.*\"}) or vector(0)",
+          "legendFormat": "vlogs scrape up",
+          "refId": "F"
+        },
+        {
+          "expr": "sum(rate(otelcol_receiver_accepted_metric_points_total[1m])) or vector(0)",
+          "legendFormat": "otel accepted metric points/s",
+          "refId": "G"
+        },
+        {
+          "expr": "sum(rate(otelcol_receiver_accepted_spans_total[1m])) or vector(0)",
+          "legendFormat": "otel accepted spans/s",
+          "refId": "H"
+        },
+        {
+          "expr": "sum(rate(otelcol_exporter_sent_spans_total{exporter=\"otlp_http/victoria\"}[1m])) or vector(0)",
+          "legendFormat": "trace export spans/s",
+          "refId": "I"
+        },
+        {
+          "expr": "clamp_min((sum(rate(otelcol_receiver_accepted_spans_total[1m])) or vector(0)) - (sum(rate(otelcol_exporter_sent_spans_total{exporter=\"otlp_http/victoria\"}[1m])) or vector(0)), 0)",
+          "legendFormat": "trace delivery gap/s",
+          "refId": "J"
+        },
+        {
+          "expr": "(sum_over_time((clamp_min((sum(rate(otelcol_receiver_accepted_spans_total[1m])) or vector(0)) - (sum(rate(otelcol_exporter_sent_spans_total{exporter=\"otlp_http/victoria\"}[1m])) or vector(0)), 0) > bool 0.1)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "trace delivery gap active seconds / 10m",
+          "refId": "AE"
+        },
+        {
+          "expr": "sum(increase(otelcol_exporter_send_failed_spans_total{exporter=\"otlp_http/victoria\"}[10m])) or vector(0)",
+          "legendFormat": "trace export failures / 10m",
+          "refId": "K"
+        },
+        {
+          "expr": "(sum(increase(otelcol_exporter_send_failed_metric_points_total[10m])) or vector(0)) + (sum(increase(otelcol_exporter_send_failed_spans_total[10m])) or vector(0)) + (sum(increase(otelcol_exporter_send_failed_log_records_total[10m])) or vector(0))",
+          "legendFormat": "otel export failures / 10m",
+          "refId": "L"
+        },
+        {
+          "expr": "sum(rate(vl_rows_ingested_total{type=\"elasticsearch_bulk\"}[1m])) or vector(0)",
+          "legendFormat": "vlogs ingest rows/s",
+          "refId": "M"
+        },
+        {
+          "expr": "sum(rate(vl_http_requests_total{path=\"/insert/elasticsearch/_bulk\"}[1m])) or vector(0)",
+          "legendFormat": "vlogs ingest requests/s",
+          "refId": "N"
+        },
+        {
+          "expr": "(time() - max(timestamp(vl_rows_ingested_total{type=\"elasticsearch_bulk\"}))) or vector(999999)",
+          "legendFormat": "vlogs ingest age seconds",
+          "refId": "O"
+        },
+        {
+          "expr": "(sum_over_time(((((time() - max(timestamp(vl_rows_ingested_total{type=\"elasticsearch_bulk\"}))) or vector(999999)) > bool 45) * on() (((time() - max(max_over_time(timestamp(vmagent_remotewrite_conn_bytes_written_total{namespace=\"$namespace\"})[2m:15s]))) or vector(999999)) <= bool 45) * on() (((sum(changes(kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=~\"vmagent-.*\"}[2m])) or vector(0)) == bool 0)))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "VictoriaLogs ingest stale seconds / 10m",
+          "refId": "AG"
+        },
+        {
+          "expr": "sum(increase(vl_rows_dropped_total[10m])) or vector(0)",
+          "legendFormat": "vlogs dropped rows / 10m",
+          "refId": "P"
+        },
+        {
+          "expr": "(sum(increase(vl_errors_total[10m])) or vector(0)) + (sum(increase(vl_http_errors_total[10m])) or vector(0))",
+          "legendFormat": "vlogs errors / 10m",
+          "refId": "Q"
+        },
+        {
+          "expr": "sum(changes(kube_pod_created{namespace=\"$namespace\",pod=~\"vmagent-.*|vmsingle-.*|vmalert-.*|vmalertmanager-.*|$release-grafana-.*|$release-kube-state-metrics-.*|$release-opentelemetry-collector-.*|$release-victoria-metrics-operator-.*|$release-victoria-logs-single-server-.*|$release-vt-single-server-.*|$release-prometheus-node-exporter-.*|$release-vector-.*\"}[10m])) or vector(0)",
+          "legendFormat": "pod recreations / 10m",
+          "refId": "R"
+        },
+        {
+          "expr": "(sum_over_time(((((time() - max(max_over_time(timestamp(vmagent_remotewrite_conn_bytes_written_total{namespace=\"$namespace\"})[2m:15s]))) or vector(999999)) > bool 45))[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "vmagent stale seconds / 10m",
+          "refId": "Y"
+        },
+        {
+          "expr": "(sum_over_time((((time() - max(timestamp(kube_pod_info{namespace=\"$namespace\"}))) or vector(999999)) > bool 45)[10m:15s]) or vector(0)) * 15",
+          "legendFormat": "k8s inventory stale seconds / 10m",
+          "refId": "Z"
+        },
+        {
+          "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=~\"vmagent-.*|vmsingle-.*|vmalert-.*|vmalertmanager-.*|$release-grafana-.*|$release-kube-state-metrics-.*|$release-opentelemetry-collector-.*|$release-victoria-metrics-operator-.*|$release-victoria-logs-single-server-.*|$release-vt-single-server-.*|$release-prometheus-node-exporter-.*|$release-vector-.*\"}[10m]))",
+          "legendFormat": "restart / {{pod}}",
+          "refId": "S"
+        }
+      ],
+      "description": "Observability drilldown for telemetry freshness, vmagent remote-write, kube-state-metrics scrape health, backend readiness, trace/log delivery, and recent observability pod restarts. Use this after the top-level Observability availability panel identifies the affected telemetry source."
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "tbite",
+    "local-ha",
+    "sre"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "tbite",
+          "value": "tbite"
+        },
+        "hide": 0,
+        "label": "Namespace",
+        "name": "namespace",
+        "options": [
+          {
+            "selected": true,
+            "text": "tbite",
+            "value": "tbite"
+          }
+        ],
+        "query": "tbite",
+        "type": "constant"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "tbite",
+          "value": "tbite"
+        },
+        "hide": 0,
+        "label": "Release",
+        "name": "release",
+        "options": [
+          {
+            "selected": true,
+            "text": "tbite",
+            "value": "tbite"
+          }
+        ],
+        "query": "tbite",
+        "type": "constant"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "local-ha",
+          "value": "local-ha"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "VictoriaMetrics"
+        },
+        "definition": "label_values(http_server_request_duration_seconds_count, deployment_environment)",
+        "hide": 0,
+        "label": "Environment",
+        "name": "env",
+        "query": {
+          "query": "label_values(http_server_request_duration_seconds_count, deployment_environment)",
+          "refId": "VictoriaMetrics-env-Variable-Query"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Local HA Drills",
+  "uid": "local-ha-drills",
+  "version": 1,
+  "weekStart": ""
+}

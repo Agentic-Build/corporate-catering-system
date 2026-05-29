@@ -57,9 +57,9 @@ spec:
             {{- include "tbite.dbEnv" . | nindent 12 }}
             {{- include "tbite.otelEnv" . | nindent 12 }}
           readinessProbe:
-            {{- include "tbite.tcpProbe" (dict "port" "probe") | nindent 12 }}
+            {{- include "tbite.httpReadinessProbe" (dict "port" "probe") | nindent 12 }}
           livenessProbe:
-            {{- include "tbite.tcpProbe" (dict "port" "probe") | nindent 12 }}
+            {{- include "tbite.httpLivenessProbe" (dict "port" "probe") | nindent 12 }}
           resources:
             {{- toYaml $cfg.resources | nindent 12 }}
           securityContext:
@@ -70,5 +70,5 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
-      {{- include "tbite.podScheduling" . | nindent 6 }}
+      {{- include "tbite.podScheduling" (dict "ctx" . "role" $role) | nindent 6 }}
 {{- end }}

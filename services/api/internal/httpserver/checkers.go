@@ -7,6 +7,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/platform/storage"
 )
 
 // PostgresChecker pings a pgx pool. The "name" parameter labels the
@@ -45,5 +47,17 @@ func RedisChecker(name string, c *redis.Client) Checker {
 			return fmt.Errorf("redis not configured")
 		}
 		return c.Ping(ctx).Err()
+	}}
+}
+
+// ObjectStorageChecker verifies that the configured object-storage bucket is
+// reachable. It uses a read-only bucket HEAD so readiness probes do not mutate
+// storage state.
+func ObjectStorageChecker(name string, c *storage.S3Client) Checker {
+	return CheckerFunc{N: name, F: func(ctx context.Context) error {
+		if c == nil {
+			return fmt.Errorf("object storage not configured")
+		}
+		return c.Check(ctx)
 	}}
 }

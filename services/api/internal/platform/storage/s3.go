@@ -79,6 +79,17 @@ func (c *S3Client) EnsureBucket(ctx context.Context) error {
 	return nil
 }
 
+// Check verifies that the configured bucket is reachable without mutating
+// storage state. Readiness probes use this for object-storage dependency
+// health.
+func (c *S3Client) Check(ctx context.Context) error {
+	_, err := c.s3.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(c.Bucket)})
+	if err != nil {
+		return fmt.Errorf("head bucket: %w", err)
+	}
+	return nil
+}
+
 // PutObject uploads body at key with the supplied content-type, returning a
 // canonical s3://bucket/key URI for persistence.
 func (c *S3Client) PutObject(ctx context.Context, key string, body io.Reader, contentType string) (string, error) {

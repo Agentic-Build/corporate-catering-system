@@ -75,6 +75,7 @@ type Settler struct {
 	Logger     *slog.Logger
 	Audit      AuditWriter
 	Outbox     OutboxAppender
+	OnStarted  func()
 }
 
 // setupSettlerConsumer resolves the durable payroll-settler consumer.
@@ -129,6 +130,9 @@ func (s *Settler) Run(ctx context.Context) error {
 		return fmt.Errorf("messages: %w", err)
 	}
 	defer it.Stop()
+	if s.OnStarted != nil {
+		s.OnStarted()
+	}
 	go func() {
 		<-ctx.Done()
 		it.Stop()

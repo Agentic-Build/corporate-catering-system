@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
@@ -35,6 +36,8 @@ SELECT COALESCE(EXTRACT(EPOCH FROM (now() - min(first_seen_at))), 0)
 // so a transient DB hiccup just skips one scrape.
 func RegisterDLQGauges(pool *pgxpool.Pool) error {
 	meter := otel.GetMeterProvider().Meter("tbite.api")
+	var pendingMu sync.Mutex
+	seenPendingStreams := map[string]struct{}{}
 
 	pendingGauge, err := meter.Int64ObservableGauge("tbite_dlq_pending",
 		metric.WithDescription("Unresolved DLQ rows, by source_stream."))
@@ -49,6 +52,7 @@ func RegisterDLQGauges(pool *pgxpool.Pool) error {
 	}
 
 	_, err = meter.RegisterCallback(func(ctx context.Context, o metric.Observer) error {
+		currentPending := map[string]int64{}
 		rows, err := pool.Query(ctx, dlqPendingQuery)
 		if err != nil {
 			return fmt.Errorf("dlq pending query: %w", err)
@@ -62,13 +66,12 @@ func RegisterDLQGauges(pool *pgxpool.Pool) error {
 			if err := rows.Scan(&sourceStream, &count); err != nil {
 				return fmt.Errorf("dlq pending scan: %w", err)
 			}
-			o.ObserveInt64(pendingGauge, count, metric.WithAttributes(
-				attribute.String("source_stream", sourceStream),
-			))
+			currentPending[sourceStream] = count
 		}
 		if err := rows.Err(); err != nil {
 			return fmt.Errorf("dlq pending rows: %w", err)
 		}
+		observeDLQPending(o, pendingGauge, currentPending, seenPendingStreams, &pendingMu)
 
 		var oldest float64
 		if err := pool.QueryRow(ctx, dlqOldestQuery).Scan(&oldest); err != nil {
@@ -79,4 +82,24 @@ func RegisterDLQGauges(pool *pgxpool.Pool) error {
 	}, pendingGauge, oldestGauge)
 
 	return err
+}
+
+func observeDLQPending(o metric.Observer, gauge metric.Int64ObservableGauge, current map[string]int64, seen map[string]struct{}, mu *sync.Mutex) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	for sourceStream, count := range current {
+		seen[sourceStream] = struct{}{}
+		o.ObserveInt64(gauge, count, metric.WithAttributes(
+			attribute.String("source_stream", sourceStream),
+		))
+	}
+	for sourceStream := range seen {
+		if _, ok := current[sourceStream]; ok {
+			continue
+		}
+		o.ObserveInt64(gauge, 0, metric.WithAttributes(
+			attribute.String("source_stream", sourceStream),
+		))
+	}
 }

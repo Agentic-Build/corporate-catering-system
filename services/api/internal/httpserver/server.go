@@ -43,6 +43,17 @@ type MCPOpts struct {
 // /mcp; unauthenticated POSTs return 401 + WWW-Authenticate pointing at
 // /.well-known/oauth-protected-resource.
 func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(chi.Router), mcp *mcpsrv.MCPServer, mcpOpts MCPOpts, apiBuilders ...func(huma.API)) *Server {
+	return newServer(addr, logger, idAPI, nil, extraRoutes, mcp, mcpOpts, apiBuilders...)
+}
+
+// NewWithHealth constructs the HTTP server with dependency-aware health
+// endpoints. API roles that own hard runtime dependencies should use this so
+// /readyz reflects whether those dependencies can serve requests.
+func NewWithHealth(addr string, logger *slog.Logger, idAPI *idhttp.API, health *Health, extraRoutes func(chi.Router), mcp *mcpsrv.MCPServer, mcpOpts MCPOpts, apiBuilders ...func(huma.API)) *Server {
+	return newServer(addr, logger, idAPI, health, extraRoutes, mcp, mcpOpts, apiBuilders...)
+}
+
+func newServer(addr string, logger *slog.Logger, idAPI *idhttp.API, health *Health, extraRoutes func(chi.Router), mcp *mcpsrv.MCPServer, mcpOpts MCPOpts, apiBuilders ...func(huma.API)) *Server {
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return otelhttp.NewHandler(next, "tbite.http")
@@ -66,8 +77,13 @@ func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(c
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(idAPI.AuthMiddleware)
 
-	r.Get("/healthz", healthHandler)
-	r.Get("/readyz", readyHandler)
+	if health != nil {
+		r.Get("/healthz", health.LivenessHandler())
+		r.Get("/readyz", health.ReadinessHandler())
+	} else {
+		r.Get("/healthz", healthHandler)
+		r.Get("/readyz", readyHandler)
+	}
 	r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, `{"error":"not_found"}`, http.StatusNotFound)
 	})
