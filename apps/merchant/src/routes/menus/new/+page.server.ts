@@ -1,8 +1,7 @@
 import { redirect, fail } from "@sveltejs/kit";
-import { problemMessage } from "@tbite/web-shared";
+import { problemMessage, formStr } from "@tbite/web-shared";
 import type { Actions, PageServerLoad } from "./$types";
 import { apiFor } from "$lib/server/api";
-import { formStr } from "@tbite/web-shared";
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (!locals.user) throw redirect(303, "/login?return_to=" + encodeURIComponent(url.pathname));
