@@ -1,23 +1,49 @@
 {{- if and .Values.observability.victoriaMetrics.enabled .Values.observability.dashboards.enabled }}
 {{- /*
-Loads every JSON file under chart/tbite-platform/dashboards/ into a ConfigMap
-that the Grafana subchart's sidecar picks up via the
-`grafana_dashboard=1` label selector.
+Loads dashboard JSON files under chart/tbite-platform/dashboards/ into
+folder-specific ConfigMaps that the Grafana sidecar picks up via the
+`grafana_dashboard=1` label selector. The `grafana_folder` annotation maps
+each ConfigMap to a Grafana folder through the sidecar's folderAnnotation
+support.
 */ -}}
+{{- $files := .Files.Glob "dashboards/*.json" }}
+{{- $folders := list
+  (dict "key" "overview" "title" "Overview" "files" (list "oncall-overview.json" "system-status.json"))
+  (dict "key" "business-domains" "title" "Business Domains" "files" (list "business-kpi.json" "order-api-slo.json" "order-lifecycle.json" "pickup-floor.json" "settlement-payroll.json" "supply-health.json"))
+  (dict "key" "application-platform" "title" "Application Platform" "files" (list "auth.json" "mcp-ai-surface.json" "read-models.json" "role-readiness.json" "sse-gateway.json"))
+  (dict "key" "data-plane" "title" "Data Plane" "files" (list "async-plane.json" "object-storage.json" "outbox-and-events.json" "pg-routing.json"))
+  (dict "key" "operations" "title" "Operations" "files" (list "infra-health.json"))
+  (dict "key" "local-drills" "title" "Local Drills" "files" (list "dev-loop.json" "local-ha-drills.json"))
+}}
+{{- range $folder := $folders }}
+{{- $included := list }}
+{{- range $path, $_ := $files }}
+{{- $name := base $path }}
+{{- $isDevLoop := eq $name "dev-loop.json" }}
+{{- $isLocalHaDrills := eq $name "local-ha-drills.json" }}
+{{- $includeDevLoop := or (not $isDevLoop) (and $.Values.observability.dashboards.includeDevLoop $.Values.observability.victoriaTraces.enabled) }}
+{{- $includeLocalHaDrills := or (not $isLocalHaDrills) $.Values.observability.dashboards.includeLocalHaDrills }}
+{{- if and (has $name $folder.files) $includeDevLoop $includeLocalHaDrills }}
+{{- $included = append $included (dict "name" $name "path" $path) }}
+{{- end }}
+{{- end }}
+{{- if gt (len $included) 0 }}
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "tbite.fullname" . }}-dashboards
-  namespace: {{ include "tbite.namespace" . }}
+  name: {{ include "tbite.fullname" $ }}-dashboards-{{ $folder.key }}
+  namespace: {{ include "tbite.namespace" $ }}
   labels:
-    {{- include "tbite.labels" . | nindent 4 }}
+    {{- include "tbite.labels" $ | nindent 4 }}
     grafana_dashboard: "1"
+  annotations:
+    grafana_folder: {{ $folder.title | quote }}
 data:
-  {{- $files := .Files.Glob "dashboards/*.json" }}
-  {{- range $path, $bytes := $files }}
-  {{- if or (ne (base $path) "dev-loop.json") (and $.Values.observability.dashboards.includeDevLoop $.Values.observability.victoriaTraces.enabled) }}
-  {{ base $path | quote }}: |-
-    {{- $.Files.Get $path | nindent 4 }}
+  {{- range $dashboard := $included }}
+  {{ $dashboard.name | quote }}: |-
+    {{- $.Files.Get $dashboard.path | nindent 4 }}
   {{- end }}
-  {{- end }}
+{{- end }}
+{{- end }}
 {{- end }}

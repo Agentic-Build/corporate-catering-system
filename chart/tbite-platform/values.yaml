@@ -875,6 +875,10 @@ observability:
     # dev-loop includes trace drilldowns and local-only links; only
     # provision it when VictoriaTraces is enabled for the release.
     includeDevLoop: false
+    # local-ha-drills is an exercise cockpit for local multi-zone
+    # behavior drills. Keep it out of production Grafana by default;
+    # values-local-ha.yaml opts in explicitly.
+    includeLocalHaDrills: false
   victoriaMetrics:
     enabled: true
     retention: "30d"
@@ -931,6 +935,12 @@ victoria-metrics-k8s-stack:
         limits:   { cpu: 500m, memory: 256Mi }
   grafana:
     enabled: true
+    sidecar:
+      dashboards:
+        defaultFolderName: ""
+        folderAnnotation: grafana_folder
+        provider:
+          foldersFromFilesStructure: true
     grafana.ini:
       analytics:
         check_for_updates: false

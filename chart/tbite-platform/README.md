@@ -47,6 +47,27 @@ Postgres), and a slim observability stack (VictoriaMetrics single +
 Grafana + OTel collector — no alertmanager, vmagent, kube-state-metrics,
 or node-exporter). All of those upgrades live in `values-prod-ha.yaml`.
 
+## Dashboard information architecture
+
+Dashboards are provisioned into Grafana folders by operating intent:
+
+- Overview: `oncall-overview.json`, `system-status.json`.
+- Business Domains: `business-kpi.json`, order, pickup, settlement/payroll,
+  and supply dashboards.
+- Application Platform: auth, MCP/AI, read-model, role-readiness, and SSE
+  dashboards.
+- Data Plane: Postgres, NATS/async, outbox/events, and object storage
+  dashboards.
+- Operations: `infra-health.json`.
+- Local Drills: `local-ha-drills.json` and `dev-loop.json`.
+
+The canonical dashboards own subsystem detail. `Local HA Drills` is only a
+cross-system exercise cockpit for local multi-zone behavior tests: zone
+distribution, cordon/drain impact, PDB blockers, autoscaler reaction, and
+recovery windows. It is excluded from production Grafana by default with
+`observability.dashboards.includeLocalHaDrills=false`; `values-local-ha.yaml`
+opts in explicitly.
+
 ### Ingress overlays
 
 | File | Public-traffic path | Trade-off |
