@@ -332,6 +332,7 @@ observability:
   dashboards:
     enabled: true
     includeDevLoop: true
+    includeLocalHaDrills: true
   victoriaMetrics:
     enabled: true
     retention: "3d"
