@@ -32,7 +32,7 @@ ingress topology.
 | --- | --- | --- | --- | --- |
 | `values.yaml` (base) | **Single-enterprise production**, ADR-0008 sizing | ≥ 16 cores / 32 GiB single-node | ~18 GiB requests | ~5K–10K employees, ~50 orders/sec sustained, ~200/sec burst |
 | `values-dev.yaml` | Laptop kind/k3d/OrbStack iteration | ≥ 8 GiB | ~6 GiB requests | smoke only |
-| `values-local-ha.yaml` | Local multi-zone behavior drills | 32 GiB OrbStack / kind 6 workers | ~12 GiB requests | HPA/KEDA/drain/failover behavior |
+| `values-local-ha.yaml` | Local multi-zone behavior drills | 32 GiB OrbStack / kind 6 workers | ~13 GiB requests | HPA/KEDA/drain/failover behavior |
 | `values-prod-ha.yaml` | Multi-AZ HA for > 10K employees | ≥ 64 GiB cluster | ~32 GiB requests | enterprise scale |
 
 The research summary for the local HA experiments and how they map into the

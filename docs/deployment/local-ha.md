@@ -639,3 +639,11 @@ A local HA drill passes when:
 
 This harness intentionally tests behavior, not full production capacity.
 Use `values-prod-ha.yaml` and a larger cluster for capacity validation.
+
+OrbStack and Docker show kind node `Block I/O` as cumulative read/write since
+container start. During log-path drills, high worker I/O is usually Vector
+reading Kubernetes pod logs from its read-only `/var/log` and `/var/lib`
+hostPath mounts, especially after a restart while it reloads checkpoints and
+catches up to VictoriaLogs. Treat sustained Vector restarts or `OOMKilled`
+events as a profile issue; the local HA overlay keeps Vector enabled and gives
+it enough CPU and memory to avoid replay loops during repeated drills.
