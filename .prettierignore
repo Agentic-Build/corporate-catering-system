@@ -9,3 +9,7 @@ target
 contract/openapi/openapi.yaml
 contract/openapi/openapi.json
 packages/api-client/src/schema.d.ts
+
+# vitest coverage output
+coverage
+**/coverage

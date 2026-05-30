@@ -514,6 +514,47 @@ func TestGetBatch_OK(t *testing.T) {
 	assert.Equal(t, []string{orderID}, out.Entries[0].OrderIDs)
 }
 
+func TestGetBatch_ExportedBatch_NilOrderIDs(t *testing.T) {
+	// Covers toBatchDTO's ExportURI!=nil branch and toEntryDTO's
+	// OrderIDs==nil normalisation (nil → []).
+	srv, f := buildHandler(t, adminUserObj())
+	exportedAt := time.Date(2026, 5, 2, 9, 0, 0, 0, time.UTC)
+	exportURI := "s3://payroll-exports/batch.csv"
+	f.batches.byID[batchID] = &payroll.Batch{
+		ID:          batchID,
+		PeriodStart: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+		PeriodEnd:   time.Date(2026, 4, 30, 0, 0, 0, 0, time.UTC),
+		Status:      payroll.BatchStatusExported,
+		ExportedAt:  &exportedAt,
+		ExportURI:   &exportURI,
+	}
+	f.entries.listByBatch = []*payroll.Entry{
+		{ID: entryID, BatchID: batchID, UserID: employeeID, OrderIDs: nil, AmountMinor: 8000, RefundedMinor: 0},
+	}
+	resp := do(t, http.MethodGet, srv.URL+"/api/admin/payroll/batches/"+batchID, "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var out struct {
+		Batch struct {
+			ID        string  `json:"id"`
+			Status    string  `json:"status"`
+			ExportURI *string `json:"export_uri"`
+		} `json:"batch"`
+		Entries []struct {
+			ID       string   `json:"id"`
+			OrderIDs []string `json:"order_ids"`
+		} `json:"entries"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	assert.Equal(t, "exported", out.Batch.Status)
+	require.NotNil(t, out.Batch.ExportURI)
+	assert.Equal(t, exportURI, *out.Batch.ExportURI)
+	require.Len(t, out.Entries, 1)
+	// nil OrderIDs must serialise as an empty array, never null.
+	assert.Equal(t, []string{}, out.Entries[0].OrderIDs)
+}
+
 func TestGetBatch_EntriesError_500(t *testing.T) {
 	srv, f := buildHandler(t, adminUserObj())
 	f.batches.byID[batchID] = &payroll.Batch{ID: batchID, Status: payroll.BatchStatusDraft}

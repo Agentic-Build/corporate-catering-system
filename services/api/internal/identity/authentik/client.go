@@ -78,7 +78,9 @@ func (c *Client) UpsertVendorOperator(ctx context.Context, in identity.VendorOpe
 	attrs := map[string]any{}
 	groups := []string{group.PK}
 	if user != nil {
-		attrs = user.Attributes
+		if user.Attributes != nil {
+			attrs = user.Attributes
+		}
 		groups = appendMissing(user.Groups, group.PK)
 	}
 	attrs["tbite_role"] = string(identity.RoleVendorOperator)

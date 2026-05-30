@@ -38,9 +38,10 @@ const (
 // handler paths reach (ListByVendor, GetByID) carry behaviour; the rest exist
 // to satisfy the interface and are never hit by the DB-free handler tests.
 type fakeDocs struct {
-	listByVendor func(ctx context.Context, vendorID string, includeAll bool) ([]*compliance.Document, error)
-	getByID      func(ctx context.Context, id string) (*compliance.Document, error)
-	createTx     func(ctx context.Context, d *compliance.Document) error
+	listByVendor   func(ctx context.Context, vendorID string, includeAll bool) ([]*compliance.Document, error)
+	getByID        func(ctx context.Context, id string) (*compliance.Document, error)
+	createTx       func(ctx context.Context, d *compliance.Document) error
+	updateStatusTx func(ctx context.Context, id string, status compliance.DocumentStatus, reviewer *string, notes string) error
 }
 
 func (f *fakeDocs) Create(context.Context, *compliance.Document) error { return nil }
@@ -65,7 +66,10 @@ func (f *fakeDocs) ListByVendor(ctx context.Context, vendorID string, includeAll
 func (f *fakeDocs) UpdateStatus(context.Context, string, compliance.DocumentStatus, *string, string) error {
 	return nil
 }
-func (f *fakeDocs) UpdateStatusTx(context.Context, pgx.Tx, string, compliance.DocumentStatus, *string, string) error {
+func (f *fakeDocs) UpdateStatusTx(ctx context.Context, _ pgx.Tx, id string, status compliance.DocumentStatus, reviewer *string, notes string) error {
+	if f.updateStatusTx != nil {
+		return f.updateStatusTx(ctx, id, status, reviewer, notes)
+	}
 	return nil
 }
 func (f *fakeDocs) ListExpiringBefore(context.Context, time.Time) ([]*compliance.Document, error) {
@@ -81,6 +85,7 @@ func (f *fakeDocs) ListPastExpiry(context.Context, time.Time) ([]*compliance.Doc
 type fakeAnomaly struct {
 	list    func(ctx context.Context, st []compliance.AnomalyStatus, sev []compliance.AnomalySeverity) ([]*compliance.Anomaly, error)
 	getByID func(ctx context.Context, id string) (*compliance.Anomaly, error)
+	closeTx func(ctx context.Context, id, by, notes string) error
 }
 
 func (f *fakeAnomaly) Open(context.Context, *compliance.Anomaly) error { return nil }
@@ -99,7 +104,12 @@ func (f *fakeAnomaly) List(ctx context.Context, st []compliance.AnomalyStatus, s
 func (f *fakeAnomaly) Triage(context.Context, string, string, string) error           { return nil }
 func (f *fakeAnomaly) TriageTx(context.Context, pgx.Tx, string, string, string) error { return nil }
 func (f *fakeAnomaly) Close(context.Context, string, string, string) error            { return nil }
-func (f *fakeAnomaly) CloseTx(context.Context, pgx.Tx, string, string, string) error  { return nil }
+func (f *fakeAnomaly) CloseTx(ctx context.Context, _ pgx.Tx, id, by, notes string) error {
+	if f.closeTx != nil {
+		return f.closeTx(ctx, id, by, notes)
+	}
+	return nil
+}
 
 // fakeVendors implements compliance.VendorReader.
 type fakeVendors struct {
@@ -941,4 +951,115 @@ func TestTriageAnomaly_Suspend_AlreadyInactive_204(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	assert.True(t, gov.called)
+}
+
+// === Write-path error (mapErr) ===
+// The write closures run end-to-end via fakeBeginner; making a repo step fail
+// inside the tx propagates a generic error up through mapErr → 500. These cover
+// the handler's `return nil, mapErr(err)` branches after a successful auth.
+
+func TestUploadDocument_WriteError_500(t *testing.T) {
+	// CreateTx fails inside the upload tx → auditErr propagates → mapErr → 500.
+	docs, svc := uploadFakes()
+	docs.createTx = func(_ context.Context, _ *compliance.Document) error {
+		return genericErr
+	}
+	srv := buildHandler(t, adminUser(), svc)
+	resp := do(t, http.MethodPost, srv.URL+"/api/admin/vendors/"+vendorID+"/documents",
+		`{"kind":"insurance","filename":"ins.pdf","content_base64":"aGVsbG8="}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
+func TestReviewDocument_WriteError_500(t *testing.T) {
+	// UpdateStatusTx fails inside the review tx → mapErr → 500.
+	docs := &fakeDocs{
+		updateStatusTx: func(_ context.Context, _ string, _ compliance.DocumentStatus, _ *string, _ string) error {
+			return genericErr
+		},
+	}
+	svc := &compliance.Service{
+		Pool:   fakeBeginner{},
+		Docs:   docs,
+		Audit:  fakeAudit{},
+		Outbox: fakeOutbox{},
+	}
+	srv := buildHandler(t, adminUser(), svc)
+	resp := do(t, http.MethodPost, srv.URL+"/api/admin/documents/"+docID+"/review",
+		`{"status":"approved","notes":"looks good"}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
+func TestCloseAnomaly_WriteError_500(t *testing.T) {
+	// CloseTx fails inside the close tx → mapErr → 500.
+	anom := &fakeAnomaly{
+		closeTx: func(_ context.Context, _, _, _ string) error {
+			return genericErr
+		},
+	}
+	svc := &compliance.Service{
+		Pool:    fakeBeginner{},
+		Anomaly: anom,
+		Audit:   fakeAudit{},
+	}
+	srv := buildHandler(t, adminUser(), svc)
+	resp := do(t, http.MethodPost, srv.URL+"/api/admin/anomalies/"+anomID+"/close", `{"notes":"resolved"}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
+// TestMerchantUpload_ValidExpiresAt_201 sends a well-formed expires_at so the
+// merchant upload handler's `expires = &t` assignment (the parse-success branch)
+// runs, and the resulting DTO carries the date back.
+func TestMerchantUpload_ValidExpiresAt_201(t *testing.T) {
+	docs, svc := uploadFakes()
+	docs.createTx = func(_ context.Context, d *compliance.Document) error {
+		require.NotNil(t, d.ExpiresAt, "valid expires_at should reach the document")
+		assert.Equal(t, "2027-03-15", d.ExpiresAt.UTC().Format("2006-01-02"))
+		d.ID = docID
+		return nil
+	}
+	srv := buildHandler(t, vendorUser(), svc)
+	resp := do(t, http.MethodPost, srv.URL+"/api/merchant/documents",
+		`{"kind":"insurance","filename":"ins.pdf","content_base64":"aGVsbG8=","expires_at":"2027-03-15"}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var out struct {
+		Document struct {
+			ExpiresAt *string `json:"expires_at"`
+		} `json:"document"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.NotNil(t, out.Document.ExpiresAt)
+	assert.Equal(t, "2027-03-15", *out.Document.ExpiresAt)
+}
+
+// TestListDocuments_ReviewedBy_Serialized lists a document whose ReviewedBy is
+// set so docToDTO's `ReviewedBy != nil` branch runs and the value round-trips.
+func TestListDocuments_ReviewedBy_Serialized(t *testing.T) {
+	reviewer := "admin-7"
+	docs := &fakeDocs{
+		listByVendor: func(_ context.Context, _ string, _ bool) ([]*compliance.Document, error) {
+			return []*compliance.Document{
+				{ID: docID, VendorID: vendorID, Kind: compliance.DocKindInsurance,
+					Filename: "ins.pdf", Status: compliance.DocStatusApproved, ReviewedBy: &reviewer},
+			}, nil
+		},
+	}
+	srv := buildHandler(t, adminUser(), &compliance.Service{Docs: docs})
+	resp := do(t, http.MethodGet, srv.URL+"/api/admin/vendors/"+vendorID+"/documents", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var out struct {
+		Items []struct {
+			ReviewedBy *string `json:"reviewed_by"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.Len(t, out.Items, 1)
+	require.NotNil(t, out.Items[0].ReviewedBy)
+	assert.Equal(t, reviewer, *out.Items[0].ReviewedBy)
 }

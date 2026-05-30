@@ -3,8 +3,11 @@ package hydra_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -70,6 +73,154 @@ func TestDiscoveryShim_ServesAsHandler(t *testing.T) {
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &parsed))
 	assert.Contains(t, parsed, "registration_endpoint")
+}
+
+// TestDiscoveryShim_PublicBaseURL pins the registration_endpoint under the
+// public host (not Hydra) and the S256 PKCE default injection.
+func TestDiscoveryShim_PublicBaseURL(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"issuer":"http://hydra/"}`))
+	}))
+	defer upstream.Close()
+
+	shim := hydra.NewDiscoveryShim(upstream.URL)
+	shim.PublicBaseURL = "https://public.example.com"
+	doc, err := shim.Doc(context.Background())
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(doc, &parsed))
+	assert.Equal(t, "https://public.example.com/oauth2/register", parsed["registration_endpoint"])
+	assert.Equal(t, []any{"S256"}, parsed["code_challenge_methods_supported"])
+}
+
+// Upstream already advertising PKCE methods → shim must not overwrite them.
+func TestDiscoveryShim_PreservesExistingPKCE(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"issuer":"http://x/","code_challenge_methods_supported":["plain"]}`))
+	}))
+	defer upstream.Close()
+
+	shim := hydra.NewDiscoveryShim(upstream.URL)
+	doc, err := shim.Doc(context.Background())
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(doc, &parsed))
+	assert.Equal(t, []any{"plain"}, parsed["code_challenge_methods_supported"])
+}
+
+// Second call within the TTL must hit the cache (no second upstream request).
+func TestDiscoveryShim_CacheHit(t *testing.T) {
+	var hits int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		_, _ = w.Write([]byte(`{"issuer":"http://x/"}`))
+	}))
+	defer upstream.Close()
+
+	shim := hydra.NewDiscoveryShim(upstream.URL)
+	_, err := shim.Doc(context.Background())
+	require.NoError(t, err)
+	_, err = shim.Doc(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, hits, "second Doc call must be served from cache")
+}
+
+func TestDiscoveryShim_UpstreamErrorStatus(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer upstream.Close()
+
+	shim := hydra.NewDiscoveryShim(upstream.URL)
+	_, err := shim.Doc(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "503")
+}
+
+func TestDiscoveryShim_UpstreamUnreachable(t *testing.T) {
+	shim := hydra.NewDiscoveryShim("http://127.0.0.1:1")
+	_, err := shim.Doc(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "discovery fetch")
+}
+
+func TestDiscoveryShim_InvalidJSON(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{not json`))
+	}))
+	defer upstream.Close()
+
+	shim := hydra.NewDiscoveryShim(upstream.URL)
+	_, err := shim.Doc(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "decode")
+}
+
+func TestDiscoveryShim_BadRequestBuild(t *testing.T) {
+	shim := hydra.NewDiscoveryShim("http://\x7f/")
+	_, err := shim.Doc(context.Background())
+	require.Error(t, err)
+}
+
+// ServeHTTP error leg: upstream down → 502 + stub body.
+func TestDiscoveryShim_ServeHTTP_BadGateway(t *testing.T) {
+	shim := hydra.NewDiscoveryShim("http://127.0.0.1:1")
+	rr := httptest.NewRecorder()
+	shim.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/.well-known/openid-configuration", nil))
+	assert.Equal(t, http.StatusBadGateway, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	assert.Contains(t, rr.Body.String(), "hydra unavailable")
+}
+
+// discErrBody yields a read error so Doc's io.ReadAll fails.
+type discErrBody struct{}
+
+func (discErrBody) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+func (discErrBody) Close() error             { return nil }
+
+type discRT func(*http.Request) (*http.Response, error)
+
+func (f discRT) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// TestDiscoveryShim_Concurrent exercises Doc under concurrent callers; the
+// RWMutex + cache must serialise correctly and only fetch upstream once.
+func TestDiscoveryShim_Concurrent(t *testing.T) {
+	var hits int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		_, _ = w.Write([]byte(`{"issuer":"http://x/"}`))
+	}))
+	defer upstream.Close()
+
+	shim := hydra.NewDiscoveryShim(upstream.URL)
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := shim.Doc(context.Background())
+			assert.NoError(t, err)
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, int32(1), atomic.LoadInt32(&hits),
+		"concurrent Doc callers must share a single upstream fetch")
+}
+
+func TestDiscoveryShim_BodyReadError(t *testing.T) {
+	shim := hydra.NewDiscoveryShim("http://hydra.local")
+	shim.HTTP = &http.Client{Transport: discRT(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: discErrBody{}, Header: http.Header{}}, nil
+	})}
+	_, err := shim.Doc(context.Background())
+	require.Error(t, err)
+}
+
+func TestReverseProxy_BadURL(t *testing.T) {
+	_, err := hydra.ReverseProxy("://not-a-url")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parse hydra url")
 }
 
 // TestReverseProxy_PreservesHostHeader ensures the proxy rewrites Host
