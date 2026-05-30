@@ -7,7 +7,8 @@
     "build": "vite build",
     "preview": "vite preview --port 4173",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "lint": "prettier --check ."
+    "lint": "prettier --check .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@sveltejs/adapter-node": "^5.5.4",
@@ -22,12 +23,17 @@
   "devDependencies": {
     "@sveltejs/kit": "^2.61.1",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/svelte": "^5.3.1",
+    "@vitest/coverage-v8": "^4.1.7",
     "autoprefixer": "^10.4.20",
+    "jsdom": "^29.1.1",
     "postcss": "^8.5.15",
     "svelte": "^5.55.9",
     "svelte-check": "^4.4.8",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.9.3",
-    "vite": "^8.0.14"
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7"
   }
 }

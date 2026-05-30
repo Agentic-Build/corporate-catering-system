@@ -51,9 +51,21 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.1.2
         version: 7.1.2(svelte@5.55.9)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))
+      '@testing-library/jest-dom':
+        specifier: ^6.9.1
+        version: 6.9.1
+      '@testing-library/svelte':
+        specifier: ^5.3.1
+        version: 5.3.1(svelte@5.55.9)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))(vitest@4.1.7)
+      '@vitest/coverage-v8':
+        specifier: ^4.1.7
+        version: 4.1.7(vitest@4.1.7)
       autoprefixer:
         specifier: ^10.4.20
         version: 10.5.0(postcss@8.5.15)
+      jsdom:
+        specifier: ^29.1.1
+        version: 29.1.1
       postcss:
         specifier: ^8.5.15
         version: 8.5.15
@@ -72,6 +84,9 @@ importers:
       vite:
         specifier: ^8.0.14
         version: 8.0.14(@types/node@25.7.0)(jiti@1.21.7)
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.7.0)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))
 
   apps/employee:
     dependencies:
@@ -106,9 +121,21 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.1.2
         version: 7.1.2(svelte@5.55.9)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))
+      '@testing-library/jest-dom':
+        specifier: ^6.9.1
+        version: 6.9.1
+      '@testing-library/svelte':
+        specifier: ^5.3.1
+        version: 5.3.1(svelte@5.55.9)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))(vitest@4.1.7)
+      '@vitest/coverage-v8':
+        specifier: ^4.1.7
+        version: 4.1.7(vitest@4.1.7)
       autoprefixer:
         specifier: ^10.4.20
         version: 10.5.0(postcss@8.5.15)
+      jsdom:
+        specifier: ^29.1.1
+        version: 29.1.1
       postcss:
         specifier: ^8.5.15
         version: 8.5.15
@@ -127,6 +154,9 @@ importers:
       vite:
         specifier: ^8.0.14
         version: 8.0.14(@types/node@25.7.0)(jiti@1.21.7)
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.7.0)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))
 
   apps/merchant:
     dependencies:
@@ -210,12 +240,18 @@ importers:
         specifier: ^0.17.0
         version: 0.17.0
     devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.1.7
+        version: 4.1.7(vitest@4.1.7)
       openapi-typescript:
         specifier: ^7.13.0
         version: 7.13.0(typescript@5.9.3)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.7.0)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))
 
   packages/pickup:
     devDependencies:
@@ -237,6 +273,21 @@ importers:
 
   packages/ui:
     devDependencies:
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.1.2
+        version: 7.1.2(svelte@5.55.9)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))
+      '@testing-library/jest-dom':
+        specifier: ^6.9.1
+        version: 6.9.1
+      '@testing-library/svelte':
+        specifier: ^5.3.1
+        version: 5.3.1(svelte@5.55.9)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))(vitest@4.1.7)
+      '@vitest/coverage-v8':
+        specifier: ^4.1.7
+        version: 4.1.7(vitest@4.1.7)
+      jsdom:
+        specifier: ^29.1.1
+        version: 29.1.1
       svelte:
         specifier: ^5.55.9
         version: 5.55.9
@@ -246,6 +297,9 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.7.0)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))
 
   packages/web-auth:
     devDependencies:
@@ -255,15 +309,36 @@ importers:
       '@tbite/api-client':
         specifier: workspace:*
         version: link:../api-client
+      '@vitest/coverage-v8':
+        specifier: ^4.1.7
+        version: 4.1.7(vitest@4.1.7)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.7.0)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))
 
   packages/web-shared:
     devDependencies:
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.1.2
+        version: 7.1.2(svelte@5.55.9)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))
       '@tbite/ui':
         specifier: workspace:*
         version: link:../ui
+      '@testing-library/jest-dom':
+        specifier: ^6.9.1
+        version: 6.9.1
+      '@testing-library/svelte':
+        specifier: ^5.3.1
+        version: 5.3.1(svelte@5.55.9)(vite@8.0.14(@types/node@25.7.0)(jiti@1.21.7))(vitest@4.1.7)
+      '@vitest/coverage-v8':
+        specifier: ^4.1.7
+        version: 4.1.7(vitest@4.1.7)
+      jsdom:
+        specifier: ^29.1.1
+        version: 29.1.1
       svelte:
         specifier: ^5.55.9
         version: 5.55.9
