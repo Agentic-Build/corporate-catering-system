@@ -54,13 +54,13 @@ describe("buildDays", () => {
 
   it("labels the first two days 今天/明天 with a weekday sub, rest get m/d(weekday) head and no sub", () => {
     const days = buildDays(from);
-    expect(days[0].head).toBe("今天");
-    expect(days[0].sub).toBe("5/31(日)");
-    expect(days[1].head).toBe("明天");
-    expect(days[1].sub).toBe("6/1(一)");
-    expect(days[2].head).toBe("6/2(二)");
-    expect(days[2].sub).toBeUndefined();
-    expect(days[6].head).toBe("6/6(六)");
+    expect(days[0]!.head).toBe("今天");
+    expect(days[0]!.sub).toBe("5/31(日)");
+    expect(days[1]!.head).toBe("明天");
+    expect(days[1]!.sub).toBe("6/1(一)");
+    expect(days[2]!.head).toBe("6/2(二)");
+    expect(days[2]!.sub).toBeUndefined();
+    expect(days[6]!.head).toBe("6/6(六)");
   });
 
   it("prepends an out-of-window selection so it is always present", () => {
@@ -72,7 +72,7 @@ describe("buildDays", () => {
   it("does not prepend when the selection is already inside the window", () => {
     const days = buildDays(from, "2026-06-02");
     expect(days).toHaveLength(7);
-    expect(days[0].id).toBe("2026-05-31");
+    expect(days[0]!.id).toBe("2026-05-31");
   });
 
   it("defaults `from` to now and still returns 7 days", () => {

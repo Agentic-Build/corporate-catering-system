@@ -86,7 +86,9 @@ describe("manual action", () => {
     });
   });
   it("404 when no matching ready order", async () => {
-    mockClient.GET.mockResolvedValue({ data: { items: [{ id: "abcd1234ef", order_number: 5, status: "placed" }] } });
+    mockClient.GET.mockResolvedValue({
+      data: { items: [{ id: "abcd1234ef", order_number: 5, status: "placed" }] },
+    });
     expect(await actions.manual!(actionEvent(form([["code", "12345678"]])))).toMatchObject({
       status: 404,
       data: { manual: true },

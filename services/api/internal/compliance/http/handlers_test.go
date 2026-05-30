@@ -103,7 +103,7 @@ func (f *fakeAnomaly) List(ctx context.Context, st []compliance.AnomalyStatus, s
 }
 func (f *fakeAnomaly) Triage(context.Context, string, string, string) error           { return nil }
 func (f *fakeAnomaly) TriageTx(context.Context, pgx.Tx, string, string, string) error { return nil }
-func (f *fakeAnomaly) Close(context.Context, string, string, string) error { return nil }
+func (f *fakeAnomaly) Close(context.Context, string, string, string) error            { return nil }
 func (f *fakeAnomaly) CloseTx(ctx context.Context, _ pgx.Tx, id, by, notes string) error {
 	if f.closeTx != nil {
 		return f.closeTx(ctx, id, by, notes)

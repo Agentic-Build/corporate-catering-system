@@ -43,31 +43,33 @@ describe("home load", () => {
 
   it("aggregates stats and groups supply by date", async () => {
     const todayStr = "today";
-    mockClient.GET.mockImplementation((path: string, opts?: { params?: { query?: { date?: string } } }) => {
-      if (path === "/api/merchant/menu-items") {
-        return Promise.resolve({ data: { items: [{ id: "i1", name: "A" }] } });
-      }
-      if (path === "/api/merchant/orders") {
-        return Promise.resolve({
-          data: {
-            items: [
-              { status: "picked_up", total_price_minor: 100 },
-              { status: "placed", total_price_minor: 50 },
-              { status: "cutoff", total_price_minor: 20 },
-              { status: "cancelled", total_price_minor: 999 },
-            ],
-          },
-        });
-      }
-      if (path === "/api/merchant/supply") {
-        const date = opts?.params?.query?.date;
-        // today's supply has capacity figures; others empty
-        return Promise.resolve({
-          data: { items: [{ capacity: 10, remain: 4 }] },
-        });
-      }
-      return Promise.resolve({ data: { items: [] } });
-    });
+    mockClient.GET.mockImplementation(
+      (path: string, opts?: { params?: { query?: { date?: string } } }) => {
+        if (path === "/api/merchant/menu-items") {
+          return Promise.resolve({ data: { items: [{ id: "i1", name: "A" }] } });
+        }
+        if (path === "/api/merchant/orders") {
+          return Promise.resolve({
+            data: {
+              items: [
+                { status: "picked_up", total_price_minor: 100 },
+                { status: "placed", total_price_minor: 50 },
+                { status: "cutoff", total_price_minor: 20 },
+                { status: "cancelled", total_price_minor: 999 },
+              ],
+            },
+          });
+        }
+        if (path === "/api/merchant/supply") {
+          const date = opts?.params?.query?.date;
+          // today's supply has capacity figures; others empty
+          return Promise.resolve({
+            data: { items: [{ capacity: 10, remain: 4 }] },
+          });
+        }
+        return Promise.resolve({ data: { items: [] } });
+      },
+    );
     void todayStr;
 
     const res = (await load(loadEvent())) as {

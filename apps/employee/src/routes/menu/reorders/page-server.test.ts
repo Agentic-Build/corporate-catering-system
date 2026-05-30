@@ -39,7 +39,12 @@ describe("reorders load", () => {
       ),
     );
     const res = await load(loadEvent());
-    expect(res).toMatchObject({ chips: [{ id: "c" }], nextCursor: 5, targetDay: "2026-09-09", error: undefined });
+    expect(res).toMatchObject({
+      chips: [{ id: "c" }],
+      nextCursor: 5,
+      targetDay: "2026-09-09",
+      error: undefined,
+    });
   });
   it("defaults chips and falls back to taipei day; surfaces error", async () => {
     mockClient.GET.mockImplementation((path: string) =>
@@ -47,7 +52,11 @@ describe("reorders load", () => {
         path === "/api/employee/reorders" ? { error: { detail: "boom" } } : { data: {} },
       ),
     );
-    const res = await load(loadEvent());
+    const res = (await load(loadEvent())) as {
+      chips: unknown[];
+      error?: string;
+      targetDay: string;
+    };
     expect(res.chips).toEqual([]);
     expect(res.error).toBe("boom");
     expect(typeof res.targetDay).toBe("string");
@@ -76,7 +85,10 @@ describe("loadMore action", () => {
   });
   it("defaults chips to empty when data lacks them", async () => {
     mockClient.GET.mockResolvedValue({ data: {} });
-    expect((await actions.loadMore!(actionEvent(form([["cursor", "1"]])))).chips).toEqual([]);
+    expect(
+      ((await actions.loadMore!(actionEvent(form([["cursor", "1"]])))) as { chips: unknown[] })
+        .chips,
+    ).toEqual([]);
   });
 });
 
@@ -88,44 +100,93 @@ describe("reorderPast action", () => {
     });
   });
   it("fails when source or date missing", async () => {
-    expect(await actions.reorderPast!(actionEvent(form([["source_order_id", "s"]])))).toMatchObject({
-      status: 400,
-    });
+    expect(await actions.reorderPast!(actionEvent(form([["source_order_id", "s"]])))).toMatchObject(
+      {
+        status: 400,
+      },
+    );
   });
   it("error with unavailable names builds toast", async () => {
     mockClient.POST.mockResolvedValue({
       error: { detail: "nope", unavailable_items: [{ name: "A" }] },
     });
     expect(
-      await actions.reorderPast!(actionEvent(form([["source_order_id", "s"], ["supply_date", "d"]]))),
+      await actions.reorderPast!(
+        actionEvent(
+          form([
+            ["source_order_id", "s"],
+            ["supply_date", "d"],
+          ]),
+        ),
+      ),
     ).toMatchObject({ status: 409, data: { reorderToast: "今日皆無供應：A", error: "nope" } });
   });
   it("error without items uses detail then generic", async () => {
     mockClient.POST.mockResolvedValue({ error: { detail: "fd" } });
     expect(
-      await actions.reorderPast!(actionEvent(form([["source_order_id", "s"], ["supply_date", "d"]]))),
+      await actions.reorderPast!(
+        actionEvent(
+          form([
+            ["source_order_id", "s"],
+            ["supply_date", "d"],
+          ]),
+        ),
+      ),
     ).toMatchObject({ data: { reorderToast: "fd", error: "fd" } });
     mockClient.POST.mockResolvedValue({ error: {} });
     expect(
-      await actions.reorderPast!(actionEvent(form([["source_order_id", "s"], ["supply_date", "d"]]))),
+      await actions.reorderPast!(
+        actionEvent(
+          form([
+            ["source_order_id", "s"],
+            ["supply_date", "d"],
+          ]),
+        ),
+      ),
     ).toMatchObject({ data: { reorderToast: "今日皆無供應", error: "reorder failed" } });
   });
   it("fails when no new_order_id", async () => {
     mockClient.POST.mockResolvedValue({ data: {} });
     expect(
-      await actions.reorderPast!(actionEvent(form([["source_order_id", "s"], ["supply_date", "d"]]))),
+      await actions.reorderPast!(
+        actionEvent(
+          form([
+            ["source_order_id", "s"],
+            ["supply_date", "d"],
+          ]),
+        ),
+      ),
     ).toMatchObject({ status: 500 });
   });
   it("redirects with partial query when some unavailable", async () => {
-    mockClient.POST.mockResolvedValue({ data: { new_order_id: "n1", unavailable_items: [{ name: "X" }] } });
+    mockClient.POST.mockResolvedValue({
+      data: { new_order_id: "n1", unavailable_items: [{ name: "X" }] },
+    });
     await expect(
-      actions.reorderPast!(actionEvent(form([["source_order_id", "s"], ["supply_date", "d"]]))),
-    ).rejects.toMatchObject({ status: 303, location: expect.stringContaining("/orders/n1?reorder=partial") });
+      actions.reorderPast!(
+        actionEvent(
+          form([
+            ["source_order_id", "s"],
+            ["supply_date", "d"],
+          ]),
+        ),
+      ),
+    ).rejects.toMatchObject({
+      status: 303,
+      location: expect.stringContaining("/orders/n1?reorder=partial"),
+    });
   });
   it("redirects plainly when all available", async () => {
     mockClient.POST.mockResolvedValue({ data: { new_order_id: "n2" } });
     await expect(
-      actions.reorderPast!(actionEvent(form([["source_order_id", "s"], ["supply_date", "d"]]))),
+      actions.reorderPast!(
+        actionEvent(
+          form([
+            ["source_order_id", "s"],
+            ["supply_date", "d"],
+          ]),
+        ),
+      ),
     ).rejects.toMatchObject({ status: 303, location: "/orders/n2" });
   });
 });

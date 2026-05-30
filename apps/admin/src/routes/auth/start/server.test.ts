@@ -7,6 +7,7 @@ const { createAuthStartHandler } = vi.hoisted(() => ({
 vi.mock("@tbite/web-auth/routes", () => ({ createAuthStartHandler }));
 
 beforeEach(() => {
+  vi.resetModules();
   createAuthStartHandler.mockClear();
 });
 
@@ -21,7 +22,7 @@ describe("auth/start +server", () => {
     delete process.env.API_BASE_URL;
     delete process.env.NODE_ENV;
     delete process.env.COOKIE_DOMAIN;
-    const mod = await import("./+server?default");
+    const mod = await import("./+server");
     expect(createAuthStartHandler).toHaveBeenCalledWith({
       portal: "admin",
       cookieName: "tbite_sid_admin",
@@ -36,7 +37,7 @@ describe("auth/start +server", () => {
     process.env.API_BASE_URL = "http://api:7000";
     process.env.NODE_ENV = "production";
     process.env.COOKIE_DOMAIN = ".example.com";
-    await import("./+server?prod");
+    await import("./+server");
     expect(createAuthStartHandler).toHaveBeenCalledWith({
       portal: "admin",
       cookieName: "tbite_sid_admin",

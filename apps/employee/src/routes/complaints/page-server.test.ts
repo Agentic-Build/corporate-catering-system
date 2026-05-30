@@ -39,14 +39,14 @@ describe("complaints load", () => {
   });
   it("defaults items to empty array", async () => {
     mockClient.GET.mockResolvedValue({ data: {} });
-    const res = await load(loadEvent());
+    const res = (await load(loadEvent())) as { complaints: unknown[] };
     expect(res.complaints).toEqual([]);
   });
   it("surfaces error detail then default", async () => {
     mockClient.GET.mockResolvedValue({ error: { detail: "boom" } });
-    expect((await load(loadEvent())).error).toBe("boom");
+    expect(((await load(loadEvent())) as { error?: string }).error).toBe("boom");
     mockClient.GET.mockResolvedValue({ error: {} });
-    expect((await load(loadEvent())).error).toBe("載入客訴失敗");
+    expect(((await load(loadEvent())) as { error?: string }).error).toBe("載入客訴失敗");
   });
 });
 

@@ -45,7 +45,7 @@ describe("login load", () => {
   });
   it("returns empty providers when fetch is not ok", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false } as Response);
-    const res = await load(loadEvent(null));
+    const res = (await load(loadEvent(null))) as { providers: unknown[] };
     expect(res.providers).toEqual([]);
   });
 });

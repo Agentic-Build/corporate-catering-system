@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
@@ -71,7 +71,7 @@ func (f *fakeRows) Next() bool {
 }
 
 func (f *fakeRows) Scan(dest ...any) error { return f.scanErr }
-func (f *fakeRows) Err() error              { return f.rowsErr }
+func (f *fakeRows) Err() error             { return f.rowsErr }
 
 // captureObserver grabs a real metric.Observer from a registered callback so
 // scanSupplyRows can be exercised in isolation. The SDK only hands out a valid

@@ -20,14 +20,14 @@ describe("orders load", () => {
   });
   it("returns orders from data", async () => {
     mockClient.GET.mockResolvedValue({ data: { items: [{ id: "o1" }] } });
-    expect((await load(loadEvent())).orders).toEqual([{ id: "o1" }]);
+    expect(((await load(loadEvent())) as { orders: unknown[] }).orders).toEqual([{ id: "o1" }]);
   });
   it("defaults missing items to empty", async () => {
     mockClient.GET.mockResolvedValue({ data: {} });
-    expect((await load(loadEvent())).orders).toEqual([]);
+    expect(((await load(loadEvent())) as { orders: unknown[] }).orders).toEqual([]);
   });
   it("returns empty orders when response carries no data (no throw needed)", async () => {
     mockClient.GET.mockResolvedValue({});
-    expect((await load(loadEvent())).orders).toEqual([]);
+    expect(((await load(loadEvent())) as { orders: unknown[] }).orders).toEqual([]);
   });
 });

@@ -28,7 +28,9 @@ beforeEach(() => {
 
 describe("menus load", () => {
   it("redirects unauthenticated", async () => {
-    await expect(load({ locals: {}, url: new URL("http://x/menus") } as never)).rejects.toMatchObject({
+    await expect(
+      load({ locals: {}, url: new URL("http://x/menus") } as never),
+    ).rejects.toMatchObject({
       status: 303,
     });
   });
@@ -46,11 +48,14 @@ describe("menus load", () => {
 
   it("honors archived=1 and defaults items on throw / missing data", async () => {
     mockClient.GET.mockRejectedValueOnce(new Error("boom"));
-    let res = (await load(loadEvent("?archived=1"))) as { items: unknown[]; includeArchived: boolean };
+    let res = (await load(loadEvent("?archived=1"))) as {
+      items: unknown[];
+      includeArchived: boolean;
+    };
     expect(res.includeArchived).toBe(true);
     expect(res.items).toEqual([]);
     mockClient.GET.mockResolvedValueOnce({ data: {} });
-    res = (await load(loadEvent("?archived=1"))) as { items: unknown[] };
+    res = (await load(loadEvent("?archived=1"))) as { items: unknown[]; includeArchived: boolean };
     expect(res.items).toEqual([]);
   });
 });

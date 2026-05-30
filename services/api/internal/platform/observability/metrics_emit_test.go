@@ -236,7 +236,7 @@ func TestRecordSupplyAdjusted_WithAndWithoutQty(t *testing.T) {
 	collect := withCollectibleMetrics(t)
 	ctx := context.Background()
 
-	RecordSupplyAdjusted(ctx, "vendor-1", "up", 0)  // count recorded, qty skipped
+	RecordSupplyAdjusted(ctx, "vendor-1", "up", 0)   // count recorded, qty skipped
 	RecordSupplyAdjusted(ctx, "vendor-2", "down", 6) // both recorded
 
 	rm := collect(ctx)

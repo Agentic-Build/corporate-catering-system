@@ -18,7 +18,9 @@ beforeEach(() => {
 
 describe("labels load", () => {
   it("redirects unauthenticated", async () => {
-    await expect(load({ locals: {}, url: new URL("http://x/labels") } as never)).rejects.toMatchObject({
+    await expect(
+      load({ locals: {}, url: new URL("http://x/labels") } as never),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/login?return_to=%2Flabels",
     });

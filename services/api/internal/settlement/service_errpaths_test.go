@@ -26,8 +26,8 @@ type fakeTx struct{}
 func (fakeTx) Begin(ctx context.Context) (pgx.Tx, error) { return fakeTx{}, nil }
 func (fakeTx) Commit(ctx context.Context) error          { return nil }
 func (fakeTx) Rollback(ctx context.Context) error        { return nil }
-func (fakeTx) LargeObjects() pgx.LargeObjects             { return pgx.LargeObjects{} }
-func (fakeTx) Conn() *pgx.Conn                            { return nil }
+func (fakeTx) LargeObjects() pgx.LargeObjects            { return pgx.LargeObjects{} }
+func (fakeTx) Conn() *pgx.Conn                           { return nil }
 func (fakeTx) SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults {
 	return nil
 }

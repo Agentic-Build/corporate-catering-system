@@ -6,7 +6,10 @@ import { GET } from "./+server";
 
 const VENDOR = { role: "vendor_operator" };
 
-function event(locals: Record<string, unknown>, signal: AbortSignal = new AbortController().signal) {
+function event(
+  locals: Record<string, unknown>,
+  signal: AbortSignal = new AbortController().signal,
+) {
   return { locals, request: { signal } } as never;
 }
 
@@ -31,12 +34,16 @@ describe("orders events SSE proxy", () => {
 
   it("502s when upstream is not ok", async () => {
     fetchMock.mockResolvedValue({ ok: false, body: null });
-    await expect(GET(event({ user: VENDOR, apiToken: "t" }))).rejects.toMatchObject({ status: 502 });
+    await expect(GET(event({ user: VENDOR, apiToken: "t" }))).rejects.toMatchObject({
+      status: 502,
+    });
   });
 
   it("502s when upstream has no body", async () => {
     fetchMock.mockResolvedValue({ ok: true, body: null });
-    await expect(GET(event({ user: VENDOR, apiToken: "t" }))).rejects.toMatchObject({ status: 502 });
+    await expect(GET(event({ user: VENDOR, apiToken: "t" }))).rejects.toMatchObject({
+      status: 502,
+    });
   });
 
   it("streams the upstream body with SSE headers and forwards token + signal", async () => {

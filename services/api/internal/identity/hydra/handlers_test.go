@@ -78,10 +78,10 @@ func (r *fakeUserRepo) put(u *identity.User) {
 }
 
 type fakeIdentityRepo struct {
-	mu       sync.Mutex
-	bySub    map[string]*identity.UserIdentity
-	linkErr  error
-	getErr   error
+	mu      sync.Mutex
+	bySub   map[string]*identity.UserIdentity
+	linkErr error
+	getErr  error
 }
 
 func newFakeIdentityRepo() *fakeIdentityRepo {
@@ -115,9 +115,9 @@ func (r *fakeIdentityRepo) ListByUser(ctx context.Context, userID string) ([]*id
 }
 
 type fakeStates struct {
-	mu       sync.Mutex
-	m        map[string]*oidc.StatePayload
-	getErr   error
+	mu     sync.Mutex
+	m      map[string]*oidc.StatePayload
+	getErr error
 }
 
 func newFakeStates() *fakeStates { return &fakeStates{m: map[string]*oidc.StatePayload{}} }

@@ -38,9 +38,10 @@ describe("anomalies load", () => {
     await expect(anomaliesLoad(loadEvent({ user: undefined }))).rejects.toMatchObject({
       status: 303,
     });
-    await expect(
-      anomaliesLoad(loadEvent({ user: { role: "x" } })),
-    ).rejects.toMatchObject({ status: 303, location: "/login" });
+    await expect(anomaliesLoad(loadEvent({ user: { role: "x" } }))).rejects.toMatchObject({
+      status: 303,
+      location: "/login",
+    });
   });
   it("uses default status=open with no filters and lists items", async () => {
     mockClient.GET.mockResolvedValue({ data: { items: [{ id: "a1" }] } });
@@ -261,9 +262,9 @@ describe("disputes", () => {
       body: { status: "resolved_refund", resolution: "ok", refund_minor: 120 },
     });
     mockClient.POST.mockResolvedValue({ error: { detail: "x" } });
-    expect(
-      await disputesActions.resolveRefund!(event(form({ dispute_id: "d1" }))),
-    ).toMatchObject({ status: 500 });
+    expect(await disputesActions.resolveRefund!(event(form({ dispute_id: "d1" })))).toMatchObject({
+      status: 500,
+    });
   });
   it("resolveReject validates and posts", async () => {
     expect(await disputesActions.resolveReject!(event(form({})))).toMatchObject({ status: 400 });

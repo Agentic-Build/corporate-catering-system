@@ -92,10 +92,7 @@ describe("root load", () => {
         return Promise.resolve({
           data: {
             batch: { id: "b2", period_start: "2026-03-01" },
-            entries: [
-              { amount_minor: 100, refunded_minor: 10 },
-              { amount_minor: 200 },
-            ],
+            entries: [{ amount_minor: 100, refunded_minor: 10 }, { amount_minor: 200 }],
           },
         });
       return Promise.resolve({ data: { items: [] } });
@@ -110,10 +107,9 @@ describe("root load", () => {
       anomaliesSevere: 2,
     });
     // newest batch (b2) selected for detail
-    expect(mockClient.GET).toHaveBeenCalledWith(
-      "/api/admin/payroll/batches/{id}",
-      { params: { path: { id: "b2" } } },
-    );
+    expect(mockClient.GET).toHaveBeenCalledWith("/api/admin/payroll/batches/{id}", {
+      params: { path: { id: "b2" } },
+    });
     expect((res.payroll as { total: number }).total).toBe(300);
     expect((res.payroll as { refunded: number }).refunded).toBe(10);
     expect((res.payroll as { entries: unknown[] }).entries).toHaveLength(2);
@@ -128,8 +124,7 @@ describe("root load", () => {
       if (path === "/api/admin/payroll/batches")
         return Promise.resolve({ data: { items: [{ id: "b1", period_start: "2026-02-01" }] } });
       if (path === "/api/admin/plants") return Promise.reject(new Error("boom"));
-      if (path === "/api/admin/payroll/batches/{id}")
-        return Promise.resolve({ data: null });
+      if (path === "/api/admin/payroll/batches/{id}") return Promise.resolve({ data: null });
       return Promise.resolve({ data: { items: [] } });
     });
     const res = (await rootLoad(loadEvent())) as Record<string, unknown>;
@@ -180,9 +175,7 @@ describe("root actions.approveVendor", () => {
   });
   it("approves with selected plants", async () => {
     mockClient.POST.mockResolvedValue({ data: {} });
-    const res = await rootActions.approveVendor!(
-      event(form({ id: "v1", plants: ["A", "B"] })),
-    );
+    const res = await rootActions.approveVendor!(event(form({ id: "v1", plants: ["A", "B"] })));
     expect(res).toEqual({ ok: true, approved: "v1" });
     expect(mockClient.POST).toHaveBeenCalledWith("/api/admin/vendors/{id}/approve", {
       params: { path: { id: "v1" } },

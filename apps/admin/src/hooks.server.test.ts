@@ -9,6 +9,7 @@ vi.mock("@tbite/web-auth/server", () => ({ createAuthHandle }));
 vi.mock("@sveltejs/kit/hooks", () => ({ sequence }));
 
 beforeEach(() => {
+  vi.resetModules();
   createAuthHandle.mockClear();
   sequence.mockClear();
 });
@@ -24,7 +25,7 @@ describe("hooks.server handle", () => {
     delete process.env.API_BASE_URL;
     delete process.env.NODE_ENV;
     delete process.env.COOKIE_DOMAIN;
-    const mod = await import("./hooks.server?default");
+    const mod = await import("./hooks.server");
     expect(createAuthHandle).toHaveBeenCalledWith({
       apiBaseUrl: "http://localhost:8080",
       cookieSecure: false,
@@ -39,7 +40,7 @@ describe("hooks.server handle", () => {
     process.env.API_BASE_URL = "http://api:7000";
     process.env.NODE_ENV = "production";
     process.env.COOKIE_DOMAIN = ".example.com";
-    await import("./hooks.server?prod");
+    await import("./hooks.server");
     expect(createAuthHandle).toHaveBeenCalledWith({
       apiBaseUrl: "http://api:7000",
       cookieSecure: true,

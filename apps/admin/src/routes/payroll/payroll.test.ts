@@ -7,10 +7,7 @@ vi.mock("$lib/server/api", () => ({ apiFor: () => mockClient }));
 
 import { load as listLoad } from "./+page.server";
 import { load as detailLoad, actions as detailActions } from "./[id]/+page.server";
-import {
-  load as disputesLoad,
-  actions as disputesActions,
-} from "./[id]/disputes/+page.server";
+import { load as disputesLoad, actions as disputesActions } from "./[id]/disputes/+page.server";
 import { load as newLoad, actions as newActions } from "./new/+page.server";
 
 const ADMIN = { id: "u1", role: "welfare_admin" };
@@ -27,9 +24,7 @@ function event(fd: FormData, params: Record<string, string> = { id: "b1" }, user
     locals: { user, apiToken: "t" },
   } as never;
 }
-function loadEvent(
-  opts: { user?: unknown; query?: string; params?: Record<string, string> } = {},
-) {
+function loadEvent(opts: { user?: unknown; query?: string; params?: Record<string, string> } = {}) {
   return {
     locals: { user: "user" in opts ? opts.user : ADMIN, apiToken: "t" },
     url: new URL("http://x/p" + (opts.query ?? "")),
@@ -133,20 +128,20 @@ describe("payroll detail actions", () => {
   });
   it("flagException returns server detail or fallback on error", async () => {
     mockClient.POST.mockResolvedValue({ error: { detail: "server says no" } });
-    expect(
-      await detailActions.flagException!(event(form({ entry_id: "e1" }))),
-    ).toMatchObject({ status: 400, data: { exError: "server says no" } });
+    expect(await detailActions.flagException!(event(form({ entry_id: "e1" })))).toMatchObject({
+      status: 400,
+      data: { exError: "server says no" },
+    });
     mockClient.POST.mockResolvedValue({ error: {} });
-    expect(
-      await detailActions.flagException!(event(form({ entry_id: "e1" }))),
-    ).toMatchObject({ status: 400, data: { exError: "標記例外失敗，請稍後再試。" } });
+    expect(await detailActions.flagException!(event(form({ entry_id: "e1" })))).toMatchObject({
+      status: 400,
+      data: { exError: "標記例外失敗，請稍後再試。" },
+    });
   });
   it("resolveException validates input", async () => {
     expect(await detailActions.resolveException!(event(form({})))).toMatchObject({ status: 400 });
     expect(
-      await detailActions.resolveException!(
-        event(form({ exception_id: "x1", status: "bogus" })),
-      ),
+      await detailActions.resolveException!(event(form({ exception_id: "x1", status: "bogus" }))),
     ).toMatchObject({ status: 400, data: { exError: "例外解決參數不正確" } });
   });
   it("resolveException posts resolved/excluded and redirects", async () => {
@@ -161,9 +156,7 @@ describe("payroll detail actions", () => {
       body: { status: "resolved", resolution: "ok" },
     });
     await expect(
-      detailActions.resolveException!(
-        event(form({ exception_id: "x1", status: "excluded" })),
-      ),
+      detailActions.resolveException!(event(form({ exception_id: "x1", status: "excluded" }))),
     ).rejects.toMatchObject({ status: 303 });
   });
   it("resolveException returns server detail or fallback on error", async () => {
@@ -222,15 +215,15 @@ describe("payroll [id] disputes", () => {
       ),
     ).toEqual({ ok: true });
     mockClient.POST.mockResolvedValue({ error: { detail: "x" } });
-    expect(
-      await disputesActions.resolveRefund!(event(form({ dispute_id: "d1" }))),
-    ).toMatchObject({ status: 500 });
+    expect(await disputesActions.resolveRefund!(event(form({ dispute_id: "d1" })))).toMatchObject({
+      status: 500,
+    });
   });
   it("resolveReject validates and posts", async () => {
     expect(await disputesActions.resolveReject!(event(form({})))).toMatchObject({ status: 400 });
-    expect(
-      await disputesActions.resolveReject!(event(form({ dispute_id: "d1" }))),
-    ).toMatchObject({ status: 400 });
+    expect(await disputesActions.resolveReject!(event(form({ dispute_id: "d1" })))).toMatchObject({
+      status: 400,
+    });
     mockClient.POST.mockResolvedValue({ data: {} });
     expect(
       await disputesActions.resolveReject!(event(form({ dispute_id: "d1", resolution: "no" }))),
@@ -264,9 +257,7 @@ describe("payroll new", () => {
   it("default action posts and redirects to new batch", async () => {
     mockClient.POST.mockResolvedValue({ data: { batch: { id: "b9" } } });
     await expect(
-      newActions.default!(
-        event(form({ period_start: "2026-01-01", period_end: "2026-01-31" })),
-      ),
+      newActions.default!(event(form({ period_start: "2026-01-01", period_end: "2026-01-31" }))),
     ).rejects.toMatchObject({ status: 303, location: "/payroll/b9" });
     expect(mockClient.POST).toHaveBeenCalledWith("/api/admin/payroll/batches", {
       body: { period_start: "2026-01-01", period_end: "2026-01-31" },

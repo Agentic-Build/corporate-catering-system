@@ -20,14 +20,14 @@ describe("disputes load", () => {
   });
   it("returns disputes from data", async () => {
     mockClient.GET.mockResolvedValue({ data: { items: [{ id: "d1" }] } });
-    expect((await load(loadEvent())).disputes).toEqual([{ id: "d1" }]);
+    expect(((await load(loadEvent())) as { disputes: unknown[] }).disputes).toEqual([{ id: "d1" }]);
   });
   it("defaults missing items to empty", async () => {
     mockClient.GET.mockResolvedValue({ data: {} });
-    expect((await load(loadEvent())).disputes).toEqual([]);
+    expect(((await load(loadEvent())) as { disputes: unknown[] }).disputes).toEqual([]);
   });
   it("returns empty disputes when response carries no data (no throw needed)", async () => {
     mockClient.GET.mockResolvedValue({});
-    expect((await load(loadEvent())).disputes).toEqual([]);
+    expect(((await load(loadEvent())) as { disputes: unknown[] }).disputes).toEqual([]);
   });
 });

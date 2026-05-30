@@ -31,19 +31,26 @@ beforeEach(() => {
 
 describe("settings load", () => {
   it("redirects unauthenticated", async () => {
-    await expect(load({ locals: {}, url: new URL("http://x/settings") } as never)).rejects.toMatchObject({
+    await expect(
+      load({ locals: {}, url: new URL("http://x/settings") } as never),
+    ).rejects.toMatchObject({
       status: 303,
     });
   });
 
   it("redirects non-vendor", async () => {
-    await expect(load(loadEvent({ role: "employee" }))).rejects.toMatchObject({ status: 303, location: "/login" });
+    await expect(load(loadEvent({ role: "employee" }))).rejects.toMatchObject({
+      status: 303,
+      location: "/login",
+    });
   });
 
   it("returns settings + plant lists", async () => {
     mockClient.GET.mockImplementation((path: string) => {
       if (path === "/api/merchant/settings")
-        return Promise.resolve({ data: { settings: { cutoff_hour: 15, preorder_window_days: 5 } } });
+        return Promise.resolve({
+          data: { settings: { cutoff_hour: 15, preorder_window_days: 5 } },
+        });
       if (path === "/api/plants")
         return Promise.resolve({ data: { items: [{ code: "P1" }, { code: "P2" }] } });
       if (path === "/api/merchant/plants")
@@ -93,24 +100,32 @@ describe("settings.save branches", () => {
   });
 
   it("rejects out-of-range cutoff hour", async () => {
-    const res = await actions.save!(actionEvent(form({ cutoff_hour: "30", preorder_window_days: "7" })));
+    const res = await actions.save!(
+      actionEvent(form({ cutoff_hour: "30", preorder_window_days: "7" })),
+    );
     expect(res).toMatchObject({ status: 400, data: { error: "截單時間需為 0–23 之間的整數" } });
   });
 
   it("rejects out-of-range window days", async () => {
-    const res = await actions.save!(actionEvent(form({ cutoff_hour: "12", preorder_window_days: "40" })));
+    const res = await actions.save!(
+      actionEvent(form({ cutoff_hour: "12", preorder_window_days: "40" })),
+    );
     expect(res).toMatchObject({ status: 400, data: { error: "預購開放天數需為 1–30 之間的整數" } });
   });
 
   it("returns API error detail", async () => {
     mockClient.PUT.mockResolvedValue({ error: { detail: "server says no" } });
-    const res = await actions.save!(actionEvent(form({ cutoff_hour: "12", preorder_window_days: "7" })));
+    const res = await actions.save!(
+      actionEvent(form({ cutoff_hour: "12", preorder_window_days: "7" })),
+    );
     expect(res).toMatchObject({ status: 400, data: { error: "server says no" } });
   });
 
   it("falls back to generic message when error has no detail", async () => {
     mockClient.PUT.mockResolvedValue({ error: {} });
-    const res = await actions.save!(actionEvent(form({ cutoff_hour: "12", preorder_window_days: "7" })));
+    const res = await actions.save!(
+      actionEvent(form({ cutoff_hour: "12", preorder_window_days: "7" })),
+    );
     expect(res).toMatchObject({ status: 400, data: { error: "儲存設定失敗，請稍後再試。" } });
   });
 });

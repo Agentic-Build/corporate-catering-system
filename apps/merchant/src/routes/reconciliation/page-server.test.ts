@@ -8,7 +8,10 @@ import { load } from "./+page.server";
 const VENDOR = { id: "u1", role: "vendor_operator" };
 
 function loadEvent(search = "", user: unknown = VENDOR) {
-  return { locals: { user, apiToken: "t" }, url: new URL("http://x/reconciliation" + search) } as never;
+  return {
+    locals: { user, apiToken: "t" },
+    url: new URL("http://x/reconciliation" + search),
+  } as never;
 }
 
 beforeEach(() => {

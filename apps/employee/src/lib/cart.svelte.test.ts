@@ -25,7 +25,7 @@ describe("cart", () => {
 
   it("add stores optional image meta", () => {
     cart.add("a", { ...META, image: "img.png" });
-    expect(cart.items.a.image).toBe("img.png");
+    expect(cart.items.a!.image).toBe("img.png");
   });
 
   it("inc on a missing line is a no-op", () => {

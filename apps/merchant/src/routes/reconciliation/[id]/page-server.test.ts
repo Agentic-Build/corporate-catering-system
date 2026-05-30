@@ -22,7 +22,11 @@ beforeEach(() => {
 describe("reconciliation/[id] load", () => {
   it("redirects unauthenticated", async () => {
     await expect(
-      load({ locals: {}, params: { id: "s1" }, url: new URL("http://x/reconciliation/s1") } as never),
+      load({
+        locals: {},
+        params: { id: "s1" },
+        url: new URL("http://x/reconciliation/s1"),
+      } as never),
     ).rejects.toMatchObject({ status: 303 });
   });
 

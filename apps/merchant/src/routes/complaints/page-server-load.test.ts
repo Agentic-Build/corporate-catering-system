@@ -13,7 +13,10 @@ function loadEvent(search = "", user: unknown = VENDOR) {
   return { locals: { user, apiToken: "t" }, url: new URL("http://x/complaints" + search) } as never;
 }
 function actionEvent(fd: FormData) {
-  return { request: { formData: async () => fd }, locals: { user: VENDOR, apiToken: "t" } } as never;
+  return {
+    request: { formData: async () => fd },
+    locals: { user: VENDOR, apiToken: "t" },
+  } as never;
 }
 function form(entries: Record<string, string>): FormData {
   const fd = new FormData();
@@ -82,7 +85,10 @@ describe("complaints.respond branches", () => {
 
   it("fails when response too short", async () => {
     const res = await actions.respond!(actionEvent(form({ complaint_id: "c1", response: "hi" })));
-    expect(res).toMatchObject({ status: 400, data: { error: "回覆內容至少需 5 個字", complaintID: "c1" } });
+    expect(res).toMatchObject({
+      status: 400,
+      data: { error: "回覆內容至少需 5 個字", complaintID: "c1" },
+    });
   });
 
   it("fails when API errors", async () => {
@@ -90,6 +96,9 @@ describe("complaints.respond branches", () => {
     const res = await actions.respond!(
       actionEvent(form({ complaint_id: "c1", response: "hello there" })),
     );
-    expect(res).toMatchObject({ status: 400, data: { error: "回覆失敗，請稍後再試", complaintID: "c1" } });
+    expect(res).toMatchObject({
+      status: 400,
+      data: { error: "回覆失敗，請稍後再試", complaintID: "c1" },
+    });
   });
 });

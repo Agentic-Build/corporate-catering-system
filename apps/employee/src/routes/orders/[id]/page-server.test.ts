@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockClient } = vi.hoisted(() => ({ mockClient: { GET: vi.fn(), POST: vi.fn(), PUT: vi.fn() } }));
+const { mockClient } = vi.hoisted(() => ({
+  mockClient: { GET: vi.fn(), POST: vi.fn(), PUT: vi.fn() },
+}));
 vi.mock("$lib/server/env", () => ({ API_BASE_URL: "http://x" }));
 vi.mock("@tbite/api-client", () => ({ createApiClient: () => mockClient }));
 
@@ -8,10 +10,18 @@ import { load, actions } from "./+page.server";
 
 const USER = { id: "u1" };
 function loadEvent(user: unknown = USER, id = "ord1") {
-  return { locals: { user, apiToken: "t" }, params: { id }, url: new URL("http://h/orders/" + id) } as never;
+  return {
+    locals: { user, apiToken: "t" },
+    params: { id },
+    url: new URL("http://h/orders/" + id),
+  } as never;
 }
 function actionEvent(fd: FormData, user: unknown = USER, id = "ord1") {
-  return { request: { formData: async () => fd }, locals: { user, apiToken: "t" }, params: { id } } as never;
+  return {
+    request: { formData: async () => fd },
+    locals: { user, apiToken: "t" },
+    params: { id },
+  } as never;
 }
 function form(entries: Array<[string, string]>): FormData {
   const fd = new FormData();
@@ -44,7 +54,11 @@ describe("order detail load", () => {
           : { data: { items: [{ vendor_id: "v1" }, { vendor_id: "v2" }] } },
       ),
     );
-    const res = await load(loadEvent());
+    const res = (await load(loadEvent())) as {
+      menu?: unknown[];
+      complaint?: { id?: string };
+      rating?: unknown;
+    };
     expect(res.menu).toEqual([{ vendor_id: "v1" }]);
     expect(res.complaint).toBeUndefined();
     expect(res.rating).toBeUndefined();
@@ -57,7 +71,11 @@ describe("order detail load", () => {
           : { data: undefined },
       ),
     );
-    const res = await load(loadEvent());
+    const res = (await load(loadEvent())) as {
+      menu?: unknown[];
+      complaint?: { id?: string };
+      rating?: unknown;
+    };
     expect(res.menu).toBeUndefined();
   });
   it("picked_up order fetches matching complaint and rating", async () => {
@@ -68,7 +86,11 @@ describe("order detail load", () => {
         return Promise.resolve({ data: { items: [{ order_id: "ord1", id: "c1" }] } });
       return Promise.resolve({ data: { rating: { score: 4 } } });
     });
-    const res = await load(loadEvent());
+    const res = (await load(loadEvent())) as {
+      menu?: unknown[];
+      complaint?: { id?: string };
+      rating?: unknown;
+    };
     expect(res.complaint).toMatchObject({ id: "c1" });
     expect(res.rating).toEqual({ score: 4 });
   });
@@ -79,7 +101,11 @@ describe("order detail load", () => {
       if (path === "/api/employee/complaints") return Promise.resolve({ data: undefined });
       return Promise.resolve({ data: undefined });
     });
-    const res = await load(loadEvent());
+    const res = (await load(loadEvent())) as {
+      menu?: unknown[];
+      complaint?: { id?: string };
+      rating?: unknown;
+    };
     expect(res.complaint).toBeUndefined();
     expect(res.rating).toBeUndefined();
   });
@@ -90,18 +116,29 @@ describe("order detail load", () => {
       if (path === "/api/employee/complaints") return Promise.resolve({ data: {} });
       return Promise.resolve({ data: { rating: null } });
     });
-    const res = await load(loadEvent());
+    const res = (await load(loadEvent())) as {
+      menu?: unknown[];
+      complaint?: { id?: string };
+      rating?: unknown;
+    };
     expect(res.complaint).toBeUndefined();
   });
 });
 
 describe("cancel action", () => {
   it("401 when unauthenticated", async () => {
-    expect(await actions.cancel!({ locals: { user: null }, params: { id: "o" } } as never)).toMatchObject({ status: 401 });
+    expect(
+      await actions.cancel!({ locals: { user: null }, params: { id: "o" } } as never),
+    ).toMatchObject({ status: 401 });
   });
   it("400 on error", async () => {
     mockClient.POST.mockResolvedValue({ error: { detail: "no" } });
-    expect(await actions.cancel!({ locals: { user: USER, apiToken: "t" }, params: { id: "o" } } as never)).toMatchObject({
+    expect(
+      await actions.cancel!({
+        locals: { user: USER, apiToken: "t" },
+        params: { id: "o" },
+      } as never),
+    ).toMatchObject({
       status: 400,
       data: { error: "no" },
     });
@@ -142,7 +179,14 @@ describe("modify action", () => {
   it("400 when notes too long", async () => {
     const items = JSON.stringify([{ menu_item_id: "a", qty: 1 }]);
     expect(
-      await actions.modify!(actionEvent(form([["items", items], ["notes", "x".repeat(501)]]))),
+      await actions.modify!(
+        actionEvent(
+          form([
+            ["items", items],
+            ["notes", "x".repeat(501)],
+          ]),
+        ),
+      ),
     ).toMatchObject({ data: { modifyError: "備註不可超過 500 字" } });
   });
   it("409 uses detail then default", async () => {
@@ -170,7 +214,16 @@ describe("modify action", () => {
   it("redirects on success", async () => {
     const items = JSON.stringify([{ menu_item_id: "a", qty: 2 }]);
     mockClient.PUT.mockResolvedValue({ data: {} });
-    await expect(actions.modify!(actionEvent(form([["items", items], ["notes", "ok"]])))).rejects.toMatchObject({
+    await expect(
+      actions.modify!(
+        actionEvent(
+          form([
+            ["items", items],
+            ["notes", "ok"],
+          ]),
+        ),
+      ),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/orders/ord1",
     });
@@ -187,7 +240,16 @@ describe("rate action", () => {
     });
   });
   it("400 when comment too long", async () => {
-    expect(await actions.rate!(actionEvent(form([["score", "5"], ["comment", "a".repeat(501)]])))).toMatchObject({
+    expect(
+      await actions.rate!(
+        actionEvent(
+          form([
+            ["score", "5"],
+            ["comment", "a".repeat(501)],
+          ]),
+        ),
+      ),
+    ).toMatchObject({
       data: { ratingError: "留言不可超過 500 字" },
     });
   });
@@ -207,7 +269,16 @@ describe("rate action", () => {
   });
   it("succeeds", async () => {
     mockClient.POST.mockResolvedValue({ data: { rating: { score: 5 } } });
-    expect(await actions.rate!(actionEvent(form([["score", "5"], ["comment", "ok"]])))).toEqual({
+    expect(
+      await actions.rate!(
+        actionEvent(
+          form([
+            ["score", "5"],
+            ["comment", "ok"],
+          ]),
+        ),
+      ),
+    ).toEqual({
       ratingOk: true,
       rating: { score: 5 },
     });
@@ -225,17 +296,30 @@ describe("complain action", () => {
   });
   it("400 when description out of bounds", async () => {
     expect(
-      await actions.complain!(actionEvent(form([["category", "quality"], ["description", "abc"]]))),
+      await actions.complain!(
+        actionEvent(
+          form([
+            ["category", "quality"],
+            ["description", "abc"],
+          ]),
+        ),
+      ),
     ).toMatchObject({ data: { complaintError: "問題描述需介於 5 至 1000 字" } });
   });
   it("409 then non-409 errors", async () => {
-    const fd = () => form([["category", "quality"], ["description", "valid issue"]]);
+    const fd = () =>
+      form([
+        ["category", "quality"],
+        ["description", "valid issue"],
+      ]);
     mockClient.POST.mockResolvedValue({ error: {}, response: { status: 409 } });
     expect(await actions.complain!(actionEvent(fd()))).toMatchObject({
       data: { complaintError: "此訂單已有未結案的客訴。" },
     });
     mockClient.POST.mockResolvedValue({ error: { detail: "d" }, response: { status: 500 } });
-    expect(await actions.complain!(actionEvent(fd()))).toMatchObject({ data: { complaintError: "d" } });
+    expect(await actions.complain!(actionEvent(fd()))).toMatchObject({
+      data: { complaintError: "d" },
+    });
     mockClient.POST.mockResolvedValue({ error: {}, response: { status: 500 } });
     expect(await actions.complain!(actionEvent(fd()))).toMatchObject({
       data: { complaintError: "送出客訴失敗，請稍後再試。" },
@@ -244,7 +328,14 @@ describe("complain action", () => {
   it("succeeds", async () => {
     mockClient.POST.mockResolvedValue({ data: { complaint: { id: "c1" } } });
     expect(
-      await actions.complain!(actionEvent(form([["category", "quality"], ["description", "valid issue"]]))),
+      await actions.complain!(
+        actionEvent(
+          form([
+            ["category", "quality"],
+            ["description", "valid issue"],
+          ]),
+        ),
+      ),
     ).toEqual({ complaintOk: true, complaint: { id: "c1" } });
   });
 });

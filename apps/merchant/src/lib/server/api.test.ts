@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("$lib/server/env", () => ({ API_BASE_URL: "http://api.test" }));
 
-const { createApiClient } = vi.hoisted(() => ({ createApiClient: vi.fn(() => ({ tag: "client" })) }));
+const { createApiClient } = vi.hoisted(() => ({
+  createApiClient: vi.fn(() => ({ tag: "client" })),
+}));
 vi.mock("@tbite/api-client", () => ({ createApiClient }));
 
 import { apiFor } from "./api";

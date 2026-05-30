@@ -17,7 +17,10 @@ function loadEvent(search = "", user: unknown = VENDOR) {
   } as never;
 }
 function actionEvent(fd: FormData) {
-  return { request: { formData: async () => fd }, locals: { user: VENDOR, apiToken: "t" } } as never;
+  return {
+    request: { formData: async () => fd },
+    locals: { user: VENDOR, apiToken: "t" },
+  } as never;
 }
 function form(entries: Record<string, string | string[]>): FormData {
   const fd = new FormData();
@@ -121,7 +124,9 @@ describe("orders.markReady", () => {
 
 describe("orders.markReadyManual", () => {
   it("fails when code empty", async () => {
-    const res = await actions.markReadyManual!(actionEvent(form({ code: " ", date: "2026-05-30" })));
+    const res = await actions.markReadyManual!(
+      actionEvent(form({ code: " ", date: "2026-05-30" })),
+    );
     expect(res).toMatchObject({ status: 400, data: { error: "請輸入訂單編號" } });
   });
 
@@ -143,11 +148,16 @@ describe("orders.markReadyManual", () => {
 
   it("rejects already-ready / picked_up / no_show orders", async () => {
     for (const status of ["ready", "picked_up", "no_show"]) {
-      mockClient.GET.mockResolvedValue({ data: { items: [{ order_number: 7, id: "o7", status }] } });
+      mockClient.GET.mockResolvedValue({
+        data: { items: [{ order_number: 7, id: "o7", status }] },
+      });
       const res = await actions.markReadyManual!(
         actionEvent(form({ code: "7", date: "2026-05-30" })),
       );
-      expect(res).toMatchObject({ status: 400, data: { error: expect.stringContaining("已出餐或已領取") } });
+      expect(res).toMatchObject({
+        status: 400,
+        data: { error: expect.stringContaining("已出餐或已領取") },
+      });
     }
   });
 
@@ -155,7 +165,9 @@ describe("orders.markReadyManual", () => {
     mockClient.GET.mockResolvedValue({
       data: { items: [{ order_number: 8, id: "o8", status: "cancelled" }] },
     });
-    const res = await actions.markReadyManual!(actionEvent(form({ code: "8", date: "2026-05-30" })));
+    const res = await actions.markReadyManual!(
+      actionEvent(form({ code: "8", date: "2026-05-30" })),
+    );
     expect(res).toMatchObject({ status: 400, data: { error: expect.stringContaining("已取消") } });
   });
 
@@ -164,7 +176,9 @@ describe("orders.markReadyManual", () => {
       data: { items: [{ order_number: 9, id: "o9", status: "placed" }] },
     });
     mockClient.POST.mockResolvedValue({ data: {} });
-    const res = await actions.markReadyManual!(actionEvent(form({ code: "9", date: "2026-05-30" })));
+    const res = await actions.markReadyManual!(
+      actionEvent(form({ code: "9", date: "2026-05-30" })),
+    );
     expect(res).toEqual({ success: true, count: 1 });
     expect(mockClient.POST).toHaveBeenCalledWith(
       "/api/merchant/orders/mark-ready",
@@ -177,13 +191,17 @@ describe("orders.markReadyManual", () => {
       data: { items: [{ order_number: 9, id: "o9", status: "cutoff" }] },
     });
     mockClient.POST.mockResolvedValue({ error: { detail: "x" } });
-    const res = await actions.markReadyManual!(actionEvent(form({ code: "9", date: "2026-05-30" })));
+    const res = await actions.markReadyManual!(
+      actionEvent(form({ code: "9", date: "2026-05-30" })),
+    );
     expect(res).toMatchObject({ status: 500 });
   });
 
   it("handles orders GET returning no data", async () => {
     mockClient.GET.mockResolvedValue({ data: null });
-    const res = await actions.markReadyManual!(actionEvent(form({ code: "1", date: "2026-05-30" })));
+    const res = await actions.markReadyManual!(
+      actionEvent(form({ code: "1", date: "2026-05-30" })),
+    );
     expect(res).toMatchObject({ status: 404 });
   });
 });

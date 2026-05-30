@@ -60,7 +60,7 @@ func (m fakeMsg) Metadata() (*jetstream.MsgMetadata, error) {
 	}
 	return &jetstream.MsgMetadata{NumDelivered: 1, Stream: "PAYROLL_V1"}, nil
 }
-func (m fakeMsg) Nak() error     { return nil }
+func (m fakeMsg) Nak() error      { return nil }
 func (m fakeMsg) Subject() string { return "payroll.batch_locked.v1" }
 
 // nextResult is one scripted return value of MessagesContext.Next.

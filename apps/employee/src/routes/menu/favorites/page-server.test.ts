@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockClient } = vi.hoisted(() => ({ mockClient: { GET: vi.fn(), POST: vi.fn(), DELETE: vi.fn() } }));
+const { mockClient } = vi.hoisted(() => ({
+  mockClient: { GET: vi.fn(), POST: vi.fn(), DELETE: vi.fn() },
+}));
 vi.mock("$lib/server/env", () => ({ API_BASE_URL: "http://x" }));
 vi.mock("@tbite/api-client", () => ({ createApiClient: () => mockClient }));
 
@@ -33,11 +35,15 @@ describe("favorites load", () => {
   });
   it("returns chips and cursor", async () => {
     mockClient.GET.mockResolvedValue({ data: { chips: [{ id: "c" }], next_cursor: 2 } });
-    expect(await load(loadEvent())).toMatchObject({ chips: [{ id: "c" }], nextCursor: 2, error: undefined });
+    expect(await load(loadEvent())).toMatchObject({
+      chips: [{ id: "c" }],
+      nextCursor: 2,
+      error: undefined,
+    });
   });
   it("defaults chips and surfaces error", async () => {
     mockClient.GET.mockResolvedValue({ error: { detail: "boom" } });
-    const res = await load(loadEvent());
+    const res = (await load(loadEvent())) as { chips: unknown[]; error?: string };
     expect(res.chips).toEqual([]);
     expect(res.error).toBe("boom");
   });
@@ -49,7 +55,9 @@ describe("loadMore action", () => {
   });
   it("error surfaces fail", async () => {
     mockClient.GET.mockResolvedValue({ error: { detail: "e" } });
-    expect(await actions.loadMore!(actionEvent(form([["cursor", "c1"]])))).toMatchObject({ status: 400 });
+    expect(await actions.loadMore!(actionEvent(form([["cursor", "c1"]])))).toMatchObject({
+      status: 400,
+    });
   });
   it("returns next page and defaults chips", async () => {
     mockClient.GET.mockResolvedValue({ data: {} });
@@ -62,14 +70,18 @@ describe("loadMore action", () => {
 
 describe("removeFavorite action", () => {
   it("401 when unauthenticated", async () => {
-    expect(await actions.removeFavorite!(actionEvent(form([]), null))).toMatchObject({ status: 401 });
+    expect(await actions.removeFavorite!(actionEvent(form([]), null))).toMatchObject({
+      status: 401,
+    });
   });
   it("400 when menu_item_id missing", async () => {
     expect(await actions.removeFavorite!(actionEvent(form([])))).toMatchObject({ status: 400 });
   });
   it("error surfaces fail", async () => {
     mockClient.DELETE.mockResolvedValue({ error: { detail: "e" } });
-    expect(await actions.removeFavorite!(actionEvent(form([["menu_item_id", "m1"]])))).toMatchObject({
+    expect(
+      await actions.removeFavorite!(actionEvent(form([["menu_item_id", "m1"]]))),
+    ).toMatchObject({
       status: 400,
     });
   });
@@ -95,13 +107,17 @@ describe("addToCart action", () => {
   it("creates an order using home day and user plant then redirects", async () => {
     mockClient.GET.mockResolvedValue({ data: { target_day: "2026-04-04" } });
     mockClient.POST.mockResolvedValue({ data: { order: { id: "o1" } } });
-    await expect(actions.addToCart!(actionEvent(form([["menu_item_id", "m1"]])))).rejects.toMatchObject({
+    await expect(
+      actions.addToCart!(actionEvent(form([["menu_item_id", "m1"]]))),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/orders/o1",
     });
     expect(mockClient.POST).toHaveBeenCalledWith(
       "/api/employee/orders",
-      expect.objectContaining({ body: expect.objectContaining({ plant: "tn-b", supply_date: "2026-04-04" }) }),
+      expect.objectContaining({
+        body: expect.objectContaining({ plant: "tn-b", supply_date: "2026-04-04" }),
+      }),
     );
   });
   it("falls back to taipei day and default plant", async () => {

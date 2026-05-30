@@ -10,11 +10,13 @@ import { load, actions } from "./+page.server";
 
 const USER = { id: "u1", role: "employee", plant: "tn-a" };
 
-function loadEvent(opts: {
-  user?: unknown;
-  search?: string;
-  plants?: Array<{ id: string }>;
-} = {}) {
+function loadEvent(
+  opts: {
+    user?: unknown;
+    search?: string;
+    plants?: Array<{ id: string }>;
+  } = {},
+) {
   const search = opts.search ?? "";
   return {
     locals: { user: "user" in opts ? opts.user : USER, apiToken: "t" },
@@ -41,9 +43,10 @@ beforeEach(() => {
 
 describe("home load", () => {
   it("redirects to login when unauthenticated, preserving path+query", async () => {
-    await expect(load(loadEvent({ user: null, search: "?day=2026-01-01" }))).rejects.toMatchObject(
-      { status: 303, location: "/login?return_to=%2F%3Fday%3D2026-01-01" },
-    );
+    await expect(load(loadEvent({ user: null, search: "?day=2026-01-01" }))).rejects.toMatchObject({
+      status: 303,
+      location: "/login?return_to=%2F%3Fday%3D2026-01-01",
+    });
   });
 
   it("loads home and derives favorites with no filter", async () => {
@@ -83,7 +86,10 @@ describe("home load", () => {
       ),
     );
     const res = (await load(
-      loadEvent({ search: "?day=2026-03-03&q=rice&tags=t1&price_min=10&price_max=50&in_stock=1&sort=price_asc" }),
+      loadEvent({
+        search:
+          "?day=2026-03-03&q=rice&tags=t1&price_min=10&price_max=50&in_stock=1&sort=price_asc",
+      }),
     )) as Record<string, unknown>;
     expect(res.filterActive).toBe(true);
     expect(res.filteredMenu).toEqual([{ tags: ["y"] }]);
@@ -164,7 +170,9 @@ describe("home load", () => {
   it("filtered-menu empty response and thrown non-Error are handled", async () => {
     mockClient.GET.mockImplementation((path: string) =>
       path === "/api/employee/home"
-        ? Promise.resolve({ data: { target_day: "d", has_ordered: false, favorite_chips: [], day_menu: [] } })
+        ? Promise.resolve({
+            data: { target_day: "d", has_ordered: false, favorite_chips: [], day_menu: [] },
+          })
         : Promise.reject("menu str"),
     );
     const res = (await load(loadEvent({ search: "?q=x" }))) as Record<string, unknown>;
@@ -175,7 +183,9 @@ describe("home load", () => {
   it("filtered-menu empty (no data/no error) leaves items undefined", async () => {
     mockClient.GET.mockImplementation((path: string) =>
       path === "/api/employee/home"
-        ? Promise.resolve({ data: { target_day: "d", has_ordered: false, favorite_chips: [], day_menu: [] } })
+        ? Promise.resolve({
+            data: { target_day: "d", has_ordered: false, favorite_chips: [], day_menu: [] },
+          })
         : Promise.resolve({}),
     );
     const res = (await load(loadEvent({ search: "?q=x" }))) as Record<string, unknown>;
@@ -186,7 +196,14 @@ describe("home load", () => {
   it("menu with data uses items default and collectTags ignores null tags", async () => {
     mockClient.GET.mockImplementation((path: string) =>
       path === "/api/employee/home"
-        ? Promise.resolve({ data: { target_day: "d", has_ordered: false, favorite_chips: [], day_menu: [{ tags: null }, {}] } })
+        ? Promise.resolve({
+            data: {
+              target_day: "d",
+              has_ordered: false,
+              favorite_chips: [],
+              day_menu: [{ tags: null }, {}],
+            },
+          })
         : Promise.resolve({ data: {} }),
     );
     const res = (await load(loadEvent({ search: "?q=x" }))) as Record<string, unknown>;
@@ -210,22 +227,42 @@ describe("placeOrder action", () => {
 
   it("fails when notes exceed 500 chars", async () => {
     const res = await actions.placeOrder!(
-      actionEvent(form([["item_id", "i1"], ["qty", "1"], ["notes", "a".repeat(501)]])),
+      actionEvent(
+        form([
+          ["item_id", "i1"],
+          ["qty", "1"],
+          ["notes", "a".repeat(501)],
+        ]),
+      ),
     );
     expect(res).toMatchObject({ status: 400, data: { error: "備註不可超過 500 字" } });
   });
 
   it("fails when all qty resolve to zero", async () => {
     const res = await actions.placeOrder!(
-      actionEvent(form([["item_id", "i1"], ["qty", "0"]])),
+      actionEvent(
+        form([
+          ["item_id", "i1"],
+          ["qty", "0"],
+        ]),
+      ),
     );
     expect(res).toMatchObject({ status: 400, data: { error: "no items selected" } });
   });
 
   it("maps cutoff error to friendly message", async () => {
-    mockClient.POST.mockResolvedValue({ error: { status: 409, detail: "order: cutoff time has passed" } });
+    mockClient.POST.mockResolvedValue({
+      error: { status: 409, detail: "order: cutoff time has passed" },
+    });
     const res = await actions.placeOrder!(
-      actionEvent(form([["item_id", "i1"], ["qty", "2"], ["plant", "p"], ["supply_date", "d"]])),
+      actionEvent(
+        form([
+          ["item_id", "i1"],
+          ["qty", "2"],
+          ["plant", "p"],
+          ["supply_date", "d"],
+        ]),
+      ),
     );
     expect(res).toMatchObject({ status: 409, data: { error: "已超過截單時間，此日已無法預訂。" } });
   });
@@ -233,13 +270,23 @@ describe("placeOrder action", () => {
   it("uses backend detail then default for other errors", async () => {
     mockClient.POST.mockResolvedValue({ error: { detail: "custom" } });
     const res = await actions.placeOrder!(
-      actionEvent(form([["item_id", "i1"], ["qty", "2"]])),
+      actionEvent(
+        form([
+          ["item_id", "i1"],
+          ["qty", "2"],
+        ]),
+      ),
     );
     expect(res).toMatchObject({ status: 409, data: { error: "custom" } });
 
     mockClient.POST.mockResolvedValue({ error: {} });
     const res2 = await actions.placeOrder!(
-      actionEvent(form([["item_id", "i1"], ["qty", "2"]])),
+      actionEvent(
+        form([
+          ["item_id", "i1"],
+          ["qty", "2"],
+        ]),
+      ),
     );
     expect(res2).toMatchObject({ status: 409, data: { error: "送出預訂失敗，請稍後再試。" } });
   });
@@ -247,7 +294,12 @@ describe("placeOrder action", () => {
   it("fails when response lacks order id", async () => {
     mockClient.POST.mockResolvedValue({ data: { order: {} } });
     const res = await actions.placeOrder!(
-      actionEvent(form([["item_id", "i1"], ["qty", "2"]])),
+      actionEvent(
+        form([
+          ["item_id", "i1"],
+          ["qty", "2"],
+        ]),
+      ),
     );
     expect(res).toMatchObject({ status: 500, data: { error: "no order id in response" } });
   });
@@ -256,12 +308,21 @@ describe("placeOrder action", () => {
     mockClient.POST.mockResolvedValue({ data: { order: { id: "o9" } } });
     await expect(
       actions.placeOrder!(
-        actionEvent(form([["item_id", "i1"], ["qty", "0"], ["item_id", "i2"], ["qty", "3"]])),
+        actionEvent(
+          form([
+            ["item_id", "i1"],
+            ["qty", "0"],
+            ["item_id", "i2"],
+            ["qty", "3"],
+          ]),
+        ),
       ),
     ).rejects.toMatchObject({ status: 303, location: "/orders/o9" });
     expect(mockClient.POST).toHaveBeenCalledWith(
       "/api/employee/orders",
-      expect.objectContaining({ body: expect.objectContaining({ items: [{ menu_item_id: "i2", qty: 3 }] }) }),
+      expect.objectContaining({
+        body: expect.objectContaining({ items: [{ menu_item_id: "i2", qty: 3 }] }),
+      }),
     );
   });
 });
@@ -284,31 +345,60 @@ describe("reorderPast action", () => {
       error: { detail: "nope", unavailable_items: [{ name: "A" }, { name: "B" }] },
     });
     const res = await actions.reorderPast!(
-      actionEvent(form([["source_order_id", "s1"], ["supply_date", "d"]])),
+      actionEvent(
+        form([
+          ["source_order_id", "s1"],
+          ["supply_date", "d"],
+        ]),
+      ),
     );
-    expect(res).toMatchObject({ status: 409, data: { reorderToast: "今日皆無供應：A、B", error: "nope" } });
+    expect(res).toMatchObject({
+      status: 409,
+      data: { reorderToast: "今日皆無供應：A、B", error: "nope" },
+    });
   });
 
   it("on error with no items uses detail fallback for toast", async () => {
     mockClient.POST.mockResolvedValue({ error: { detail: "fail detail" } });
     const res = await actions.reorderPast!(
-      actionEvent(form([["source_order_id", "s1"], ["supply_date", "d"]])),
+      actionEvent(
+        form([
+          ["source_order_id", "s1"],
+          ["supply_date", "d"],
+        ]),
+      ),
     );
-    expect(res).toMatchObject({ status: 409, data: { reorderToast: "fail detail", error: "fail detail" } });
+    expect(res).toMatchObject({
+      status: 409,
+      data: { reorderToast: "fail detail", error: "fail detail" },
+    });
   });
 
   it("on error with neither items nor detail uses generic strings", async () => {
     mockClient.POST.mockResolvedValue({ error: {} });
     const res = await actions.reorderPast!(
-      actionEvent(form([["source_order_id", "s1"], ["supply_date", "d"]])),
+      actionEvent(
+        form([
+          ["source_order_id", "s1"],
+          ["supply_date", "d"],
+        ]),
+      ),
     );
-    expect(res).toMatchObject({ status: 409, data: { reorderToast: "今日皆無供應", error: "reorder failed" } });
+    expect(res).toMatchObject({
+      status: 409,
+      data: { reorderToast: "今日皆無供應", error: "reorder failed" },
+    });
   });
 
   it("fails when no new_order_id", async () => {
     mockClient.POST.mockResolvedValue({ data: {} });
     const res = await actions.reorderPast!(
-      actionEvent(form([["source_order_id", "s1"], ["supply_date", "d"]])),
+      actionEvent(
+        form([
+          ["source_order_id", "s1"],
+          ["supply_date", "d"],
+        ]),
+      ),
     );
     expect(res).toMatchObject({ status: 500 });
   });
@@ -318,7 +408,14 @@ describe("reorderPast action", () => {
       data: { new_order_id: "n1", unavailable_items: [{ name: "X" }] },
     });
     await expect(
-      actions.reorderPast!(actionEvent(form([["source_order_id", "s1"], ["supply_date", "d"]]))),
+      actions.reorderPast!(
+        actionEvent(
+          form([
+            ["source_order_id", "s1"],
+            ["supply_date", "d"],
+          ]),
+        ),
+      ),
     ).rejects.toMatchObject({
       status: 303,
       location: expect.stringContaining("/orders/n1?reorder=partial"),
@@ -328,7 +425,14 @@ describe("reorderPast action", () => {
   it("redirects plainly when all items available", async () => {
     mockClient.POST.mockResolvedValue({ data: { new_order_id: "n2" } });
     await expect(
-      actions.reorderPast!(actionEvent(form([["source_order_id", "s1"], ["supply_date", "d"]]))),
+      actions.reorderPast!(
+        actionEvent(
+          form([
+            ["source_order_id", "s1"],
+            ["supply_date", "d"],
+          ]),
+        ),
+      ),
     ).rejects.toMatchObject({ status: 303, location: "/orders/n2" });
   });
 });

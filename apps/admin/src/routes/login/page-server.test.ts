@@ -51,10 +51,7 @@ describe("login load", () => {
   });
 
   it("returns empty providers when body has no items", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
     const res = (await load(loadEvent())) as Record<string, unknown>;
     expect(res.providers).toEqual([]);
   });

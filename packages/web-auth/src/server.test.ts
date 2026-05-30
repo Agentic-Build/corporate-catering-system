@@ -25,7 +25,11 @@ function cookieEvent() {
     delete: vi.fn(),
   };
   return { cookies, locals: {} as Record<string, unknown> } as never as {
-    cookies: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+    cookies: {
+      get: ReturnType<typeof vi.fn>;
+      set: ReturnType<typeof vi.fn>;
+      delete: ReturnType<typeof vi.fn>;
+    };
     locals: Record<string, unknown>;
   };
 }

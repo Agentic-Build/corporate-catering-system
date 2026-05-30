@@ -48,7 +48,7 @@ func TestDrainHandlerDelayPaths(t *testing.T) {
 	t.Run("delay elapses then responds", func(t *testing.T) {
 		h := NewHealth()
 		rr := httptest.NewRecorder()
-		h.DrainHandler(10 * time.Millisecond)(rr, httptest.NewRequest(http.MethodGet, "/drainz", nil))
+		h.DrainHandler(10*time.Millisecond)(rr, httptest.NewRequest(http.MethodGet, "/drainz", nil))
 		assert.Equal(t, http.StatusOK, rr.Code)
 		assert.JSONEq(t, `{"status":"draining"}`, rr.Body.String())
 		assert.False(t, h.ready.Load())

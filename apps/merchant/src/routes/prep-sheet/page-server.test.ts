@@ -17,7 +17,9 @@ beforeEach(() => {
 
 describe("prep-sheet load", () => {
   it("redirects unauthenticated", async () => {
-    await expect(load({ locals: {}, url: new URL("http://x/prep-sheet") } as never)).rejects.toMatchObject({
+    await expect(
+      load({ locals: {}, url: new URL("http://x/prep-sheet") } as never),
+    ).rejects.toMatchObject({
       status: 303,
     });
   });
@@ -44,12 +46,16 @@ describe("prep-sheet load", () => {
 
   it("uses a default empty sheet on API throw and missing data", async () => {
     mockClient.GET.mockRejectedValueOnce(new Error("boom"));
-    let res = (await load(loadEvent("?date=2026-05-30"))) as { sheet: { total_orders: number; plants: unknown[] } };
+    let res = (await load(loadEvent("?date=2026-05-30"))) as {
+      sheet: { total_orders: number; plants: unknown[] };
+    };
     expect(res.sheet.total_orders).toBe(0);
     expect(res.sheet.plants).toEqual([]);
 
     mockClient.GET.mockResolvedValueOnce({ data: null });
-    res = (await load(loadEvent("?date=2026-05-30"))) as { sheet: { total_orders: number } };
+    res = (await load(loadEvent("?date=2026-05-30"))) as {
+      sheet: { total_orders: number; plants: unknown[] };
+    };
     expect(res.sheet.total_orders).toBe(0);
   });
 });

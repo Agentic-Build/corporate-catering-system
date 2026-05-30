@@ -8,7 +8,10 @@ import { load, actions } from "./+page.server";
 
 const USER = { id: "u1", plant: "tn-c" };
 function loadEvent(user: unknown = USER, search = "") {
-  return { locals: { user, apiToken: "t" }, url: new URL("http://h/menu/recommendations" + search) } as never;
+  return {
+    locals: { user, apiToken: "t" },
+    url: new URL("http://h/menu/recommendations" + search),
+  } as never;
 }
 function actionEvent(fd: FormData, user: unknown = USER, search = "") {
   return {
@@ -37,7 +40,12 @@ describe("recommendations load", () => {
   it("returns chips and includes day query when present", async () => {
     mockClient.GET.mockResolvedValue({ data: { chips: [{ id: "c" }], next_cursor: 1 } });
     const res = await load(loadEvent(USER, "?day=2026-05-05"));
-    expect(res).toMatchObject({ chips: [{ id: "c" }], nextCursor: 1, day: "2026-05-05", error: undefined });
+    expect(res).toMatchObject({
+      chips: [{ id: "c" }],
+      nextCursor: 1,
+      day: "2026-05-05",
+      error: undefined,
+    });
     expect(mockClient.GET).toHaveBeenCalledWith(
       "/api/employee/recommendations",
       expect.objectContaining({ params: { query: { day: "2026-05-05", limit: 20 } } }),
@@ -45,7 +53,7 @@ describe("recommendations load", () => {
   });
   it("omits day query when absent and surfaces error", async () => {
     mockClient.GET.mockResolvedValue({ error: { detail: "boom" } });
-    const res = await load(loadEvent());
+    const res = (await load(loadEvent())) as { error?: string; day?: string };
     expect(res.error).toBe("boom");
     expect(res.day).toBeUndefined();
     expect(mockClient.GET).toHaveBeenCalledWith(
@@ -61,7 +69,9 @@ describe("loadMore action", () => {
   });
   it("error surfaces fail", async () => {
     mockClient.GET.mockResolvedValue({ error: { detail: "e" } });
-    expect(await actions.loadMore!(actionEvent(form([["cursor", "2"]])))).toMatchObject({ status: 400 });
+    expect(await actions.loadMore!(actionEvent(form([["cursor", "2"]])))).toMatchObject({
+      status: 400,
+    });
   });
   it("returns next page with day and defaults cursor", async () => {
     mockClient.GET.mockResolvedValue({ data: { chips: [], next_cursor: 7 } });
@@ -87,7 +97,9 @@ describe("addToCart action", () => {
   it("creates order with home day and user plant", async () => {
     mockClient.GET.mockResolvedValue({ data: { target_day: "2026-07-07" } });
     mockClient.POST.mockResolvedValue({ data: { order: { id: "o1" } } });
-    await expect(actions.addToCart!(actionEvent(form([["menu_item_id", "m1"]])))).rejects.toMatchObject({
+    await expect(
+      actions.addToCart!(actionEvent(form([["menu_item_id", "m1"]]))),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/orders/o1",
     });

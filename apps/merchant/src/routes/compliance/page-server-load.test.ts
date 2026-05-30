@@ -34,7 +34,10 @@ describe("compliance load", () => {
   });
 
   it("redirects non-vendor", async () => {
-    await expect(load(loadEvent({ role: "employee" }))).rejects.toMatchObject({ status: 303, location: "/login" });
+    await expect(load(loadEvent({ role: "employee" }))).rejects.toMatchObject({
+      status: 303,
+      location: "/login",
+    });
   });
 
   it("returns vendor/documents/warnings", async () => {
@@ -53,13 +56,21 @@ describe("compliance load", () => {
 
   it("defaults to null/empty on missing fields and on throw", async () => {
     mockClient.GET.mockResolvedValueOnce({ data: {} });
-    let res = (await load(loadEvent())) as { vendor: unknown; documents: unknown[]; warnings: unknown[] };
+    let res = (await load(loadEvent())) as {
+      vendor: unknown;
+      documents: unknown[];
+      warnings: unknown[];
+    };
     expect(res.vendor).toBeNull();
     expect(res.documents).toEqual([]);
     expect(res.warnings).toEqual([]);
 
     mockClient.GET.mockRejectedValueOnce(new Error("boom"));
-    res = (await load(loadEvent())) as { vendor: unknown; documents: unknown[] };
+    res = (await load(loadEvent())) as {
+      vendor: unknown;
+      documents: unknown[];
+      warnings: unknown[];
+    };
     expect(res.vendor).toBeNull();
     expect(res.documents).toEqual([]);
   });
@@ -83,7 +94,9 @@ describe("compliance.uploadDocument branches", () => {
 
   it("rejects empty file", async () => {
     const empty = new File([], "x.pdf");
-    const res = await actions.uploadDocument!(actionEvent(form({ kind: "insurance", file: empty })));
+    const res = await actions.uploadDocument!(
+      actionEvent(form({ kind: "insurance", file: empty })),
+    );
     expect(res).toMatchObject({ status: 400, data: { uploadError: "請選擇要上傳的檔案" } });
   });
 

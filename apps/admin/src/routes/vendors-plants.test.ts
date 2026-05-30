@@ -11,14 +11,8 @@ import {
   actions as settlementsActions,
 } from "./vendor-settlements/+page.server";
 import { load as vendorsLoad, actions as vendorsActions } from "./vendors/+page.server";
-import {
-  load as vendorLoad,
-  actions as vendorActions,
-} from "./vendors/[id]/+page.server";
-import {
-  load as docsLoad,
-  actions as docsActions,
-} from "./vendors/[id]/documents/+page.server";
+import { load as vendorLoad, actions as vendorActions } from "./vendors/[id]/+page.server";
+import { load as docsLoad, actions as docsActions } from "./vendors/[id]/documents/+page.server";
 
 const ADMIN = { id: "u1", role: "welfare_admin" };
 
@@ -41,9 +35,7 @@ function event(
     url: new URL("http://x" + (opts.url ?? "/p")),
   } as never;
 }
-function loadEvent(
-  opts: { user?: unknown; query?: string; params?: Record<string, string> } = {},
-) {
+function loadEvent(opts: { user?: unknown; query?: string; params?: Record<string, string> } = {}) {
   return {
     locals: { user: "user" in opts ? opts.user : ADMIN, apiToken: "t" },
     url: new URL("http://x/p" + (opts.query ?? "")),
@@ -90,9 +82,9 @@ describe("plants", () => {
       expect.objectContaining({ body: expect.objectContaining({ sort_order: 0 }) }),
     );
     mockClient.POST.mockResolvedValue({ error: { detail: "x" } });
-    expect(
-      await plantsActions.create!(event(form({ code: "P1", label: "L" }))),
-    ).toMatchObject({ status: 500 });
+    expect(await plantsActions.create!(event(form({ code: "P1", label: "L" })))).toMatchObject({
+      status: 500,
+    });
   });
   it("update validates, puts (active flag), surfaces errors", async () => {
     expect(await plantsActions.update!(event(form({ code: "P1" })))).toMatchObject({ status: 400 });
@@ -112,9 +104,9 @@ describe("plants", () => {
       expect.objectContaining({ body: expect.objectContaining({ active: false }) }),
     );
     mockClient.PUT.mockResolvedValue({ error: { detail: "x" } });
-    expect(
-      await plantsActions.update!(event(form({ code: "P1", label: "L" }))),
-    ).toMatchObject({ status: 500 });
+    expect(await plantsActions.update!(event(form({ code: "P1", label: "L" })))).toMatchObject({
+      status: 500,
+    });
   });
 });
 
@@ -140,15 +132,19 @@ describe("vendor-settlements", () => {
     vi.useRealTimers();
     mockClient.GET.mockRejectedValue(new Error("x"));
     expect(
-      ((await settlementsLoad(loadEvent({ query: "?period=2026-01" }))) as {
-        settlements: unknown[];
-      }).settlements,
+      (
+        (await settlementsLoad(loadEvent({ query: "?period=2026-01" }))) as {
+          settlements: unknown[];
+        }
+      ).settlements,
     ).toEqual([]);
     mockClient.GET.mockResolvedValue({ data: null });
     expect(
-      ((await settlementsLoad(loadEvent({ query: "?period=2026-01" }))) as {
-        settlements: unknown[];
-      }).settlements,
+      (
+        (await settlementsLoad(loadEvent({ query: "?period=2026-01" }))) as {
+          settlements: unknown[];
+        }
+      ).settlements,
     ).toEqual([]);
   });
   it("close validates period format and month range, posts, redirects", async () => {
@@ -179,9 +175,7 @@ describe("vendor-settlements", () => {
     });
     mockClient.POST.mockResolvedValue({ data: {} });
     await expect(
-      settlementsActions.voidSettlement!(
-        event(form({ id: "s1" }), { url: "/p?period=2026-04" }),
-      ),
+      settlementsActions.voidSettlement!(event(form({ id: "s1" }), { url: "/p?period=2026-04" })),
     ).rejects.toMatchObject({ status: 303, location: "/vendor-settlements?period=2026-04" });
     await expect(
       settlementsActions.voidSettlement!(event(form({ id: "s1" }), { url: "/p" })),
@@ -222,9 +216,9 @@ describe("vendors list", () => {
     expect(((await vendorsLoad(loadEvent())) as { vendors: unknown[] }).vendors).toEqual([]);
   });
   it("create validates, posts, redirects, surfaces errors", async () => {
-    expect(
-      await vendorsActions.create!(event(form({ display_name: "D" }))),
-    ).toMatchObject({ status: 400 });
+    expect(await vendorsActions.create!(event(form({ display_name: "D" })))).toMatchObject({
+      status: 400,
+    });
     mockClient.POST.mockResolvedValue({ data: {} });
     await expect(
       vendorsActions.create!(
@@ -294,9 +288,9 @@ describe("vendor detail", () => {
 
   it("approve posts plants and redirects, surfaces errors", async () => {
     mockClient.POST.mockResolvedValue({ data: {} });
-    await expect(
-      vendorActions.approve!(event(form({ plants: ["A", "B"] }))),
-    ).rejects.toMatchObject({ status: 303, location: "/vendors/v1" });
+    await expect(vendorActions.approve!(event(form({ plants: ["A", "B"] })))).rejects.toMatchObject(
+      { status: 303, location: "/vendors/v1" },
+    );
     expect(mockClient.POST).toHaveBeenCalledWith("/api/admin/vendors/{id}/approve", {
       params: { path: { id: "v1" } },
       body: { plants: ["A", "B"] },
@@ -315,26 +309,24 @@ describe("vendor detail", () => {
       body: { contact_email: "a@b.com", plants: ["A"] },
     });
     mockClient.PATCH.mockResolvedValue({ error: { detail: "x" } });
-    expect(
-      await vendorActions.update!(event(form({ contact_email: "a@b.com" }))),
-    ).toMatchObject({ status: 500 });
+    expect(await vendorActions.update!(event(form({ contact_email: "a@b.com" })))).toMatchObject({
+      status: 500,
+    });
   });
   it("setPlantWindow validates plant, puts, surfaces errors", async () => {
     expect(await vendorActions.setPlantWindow!(event(form({})))).toMatchObject({ status: 400 });
     mockClient.PUT.mockResolvedValue({ data: {} });
     await expect(
-      vendorActions.setPlantWindow!(
-        event(form({ plant: "A", service_window: " 11:00-13:00 " })),
-      ),
+      vendorActions.setPlantWindow!(event(form({ plant: "A", service_window: " 11:00-13:00 " }))),
     ).rejects.toMatchObject({ status: 303, location: "/vendors/v1" });
     expect(mockClient.PUT).toHaveBeenCalledWith("/api/admin/vendors/{id}/plants/{plant}/window", {
       params: { path: { id: "v1", plant: "A" } },
       body: { service_window: "11:00-13:00" },
     });
     mockClient.PUT.mockResolvedValue({ error: { detail: "x" } });
-    expect(
-      await vendorActions.setPlantWindow!(event(form({ plant: "A" }))),
-    ).toMatchObject({ status: 500 });
+    expect(await vendorActions.setPlantWindow!(event(form({ plant: "A" })))).toMatchObject({
+      status: 500,
+    });
   });
   it("suspend redirects and surfaces errors", async () => {
     mockClient.POST.mockResolvedValue({ data: {} });
@@ -369,9 +361,7 @@ describe("vendor detail", () => {
     });
     mockClient.POST.mockResolvedValue({ error: { detail: "x" } });
     expect(
-      await vendorActions.createOperator!(
-        event(form({ email: "a@b.com", display_name: "Bob" })),
-      ),
+      await vendorActions.createOperator!(event(form({ email: "a@b.com", display_name: "Bob" }))),
     ).toMatchObject({ status: 500 });
   });
   it("suspendOperator posts and surfaces errors", async () => {
@@ -384,9 +374,9 @@ describe("vendor detail", () => {
       { params: { path: { id: "v1", operator_id: "op1" } } },
     );
     mockClient.POST.mockResolvedValue({ error: { detail: "x" } });
-    expect(
-      await vendorActions.suspendOperator!(event(form({ operator_id: "op1" }))),
-    ).toMatchObject({ status: 500 });
+    expect(await vendorActions.suspendOperator!(event(form({ operator_id: "op1" })))).toMatchObject(
+      { status: 500 },
+    );
   });
   it("reinstateOperator posts and surfaces errors", async () => {
     mockClient.POST.mockResolvedValue({ data: {} });
@@ -472,9 +462,7 @@ describe("vendor documents", () => {
   it("upload omits expires_at when blank and surfaces errors", async () => {
     mockClient.POST.mockResolvedValue({ data: {} });
     await expect(
-      docsActions.upload!(
-        event(form({ filename: "f", kind: "insurance", content_base64: "abc" })),
-      ),
+      docsActions.upload!(event(form({ filename: "f", kind: "insurance", content_base64: "abc" }))),
     ).rejects.toMatchObject({ status: 303 });
     expect(mockClient.POST).toHaveBeenLastCalledWith(
       "/api/admin/vendors/{vendor_id}/documents",
@@ -504,12 +492,12 @@ describe("vendor documents", () => {
       params: { path: { id: "d1" } },
       body: { status: "approved", notes: "ok" },
     });
-    expect(
-      await docsActions.review!(event(form({ id: "d1", status: "rejected" }))),
-    ).toEqual({ ok: true });
+    expect(await docsActions.review!(event(form({ id: "d1", status: "rejected" })))).toEqual({
+      ok: true,
+    });
     mockClient.POST.mockResolvedValue({ error: { detail: "x" } });
-    expect(
-      await docsActions.review!(event(form({ id: "d1", status: "approved" }))),
-    ).toMatchObject({ status: 500 });
+    expect(await docsActions.review!(event(form({ id: "d1", status: "approved" })))).toMatchObject({
+      status: 500,
+    });
   });
 });

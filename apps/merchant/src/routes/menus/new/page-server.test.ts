@@ -13,7 +13,10 @@ function loadEvent(user: unknown = VENDOR) {
   return { locals: { user, apiToken: "t" }, url: new URL("http://x/menus/new") } as never;
 }
 function actionEvent(fd: FormData) {
-  return { request: { formData: async () => fd }, locals: { user: VENDOR, apiToken: "t" } } as never;
+  return {
+    request: { formData: async () => fd },
+    locals: { user: VENDOR, apiToken: "t" },
+  } as never;
 }
 function form(entries: Record<string, string>): FormData {
   const fd = new FormData();
@@ -27,7 +30,9 @@ beforeEach(() => {
 
 describe("menus/new load", () => {
   it("redirects unauthenticated", async () => {
-    await expect(load({ locals: {}, url: new URL("http://x/menus/new") } as never)).rejects.toMatchObject({
+    await expect(
+      load({ locals: {}, url: new URL("http://x/menus/new") } as never),
+    ).rejects.toMatchObject({
       status: 303,
       location: "/login?return_to=%2Fmenus%2Fnew",
     });

@@ -31,17 +31,17 @@ describe("+layout.server load", () => {
         path === "/api/employee/orders"
           ? {
               data: {
-                items: [
-                  { status: "placed" },
-                  { status: "cutoff" },
-                  { status: "picked_up" },
-                ],
+                items: [{ status: "placed" }, { status: "cutoff" }, { status: "picked_up" }],
               },
             }
           : { data: { items: [{ code: "tn-a", label: "Plant A" }] } },
       ),
     );
-    const res = await load(event());
+    const res = (await load(event())) as {
+      activeOrders: number;
+      plants: { id: string; label: string }[];
+      user: unknown;
+    };
     expect(res.activeOrders).toBe(2);
     expect(res.plants).toEqual([{ id: "tn-a", label: "Plant A" }]);
     expect(res.user).toEqual(USER);
@@ -53,7 +53,10 @@ describe("+layout.server load", () => {
         ? Promise.reject(new Error("boom"))
         : Promise.resolve({ data: undefined }),
     );
-    const res = await load(event());
+    const res = (await load(event())) as {
+      activeOrders: number;
+      plants: { id: string; label: string }[];
+    };
     expect(res.activeOrders).toBe(0);
     expect(res.plants).toEqual([]);
   });

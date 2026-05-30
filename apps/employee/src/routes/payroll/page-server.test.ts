@@ -56,7 +56,7 @@ describe("payroll load", () => {
         path === "/api/employee/payroll" ? { data: {} } : { data: { total_minor: 0 } },
       ),
     );
-    const res = await load(loadEvent());
+    const res = (await load(loadEvent())) as { entries: unknown[]; currentLines: unknown[] };
     expect(res.entries).toEqual([]);
     expect(res.currentLines).toEqual([]);
   });
@@ -73,40 +73,103 @@ describe("rate action", () => {
     });
   });
   it("400 on out-of-range score", async () => {
-    expect(await actions.rate!(actionEvent(form([["order_id", "o1"], ["score", "9"]])))).toMatchObject({
+    expect(
+      await actions.rate!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["score", "9"],
+          ]),
+        ),
+      ),
+    ).toMatchObject({
       data: { ratingError: "請選擇 1 至 5 顆星的評分" },
     });
   });
   it("400 on non-integer score", async () => {
-    expect(await actions.rate!(actionEvent(form([["order_id", "o1"], ["score", "abc"]])))).toMatchObject({
+    expect(
+      await actions.rate!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["score", "abc"],
+          ]),
+        ),
+      ),
+    ).toMatchObject({
       data: { ratingError: "請選擇 1 至 5 顆星的評分" },
     });
   });
   it("400 when comment too long", async () => {
     expect(
-      await actions.rate!(actionEvent(form([["order_id", "o1"], ["score", "5"], ["comment", "a".repeat(501)]]))),
+      await actions.rate!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["score", "5"],
+            ["comment", "a".repeat(501)],
+          ]),
+        ),
+      ),
     ).toMatchObject({ data: { ratingError: "留言不可超過 500 字" } });
   });
   it("409 maps to already-rated", async () => {
     mockClient.POST.mockResolvedValue({ error: {}, response: { status: 409 } });
-    expect(await actions.rate!(actionEvent(form([["order_id", "o1"], ["score", "5"]])))).toMatchObject({
+    expect(
+      await actions.rate!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["score", "5"],
+          ]),
+        ),
+      ),
+    ).toMatchObject({
       status: 409,
       data: { ratingError: "此訂單已評分過了。" },
     });
   });
   it("non-409 uses detail then default", async () => {
     mockClient.POST.mockResolvedValue({ error: { detail: "d" }, response: { status: 500 } });
-    expect(await actions.rate!(actionEvent(form([["order_id", "o1"], ["score", "5"]])))).toMatchObject({
+    expect(
+      await actions.rate!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["score", "5"],
+          ]),
+        ),
+      ),
+    ).toMatchObject({
       data: { ratingError: "d" },
     });
     mockClient.POST.mockResolvedValue({ error: {}, response: { status: 500 } });
-    expect(await actions.rate!(actionEvent(form([["order_id", "o1"], ["score", "5"]])))).toMatchObject({
+    expect(
+      await actions.rate!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["score", "5"],
+          ]),
+        ),
+      ),
+    ).toMatchObject({
       data: { ratingError: "送出評分失敗，請稍後再試。" },
     });
   });
   it("succeeds", async () => {
     mockClient.POST.mockResolvedValue({ data: { rating: { score: 5 } } });
-    expect(await actions.rate!(actionEvent(form([["order_id", "o1"], ["score", "5"], ["comment", "ok"]])))).toEqual({
+    expect(
+      await actions.rate!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["score", "5"],
+            ["comment", "ok"],
+          ]),
+        ),
+      ),
+    ).toEqual({
       ratingOk: true,
       orderId: "o1",
       rating: { score: 5 },
@@ -125,34 +188,81 @@ describe("complain action", () => {
   });
   it("400 on invalid category", async () => {
     expect(
-      await actions.complain!(actionEvent(form([["order_id", "o1"], ["category", "nope"]]))),
+      await actions.complain!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["category", "nope"],
+          ]),
+        ),
+      ),
     ).toMatchObject({ data: { complaintError: "請選擇問題類型" } });
   });
   it("400 when description out of bounds", async () => {
     expect(
-      await actions.complain!(actionEvent(form([["order_id", "o1"], ["category", "quality"], ["description", "abc"]]))),
+      await actions.complain!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["category", "quality"],
+            ["description", "abc"],
+          ]),
+        ),
+      ),
     ).toMatchObject({ data: { complaintError: "問題描述需介於 5 至 1000 字" } });
   });
   it("409 maps to existing complaint", async () => {
     mockClient.POST.mockResolvedValue({ error: {}, response: { status: 409 } });
     expect(
-      await actions.complain!(actionEvent(form([["order_id", "o1"], ["category", "quality"], ["description", "valid issue"]]))),
+      await actions.complain!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["category", "quality"],
+            ["description", "valid issue"],
+          ]),
+        ),
+      ),
     ).toMatchObject({ status: 409, data: { complaintError: "此訂單已有未結案的客訴。" } });
   });
   it("non-409 uses detail then default", async () => {
     mockClient.POST.mockResolvedValue({ error: { detail: "d" }, response: { status: 500 } });
     expect(
-      await actions.complain!(actionEvent(form([["order_id", "o1"], ["category", "quality"], ["description", "valid issue"]]))),
+      await actions.complain!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["category", "quality"],
+            ["description", "valid issue"],
+          ]),
+        ),
+      ),
     ).toMatchObject({ data: { complaintError: "d" } });
     mockClient.POST.mockResolvedValue({ error: {}, response: { status: 500 } });
     expect(
-      await actions.complain!(actionEvent(form([["order_id", "o1"], ["category", "quality"], ["description", "valid issue"]]))),
+      await actions.complain!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["category", "quality"],
+            ["description", "valid issue"],
+          ]),
+        ),
+      ),
     ).toMatchObject({ data: { complaintError: "送出客訴失敗，請稍後再試。" } });
   });
   it("succeeds", async () => {
     mockClient.POST.mockResolvedValue({ data: { complaint: { id: "c1" } } });
     expect(
-      await actions.complain!(actionEvent(form([["order_id", "o1"], ["category", "quality"], ["description", "valid issue"]]))),
+      await actions.complain!(
+        actionEvent(
+          form([
+            ["order_id", "o1"],
+            ["category", "quality"],
+            ["description", "valid issue"],
+          ]),
+        ),
+      ),
     ).toEqual({ complaintOk: true, orderId: "o1", complaint: { id: "c1" } });
   });
 });
