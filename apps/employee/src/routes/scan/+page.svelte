@@ -75,7 +75,7 @@
   <PageHeader
     eyebrow="Pickup · 掃描核銷"
     title="掃描餐點 QR 領餐"
-    subtitle="對準餐點貼紙上的 QR Code 即可自助核銷；無法掃描時可手動輸入訂單編號。"
+    subtitle="對準餐點貼紙上的 QR Code 即可自助核銷；需商家完成出餐後才可領取。無法掃描時可手動輸入貼紙上的單號。"
   />
 
   {#if form?.ok}
@@ -124,7 +124,7 @@
         {/if}
       </Card>
 
-      <Card title="手動輸入訂單編號" description="無法掃描時，輸入貼紙上的訂單編號（前 8 碼）。">
+      <Card title="手動輸入訂單編號" description="無法掃描時，輸入貼紙上的單號（# 後的數字）。">
         <form
           method="POST"
           action="?/manual"
@@ -138,10 +138,9 @@
             <input
               name="code"
               required
-              maxlength="8"
-              autocapitalize="off"
+              inputmode="numeric"
               autocomplete="off"
-              placeholder="例如 3f9a1c4b"
+              placeholder="例如 23207"
               class="rounded-tb-lg border border-tb-slate-300 px-3 py-2 font-jetbrains-mono text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
             />
           </label>

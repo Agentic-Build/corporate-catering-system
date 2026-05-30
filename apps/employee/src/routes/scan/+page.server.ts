@@ -29,7 +29,7 @@ function pickupError(status: number): string {
     case 404:
       return "找不到這筆訂單。";
     case 409:
-      return "此訂單目前無法取餐：可能供應日尚未到、商家尚未備餐完成，或已領取過。";
+      return "尚無法領取：請確認商家已掃描出餐（備餐完成），且此單尚未被領取。";
     default:
       return "核銷失敗，請稍後再試。";
   }
@@ -72,7 +72,10 @@ export const actions: Actions = {
           o.id.slice(0, 8).toLowerCase() === code),
     );
     if (matches.length === 0) {
-      return fail(404, { error: "找不到符合的待領訂單，請確認編號或改用相機掃描。", manual: true });
+      return fail(404, {
+        error: "找不到可領取的訂單：請確認商家已完成出餐、單號正確，或改用相機掃描。",
+        manual: true,
+      });
     }
     if (matches.length > 1) {
       return fail(400, {
