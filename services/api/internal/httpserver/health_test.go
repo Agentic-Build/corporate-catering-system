@@ -71,7 +71,7 @@ func TestNewWithHealthUsesDependencyReadiness(t *testing.T) {
 			return errors.New("connection refused")
 		},
 	})
-	srv := NewWithHealth(":0", slog.New(slog.NewTextHandler(io.Discard, nil)), &idhttp.API{}, h, nil, nil, MCPOpts{})
+	srv := NewWithHealth(":0", slog.New(slog.NewTextHandler(io.Discard, nil)), &idhttp.API{}, h, nil, MCP{})
 
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	rr := httptest.NewRecorder()

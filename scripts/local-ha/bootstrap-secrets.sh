@@ -20,7 +20,8 @@ mkdir -p "${state_dir}"
 chmod 700 "${state_dir}"
 
 random_hex() {
-  openssl rand -hex "$1"
+  local bytes="$1"
+  openssl rand -hex "$bytes"
 }
 
 if [[ ! -f "${secrets_file}" ]]; then
