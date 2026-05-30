@@ -257,6 +257,28 @@
       <p class="mt-3 rounded-lg bg-tb-rose-50 px-3 py-2 text-sm text-tb-rose-700">{scanError}</p>
     {/if}
     <p class="mt-3 text-xs text-tb-slate-400">掃描成功後系統會自動標記該訂單為備餐完成（出餐）。</p>
+
+    <form
+      method="POST"
+      action="?/markReadyManual"
+      class="mt-4 flex flex-col gap-2 border-t border-tb-slate-100 pt-4"
+    >
+      <span class="text-[11px] font-bold uppercase tracking-eyebrow text-tb-slate-500">
+        無法掃描？手動輸入貼紙單號
+      </span>
+      <input type="hidden" name="date" value={data.date} />
+      <div class="flex gap-2">
+        <input
+          name="code"
+          required
+          inputmode="numeric"
+          autocomplete="off"
+          placeholder="例如 23207"
+          class="flex-1 rounded-tb-lg border border-tb-slate-300 px-3 py-2 font-jetbrains-mono text-sm transition focus:border-tb-red-500 focus:outline-none focus:ring-4 focus:ring-tb-red-100"
+        />
+        <Button variant="primary" size="md" type="submit">標記出餐</Button>
+      </div>
+    </form>
   {/snippet}
   {#snippet footer()}
     <Button variant="secondary" onclick={closeScan}>關閉</Button>
