@@ -87,7 +87,7 @@ func TestMCPAuthEnforce_EmptyOptsRealm(t *testing.T) {
 func TestServerRunShutsDownOnContextCancel(t *testing.T) {
 	srv := New(":0",
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		&idhttp.API{}, nil, nil, MCPOpts{})
+		&idhttp.API{}, nil, MCP{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -112,7 +112,7 @@ func TestServerRunReturnsListenError(t *testing.T) {
 
 	srv := New(ln.Addr().String(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		&idhttp.API{}, nil, nil, MCPOpts{})
+		&idhttp.API{}, nil, MCP{})
 
 	err = srv.Run(context.Background())
 	assert.Error(t, err)
@@ -132,7 +132,7 @@ func TestNewWithExtraRoutesAndDefaultHealth(t *testing.T) {
 				w.WriteHeader(http.StatusTeapot)
 			})
 		},
-		nil, MCPOpts{})
+		MCP{})
 	assert.True(t, hit)
 
 	rr := httptest.NewRecorder()
@@ -152,7 +152,7 @@ func TestNewWithAPIBuilder(t *testing.T) {
 	built := false
 	srv := New(":0",
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		&idhttp.API{}, nil, nil, MCPOpts{},
+		&idhttp.API{}, nil, MCP{},
 		func(api huma.API) {
 			built = true
 			huma.Get(api, "/ping", func(_ context.Context, _ *struct{}) (*struct {
