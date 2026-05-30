@@ -52,8 +52,8 @@ timeout_seconds() {
   fi
   case "${unit}" in
     s) echo "${number}" ;;
-    m) echo "$(( number * 60 ))" ;;
-    h) echo "$(( number * 3600 ))" ;;
+    m) echo "$(( number*60 ))" ;;
+    h) echo "$(( number*3600 ))" ;;
   esac
 }
 

@@ -30,8 +30,7 @@ func boot(t *testing.T, opts httpserver.MCPOpts) *httptest.Server {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		idAPI,
 		func(_ chi.Router) {},
-		mcp,
-		opts,
+		httpserver.MCP{Server: mcp, Opts: opts},
 	)
 	require.NotNil(t, hs)
 	return httptest.NewServer(hs.Handler())

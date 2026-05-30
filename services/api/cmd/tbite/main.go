@@ -233,8 +233,10 @@ func runAPI(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	)
 	srv := httpserver.NewWithHealth(cfg.HTTPAddr, logger, idAPI, apiHealth,
 		hydraRouter(hb, menuAPI, cfg.HydraPublicURL),
-		mcpSrv,
-		httpserver.MCPOpts{PublicBaseURL: cfg.OIDCCallbackBaseURL, AuthorizationServers: mcpAuthServers(cfg)},
+		httpserver.MCP{
+			Server: mcpSrv,
+			Opts:   httpserver.MCPOpts{PublicBaseURL: cfg.OIDCCallbackBaseURL, AuthorizationServers: mcpAuthServers(cfg)},
+		},
 		(&vhttp.API{Svc: cs.Vendor}).Register,
 		(&phttp.API{Svc: &plants.Service{Repo: ppgrepo.NewPlantRepo(inf.pool)}, VendorSvc: cs.Vendor}).Register,
 		menuAPI.Register,

@@ -37,23 +37,30 @@ type MCPOpts struct {
 	AuthorizationServers []string
 }
 
+// MCP bundles the optional MCP transport: the server to mount and its
+// transport options. A nil Server skips the /mcp mount entirely.
+type MCP struct {
+	Server *mcpsrv.MCPServer
+	Opts   MCPOpts
+}
+
 // New constructs the HTTP server. extraRoutes (optional) attaches chi handlers
 // after standard routes; apiBuilders register more huma API modules onto the
-// shared API. When mcp != nil, the MCP Streamable HTTP transport mounts at
+// shared API. When mcp.Server != nil, the MCP Streamable HTTP transport mounts at
 // /mcp; unauthenticated POSTs return 401 + WWW-Authenticate pointing at
 // /.well-known/oauth-protected-resource.
-func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(chi.Router), mcp *mcpsrv.MCPServer, mcpOpts MCPOpts, apiBuilders ...func(huma.API)) *Server {
-	return newServer(addr, logger, idAPI, nil, extraRoutes, mcp, mcpOpts, apiBuilders...)
+func New(addr string, logger *slog.Logger, idAPI *idhttp.API, extraRoutes func(chi.Router), mcp MCP, apiBuilders ...func(huma.API)) *Server {
+	return newServer(addr, logger, idAPI, nil, extraRoutes, mcp, apiBuilders...)
 }
 
 // NewWithHealth constructs the HTTP server with dependency-aware health
 // endpoints. API roles that own hard runtime dependencies should use this so
 // /readyz reflects whether those dependencies can serve requests.
-func NewWithHealth(addr string, logger *slog.Logger, idAPI *idhttp.API, health *Health, extraRoutes func(chi.Router), mcp *mcpsrv.MCPServer, mcpOpts MCPOpts, apiBuilders ...func(huma.API)) *Server {
-	return newServer(addr, logger, idAPI, health, extraRoutes, mcp, mcpOpts, apiBuilders...)
+func NewWithHealth(addr string, logger *slog.Logger, idAPI *idhttp.API, health *Health, extraRoutes func(chi.Router), mcp MCP, apiBuilders ...func(huma.API)) *Server {
+	return newServer(addr, logger, idAPI, health, extraRoutes, mcp, apiBuilders...)
 }
 
-func newServer(addr string, logger *slog.Logger, idAPI *idhttp.API, health *Health, extraRoutes func(chi.Router), mcp *mcpsrv.MCPServer, mcpOpts MCPOpts, apiBuilders ...func(huma.API)) *Server {
+func newServer(addr string, logger *slog.Logger, idAPI *idhttp.API, health *Health, extraRoutes func(chi.Router), mcp MCP, apiBuilders ...func(huma.API)) *Server {
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return otelhttp.NewHandler(next, "tbite.http")
@@ -98,8 +105,8 @@ func newServer(addr string, logger *slog.Logger, idAPI *idhttp.API, health *Heal
 		build(api)
 	}
 
-	if mcp != nil {
-		mountMCP(r, logger, mcp, mcpOpts)
+	if mcp.Server != nil {
+		mountMCP(r, logger, mcp.Server, mcp.Opts)
 	}
 
 	if extraRoutes != nil {

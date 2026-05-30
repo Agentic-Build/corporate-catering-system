@@ -20,17 +20,22 @@ original_s3_present=false
 original_s3_value=""
 baseline_app_dependency_degraded_seconds=0
 baseline_dependency_readiness_changes=0
+readonly PANEL_DATA_SERVICE_AVAILABILITY="Data service availability"
+readonly PANEL_DEPENDENCY_READINESS_HEALTH="Dependency readiness and scaler health"
 
 float_ge() {
-  awk -v left="$1" -v right="$2" 'BEGIN { exit !(left >= right) }'
+  local left="$1" right="$2"
+  awk -v left="$left" -v right="$right" 'BEGIN { exit !(left >= right) }'
 }
 
 float_gt() {
-  awk -v left="$1" -v right="$2" 'BEGIN { exit !(left > right) }'
+  local left="$1" right="$2"
+  awk -v left="$left" -v right="$right" 'BEGIN { exit !(left > right) }'
 }
 
 float_le() {
-  awk -v left="$1" -v right="$2" 'BEGIN { exit !(left <= right) }'
+  local left="$1" right="$2"
+  awk -v left="$left" -v right="$right" 'BEGIN { exit !(left <= right) }'
 }
 
 start_vm_port_forward() {
@@ -140,23 +145,23 @@ dashboard_target_value() {
 }
 
 dashboard_data_database_degraded() {
-  dashboard_target_value "Data service availability" "database service degraded"
+  dashboard_target_value "${PANEL_DATA_SERVICE_AVAILABILITY}" "database service degraded"
 }
 
 dashboard_data_messaging_degraded() {
-  dashboard_target_value "Data service availability" "messaging service degraded"
+  dashboard_target_value "${PANEL_DATA_SERVICE_AVAILABILITY}" "messaging service degraded"
 }
 
 dashboard_data_cache_degraded() {
-  dashboard_target_value "Data service availability" "cache service degraded"
+  dashboard_target_value "${PANEL_DATA_SERVICE_AVAILABILITY}" "cache service degraded"
 }
 
 dashboard_data_object_storage_degraded() {
-  dashboard_target_value "Data service availability" "object storage service degraded"
+  dashboard_target_value "${PANEL_DATA_SERVICE_AVAILABILITY}" "object storage service degraded"
 }
 
 dashboard_data_app_dependency_clients_degraded() {
-  dashboard_target_value "Data service availability" "app dependency clients degraded"
+  dashboard_target_value "${PANEL_DATA_SERVICE_AVAILABILITY}" "app dependency clients degraded"
 }
 
 dashboard_data_app_dependency_clients_degraded_seconds_10m() {
@@ -164,19 +169,19 @@ dashboard_data_app_dependency_clients_degraded_seconds_10m() {
 }
 
 dashboard_dependency_database_clients_not_ready() {
-  dashboard_target_value "Dependency readiness and scaler health" "database clients not-ready"
+  dashboard_target_value "${PANEL_DEPENDENCY_READINESS_HEALTH}" "database clients not-ready"
 }
 
 dashboard_dependency_messaging_clients_not_ready() {
-  dashboard_target_value "Dependency readiness and scaler health" "messaging clients not-ready"
+  dashboard_target_value "${PANEL_DEPENDENCY_READINESS_HEALTH}" "messaging clients not-ready"
 }
 
 dashboard_dependency_cache_clients_not_ready() {
-  dashboard_target_value "Dependency readiness and scaler health" "cache clients not-ready"
+  dashboard_target_value "${PANEL_DEPENDENCY_READINESS_HEALTH}" "cache clients not-ready"
 }
 
 dashboard_dependency_object_storage_clients_not_ready() {
-  dashboard_target_value "Dependency readiness and scaler health" "object storage clients not-ready"
+  dashboard_target_value "${PANEL_DEPENDENCY_READINESS_HEALTH}" "object storage clients not-ready"
 }
 
 dashboard_object_storage_dependency_ready_series() {
@@ -184,7 +189,7 @@ dashboard_object_storage_dependency_ready_series() {
 }
 
 dashboard_dependency_readiness_changes_10m() {
-  dashboard_target_value "Dependency readiness and scaler health" "dependency readiness changes / 10m"
+  dashboard_target_value "${PANEL_DEPENDENCY_READINESS_HEALTH}" "dependency readiness changes / 10m"
 }
 
 dashboard_api_not_ready_pods() {
