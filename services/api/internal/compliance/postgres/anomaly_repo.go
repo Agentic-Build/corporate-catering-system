@@ -13,7 +13,7 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
 )
 
-type AnomalyRepo struct{ pool *pgxpool.Pool }
+type AnomalyRepo struct{ pool queryer }
 
 func NewAnomalyRepo(p *pgxpool.Pool) *AnomalyRepo { return &AnomalyRepo{pool: p} }
 

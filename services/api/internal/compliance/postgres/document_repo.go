@@ -12,7 +12,7 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/compliance"
 )
 
-type DocumentRepo struct{ pool *pgxpool.Pool }
+type DocumentRepo struct{ pool queryer }
 
 func NewDocumentRepo(p *pgxpool.Pool) *DocumentRepo { return &DocumentRepo{pool: p} }
 

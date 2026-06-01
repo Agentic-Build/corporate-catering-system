@@ -290,6 +290,37 @@ func TestLoginHandler_StateStoreError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 }
 
+// buildAuthErrProvider implements oidc.Provider with a BuildAuthURL that fails,
+// exercising LoginHandler's "build auth url" error branch.
+type buildAuthErrProvider struct{}
+
+func (buildAuthErrProvider) Name() string        { return "authentik" }
+func (buildAuthErrProvider) DisplayName() string { return "Authentik" }
+func (buildAuthErrProvider) BuildAuthURL(ctx context.Context, state string) (*oidc.AuthURL, error) {
+	return nil, assertErr
+}
+func (buildAuthErrProvider) Exchange(ctx context.Context, code, pkceVerifier, nonce string) (*oidc.Userinfo, error) {
+	return nil, assertErr
+}
+
+func TestLoginHandler_BuildAuthURLError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"skip":false}`))
+	}))
+	defer srv.Close()
+
+	b := &hydra.Bridge{
+		Hydra:            &hydra.AdminClient{BaseURL: srv.URL, HTTP: srv.Client()},
+		OIDCProvider:     buildAuthErrProvider{},
+		OIDCProviderName: "authentik",
+		States:           newFakeStates(),
+	}
+	rr := httptest.NewRecorder()
+	b.LoginHandler(rr, httptest.NewRequest(http.MethodGet, "/oauth/login?login_challenge=chal", nil))
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "build auth url")
+}
+
 // === CallbackHandler ===
 
 // callbackBridge wires a Bridge whose OIDC exchange succeeds against iss,

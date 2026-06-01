@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -215,6 +216,43 @@ func TestDiscoveryShim_BodyReadError(t *testing.T) {
 	})}
 	_, err := shim.Doc(context.Background())
 	require.Error(t, err)
+}
+
+// TestDiscoveryShim_DoubleCheckCacheHit exercises the post-write-lock
+// double-check branch in Doc. That branch is reachable only when a caller
+// clears the RLock cache-miss section, then parks on d.mu.Lock() and finds the
+// cache freshly populated by the goroutine that won the write lock. We provoke
+// it by releasing a burst of concurrent callers at the same instant against a
+// fresh shim: several clear the RLock miss before any one takes the write lock,
+// so losers queue on d.mu.Lock() and run the double-check once the winner
+// populates the cache. Repeated across many fresh shims so the window lands.
+func TestDiscoveryShim_DoubleCheckCacheHit(t *testing.T) {
+	for attempt := 0; attempt < 4000; attempt++ {
+		shim := hydra.NewDiscoveryShim("http://hydra.local")
+		shim.HTTP = &http.Client{Transport: discRT(func(r *http.Request) (*http.Response, error) {
+			body := io.NopCloser(strings.NewReader(`{"issuer":"http://x/"}`))
+			return &http.Response{StatusCode: http.StatusOK, Body: body, Header: http.Header{}}, nil
+		})}
+
+		// Fire a burst of callers at the same instant. Several will clear the
+		// RLock cache-miss section before any one of them takes the write lock;
+		// all but the winner then queue on d.mu.Lock() and, once the winner
+		// populates the cache, run the post-lock double-check branch.
+		var wg sync.WaitGroup
+		const callers = 16
+		start := make(chan struct{})
+		for i := 0; i < callers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start // release all goroutines simultaneously
+				_, err := shim.Doc(context.Background())
+				assert.NoError(t, err)
+			}()
+		}
+		close(start)
+		wg.Wait()
+	}
 }
 
 func TestReverseProxy_BadURL(t *testing.T) {

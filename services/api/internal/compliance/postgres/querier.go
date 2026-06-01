@@ -13,3 +13,12 @@ type pgxQuerier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
+
+// queryer is the subset of *pgxpool.Pool used by the repos in this package.
+// Declaring it as a seam lets tests drive the repos with a pgxmock pool.
+// Both *pgxpool.Pool and pgxmock.PgxPoolIface satisfy it.
+type queryer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}

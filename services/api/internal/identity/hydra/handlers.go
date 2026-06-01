@@ -25,7 +25,7 @@ type Bridge struct {
 
 	// OIDCProvider is used directly (not via identity.Service.StartLogin) since
 	// we want only the user ID for the Hydra subject claim, not a frontend session.
-	OIDCProvider *oidc.OIDCProvider
+	OIDCProvider oidc.Provider
 	// OIDCProviderName matches the slug used for UserIdentity rows (AUTH_PROVIDER_SLUGS).
 	OIDCProviderName string
 

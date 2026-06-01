@@ -267,6 +267,23 @@ func TestAuthProvidersFromEnvSkipsEmptySlugTokens(t *testing.T) {
 	}
 }
 
+func TestAuthProvidersFromEnvSkipsWhitespaceOnlySlug(t *testing.T) {
+	// A carriage-return token survives FieldsFunc (which only splits on
+	// comma/space/tab/newline) but TrimSpace reduces it to "", exercising the
+	// empty-slug "continue" guard inside the loop.
+	t.Setenv("AUTH_PROVIDER_SLUGS", "authentik,\r,keycloak")
+	providers, err := authProvidersFromEnv()
+	if err != nil {
+		t.Fatalf("authProvidersFromEnv() error = %v", err)
+	}
+	if len(providers) != 2 {
+		t.Fatalf("authProvidersFromEnv() len = %d, want 2 (whitespace-only slug skipped)", len(providers))
+	}
+	if providers[0].Slug != "authentik" || providers[1].Slug != "keycloak" {
+		t.Fatalf("unexpected slugs: %#v", providers)
+	}
+}
+
 func TestAuthProvidersFromEnvEmptyReturnsNil(t *testing.T) {
 	t.Setenv("AUTH_PROVIDER_SLUGS", "   ")
 	providers, err := authProvidersFromEnv()
