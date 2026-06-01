@@ -884,6 +884,33 @@ func TestListEscalatedComplaints_OK(t *testing.T) {
 	assert.Equal(t, "escalated", out.Items[0].Status)
 }
 
+func TestListEscalatedComplaints_ResolvedBySerialized(t *testing.T) {
+	// A resolved complaint carries a non-nil ResolvedBy; toComplaintDTO must
+	// copy it into the resolved_by field.
+	srv, f := buildHandler(t, adminUser())
+	resolver := "adm-7"
+	resolvedAt := now.Add(time.Hour)
+	f.complaints.byStatus[feedback.StatusEscalated] = []*feedback.Complaint{
+		{ID: complaintID, OrderID: orderID, UserID: employeeID, VendorID: vendorID,
+			Status: feedback.StatusResolved, Category: feedback.CategoryOther, Description: "x",
+			Resolution: "committee decision", ResolvedBy: &resolver, ResolvedAt: &resolvedAt, CreatedAt: now},
+	}
+	resp := do(t, http.MethodGet, srv.URL+"/api/admin/complaints", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var out struct {
+		Items []struct {
+			ID         string  `json:"id"`
+			ResolvedBy *string `json:"resolved_by"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.Len(t, out.Items, 1)
+	require.NotNil(t, out.Items[0].ResolvedBy)
+	assert.Equal(t, resolver, *out.Items[0].ResolvedBy)
+}
+
 func TestListEscalatedComplaints_RepoError_500(t *testing.T) {
 	srv, f := buildHandler(t, adminUser())
 	f.complaints.listErr = errors.New("db down")

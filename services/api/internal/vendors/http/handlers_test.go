@@ -119,12 +119,13 @@ func TestRequireAdmin_RejectsAnonymous(t *testing.T) {
 }
 
 type fakeVendorRepo struct {
-	mu      sync.Mutex
-	byID    map[string]*vendor.Vendor
-	byEmail map[string]*vendor.Vendor
-	nextID  int
-	getErr  error
-	listErr error
+	mu        sync.Mutex
+	byID      map[string]*vendor.Vendor
+	byEmail   map[string]*vendor.Vendor
+	nextID    int
+	getErr    error
+	listErr   error
+	createErr error
 }
 
 func newFakeVendorRepo() *fakeVendorRepo {
@@ -134,6 +135,9 @@ func newFakeVendorRepo() *fakeVendorRepo {
 func (r *fakeVendorRepo) Create(_ context.Context, v *vendor.Vendor) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.createErr != nil {
+		return r.createErr
+	}
 	r.nextID++
 	v.ID = "vendor-" + strconv.Itoa(r.nextID)
 	v.CreatedAt = time.Now().UTC()
@@ -1017,4 +1021,111 @@ func TestMerchantUpdateSettings_VendorNotFound(t *testing.T) {
 		`{"cutoff_hour":15,"preorder_window_days":5}`)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+// === POST /api/admin/vendors (create error path) ===
+
+func TestCreateVendor_RepoError_500(t *testing.T) {
+	srv, vr, _, _, _ := buildHandler(t, adminUser())
+	vr.createErr = errors.New("db down")
+	resp := do(t, http.MethodPost, srv.URL+"/api/admin/vendors",
+		`{"display_name":"稻禾","legal_name":"稻禾股份","contact_email":"ops@daohe.tw"}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
+// === PATCH /api/admin/vendors/{id} ===
+
+func TestUpdateVendor_WrongRole(t *testing.T) {
+	srv, _, _, _, _ := buildHandler(t, vendorUser())
+	resp := do(t, http.MethodPatch, srv.URL+"/api/admin/vendors/"+vendorID,
+		`{"contact_email":"new@daohe.tw"}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+}
+
+func TestUpdateVendor_InvalidUUID_422(t *testing.T) {
+	srv, _, _, _, _ := buildHandler(t, adminUser())
+	resp := do(t, http.MethodPatch, srv.URL+"/api/admin/vendors/not-a-uuid",
+		`{"contact_email":"new@daohe.tw"}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+}
+
+func TestUpdateVendor_NotFound(t *testing.T) {
+	srv, _, _, _, _ := buildHandler(t, adminUser())
+	resp := do(t, http.MethodPatch, srv.URL+"/api/admin/vendors/"+vendorID,
+		`{"contact_email":"new@daohe.tw"}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestUpdateVendor_OK_EmailAndPlants(t *testing.T) {
+	srv, vr, pr, _, _ := buildHandler(t, adminUser())
+	v := seedVendor(vr, vendorID, vendor.StatusApproved)
+	// Set ApprovedAt so toDTO serializes the approved_at field branch.
+	approvedAt := time.Date(2026, 5, 31, 8, 0, 0, 0, time.UTC)
+	v.ApprovedAt = &approvedAt
+	resp := do(t, http.MethodPatch, srv.URL+"/api/admin/vendors/"+vendorID,
+		`{"contact_email":"New@Daohe.tw","plants":["F12B-3F","F15-2F"]}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var out struct {
+		Vendor struct {
+			ID            string   `json:"id"`
+			Status        string   `json:"status"`
+			ApprovedAt    string   `json:"approved_at"`
+			Plants        []string `json:"plants"`
+			PlantMappings []struct {
+				Plant         string `json:"plant"`
+				ServiceWindow string `json:"service_window"`
+			} `json:"plant_mappings"`
+		} `json:"vendor"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	assert.Equal(t, vendorID, out.Vendor.ID)
+	assert.Equal(t, "2026-05-31T08:00:00Z", out.Vendor.ApprovedAt)
+	assert.Equal(t, []string{"F12B-3F", "F15-2F"}, out.Vendor.Plants)
+	require.Len(t, out.Vendor.PlantMappings, 2)
+	// plant set is persisted in the repo.
+	require.Len(t, pr.byVendor[vendorID], 2)
+}
+
+// TestUpdateVendor_OK_EmailOnly_SkipsInactiveMapping updates only the contact
+// email (no plants), leaving the pre-seeded mappings untouched. The inactive
+// mapping must be filtered out of the response, exercising the !m.Active skip.
+func TestUpdateVendor_OK_EmailOnly_SkipsInactiveMapping(t *testing.T) {
+	srv, vr, pr, _, _ := buildHandler(t, adminUser())
+	seedVendor(vr, vendorID, vendor.StatusApproved)
+	pr.byVendor[vendorID] = []*vendor.PlantMapping{
+		{VendorID: vendorID, Plant: "F12B-3F", Active: true, ServiceWindow: "11:30-13:00"},
+		{VendorID: vendorID, Plant: "F15-2F", Active: false, ServiceWindow: "12:00-13:00"}, // inactive → skipped
+	}
+	resp := do(t, http.MethodPatch, srv.URL+"/api/admin/vendors/"+vendorID,
+		`{"contact_email":"New@Daohe.tw"}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var out struct {
+		Vendor struct {
+			Plants        []string `json:"plants"`
+			PlantMappings []struct {
+				Plant string `json:"plant"`
+			} `json:"plant_mappings"`
+		} `json:"vendor"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	assert.Equal(t, []string{"F12B-3F"}, out.Vendor.Plants)
+	require.Len(t, out.Vendor.PlantMappings, 1)
+}
+
+func TestUpdateVendor_PlantsRepoError_500(t *testing.T) {
+	srv, vr, pr, _, _ := buildHandler(t, adminUser())
+	seedVendor(vr, vendorID, vendor.StatusApproved)
+	pr.setErr = errors.New("db down")
+	resp := do(t, http.MethodPatch, srv.URL+"/api/admin/vendors/"+vendorID,
+		`{"plants":["F12B-3F"]}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }

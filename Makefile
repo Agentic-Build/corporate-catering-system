@@ -187,7 +187,12 @@ coverage-go: ## Go coverage of internal/ (excludes cmd wiring + load tool); seri
 	@TESTCONTAINERS_RYUK_DISABLED=true go test ./services/api/internal/... \
 		-coverprofile=coverage.out -covermode=atomic -p 1 -timeout 25m
 	@go tool cover -html=coverage.out -o coverage.html
-	@echo "==> total:"; go tool cover -func=coverage.out | tail -1
+	@echo "==> total (raw):"; go tool cover -func=coverage.out | tail -1
+	@# Effective coverage excludes genuinely untestable infra that requires a live
+	@# external runtime (documented in docs/plans/2026-05-31-test-coverage-99.md):
+	@#   platform/leader — K8s Lease leader election (needs an in-cluster API server)
+	@grep -vE 'internal/platform/leader/' coverage.out > coverage.eff.out || true
+	@echo "==> total (effective, excl. K8s leader-election infra):"; go tool cover -func=coverage.eff.out | tail -1
 	@echo "==> wrote coverage.out + coverage.html"
 
 coverage-web: ## Frontend coverage (vitest v8). Requires: pnpm install (adds @vitest/coverage-v8)

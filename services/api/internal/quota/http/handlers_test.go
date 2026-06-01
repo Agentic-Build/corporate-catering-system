@@ -58,6 +58,7 @@ type fakeSupplyRepo struct {
 	byKey     map[supplyKey]*quota.Supply
 	vendor    map[string]string // itemID -> vendorID, for ListByVendor
 	upsertErr error
+	listErr   error
 }
 
 func newFakeSupplyRepo() *fakeSupplyRepo {
@@ -81,6 +82,9 @@ func (r *fakeSupplyRepo) Get(_ context.Context, id string, date time.Time) (*quo
 	return nil, quota.ErrSupplyNotFound
 }
 func (r *fakeSupplyRepo) ListByVendor(_ context.Context, v string, date time.Time) ([]*quota.Supply, error) {
+	if r.listErr != nil {
+		return nil, r.listErr
+	}
 	var out []*quota.Supply
 	for k, s := range r.byKey {
 		if s.SupplyDate.Equal(date) && r.vendor[k.itemID] == v {
@@ -268,6 +272,23 @@ func TestSetSoldOut_OK(t *testing.T) {
 	assert.Equal(t, 50, out.Supply.Remain, "remain untouched by sold-out")
 }
 
+func TestSetSoldOut_Unauthenticated(t *testing.T) {
+	srv, _, _ := buildHandler(t, nil)
+	resp := do(t, http.MethodPost, srv.URL+"/api/merchant/supply/"+itemID+"/2026-05-14/sold-out",
+		`{"sold_out":true}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestSetSoldOut_InvalidDate(t *testing.T) {
+	srv, _, ir := buildHandler(t, vendorUser())
+	ir.seed(itemID, vendorID)
+	resp := do(t, http.MethodPost, srv.URL+"/api/merchant/supply/"+itemID+"/not-a-date/sold-out",
+		`{"sold_out":true}`)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
 func TestSetSoldOut_SupplyNotFound_404(t *testing.T) {
 	srv, _, ir := buildHandler(t, vendorUser())
 	ir.seed(itemID, vendorID) // item exists but no supply row for the date
@@ -317,6 +338,21 @@ func TestList_DefaultsToToday(t *testing.T) {
 	today := time.Now().UTC().Format("2006-01-02")
 	assert.Equal(t, today, out.Date)
 	assert.Empty(t, out.Items)
+}
+
+func TestList_InvalidDate(t *testing.T) {
+	srv, _, _ := buildHandler(t, vendorUser())
+	resp := do(t, http.MethodGet, srv.URL+"/api/merchant/supply?date=not-a-date", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestList_RepoError_500(t *testing.T) {
+	srv, sr, _ := buildHandler(t, vendorUser())
+	sr.listErr = errors.New("db down")
+	resp := do(t, http.MethodGet, srv.URL+"/api/merchant/supply?date=2026-05-14", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
 func TestList_Unauthenticated(t *testing.T) {

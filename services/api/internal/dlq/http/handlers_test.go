@@ -353,6 +353,25 @@ func TestReplay_PublishError_500(t *testing.T) {
 	assert.Empty(t, repo.replayCalls, "row not stamped when publish fails")
 }
 
+// A payload that cannot be JSON-marshalled (channels are unsupported) makes the
+// pre-publish json.Marshal fail and must surface as 500 without ever publishing.
+func TestReplay_MarshalError_500(t *testing.T) {
+	js := &fakeJS{}
+	srv, repo := buildHandler(t, adminUser(), js)
+	repo.seed(&dlq.Message{
+		ID:            msgID,
+		SourceSubject: "orders.created",
+		Payload:       map[string]any{"bad": make(chan int)},
+		FirstSeenAt:   time.Now(),
+	})
+
+	resp := do(t, http.MethodPost, srv.URL+"/api/admin/dlq/"+msgID+"/replay", "")
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	assert.Empty(t, js.subjects, "nothing published when payload cannot be marshalled")
+	assert.Empty(t, repo.replayCalls, "row not stamped when marshal fails")
+}
+
 func TestReplay_GetError_500(t *testing.T) {
 	srv, repo := buildHandler(t, adminUser(), &fakeJS{})
 	repo.getErr = errors.New("db down")

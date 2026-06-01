@@ -74,6 +74,12 @@ func migrateUp(dsn string) error {
 	if err != nil {
 		return err
 	}
+	// Close the migrate instance (and its leaked database/sql connection +
+	// background connection-opener goroutine) once migration finishes. Without
+	// this each setupPostgres leaks a *sql.DB pointed at a container that later
+	// gets Terminate()d, and under many tests one of those leaked openers panics
+	// in database/sql and crashes the whole test binary.
+	defer func() { _, _ = m.Close() }()
 	return m.Up()
 }
 

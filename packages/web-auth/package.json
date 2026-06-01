@@ -17,9 +17,12 @@
   "devDependencies": {
     "@sveltejs/kit": "^2.61.1",
     "@tbite/api-client": "workspace:*",
-    "typescript": "^5.9.3"
+    "@vitest/coverage-v8": "^4.1.7",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
   },
   "scripts": {
-    "check": "tsc --noEmit -p tsconfig.json"
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
   }
 }

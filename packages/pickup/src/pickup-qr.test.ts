@@ -14,6 +14,13 @@ describe("pickup QR payload", () => {
   it("returns null when order param missing", () => {
     expect(parsePickupQR("tbite://pickup")).toBeNull();
   });
+  it("returns null when order param present but empty", () => {
+    expect(parsePickupQR("tbite://pickup?order=")).toBeNull();
+  });
+  it("returns null for nullish input", () => {
+    expect(parsePickupQR(null as unknown as string)).toBeNull();
+    expect(parsePickupQR(undefined as unknown as string)).toBeNull();
+  });
   it("returns null for wrong scheme/host", () => {
     expect(parsePickupQR("https://evil?order=x")).toBeNull();
     expect(parsePickupQR("tbite://other?order=x")).toBeNull();

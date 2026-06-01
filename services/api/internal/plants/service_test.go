@@ -2,6 +2,7 @@ package plants_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -127,6 +128,51 @@ func TestService_Update_NotFound(t *testing.T) {
 	svc := newSvc()
 	_, err := svc.Update(context.Background(), "nonexistent", "label", "", true, 0)
 	assert.ErrorIs(t, err, plants.ErrPlantNotFound)
+}
+
+// errUpdateRepo lets Get succeed but Update fail, to cover the Repo.Update error path.
+type errUpdateRepo struct {
+	*fakePlantRepo
+	updateErr error
+}
+
+func (r *errUpdateRepo) Update(_ context.Context, _ *plants.Plant) error {
+	return r.updateErr
+}
+
+func TestService_Update_RepoError(t *testing.T) {
+	fake := newFakeRepo()
+	fake.data["tn-a"] = &plants.Plant{Code: "tn-a", Label: "A", Active: true}
+	boom := errors.New("update boom")
+	svc := &plants.Service{Repo: &errUpdateRepo{fakePlantRepo: fake, updateErr: boom}}
+
+	_, err := svc.Update(context.Background(), "tn-a", "新名", "新址", false, 3)
+	assert.ErrorIs(t, err, boom)
+}
+
+func TestService_Get(t *testing.T) {
+	svc := newSvc()
+	_, err := svc.Create(context.Background(), "tn-a", "A", "addr", 0)
+	require.NoError(t, err)
+
+	got, err := svc.Get(context.Background(), "tn-a")
+	require.NoError(t, err)
+	assert.Equal(t, "tn-a", got.Code)
+	assert.Equal(t, "addr", got.Address)
+
+	_, err = svc.Get(context.Background(), "missing")
+	assert.ErrorIs(t, err, plants.ErrPlantNotFound)
+}
+
+func TestService_ListAll(t *testing.T) {
+	svc := newSvc()
+	_, _ = svc.Create(context.Background(), "tn-a", "A", "", 1)
+	_, _ = svc.Create(context.Background(), "tn-b", "B", "", 2)
+	_, _ = svc.Update(context.Background(), "tn-b", "B", "", false, 2) // inactive
+
+	list, err := svc.ListAll(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, list, 2) // includes inactive
 }
 
 func TestService_ListActive(t *testing.T) {
