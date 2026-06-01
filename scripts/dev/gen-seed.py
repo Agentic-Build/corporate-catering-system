@@ -285,19 +285,19 @@ def main() -> None:
     w("")
 
     # ---- menu_item_image ---------------------------------------------------
-    # Each store shares one representative image (mvpRepresentativeItemImage),
-    # mapped to /brand/items/<repr>.jpg. menu_item_image has no unique
-    # constraint, so guard with NOT EXISTS for idempotency.
-    w("-- Menu item images. Each store shares its representative photo under /brand/items/.")
+    # Every item has its own photo under /brand/items/<itemId>.jpg (rendered by
+    # scripts/dev/gen-item-images.py; the 10 store representatives keep their
+    # hand-picked MVP photos). menu_item_image has no unique constraint, so
+    # guard with NOT EXISTS for idempotency.
+    w("-- Menu item images. Each item has its own photo under /brand/items/<itemId>.jpg.")
     w("INSERT INTO menu_item_image (menu_item_id, blob_uri, alt, sort_order)")
     w("SELECT v.menu_item_id, v.blob_uri, v.alt, 0")
     w("FROM (VALUES")
     rows = []
     for r in restaurants:
-        repr_id = r["mvpRepresentativeItemId"]
-        blob = f"__ASSET_BASE__/brand/items/{repr_id}.jpg"
         for it in r["items"]:
             iid = menu_item_id(it["id"])
+            blob = f"__ASSET_BASE__/brand/items/{it['id']}.jpg"
             rows.append(
                 "  ({iid}::uuid, {blob}, {alt})".format(
                     iid=sql_str(str(iid)),

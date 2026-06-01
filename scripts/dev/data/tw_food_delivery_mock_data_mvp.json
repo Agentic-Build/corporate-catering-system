@@ -7213,12 +7213,12 @@
     }
   ],
   "mvpAssetManifest": {
-    "imageFileCount": 34,
+    "imageFileCount": 174,
     "strategy": {
       "categories": "4 張分類圖一對一。",
       "restaurantCovers": "10 張店家封面圖一對一。",
       "restaurantLogos": "10 張店家 Logo 一對一。",
-      "items": "10 張代表餐點圖；每家店 15 個品項共用該店代表餐點圖。"
+      "items": "150 張餐點圖，每個品項一張（i001–i150）；其中 10 張為各店代表圖（MVP 既有），其餘 140 張由 scripts/dev/gen-item-images.py 以 Bonsai-Image 模型生成，同店維持一致風格。"
     },
     "restaurantRepresentativeItems": [
       {
