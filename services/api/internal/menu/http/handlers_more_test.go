@@ -43,6 +43,26 @@ func newS3(t *testing.T, endpoint string) *storage.S3Client {
 	return c
 }
 
+// newS3NoCreds builds an S3Client with empty static credentials. Presigning is
+// an offline signing operation, so it normally never errors — but with empty
+// credentials the SDK's credential refresh fails inside PresignPutObject /
+// PresignGetObject, making both PresignedPut and PresignedGet return a non-nil
+// error with no network I/O. This is what drives the presign error legs in
+// presign.go (the signErrorCounter + huma.Error500 blocks).
+func newS3NoCreds(t *testing.T) *storage.S3Client {
+	t.Helper()
+	c, err := storage.NewS3(context.Background(), storage.S3Config{
+		Endpoint:        "http://127.0.0.1:9",
+		Region:          "us-east-1",
+		AccessKeyID:     "",
+		SecretAccessKey: "",
+		Bucket:          "tbite-test",
+		UsePathStyle:    true,
+	})
+	require.NoError(t, err)
+	return c
+}
+
 // --- presign upload success (presign.go imageObjectKey + PresignedPut path) ---
 
 func TestPresignUpload_OK(t *testing.T) {
@@ -82,6 +102,40 @@ func TestPresignDownload_OK(t *testing.T) {
 	assert.Contains(t, out.URL, "X-Amz-Signature=")
 	assert.Equal(t, "menu-images/v1/a.jpg", out.Key)
 	assert.Equal(t, int(10*time.Minute/time.Second), out.ExpiresIn)
+}
+
+// TestPresignUpload_PresignError_500 drives the PresignedPut error leg
+// (presign.go:127-131): auth + validation + non-nil Storage all pass, but the
+// empty-credentials client fails to sign, so the handler returns huma 500.
+func TestPresignUpload_PresignError_500(t *testing.T) {
+	srv := buildPresign(t, vendorUser(), newS3NoCreds(t))
+	resp := do(t, http.MethodPost, srv.URL+"/api/merchant/uploads/presigned",
+		`{"content_type":"image/png","size":1024}`)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+	var out struct {
+		Detail string `json:"detail"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	assert.Contains(t, out.Detail, "presign failed")
+}
+
+// TestPresignDownload_PresignError_500 drives the PresignedGet error leg
+// (presign.go:163-167): auth + key validation + non-nil Storage all pass, but
+// the empty-credentials client fails to sign, so the handler returns huma 500.
+func TestPresignDownload_PresignError_500(t *testing.T) {
+	srv := buildPresign(t, employeeUser(), newS3NoCreds(t))
+	resp := do(t, http.MethodGet,
+		srv.URL+"/api/menu/uploads/presigned?key=menu-images/v1/a.jpg", "")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+	var out struct {
+		Detail string `json:"detail"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	assert.Contains(t, out.Detail, "presign failed")
 }
 
 // --- HandleDirectUpload success + FormFile-missing + PutObject error ---------

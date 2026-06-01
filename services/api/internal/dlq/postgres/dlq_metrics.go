@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -34,7 +33,7 @@ SELECT COALESCE(EXTRACT(EPOCH FROM (now() - min(first_seen_at))), 0)
 // A single callback runs both queries on each metric collection and observes
 // the results. A query error is returned (OTel logs it) rather than panicking,
 // so a transient DB hiccup just skips one scrape.
-func RegisterDLQGauges(pool *pgxpool.Pool) error {
+func RegisterDLQGauges(pool queryer) error {
 	meter := otel.GetMeterProvider().Meter("tbite.api")
 	var pendingMu sync.Mutex
 	seenPendingStreams := map[string]struct{}{}

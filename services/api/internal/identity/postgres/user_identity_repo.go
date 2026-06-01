@@ -12,7 +12,12 @@ import (
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/identity"
 )
 
-type UserIdentityRepo struct{ pool *pgxpool.Pool }
+type queryer interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+type UserIdentityRepo struct{ pool queryer }
 
 func NewUserIdentityRepo(p *pgxpool.Pool) *UserIdentityRepo { return &UserIdentityRepo{pool: p} }
 

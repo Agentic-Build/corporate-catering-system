@@ -8,13 +8,22 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Agentic-Build/corporate-catering-system/services/api/internal/dlq"
 )
 
+// queryer is the subset of *pgxpool.Pool the repo and metrics use, narrowed so
+// tests can substitute a pgxmock pool.
+type queryer interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 // DLQRepo persists DLQ rows in Postgres.
-type DLQRepo struct{ pool *pgxpool.Pool }
+type DLQRepo struct{ pool queryer }
 
 // NewDLQRepo wires a DLQRepo to the given pgx pool.
 func NewDLQRepo(p *pgxpool.Pool) *DLQRepo { return &DLQRepo{pool: p} }
