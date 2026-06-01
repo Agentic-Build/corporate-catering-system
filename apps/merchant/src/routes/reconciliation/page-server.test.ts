@@ -72,5 +72,13 @@ describe("reconciliation load", () => {
     };
     expect(res.reconciliation).toBeNull();
     expect(res.settlements).toEqual([]);
+
+    mockClient.GET.mockResolvedValue({ data: null });
+    res = (await load(loadEvent("?period=2026-04"))) as {
+      reconciliation: unknown;
+      settlements: unknown[];
+    };
+    expect(res.reconciliation).toBeNull();
+    expect(res.settlements).toEqual([]);
   });
 });

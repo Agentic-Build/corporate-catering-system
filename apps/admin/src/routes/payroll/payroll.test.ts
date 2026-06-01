@@ -60,6 +60,8 @@ describe("payroll list load", () => {
     expect(((await listLoad(loadEvent())) as { batches: unknown[] }).batches).toEqual([]);
     mockClient.GET.mockResolvedValue({ data: null });
     expect(((await listLoad(loadEvent())) as { batches: unknown[] }).batches).toEqual([]);
+    mockClient.GET.mockResolvedValue({ data: {} });
+    expect(((await listLoad(loadEvent())) as { batches: unknown[] }).batches).toEqual([]);
   });
 });
 
@@ -96,6 +98,15 @@ describe("payroll detail load", () => {
     });
     const res = (await detailLoad(loadEvent())) as Record<string, unknown>;
     expect(res.entries).toEqual([]);
+    expect(res.exceptions).toEqual([]);
+  });
+  it("defaults exceptions to [] when exceptions data omits items", async () => {
+    mockClient.GET.mockImplementation((path: string) => {
+      if (path === "/api/admin/payroll/batches/{id}")
+        return Promise.resolve({ data: { batch: { id: "b1" }, entries: [{ id: "e1" }] } });
+      return Promise.resolve({ data: {} });
+    });
+    const res = (await detailLoad(loadEvent())) as Record<string, unknown>;
     expect(res.exceptions).toEqual([]);
   });
 });
@@ -201,6 +212,8 @@ describe("payroll [id] disputes", () => {
     mockClient.GET.mockRejectedValue(new Error("x"));
     expect(((await disputesLoad(loadEvent())) as { disputes: unknown[] }).disputes).toEqual([]);
     mockClient.GET.mockResolvedValue({ data: null });
+    expect(((await disputesLoad(loadEvent())) as { disputes: unknown[] }).disputes).toEqual([]);
+    mockClient.GET.mockResolvedValue({ data: {} });
     expect(((await disputesLoad(loadEvent())) as { disputes: unknown[] }).disputes).toEqual([]);
   });
   it("resolveRefund validates and posts", async () => {

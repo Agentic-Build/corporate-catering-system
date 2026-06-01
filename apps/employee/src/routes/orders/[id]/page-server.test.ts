@@ -63,6 +63,17 @@ describe("order detail load", () => {
     expect(res.complaint).toBeUndefined();
     expect(res.rating).toBeUndefined();
   });
+  it("placed order with data but no items defaults menu to empty", async () => {
+    mockClient.GET.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/employee/orders/{id}"
+          ? { data: { order: { status: "placed", plant: "p", supply_date: "d", vendor_id: "v1" } } }
+          : { data: {} },
+      ),
+    );
+    const res = (await load(loadEvent())) as { menu?: unknown[] };
+    expect(res.menu).toEqual([]);
+  });
   it("placed order with no menu data leaves menu undefined", async () => {
     mockClient.GET.mockImplementation((path: string) =>
       Promise.resolve(
@@ -168,6 +179,11 @@ describe("modify action", () => {
       { menu_item_id: "b", qty: 1.5 },
     ]);
     expect(await actions.modify!(actionEvent(form([["items", items]])))).toMatchObject({
+      data: { modifyError: expect.stringContaining("至少需保留") },
+    });
+  });
+  it("400 when items JSON is valid but not an array", async () => {
+    expect(await actions.modify!(actionEvent(form([["items", "{}"]])))).toMatchObject({
       data: { modifyError: expect.stringContaining("至少需保留") },
     });
   });

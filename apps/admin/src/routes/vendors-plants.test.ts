@@ -63,6 +63,8 @@ describe("plants", () => {
     expect(((await plantsLoad(loadEvent())) as { plants: unknown[] }).plants).toEqual([]);
     mockClient.GET.mockResolvedValue({ data: null });
     expect(((await plantsLoad(loadEvent())) as { plants: unknown[] }).plants).toEqual([]);
+    mockClient.GET.mockResolvedValue({ data: {} });
+    expect(((await plantsLoad(loadEvent())) as { plants: unknown[] }).plants).toEqual([]);
   });
   it("create validates, posts (with parsed sort), surfaces errors", async () => {
     expect(await plantsActions.create!(event(form({ code: "P1" })))).toMatchObject({ status: 400 });
@@ -146,6 +148,14 @@ describe("vendor-settlements", () => {
         }
       ).settlements,
     ).toEqual([]);
+    mockClient.GET.mockResolvedValue({ data: {} });
+    expect(
+      (
+        (await settlementsLoad(loadEvent({ query: "?period=2026-01" }))) as {
+          settlements: unknown[];
+        }
+      ).settlements,
+    ).toEqual([]);
   });
   it("close validates period format and month range, posts, redirects", async () => {
     expect(await settlementsActions.close!(event(form({ period: "bad" })))).toMatchObject({
@@ -213,6 +223,8 @@ describe("vendors list", () => {
     mockClient.GET.mockRejectedValue(new Error("x"));
     expect(((await vendorsLoad(loadEvent())) as { vendors: unknown[] }).vendors).toEqual([]);
     mockClient.GET.mockResolvedValue({ data: null });
+    expect(((await vendorsLoad(loadEvent())) as { vendors: unknown[] }).vendors).toEqual([]);
+    mockClient.GET.mockResolvedValue({ data: {} });
     expect(((await vendorsLoad(loadEvent())) as { vendors: unknown[] }).vendors).toEqual([]);
   });
   it("create validates, posts, redirects, surfaces errors", async () => {
@@ -284,6 +296,20 @@ describe("vendor detail", () => {
   it("defaults vendors list to [] when that call rejects -> 404", async () => {
     mockClient.GET.mockRejectedValue(new Error("down"));
     await expect(vendorLoad(loadEvent())).rejects.toMatchObject({ status: 404 });
+  });
+  it("defaults vendors list to [] when vendors data omits items -> 404", async () => {
+    mockClient.GET.mockResolvedValue({ data: {} });
+    await expect(vendorLoad(loadEvent())).rejects.toMatchObject({ status: 404 });
+  });
+  it("defaults operators/plants to [] when those calls omit items", async () => {
+    mockClient.GET.mockImplementation((path: string) => {
+      if (path === "/api/admin/vendors")
+        return Promise.resolve({ data: { items: [{ id: "v1" }] } });
+      return Promise.resolve({ data: {} });
+    });
+    const res = (await vendorLoad(loadEvent())) as Record<string, unknown>;
+    expect(res.operators).toEqual([]);
+    expect(res.knownPlants).toEqual([]);
   });
 
   it("approve posts plants and redirects, surfaces errors", async () => {
@@ -429,6 +455,13 @@ describe("vendor documents", () => {
       if (path === "/api/admin/vendors")
         return Promise.resolve({ data: { items: [{ id: "v1" }] } });
       return Promise.resolve({ data: null });
+    });
+    expect(((await docsLoad(loadEvent())) as { documents: unknown[] }).documents).toEqual([]);
+
+    mockClient.GET.mockImplementation((path: string) => {
+      if (path === "/api/admin/vendors")
+        return Promise.resolve({ data: { items: [{ id: "v1" }] } });
+      return Promise.resolve({ data: {} });
     });
     expect(((await docsLoad(loadEvent())) as { documents: unknown[] }).documents).toEqual([]);
   });

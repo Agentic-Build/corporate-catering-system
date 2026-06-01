@@ -57,6 +57,10 @@ describe("menus load", () => {
     mockClient.GET.mockResolvedValueOnce({ data: {} });
     res = (await load(loadEvent("?archived=1"))) as { items: unknown[]; includeArchived: boolean };
     expect(res.items).toEqual([]);
+
+    mockClient.GET.mockResolvedValueOnce({ data: null });
+    res = (await load(loadEvent("?archived=1"))) as { items: unknown[]; includeArchived: boolean };
+    expect(res.items).toEqual([]);
   });
 });
 

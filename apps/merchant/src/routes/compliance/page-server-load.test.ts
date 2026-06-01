@@ -74,6 +74,18 @@ describe("compliance load", () => {
     expect(res.vendor).toBeNull();
     expect(res.documents).toEqual([]);
   });
+
+  it("leaves defaults when GET resolves without data", async () => {
+    mockClient.GET.mockResolvedValue({ data: null });
+    const res = (await load(loadEvent())) as {
+      vendor: unknown;
+      documents: unknown[];
+      warnings: unknown[];
+    };
+    expect(res.vendor).toBeNull();
+    expect(res.documents).toEqual([]);
+    expect(res.warnings).toEqual([]);
+  });
 });
 
 describe("compliance.uploadDocument branches", () => {

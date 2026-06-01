@@ -44,6 +44,12 @@ describe("prep-sheet load", () => {
     expect(res.sheet.plants).toHaveLength(1);
   });
 
+  it("defaults date to Taipei today when no param", async () => {
+    mockClient.GET.mockResolvedValue({ data: null });
+    const res = (await load(loadEvent())) as { date: string };
+    expect(res.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
   it("uses a default empty sheet on API throw and missing data", async () => {
     mockClient.GET.mockRejectedValueOnce(new Error("boom"));
     let res = (await load(loadEvent("?date=2026-05-30"))) as {

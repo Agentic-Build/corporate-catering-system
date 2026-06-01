@@ -73,4 +73,11 @@ describe("labels load", () => {
     expect(res.totalCount).toBe(0);
     expect(res.itemsById).toEqual({});
   });
+
+  it("defaults items to [] when data present but items undefined", async () => {
+    mockClient.GET.mockResolvedValue({ data: { items: undefined } });
+    const res = (await load(loadEvent())) as { totalCount: number; itemsById: object };
+    expect(res.totalCount).toBe(0);
+    expect(res.itemsById).toEqual({});
+  });
 });

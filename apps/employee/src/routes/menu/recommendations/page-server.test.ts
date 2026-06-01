@@ -73,6 +73,11 @@ describe("loadMore action", () => {
       status: 400,
     });
   });
+  it("defaults chips to empty when response data lacks chips", async () => {
+    mockClient.GET.mockResolvedValue({ data: { next_cursor: 3 } });
+    const res = await actions.loadMore!(actionEvent(form([["cursor", "1"]])));
+    expect(res).toEqual({ chips: [], nextCursor: 3 });
+  });
   it("returns next page with day and defaults cursor", async () => {
     mockClient.GET.mockResolvedValue({ data: { chips: [], next_cursor: 7 } });
     const res = await actions.loadMore!(actionEvent(form([]), USER, "?day=2026-06-06"));
