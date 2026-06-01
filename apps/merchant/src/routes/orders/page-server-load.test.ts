@@ -97,6 +97,13 @@ describe("orders load", () => {
     const res2 = (await load(loadEvent())) as { totalCount: number };
     expect(res2.totalCount).toBe(0);
   });
+
+  it("defaults items to [] when data present but items undefined", async () => {
+    mockClient.GET.mockResolvedValue({ data: { items: undefined } });
+    const res = (await load(loadEvent())) as { totalCount: number; itemsById: object };
+    expect(res.totalCount).toBe(0);
+    expect(res.itemsById).toEqual({});
+  });
 });
 
 describe("orders.markReady", () => {
@@ -199,6 +206,14 @@ describe("orders.markReadyManual", () => {
 
   it("handles orders GET returning no data", async () => {
     mockClient.GET.mockResolvedValue({ data: null });
+    const res = await actions.markReadyManual!(
+      actionEvent(form({ code: "1", date: "2026-05-30" })),
+    );
+    expect(res).toMatchObject({ status: 404 });
+  });
+
+  it("defaults items to [] when data present but items undefined", async () => {
+    mockClient.GET.mockResolvedValue({ data: { items: undefined } });
     const res = await actions.markReadyManual!(
       actionEvent(form({ code: "1", date: "2026-05-30" })),
     );

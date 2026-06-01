@@ -193,6 +193,45 @@ describe("home load", () => {
     expect(res.error).toBeUndefined();
   });
 
+  it("defaults favorite_chips and day_menu when home omits them", async () => {
+    mockClient.GET.mockResolvedValue({
+      data: { target_day: "d", has_ordered: false },
+    });
+    const res = (await load(loadEvent())) as Record<string, unknown>;
+    expect(res.favoriteIds).toEqual([]);
+    expect((res.home as { day_menu: unknown[] }).day_menu).toEqual([]);
+    expect(res.tagPool).toEqual([]);
+  });
+
+  it("builds menu query when filter active via non-q field (in_stock only)", async () => {
+    mockClient.GET.mockImplementation((path: string) =>
+      path === "/api/employee/home"
+        ? Promise.resolve({
+            data: { target_day: "d", has_ordered: false, favorite_chips: [], day_menu: [] },
+          })
+        : Promise.resolve({ data: { items: [] } }),
+    );
+    const res = (await load(loadEvent({ search: "?in_stock=1" }))) as Record<string, unknown>;
+    expect(res.filterActive).toBe(true);
+    expect(mockClient.GET).toHaveBeenCalledWith(
+      "/api/employee/menu",
+      expect.objectContaining({ params: { query: { plant: "tn-a", day: "d", in_stock: true } } }),
+    );
+  });
+
+  it("filtered-menu thrown Error uses its message", async () => {
+    mockClient.GET.mockImplementation((path: string) =>
+      path === "/api/employee/home"
+        ? Promise.resolve({
+            data: { target_day: "d", has_ordered: false, favorite_chips: [], day_menu: [] },
+          })
+        : Promise.reject(new Error("menu err obj")),
+    );
+    const res = (await load(loadEvent({ search: "?q=x" }))) as Record<string, unknown>;
+    expect(res.error).toBe("menu err obj");
+    expect(res.filteredMenu).toBeUndefined();
+  });
+
   it("menu with data uses items default and collectTags ignores null tags", async () => {
     mockClient.GET.mockImplementation((path: string) =>
       path === "/api/employee/home"
@@ -302,6 +341,27 @@ describe("placeOrder action", () => {
       ),
     );
     expect(res).toMatchObject({ status: 500, data: { error: "no order id in response" } });
+  });
+
+  it("treats item_id without matching qty as qty 0 and drops it", async () => {
+    mockClient.POST.mockResolvedValue({ data: { order: { id: "o7" } } });
+    await expect(
+      actions.placeOrder!(
+        actionEvent(
+          form([
+            ["item_id", "i1"],
+            ["qty", "2"],
+            ["item_id", "i2"],
+          ]),
+        ),
+      ),
+    ).rejects.toMatchObject({ status: 303, location: "/orders/o7" });
+    expect(mockClient.POST).toHaveBeenCalledWith(
+      "/api/employee/orders",
+      expect.objectContaining({
+        body: expect.objectContaining({ items: [{ menu_item_id: "i1", qty: 2 }] }),
+      }),
+    );
   });
 
   it("redirects to the created order, filtering qty<=0 lines", async () => {

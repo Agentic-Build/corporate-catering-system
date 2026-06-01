@@ -166,6 +166,36 @@ describe("root load", () => {
     expect((res.payroll as { batch: unknown }).batch).toBeNull();
     expect(res.counts).toMatchObject({ anomalies7d: 0 });
   });
+
+  it("defaults batches to [] when the batches list GET rejects", async () => {
+    mockClient.GET.mockImplementation((path: string) => {
+      if (path === "/api/admin/payroll/batches") return Promise.reject(new Error("boom"));
+      return Promise.resolve({ data: { items: [] } });
+    });
+    const res = (await rootLoad(loadEvent())) as Record<string, unknown>;
+    expect((res.payroll as { batch: unknown }).batch).toBeNull();
+    expect((res.payroll as { entries: unknown[] }).entries).toEqual([]);
+  });
+
+  it("treats anomalies with missing created_at and entries with missing amounts as zero", async () => {
+    mockClient.GET.mockImplementation((path: string) => {
+      if (path === "/api/admin/anomalies")
+        return Promise.resolve({
+          data: { items: [{ severity: "high", status: "open" }] },
+        });
+      if (path === "/api/admin/payroll/batches")
+        return Promise.resolve({ data: { items: [{ id: "b1", period_start: "2026-01-01" }] } });
+      if (path === "/api/admin/payroll/batches/{id}")
+        return Promise.resolve({ data: { batch: { id: "b1" }, entries: [{}] } });
+      return Promise.resolve({ data: { items: [] } });
+    });
+    const res = (await rootLoad(loadEvent())) as Record<string, unknown>;
+    // created_at missing -> Date.parse("") is NaN -> dropped from recentAnomalies
+    expect(res.counts).toMatchObject({ anomalies7d: 0, anomaliesSevere: 0 });
+    // amount_minor/refunded_minor missing -> ?? 0
+    expect((res.payroll as { total: number }).total).toBe(0);
+    expect((res.payroll as { refunded: number }).refunded).toBe(0);
+  });
 });
 
 describe("root actions.approveVendor", () => {

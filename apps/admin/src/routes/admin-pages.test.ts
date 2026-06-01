@@ -74,6 +74,9 @@ describe("anomalies load", () => {
     mockClient.GET.mockResolvedValue({ data: null });
     const res2 = (await anomaliesLoad(loadEvent())) as { anomalies: unknown[] };
     expect(res2.anomalies).toEqual([]);
+    mockClient.GET.mockResolvedValue({ data: {} });
+    const res3 = (await anomaliesLoad(loadEvent())) as { anomalies: unknown[] };
+    expect(res3.anomalies).toEqual([]);
   });
 });
 
@@ -156,6 +159,8 @@ describe("audit load", () => {
     expect(((await auditLoad(loadEvent())) as { events: unknown[] }).events).toEqual([]);
     mockClient.GET.mockResolvedValue({ data: null });
     expect(((await auditLoad(loadEvent())) as { events: unknown[] }).events).toEqual([]);
+    mockClient.GET.mockResolvedValue({ data: {} });
+    expect(((await auditLoad(loadEvent())) as { events: unknown[] }).events).toEqual([]);
   });
 });
 
@@ -177,6 +182,10 @@ describe("complaints", () => {
       [],
     );
     mockClient.GET.mockResolvedValue({ data: null });
+    expect(((await complaintsLoad(loadEvent())) as { complaints: unknown[] }).complaints).toEqual(
+      [],
+    );
+    mockClient.GET.mockResolvedValue({ data: {} });
     expect(((await complaintsLoad(loadEvent())) as { complaints: unknown[] }).complaints).toEqual(
       [],
     );
@@ -239,6 +248,8 @@ describe("disputes", () => {
     mockClient.GET.mockRejectedValue(new Error("x"));
     expect(((await disputesLoad(loadEvent())) as { disputes: unknown[] }).disputes).toEqual([]);
     mockClient.GET.mockResolvedValue({ data: null });
+    expect(((await disputesLoad(loadEvent())) as { disputes: unknown[] }).disputes).toEqual([]);
+    mockClient.GET.mockResolvedValue({ data: {} });
     expect(((await disputesLoad(loadEvent())) as { disputes: unknown[] }).disputes).toEqual([]);
   });
   it("resolveRefund validates dispute_id and refund_minor", async () => {
@@ -306,6 +317,8 @@ describe("dlq", () => {
     mockClient.GET.mockRejectedValue(new Error("x"));
     expect(((await dlqLoad(loadEvent())) as { messages: unknown[] }).messages).toEqual([]);
     mockClient.GET.mockResolvedValue({ data: null });
+    expect(((await dlqLoad(loadEvent())) as { messages: unknown[] }).messages).toEqual([]);
+    mockClient.GET.mockResolvedValue({ data: {} });
     expect(((await dlqLoad(loadEvent())) as { messages: unknown[] }).messages).toEqual([]);
   });
   it("replay validates id, succeeds, surfaces errors", async () => {

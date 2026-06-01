@@ -120,6 +120,34 @@ describe("home load", () => {
     expect(res.items).toEqual([]);
     expect(res.stats.totalCapacity).toBe(0);
   });
+
+  it("defaults items/orders to [] when data present but items undefined", async () => {
+    mockClient.GET.mockImplementation((path: string) => {
+      if (path === "/api/merchant/menu-items")
+        return Promise.resolve({ data: { items: undefined } });
+      if (path === "/api/merchant/orders") return Promise.resolve({ data: { items: undefined } });
+      return Promise.resolve({ data: { items: undefined } });
+    });
+    const res = (await load(loadEvent())) as {
+      items: unknown[];
+      stats: { todayOrderCount: number };
+    };
+    expect(res.items).toEqual([]);
+    expect(res.stats.todayOrderCount).toBe(0);
+  });
+
+  it("treats missing total_price_minor as 0 in revenue", async () => {
+    mockClient.GET.mockImplementation((path: string) => {
+      if (path === "/api/merchant/orders") {
+        return Promise.resolve({
+          data: { items: [{ status: "placed" }] }, // total_price_minor undefined
+        });
+      }
+      return Promise.resolve({ data: { items: [] } });
+    });
+    const res = (await load(loadEvent())) as { stats: { revenue: number } };
+    expect(res.stats.revenue).toBe(0);
+  });
 });
 
 describe("home actions.setSupply", () => {

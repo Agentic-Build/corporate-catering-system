@@ -60,4 +60,18 @@ describe("+layout.server load", () => {
     expect(res.activeOrders).toBe(0);
     expect(res.plants).toEqual([]);
   });
+
+  it("defaults to empty when orders fulfilled without items and plants rejects", async () => {
+    mockClient.GET.mockImplementation((path: string) =>
+      path === "/api/employee/orders"
+        ? Promise.resolve({ data: undefined })
+        : Promise.reject(new Error("plants boom")),
+    );
+    const res = (await load(event())) as {
+      activeOrders: number;
+      plants: { id: string; label: string }[];
+    };
+    expect(res.activeOrders).toBe(0);
+    expect(res.plants).toEqual([]);
+  });
 });
