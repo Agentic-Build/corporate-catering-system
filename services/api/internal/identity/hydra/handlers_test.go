@@ -296,7 +296,7 @@ type buildAuthErrProvider struct{}
 
 func (buildAuthErrProvider) Name() string        { return "authentik" }
 func (buildAuthErrProvider) DisplayName() string { return "Authentik" }
-func (buildAuthErrProvider) BuildAuthURL(ctx context.Context, state string) (*oidc.AuthURL, error) {
+func (buildAuthErrProvider) BuildAuthURL(ctx context.Context, state string, forceLogin bool) (*oidc.AuthURL, error) {
 	return nil, assertErr
 }
 func (buildAuthErrProvider) Exchange(ctx context.Context, code, pkceVerifier, nonce string) (*oidc.Userinfo, error) {

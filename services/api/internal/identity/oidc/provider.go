@@ -30,7 +30,7 @@ type AuthURL struct {
 type Provider interface {
 	Name() string
 	DisplayName() string
-	BuildAuthURL(ctx context.Context, state string) (*AuthURL, error)
+	BuildAuthURL(ctx context.Context, state string, forceLogin bool) (*AuthURL, error)
 	Exchange(ctx context.Context, code, pkceVerifier, nonce string) (*Userinfo, error)
 }
 

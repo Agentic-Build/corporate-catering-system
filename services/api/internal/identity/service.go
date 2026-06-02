@@ -62,7 +62,7 @@ func (s *Service) StartLogin(ctx context.Context, in StartLoginInput) (*StartLog
 		return nil, ErrInvalidProvider
 	}
 	state := randState()
-	au, err := p.BuildAuthURL(ctx, state)
+	au, err := p.BuildAuthURL(ctx, state, true)
 	if err != nil {
 		return nil, err
 	}
