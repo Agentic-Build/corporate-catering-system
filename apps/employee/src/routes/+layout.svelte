@@ -7,6 +7,7 @@
   import BottomNav from "$lib/components/BottomNav.svelte";
   import CartDrawer from "$lib/components/CartDrawer.svelte";
   import FloatingCartBar from "$lib/components/FloatingCartBar.svelte";
+  import UserMenu from "$lib/components/UserMenu.svelte";
   import { cart } from "$lib/cart.svelte";
   import { buildDays, taipeiISO } from "$lib/plants";
 
@@ -58,8 +59,6 @@
   $effect(() => () => {
     if (bumpTimer) clearTimeout(bumpTimer);
   });
-
-  const initial = $derived((data.user?.display_name ?? "").trim().slice(0, 1) || "你");
 </script>
 
 {#if data.user}
@@ -101,16 +100,7 @@
               >
             {/if}
           </button>
-          <form method="POST" action="/auth/logout">
-            <button
-              type="submit"
-              class="ml-1 grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-tb-red-500 to-tb-rose-700 text-sm font-bold text-white shadow-tb-sm"
-              title="{data.user.display_name} · 登出"
-              aria-label="登出"
-            >
-              {initial}
-            </button>
-          </form>
+          <UserMenu displayName={data.user.display_name} email={data.user.email} />
         </div>
       </div>
       <div class="border-t border-tb-slate-100 md:hidden">
