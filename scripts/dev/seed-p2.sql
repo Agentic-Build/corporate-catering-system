@@ -485,6 +485,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Menu item images. Each item has its own photo under /brand/items/<itemId>.jpg.
+DELETE FROM menu_item_image WHERE blob_uri LIKE '%/brand/items/%';
 INSERT INTO menu_item_image (menu_item_id, blob_uri, alt, sort_order)
 SELECT v.menu_item_id, v.blob_uri, v.alt, 0
 FROM (VALUES

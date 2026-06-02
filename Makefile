@@ -267,8 +267,8 @@ image-build-local: ## Build the platform image for the local Docker daemon's nat
 	docker build -f services/api/Dockerfile -t ghcr.io/agentic-build/tbite-api:$$TAG . && \
 	echo "built ghcr.io/agentic-build/tbite-api:$$TAG"
 
-demo-seed-tsmc: ## Seed current Kubernetes context with the 50k-person TSMC demo scenario
-	@ops/demo/seed-tsmc-enterprise.sh
+demo-seed-tsmc: ## Seed current Kubernetes context with the full 50k-person TSMC demo (catalog, brand images -> MinIO, 50k employees)
+	@ops/demo/seed-prod-demo.sh
 
 demo-load-tsmc: ## Run TSMC lunch-crunch traffic against current Kubernetes context
 	@ops/demo/run-tsmc-load.sh
