@@ -51,6 +51,9 @@ export const options = {
   },
 };
 
+// 409 (already ordered / not yet ready) is expected, not a failure.
+http.setResponseCallback(http.expectedStatuses(200, 201, 409));
+
 const API = __ENV.API_BASE_URL || "http://localhost:8080";
 const TOKEN_EMPLOYEE = __ENV.K6_TOKEN_EMPLOYEE || "";
 const PLANT = __ENV.K6_PLANT || "F12B-3F";
@@ -96,9 +99,9 @@ export function getPickupCode() {
   group("pickup_code", () => {
     if (READY_ORDER_IDS.length === 0) return;
     const orderID = READY_ORDER_IDS[Math.floor(Math.random() * READY_ORDER_IDS.length)];
-    const r = http.get(`${API}/api/employee/orders/${orderID}/pickup-code`, { headers });
+    const r = http.get(`${API}/api/employee/orders/${orderID}`, { headers });
     check(r, {
-      "pickup 200 or 409": (res) => res.status === 200 || res.status === 409,
+      "pickup 200": (res) => res.status === 200,
     });
   });
 }

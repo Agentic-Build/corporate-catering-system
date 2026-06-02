@@ -87,7 +87,7 @@ jobs:
       - name: Build Go binary
         run: go build -o /tmp/tbite ./services/api/cmd/tbite
 
-      - name: Start API + Worker + Scheduler
+      - name: Start API
         env:
           DATABASE_RW_URL: postgres://tbite:tbite@localhost:5432/tbite?sslmode=disable
           REDIS_URL: redis://localhost:6379/0
@@ -109,14 +109,19 @@ jobs:
           S3_BUCKET: tbite
         run: |
           /tmp/tbite --role=api > /tmp/api.log 2>&1 &
-          /tmp/tbite --role=worker > /tmp/worker.log 2>&1 &
-          /tmp/tbite --role=scheduler > /tmp/scheduler.log 2>&1 &
-          # Wait for API
-          for i in {1..30}; do
-            if curl -fsS http://localhost:8080/healthz; then break; fi
+          # S3 bucket-ensure retries can delay the first listen ~40s on CI.
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8080/healthz >/dev/null; then
+              echo "api ready after ${i}s"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "::error::API failed to become ready within 60s"
+              cat /tmp/api.log
+              exit 1
+            fi
             sleep 1
           done
-          echo "api ready"
 
       - name: Mint k6 session + seed ready orders
         env:
@@ -124,7 +129,7 @@ jobs:
         run: |
           psql -h localhost -U tbite -d tbite -c "
           INSERT INTO \"user\" (id, primary_email, display_name, role, status, plant)
-          VALUES ('22222222-2222-2222-2222-222222222222', 'load@tbite.test', 'Load', 'employee', 'active', 'F12B-3F')
+          VALUES ('22222222-2222-2222-2222-222222222222', 'load@tbite.test', 'Load', 'employee', 'active', 'tn-a')
           ON CONFLICT (id) DO NOTHING;"
           redis-cli SET "sess:tb_load" '{"user_id":"22222222-2222-2222-2222-222222222222","role":"employee","created_at":"2026-05-13T00:00:00Z","last_seen_at":"2026-05-13T00:00:00Z"}' EX 86400
 
@@ -137,7 +142,7 @@ jobs:
             gen_random_uuid(),
             '22222222-2222-2222-2222-222222222222',
             (SELECT vendor_id FROM menu_item WHERE id='${MENU_ITEM_ID}'),
-            'F12B-3F',
+            'tn-a',
             CURRENT_DATE,
             'ready',
             110,
@@ -154,7 +159,7 @@ jobs:
         env:
           API_BASE_URL: http://localhost:8080
           K6_TOKEN_EMPLOYEE: tb_load
-          K6_PLANT: F12B-3F
+          K6_PLANT: tn-a
           # CI thresholds relaxed vs production SLO — ubuntu-latest is 2-vCPU
           # and runs Postgres/Redis/NATS/API/k6 on the same box. Regression
           # detection still works because runs share the same runner class.
@@ -173,7 +178,7 @@ jobs:
           name: k6-summary
           path: k6-summary.json
 
-      - name: Upload api/worker/scheduler logs (on failure)
+      - name: Upload API logs (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
