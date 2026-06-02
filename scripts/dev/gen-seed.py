@@ -287,9 +287,13 @@ def main() -> None:
     # ---- menu_item_image ---------------------------------------------------
     # Every item has its own photo under /brand/items/<itemId>.jpg (rendered by
     # scripts/dev/gen-item-images.py; the 10 store representatives keep their
-    # hand-picked MVP photos). menu_item_image has no unique constraint, so
-    # guard with NOT EXISTS for idempotency.
+    # hand-picked MVP photos). menu_item_image has no unique constraint, so an
+    # item whose photo assignment changed between generator runs would keep both
+    # the stale and the new row. Clear seed-managed photos (brand/items/ prefix)
+    # first so the per-item mapping is authoritative; merchant-uploaded gallery
+    # images (under menu-images/) are left untouched.
     w("-- Menu item images. Each item has its own photo under /brand/items/<itemId>.jpg.")
+    w("DELETE FROM menu_item_image WHERE blob_uri LIKE '%/brand/items/%';")
     w("INSERT INTO menu_item_image (menu_item_id, blob_uri, alt, sort_order)")
     w("SELECT v.menu_item_id, v.blob_uri, v.alt, 0")
     w("FROM (VALUES")

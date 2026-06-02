@@ -506,13 +506,21 @@ synthetic employees:
 make demo-seed-tsmc
 ```
 
-`ops/demo/seed-tsmc-enterprise.sh` reads the chart contract Secret
-`tbite-db` key `rwUrl`, starts short-lived psql pods, and applies:
+`ops/demo/seed-prod-demo.sh` reads the chart contract Secret `tbite-db`
+key `rwUrl` plus the S3 config (`tbite-app-env` ConfigMap, `tbite-s3`
+Secret), uploads the brand assets, then starts short-lived psql pods and
+applies the seeds. It:
 
+0. Mirrors `apps/employee/static/brand` into the MinIO bucket's `brand/`
+   prefix (anonymous read) and rewrites the `__ASSET_BASE__` placeholders
+   to `$S3_PUBLIC_BASE_URL/$S3_BUCKET` so images resolve via MinIO.
 1. `scripts/dev/seed-p2.sql` — vendors, menu, image rows, 7 days of supply.
 2. `scripts/dev/seed-demo.sql` — canonical demo users and visible orders.
 3. `scripts/dev/seed-tsmc.sql` — 19 pickup locations and service windows.
 4. `scripts/dev/seed-tsmc-scale.sql` — 50,000 employees and scaled supply.
+
+It also handles the re-seed hazards around `seed-p2.sql` (RESTRICT FKs on
+the demo orders and the `order_state_event` append-only triggers).
 
 Confirm:
 
