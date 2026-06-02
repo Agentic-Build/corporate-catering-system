@@ -76,16 +76,20 @@ func (p *OIDCProvider) Name() string { return p.slug }
 
 func (p *OIDCProvider) DisplayName() string { return p.displayName }
 
-func (p *OIDCProvider) BuildAuthURL(_ context.Context, state string) (*AuthURL, error) {
+func (p *OIDCProvider) BuildAuthURL(_ context.Context, state string, forceLogin bool) (*AuthURL, error) {
 	verifier := randURLSafe(48)
 	nonce := randURLSafe(24)
 	challenge := s256(verifier)
-	u := p.oauth.AuthCodeURL(state,
+	opts := []oauth2.AuthCodeOption{
 		oauth2.AccessTypeOnline,
 		oauth2.SetAuthURLParam("code_challenge", challenge),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 		oauth2.SetAuthURLParam("nonce", nonce),
-	)
+	}
+	if forceLogin {
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", "login"))
+	}
+	u := p.oauth.AuthCodeURL(state, opts...)
 	return &AuthURL{URL: u, PKCEVerifier: verifier, Nonce: nonce}, nil
 }
 

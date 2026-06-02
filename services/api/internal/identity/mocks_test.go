@@ -227,7 +227,7 @@ func (p *fakeProvider) Name() string { return p.name }
 
 func (p *fakeProvider) DisplayName() string { return p.name }
 
-func (p *fakeProvider) BuildAuthURL(ctx context.Context, state string) (*oidc.AuthURL, error) {
+func (p *fakeProvider) BuildAuthURL(ctx context.Context, state string, forceLogin bool) (*oidc.AuthURL, error) {
 	p.nextState = state
 	return &oidc.AuthURL{URL: "https://fake/" + state, PKCEVerifier: "v", Nonce: "n"}, nil
 }

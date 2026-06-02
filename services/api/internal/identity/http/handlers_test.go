@@ -190,7 +190,7 @@ type fakeProvider struct{}
 
 func (fakeProvider) Name() string        { return "authentik" }
 func (fakeProvider) DisplayName() string { return "Authentik" }
-func (fakeProvider) BuildAuthURL(_ context.Context, state string) (*oidc.AuthURL, error) {
+func (fakeProvider) BuildAuthURL(_ context.Context, state string, _ bool) (*oidc.AuthURL, error) {
 	return &oidc.AuthURL{URL: "https://fake/" + state, PKCEVerifier: "v", Nonce: "n"}, nil
 }
 func (fakeProvider) Exchange(context.Context, string, string, string) (*oidc.Userinfo, error) {

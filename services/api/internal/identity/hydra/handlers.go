@@ -68,7 +68,7 @@ func (b *Bridge) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	// Build an Authentik authorize URL; redirect_uri is /oauth/callback
 	// (must match the Authentik client config).
 	state := uuid.NewString()
-	auth, err := b.OIDCProvider.BuildAuthURL(r.Context(), state)
+	auth, err := b.OIDCProvider.BuildAuthURL(r.Context(), state, false)
 	if err != nil {
 		http.Error(w, "build auth url: "+err.Error(), http.StatusInternalServerError)
 		return

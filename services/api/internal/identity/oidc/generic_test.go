@@ -202,7 +202,7 @@ func TestNew_Success_WithProvidedScopesAndDisplayName(t *testing.T) {
 	assert.Equal(t, "Authentik", p.DisplayName())
 
 	// The built auth URL should carry the openid scope (prepended).
-	au, err := p.BuildAuthURL(context.Background(), "state-1")
+	au, err := p.BuildAuthURL(context.Background(), "state-1", false)
 	require.NoError(t, err)
 	parsed, err := url.Parse(au.URL)
 	require.NoError(t, err)
@@ -221,7 +221,7 @@ func TestNew_DefaultsScopesAndDisplayName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "authentik", p.DisplayName())
 
-	au, err := p.BuildAuthURL(context.Background(), "state-2")
+	au, err := p.BuildAuthURL(context.Background(), "state-2", false)
 	require.NoError(t, err)
 	parsed, err := url.Parse(au.URL)
 	require.NoError(t, err)
@@ -239,7 +239,7 @@ func TestNew_ScopesAlreadyContainOpenID(t *testing.T) {
 	p, err := oidc.New(context.Background(), cfg)
 	require.NoError(t, err)
 
-	au, err := p.BuildAuthURL(context.Background(), "state-3")
+	au, err := p.BuildAuthURL(context.Background(), "state-3", false)
 	require.NoError(t, err)
 	parsed, err := url.Parse(au.URL)
 	require.NoError(t, err)
@@ -257,7 +257,7 @@ func TestBuildAuthURL_CarriesPKCEAndNonce(t *testing.T) {
 	p, err := oidc.New(context.Background(), cfg)
 	require.NoError(t, err)
 
-	au, err := p.BuildAuthURL(context.Background(), "the-state")
+	au, err := p.BuildAuthURL(context.Background(), "the-state", false)
 	require.NoError(t, err)
 	require.NotNil(t, au)
 	assert.NotEmpty(t, au.PKCEVerifier)
@@ -270,6 +270,34 @@ func TestBuildAuthURL_CarriesPKCEAndNonce(t *testing.T) {
 	assert.Equal(t, "S256", q.Get("code_challenge_method"))
 	assert.NotEmpty(t, q.Get("code_challenge"))
 	assert.Equal(t, au.Nonce, q.Get("nonce"))
+}
+
+func TestBuildAuthURL_ForcesLoginPrompt(t *testing.T) {
+	iss := newFakeIssuer(t, "client-x")
+	cfg := baseConfig(iss)
+	cfg.ClientID = "client-x"
+	p, err := oidc.New(context.Background(), cfg)
+	require.NoError(t, err)
+
+	au, err := p.BuildAuthURL(context.Background(), "the-state", true)
+	require.NoError(t, err)
+	parsed, err := url.Parse(au.URL)
+	require.NoError(t, err)
+	assert.Equal(t, "login", parsed.Query().Get("prompt"))
+}
+
+func TestBuildAuthURL_NoPromptWhenNotForced(t *testing.T) {
+	iss := newFakeIssuer(t, "client-x")
+	cfg := baseConfig(iss)
+	cfg.ClientID = "client-x"
+	p, err := oidc.New(context.Background(), cfg)
+	require.NoError(t, err)
+
+	au, err := p.BuildAuthURL(context.Background(), "the-state", false)
+	require.NoError(t, err)
+	parsed, err := url.Parse(au.URL)
+	require.NoError(t, err)
+	assert.Empty(t, parsed.Query().Get("prompt"))
 }
 
 // === Exchange ===

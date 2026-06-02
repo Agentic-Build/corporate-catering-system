@@ -149,7 +149,7 @@ func TestStartLogin_StatePutError(t *testing.T) {
 
 type buildErrProvider struct{ fakeProvider }
 
-func (p *buildErrProvider) BuildAuthURL(ctx context.Context, state string) (*oidc.AuthURL, error) {
+func (p *buildErrProvider) BuildAuthURL(ctx context.Context, state string, forceLogin bool) (*oidc.AuthURL, error) {
 	return nil, errBoom
 }
 
