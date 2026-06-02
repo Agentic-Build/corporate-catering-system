@@ -854,6 +854,20 @@ hydra:
         logout: https://app.tbite.example.com/logout
       secrets:
         system: []
+      # Hydra exists in this stack specifically to give remote MCP clients
+      # (Claude.ai / ChatGPT) the RFC 7591 Dynamic Client Registration surface
+      # Authentik lacks (ADR-0006). DCR is off by default in Hydra, so the API's
+      # discovery shim would advertise /oauth2/register while Hydra answers 404
+      # "Dynamic registration is not enabled" — enable it here. default_scope is
+      # what a dynamically-registered client receives when it omits `scope`.
+      oidc:
+        dynamic_client_registration:
+          enabled: true
+          default_scope:
+            - openid
+            - profile
+            - email
+            - offline_access
     automigration:
       enabled: true
       type: initContainer
