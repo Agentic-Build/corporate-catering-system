@@ -52,7 +52,13 @@ hydra:
     config:
       urls:
         self:
-          issuer: https://tbite-hydra.nycu.ai
+          # MUST equal the API public origin with a trailing slash. The API
+          # reverse-proxies /oauth2/* under its own host and verifies tokens
+          # against publicIssuer = OIDC_CALLBACK_BASE_URL + "/" (= the API
+          # base URL). Pointing this at tbite-hydra.nycu.ai breaks the
+          # one-origin guarantee — the JWT iss claim no longer matches what
+          # MCP clients discover, so DCR-issued tokens fail verification.
+          issuer: https://tbite-api.nycu.ai/
         login: https://tbite-app.nycu.ai/login
         consent: https://tbite-app.nycu.ai/consent
         logout: https://tbite-app.nycu.ai/logout
