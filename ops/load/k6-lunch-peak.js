@@ -51,6 +51,9 @@ export const options = {
   },
 };
 
+// 409 (already ordered / not yet ready) is expected, not a failure.
+http.setResponseCallback(http.expectedStatuses(200, 201, 409));
+
 const API = __ENV.API_BASE_URL || "http://localhost:8080";
 const TOKEN_EMPLOYEE = __ENV.K6_TOKEN_EMPLOYEE || "";
 const PLANT = __ENV.K6_PLANT || "F12B-3F";
