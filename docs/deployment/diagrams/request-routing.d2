@@ -1,0 +1,61 @@
+# tbite-platform — request routing & load balancing (north-south), with the SSE case
+#
+# Pitch-deck diagram: the load-balancing mechanism at each layer. Static.
+# Render: d2 --layout=elk --theme=4 request-routing.d2 request-routing.svg
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 4
+    pad: 15
+  }
+}
+
+direction: down
+
+classes: {
+  app:  { style: { fill: "#d6eaf8"; stroke: "#2e86c1"; border-radius: 8 } }
+  data: { style: { fill: "#d5f5e3"; stroke: "#229954"; border-radius: 8 } }
+  ext:  { style: { fill: "#fde2e2"; stroke: "#c0392b"; border-radius: 8 } }
+  edge: { style: { fill: "#d6eaf8"; stroke: "#2e86c1"; border-radius: 8; bold: true } }
+  lb:   { style: { stroke: "#2e86c1"; stroke-width: 2 } }
+  sticky:{ style: { stroke: "#c0392b"; stroke-width: 2 } }
+}
+
+title: {
+  label: "tbite — request routing & load balancing"
+  near: top-center
+  shape: text
+  style: { font-size: 22; bold: true }
+}
+
+user: "Browser / client" { class: ext }
+gw: "Ingress → Traefik Gateway API · round-robin to pod endpoints\n(DNS + LB / Cloudflare Tunnel · TLS termination)" { class: edge }
+
+http: "Stateless HTTP (any replica)" {
+  style: { fill: "#f3f8fd"; stroke: "#2e86c1" }
+  api: "api ×N · HPA (CPU / RPS / inflight)" { class: app }
+  web: "web ×3 · HPA (CPU)" { class: app }
+}
+
+data: "Data plane" {
+  style: { fill: "#f0faf3"; stroke: "#229954" }
+  pg:     "PostgreSQL · PgBouncer (RW → primary / RO → standby)" { class: data }
+  valkey: "Valkey" { class: data }
+  nats:   "NATS JetStream" { class: data }
+}
+
+sse: "Server-Sent Events · sticky (ClientIP) · per-pod fanout" {
+  style: { fill: "#fbf4f4"; stroke: "#c0392b" }
+  rt: "realtime-gateway ×N · HPA (active connections)" { class: app }
+}
+
+user -> gw: { class: lb }
+gw -> http.api: "round-robin" { class: lb }
+gw -> http.web: "round-robin" { class: lb }
+gw -> sse.rt: "new connection → a pod" { class: sticky }
+
+http.api -> data.pg: { class: lb }
+http.api -> data.valkey: { class: lb }
+http.api -> data.nats: { class: lb }
+data.nats -> sse.rt: "ORDERS_V1 tap (every pod)" { class: sticky }

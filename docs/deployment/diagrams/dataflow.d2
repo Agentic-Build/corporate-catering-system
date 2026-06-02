@@ -1,0 +1,79 @@
+# tbite-platform — order → outbox → JetStream → settle/evaluate + SSE (animated sequence)
+#
+# Sequence diagram: the order of operations and which components each request /
+# event passes through. D2 `steps` reveal each message; --animate-interval plays
+# them in order.
+#
+#   d2 --theme=4 --animate-interval=1400 dataflow.d2 dataflow.svg   (or make diagrams)
+
+vars: {
+  d2-config: {
+    theme-id: 4
+    pad: 15
+  }
+}
+
+shape: sequence_diagram
+
+# ── Participants (left to right, roughly along the request flow) ──
+user: "Employee / Merchant\nbrowser"
+api:  "api :8080"
+pg:   "PostgreSQL\n(order + outbox)"
+obx:  "outbox-relay"
+js:   "NATS JetStream\nORDERS_V1 / PAYROLL_V1"
+ote:  "on-time-evaluator"
+pay:  "payroll-settler"
+rt:   "realtime-gateway"
+board:"Merchant board / Employee menu\n(SSE)"
+
+# ── Revealed one step at a time (each step = one animation frame) ──
+steps: {
+  # 1) Synchronous request: state + outbox in one DB transaction
+  s1_request: {
+    user -> api: "1. POST /orders (place / cancel / modify)"
+  }
+  s2_tx: {
+    api -> pg: "2. tx: write order state + INSERT outbox_event (published_at=NULL)"
+  }
+  s3_ack: {
+    api -> user: "3. 200 OK (returns immediately)"
+  }
+
+  # 2) Outbox-only exit: relay publishes unpublished rows to JetStream
+  s4_poll: {
+    obx -> pg: "4. SELECT … WHERE published_at IS NULL"
+  }
+  s5_publish: {
+    obx -> js: "5. publish order.placed.v1 / payroll.batch_locked.v1"
+  }
+  s6_mark: {
+    obx -> pg: "6. UPDATE published_at"
+  }
+
+  # 3) Three parallel consumers (durable + ephemeral)
+  s7_fanout_ontime: {
+    js -> ote: "7a. order.> (durable, at-least-once)"
+  }
+  s7_fanout_payroll: {
+    js -> pay: "7b. payroll.> (durable)"
+  }
+  s7_fanout_rt: {
+    js -> rt: "7c. order.> (ephemeral board-fanout, ack-none)"
+  }
+
+  # 4) Consumer outcomes: idempotent writes / DLQ / SSE fanout
+  s8_ontime_write: {
+    ote -> pg: "8. idempotent write: on-time result"
+  }
+  s9_dlq: {
+    ote -> ote: "9. 5 failed deliveries → INSERT dlq_message (DLQ)" {
+      style: { stroke: "#c0392b"; stroke-dash: 3 }
+    }
+  }
+  s10_payroll_write: {
+    pay -> pg: "10. idempotent write: settlement"
+  }
+  s11_sse: {
+    rt -> board: "11. SSE push: BoardHub.Publish / MenuHub.Broadcast (topic-scoped)"
+  }
+}

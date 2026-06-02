@@ -1,0 +1,87 @@
+# tbite-platform — ingress comparison: default (Traefik + cert-manager) vs Cloudflare Tunnel
+#
+# Static structural comparison of the two public-exposure paths
+# (values.yaml default vs values-cloudflared.yaml overlay).
+#
+#   d2 --layout=elk --theme=4 ingress.d2 ingress.svg   (or make diagrams)
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 4
+    pad: 15
+  }
+}
+
+direction: right
+
+classes: {
+  app:  { style: { fill: "#d6eaf8"; stroke: "#2e86c1"; border-radius: 8 } }
+  edge: { style: { fill: "#d6eaf8"; stroke: "#2e86c1"; border-radius: 8; bold: true } }
+  idc:  { style: { fill: "#fcf3cf"; stroke: "#b7950b"; border-radius: 8 } }
+  ext:  { style: { fill: "#fde2e2"; stroke: "#c0392b"; border-radius: 8 } }
+  off:  { style: { fill: "#eeeeee"; stroke: "#999999"; border-radius: 8; stroke-dash: 4; font-color: "#777777" } }
+  note: { shape: text; style: { font-size: 13; italic: true; font-color: "#555555" } }
+  inbound: { style: { stroke: "#229954"; stroke-width: 2 } }
+  outbound:{ style: { stroke: "#c0392b"; stroke-width: 2 } }
+  acme: { style: { stroke-dash: 3; stroke: "#b7950b" } }
+}
+
+title: {
+  label: "Ingress: Gateway API + cert-manager  vs  Cloudflare Tunnel (cloudflared overlay)"
+  near: top-center
+  shape: text
+  style: { font-size: 22; bold: true }
+}
+
+# ════════════════════════════════════════════════════════════════════
+# A. Default path (values.yaml) — Traefik Gateway API + cert-manager + Let's Encrypt
+# ════════════════════════════════════════════════════════════════════
+default: "Default path (values.yaml) — on-prem / air-gapped baseline (ADR-0006)" {
+  style: { fill: "#f4fbf6"; stroke: "#229954" }
+
+  dns_a: "DNS\n(A/AAAA → LB IP)" { class: ext }
+  user_a: "Browser\n*.tbite.example.com" { class: ext }
+  le: "Let's Encrypt\n(ACME HTTP-01)" { class: ext }
+
+  k8s_a: "Kubernetes (ns: tbite)" {
+    lb: "LoadBalancer / NodePort\ninbound :443" { class: edge }
+    traefik: "Traefik Gateway API\nGateway + HTTPRoute · TLS termination" { class: edge }
+    cm: "cert-manager\nwildcard TLS (ClusterIssuer)" { class: idc }
+    svc: "in-cluster Services\napi / realtime / web / authentik / hydra / minio" { class: app }
+  }
+
+  user_a -> dns_a: "resolve" { class: inbound }
+  dns_a -> k8s_a.lb: "public IP" { class: inbound }
+  k8s_a.lb -> k8s_a.traefik: "inbound HTTPS" { class: inbound }
+  k8s_a.traefik -> k8s_a.svc: "route (HTTPRoute)" { class: inbound }
+  k8s_a.cm -> k8s_a.traefik: "mount cert" { class: acme }
+  k8s_a.cm -> le: "HTTP-01 challenge" { class: acme }
+
+  note_a: "• TLS terminates in-cluster (cert-manager + Let's Encrypt)\n• Inbound LoadBalancer on :443\n• DNS A record points to the LB\n• Air-gapped baseline (ADR-0006)" { class: note }
+}
+
+# ════════════════════════════════════════════════════════════════════
+# B. Cloudflare Tunnel overlay (values-cloudflared.yaml, stacked on values.yaml)
+# ════════════════════════════════════════════════════════════════════
+cf: "Cloudflare Tunnel overlay (values-cloudflared.yaml) — public SaaS" {
+  style: { fill: "#fbf4f4"; stroke: "#c0392b" }
+
+  user_b: "Browser\n*.tbite.example.com" { class: ext }
+  edge: "Cloudflare edge\nTLS termination + edge cert\nZero Trust: Public Hostnames → Service\nauto-managed DNS CNAME" { class: ext }
+
+  k8s_b: "Kubernetes (ns: tbite)" {
+    cfd: "cloudflared Deployment ×2\noutbound tunnel (egress-only)" { class: edge }
+    svc: "in-cluster Services\napi / realtime / web / authentik / hydra / minio" { class: app }
+
+    traefik_off: "Traefik\ndisabled" { class: off }
+    cm_off: "cert-manager\ndisabled" { class: off }
+    gw_off: "Gateway / HTTPRoute / Issuer\nshipped, inert" { class: off }
+  }
+
+  user_b -> edge: "HTTPS" { class: inbound }
+  k8s_b.cfd -> edge: "outbound tunnel" { class: outbound }
+  k8s_b.cfd -> k8s_b.svc: "plain HTTP (in-cluster)" { class: inbound }
+
+  note_b: "• TLS terminates at the Cloudflare edge; in-cluster traffic is plain HTTP\n• Egress-only — the cluster dials out\n• Routing and DNS managed in the Cloudflare dashboard\n• Traefik / cert-manager / Gateway / Issuer disabled (templates remain for switch-back)\n• External vendor on the public data path — opt-in deviation from ADR-0006\n• Stackable with values-prod-ha.yaml; MinIO via a Cloudflare public hostname" { class: note }
+}

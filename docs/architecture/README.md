@@ -91,5 +91,6 @@ acceptance criteria call for:
 | Document | Covers |
 | --- | --- |
 | [`worker-roles.md`](worker-roles.md) | Per-role scaling signal, idempotency, retry, and DLQ behaviour (#56, #57). |
+| [`../deployment/architecture-diagrams.md`](../deployment/architecture-diagrams.md) | D2 diagrams: static Dev/Production/Production-HA topology + an animated order→event→SSE sequence (`make diagrams`). |
 | [`../deployment/local-clusters.md`](../deployment/local-clusters.md) | kind / k3d / OrbStack local cluster setup (#48). |
 | [`../deployment/backup-restore.md`](../deployment/backup-restore.md) | Data-plane backup, restore, and drill procedure (#51, #54). |

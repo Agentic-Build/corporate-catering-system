@@ -1,0 +1,80 @@
+# tbite-platform — three replica distribution patterns
+#
+# Pitch-deck diagram: what "more replicas" means for each role. Static.
+# Render: d2 --layout=elk --theme=4 distribution.d2 distribution.svg
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 4
+    pad: 15
+  }
+}
+
+direction: right
+
+classes: {
+  app:  { style: { fill: "#d6eaf8"; stroke: "#2e86c1"; border-radius: 8 } }
+  data: { style: { fill: "#d5f5e3"; stroke: "#229954"; border-radius: 8 } }
+  bus:  { style: { fill: "#fcf3cf"; stroke: "#b7950b"; border-radius: 8; bold: true } }
+  idle: { style: { fill: "#eeeeee"; stroke: "#999999"; border-radius: 8; stroke-dash: 4; font-color: "#777777" } }
+  share:{ style: { stroke: "#229954"; stroke-width: 2 } }
+  fan:  { style: { stroke: "#2e86c1"; stroke-width: 2 } }
+  lease:{ style: { stroke: "#c0392b"; stroke-width: 2 } }
+  ext:  { style: { fill: "#fde2e2"; stroke: "#c0392b"; border-radius: 8 } }
+  note: { shape: text; style: { font-size: 12; italic: true; font-color: "#555555" } }
+}
+
+title: {
+  label: "tbite — three replica distribution patterns"
+  near: top-center
+  shape: text
+  style: { font-size: 22; bold: true }
+}
+
+# ════════════ 1. Competing consumers (work-sharing) ════════════
+cc: "1. Competing consumers — work-sharing (each job goes to one replica)" {
+  style: { fill: "#f0faf3"; stroke: "#229954" }
+
+  relay: "outbox-relay ×N" { class: app }
+  pg: "PostgreSQL\nSELECT … FOR UPDATE SKIP LOCKED\ndisjoint batch per replica" { class: data }
+
+  settler: "payroll-settler / on-time-evaluator ×N" { class: app }
+  js: "NATS JetStream\ndurable pull consumer (shared)\nAckExplicit · MaxDeliver 5 → DLQ" { class: bus }
+
+  relay -> pg: "claim rows" { class: share }
+  settler -> js: "pull (one message → one worker)" { class: share }
+
+  note_cc: "Autoscaling: KEDA (outbox backlog ≥100 / consumer lag ≥500)" { class: note }
+}
+
+# ════════════ 2. Per-pod fanout (broadcast) ════════════
+fo: "2. Per-pod fanout — broadcast (every replica receives all events)" {
+  style: { fill: "#f3f8fd"; stroke: "#2e86c1" }
+
+  js2: "NATS JetStream · ORDERS_V1" { class: bus }
+  rt1: "realtime-gateway pod A\nephemeral · ack-none consumer" { class: app }
+  rt2: "realtime-gateway pod B\nephemeral · ack-none consumer" { class: app }
+  clients: "connected SSE clients" { class: ext }
+
+  js2 -> rt1: "all events" { class: fan }
+  js2 -> rt2: "all events" { class: fan }
+  rt1 -> clients: "SSE push (topic-scoped)" { class: fan }
+  rt2 -> clients: "SSE push" { class: fan }
+
+  note_fo: "Autoscaling: HPA (active connections) — scales connection capacity" { class: note }
+}
+
+# ════════════ 3. Lease singleton (active / standby) ════════════
+ls: "3. Lease singleton — active / standby (one runs at a time)" {
+  style: { fill: "#fbf4f4"; stroke: "#c0392b" }
+
+  lease: "K8s Lease (coordination.k8s.io)\none lease name per scheduler" { class: bus }
+  active: "scheduler pod (active)\nholds lease → runs ticks" { class: app }
+  standby: "scheduler pod (standby)\nwaits to take over" { class: idle }
+
+  active -> lease: "hold / renew" { class: lease }
+  standby -> lease: "acquire when free" { class: lease }
+
+  note_ls: "schedulers: cutoff / no-show / doc-expiry / feedback" { class: note }
+}
