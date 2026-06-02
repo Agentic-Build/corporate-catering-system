@@ -23,6 +23,13 @@ data:
   AUTHENTIK_BASE_URL: {{ .Values.global.authentik.baseURL | quote }}
   AUTHENTIK_VENDOR_OPERATOR_GROUP: {{ .Values.global.authentik.vendorOperatorGroup | quote }}
   AUTH_PROVIDER_SLUGS: {{ .Values.global.authentik.providerSlugs | quote }}
+{{- if .Values.hydra.enabled }}
+  # Ory Hydra sidecar supplies RFC 7591 DCR for remote MCP clients. Without
+  # these the API runs Hydra-less and MCP advertises Authentik (no DCR), so
+  # Claude.ai / ChatGPT fail with "does not support dynamic client registration".
+  HYDRA_PUBLIC_URL: {{ .Values.global.hydra.publicURL | quote }}
+  HYDRA_ADMIN_URL: {{ .Values.global.hydra.adminURL | quote }}
+{{- end }}
   APP_BASE_URL_EMPLOYEE: {{ .Values.global.baseURL.employee | quote }}
   APP_BASE_URL_MERCHANT: {{ .Values.global.baseURL.merchant | quote }}
   APP_BASE_URL_ADMIN: {{ .Values.global.baseURL.admin | quote }}

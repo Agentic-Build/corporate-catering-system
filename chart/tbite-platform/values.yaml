@@ -83,6 +83,18 @@ global:
     credentialsSecretRef:
       name: tbite-nats
       key: creds
+  # In-cluster URLs the API process uses to reach the Ory Hydra sidecar
+  # (HYDRA_PUBLIC_URL / HYDRA_ADMIN_URL). When hydra.enabled is true the API
+  # mounts the OAuth bridge: it reverse-proxies Hydra's /oauth2/* under its own
+  # host and serves a discovery shim that advertises registration_endpoint so
+  # remote MCP clients (Claude.ai / ChatGPT) can do RFC 7591 Dynamic Client
+  # Registration. Empty values (hydra disabled) make MCP fall back to
+  # advertising Authentik, which does not support DCR. Service names follow the
+  # Ory chart default `<release>-hydra-{public,admin}`; public port 4444,
+  # admin port 4445.
+  hydra:
+    publicURL: "http://tbite-hydra-public.tbite.svc.cluster.local:4444"
+    adminURL: "http://tbite-hydra-admin.tbite.svc.cluster.local:4445"
 
 tbite:
   affinity: {}
