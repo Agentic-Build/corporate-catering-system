@@ -99,9 +99,9 @@ export function getPickupCode() {
   group("pickup_code", () => {
     if (READY_ORDER_IDS.length === 0) return;
     const orderID = READY_ORDER_IDS[Math.floor(Math.random() * READY_ORDER_IDS.length)];
-    const r = http.get(`${API}/api/employee/orders/${orderID}/pickup-code`, { headers });
+    const r = http.get(`${API}/api/employee/orders/${orderID}`, { headers });
     check(r, {
-      "pickup 200 or 409": (res) => res.status === 200 || res.status === 409,
+      "pickup 200": (res) => res.status === 200,
     });
   });
 }
