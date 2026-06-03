@@ -59,8 +59,15 @@ hydra:
           # one-origin guarantee — the JWT iss claim no longer matches what
           # MCP clients discover, so DCR-issued tokens fail verification.
           issuer: https://tbite-api.nycu.ai/
-        login: https://tbite-app.nycu.ai/login
-        consent: https://tbite-app.nycu.ai/consent
+        # login/consent MUST point at the API's Hydra bridge endpoints, not the
+        # SvelteKit app pages. Hydra redirects the browser here with
+        # ?login_challenge / ?consent_challenge; the bridge (main.go registers
+        # /oauth/login, /oauth/callback, /oauth/consent) bounces to Authentik,
+        # resolves the user, then accepts the Hydra challenge and redirects back
+        # to the client. The app's /login does not understand login_challenge,
+        # so pointing here previously aborted every authorization request.
+        login: https://tbite-api.nycu.ai/oauth/login
+        consent: https://tbite-api.nycu.ai/oauth/consent
         logout: https://tbite-app.nycu.ai/logout
 
 observability:

@@ -848,9 +848,14 @@ hydra:
       dsn: ""
       urls:
         self:
-          issuer: https://hydra.tbite.example.com
-        consent: https://app.tbite.example.com/consent
-        login: https://app.tbite.example.com/login
+          # issuer must equal the API public origin (the API reverse-proxies
+          # /oauth2/* and verifies tokens against OIDC_CALLBACK_BASE_URL + "/").
+          issuer: https://api.tbite.example.com/
+        # login/consent must target the API's Hydra bridge endpoints
+        # (/oauth/login, /oauth/consent), NOT the SvelteKit app pages — the
+        # bridge is what accepts Hydra's login_challenge / consent_challenge.
+        consent: https://api.tbite.example.com/oauth/consent
+        login: https://api.tbite.example.com/oauth/login
         logout: https://app.tbite.example.com/logout
       secrets:
         system: []
