@@ -846,6 +846,14 @@ hydra:
       # `postgresPassword`; the chart's createIdentityDatabases Job ensures
       # the `hydra` database exists in the main CNPG cluster.
       dsn: ""
+      # MCP clients send the access token back to the API's /mcp resource
+      # server, which validates it via Hydra's JWKS (services/api/internal/
+      # identity/hydra/jwt.go). That only works for JWT access tokens — with
+      # Hydra's default opaque strategy the API can't verify the token and the
+      # request falls through to 401. Mint JWT access tokens so the JWKS path
+      # applies.
+      strategies:
+        access_token: jwt
       urls:
         self:
           issuer: https://hydra.tbite.example.com
