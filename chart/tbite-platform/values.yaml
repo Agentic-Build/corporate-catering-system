@@ -849,8 +849,8 @@ hydra:
       urls:
         self:
           issuer: https://hydra.tbite.example.com
-        consent: https://app.tbite.example.com/consent
-        login: https://app.tbite.example.com/login
+        consent: https://api.tbite.example.com/oauth/consent
+        login: https://api.tbite.example.com/oauth/login
         logout: https://app.tbite.example.com/logout
       secrets:
         system: []

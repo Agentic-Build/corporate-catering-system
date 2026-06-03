@@ -27,8 +27,8 @@ hydra:
       urls:
         self:
           issuer: https://hydra.tbite.example.com
-        login: https://app.tbite.example.com/login
-        consent: https://app.tbite.example.com/consent
+        login: https://api.tbite.example.com/oauth/login
+        consent: https://api.tbite.example.com/oauth/consent
         logout: https://app.tbite.example.com/logout
 
 observability:
