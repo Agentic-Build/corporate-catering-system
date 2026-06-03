@@ -101,7 +101,7 @@ tbite:
 
 image:
   repository: ghcr.io/agentic-build/tbite-api
-  tag: "sha-cee18ec"
+  tag: "sha-e357aa2"
   pullSecrets: []
 
 serviceAccount:
