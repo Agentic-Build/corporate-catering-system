@@ -12,6 +12,13 @@ A monorepo: 3 SvelteKit frontends + a Go modular monolith + a self-hostable clou
 - https://tbite-api.nycu.ai/docs — API reference (Stoplight Elements)
 - https://tbite-api.nycu.ai/openapi.yaml — OpenAPI 3.1 spec
 
+## 最終版簡報 (Final Presentation)
+
+最終版簡報可透過 GitHub Pages wrapper 瀏覽，也可直接開啟原始簡報頁面。
+
+- GitHub Pages wrapper: https://agentic-build.github.io/corporate-catering-system/presentation/
+- 原始簡報: https://agentic-build.github.io/t-bite-presentation/s/t-bite-google-slides-final/
+
 ## Architecture
 
 The canonical architecture is recorded in [`docs/architecture/`](docs/architecture/). The
