@@ -69,10 +69,10 @@ as `TBiteLogo` from `@tbite/ui` and used by:
 - `apps/employee/src/routes/login/+page.svelte` (login hero)
 - `apps/admin/src/routes/+layout.svelte` (app header)
 - `apps/admin/src/routes/login/+page.svelte` (login hero)
+- `apps/merchant/src/routes/+layout.svelte` (app header)
 - `apps/merchant/src/routes/login/+page.svelte` (login hero)
 
-The current implementation is an inline SVG placeholder (rounded gradient
-tile + bite notch + amber accent dot + bold "T"). Swap the SVG body when
-the final brand asset is ready; keep the `Props` interface
-(`size?: number; eyebrow?: boolean`) stable so the five callers above stay
-unchanged.
+The current implementation loads the real brand asset via a `<picture>`
+element (`./assets/logo.svg` with a `./assets/logo.png` fallback). Keep the
+`Props` interface (`size?: number; small?: boolean; light?: boolean`) stable
+so the six callers above stay unchanged.

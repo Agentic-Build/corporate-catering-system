@@ -52,7 +52,8 @@ done < ops/airgap/images.txt
 ```
 
 The platform's own images live under `ghcr.io/agentic-build/tbite-*` (see
-[`argocd.md`](./argocd.md) for the naming table). Third-party images come
+[`k3s-cloudflare-tsmc.md`](./k3s-cloudflare-tsmc.md) for the naming table).
+Third-party images come
 from the sub-charts listed in `chart/tbite-platform/Chart.yaml`; render the
 chart once with `helm template` against your values and grep for `image:`
 to produce the full set.
@@ -82,10 +83,12 @@ git add charts/ Chart.lock
 git commit -m "vendor chart deps @ $(date -u +%Y-%m-%d)"
 ```
 
-The `charts/` directory is currently empty in this repo because we expect
-operators to vendor at install time against their own private mirror. If
-you fork the repo into an internal Git, commit `charts/` and `Chart.lock`
-to your fork — that is the supported, reproducible install path.
+The sub-charts are already vendored in this repo under
+`chart/tbite-platform/charts/` (one `.tgz` per dependency, pinned to the
+version listed in `Chart.yaml`), so the runtime install does not re-resolve
+against any upstream chart repo. If you fork the repo into an internal Git,
+keep `charts/` and `Chart.lock` committed in your fork — that is the
+supported, reproducible install path.
 
 For OCI-distributed charts (e.g. when the upstream switches from a HTTP
 chart repo to an OCI registry), `skopeo` works on those too:
@@ -137,8 +140,8 @@ A first install against an air-gapped cluster, in rough order:
 3. On the cluster operator workstation: pull the internal mirror, point
    `kubectl` at the air-gapped cluster, generate the SOPS files for that
    environment under `ops/secrets/<env>/` (see
-   [`secrets.md`](./secrets.md)), and `make prod-up env=<env>` (or sync
-   the ArgoCD `Application`).
+   [`secrets.md`](./secrets.md)), and `make chart-upgrade
+   CHART_VALUES=<env-values>` (or sync the ArgoCD `Application`).
 4. Verify zero public-internet egress with the cluster's NetworkPolicy
    audit log / egress firewall — the platform should be quiet apart from
    in-cluster traffic and your monitoring backends.

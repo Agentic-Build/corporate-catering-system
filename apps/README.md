@@ -17,6 +17,8 @@ All three share the workspace packages under [`../packages/`](../packages/):
   `GET /me` → `event.locals.user`)
 - `@tbite/api-client` — typed openapi-fetch client generated from the
   Go API's OpenAPI 3.1 spec
+- `@tbite/web-shared` — shared helpers (Taipei date/TZ, money formatting,
+  form/problem helpers, status tables + `StatusTag`)
 - `@tbite/pickup` — QR payload helpers (`tbite://pickup?order=<id>`)
 
 ## Working in one app

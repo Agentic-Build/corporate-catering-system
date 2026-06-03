@@ -12,14 +12,17 @@ ops/secrets/
   README.md              # this file
   example.sops.yaml      # template; not encrypted, do not put real values here
   <env>/                 # one directory per environment
-    app.sops.yaml        # tbite-app-secrets (DB, NATS, S3, OIDC, Hydra, ...)
-    monitoring.sops.yaml # monitoring-secrets (Grafana admin, exporter DSNs)
-    ...                  # split however your blast-radius needs require
+    app.sops.yaml        # multiple Secrets: tbite-db, tbite-s3, tbite-nats,
+                         #   tbite-oidc-clients, tbite-authentik, tbite-valkey,
+                         #   tbite-authentik-config, tbite-hydra, tbite-grafana-admin
+                         #   (see example.sops.yaml for the full set)
+    ...                  # split into more files however your blast-radius needs require
 ```
 
 `<env>` is typically one of `single-node/`, `gcp/`, or a customer-specific name.
-The convention is "one Secret object per file, named to match its `metadata.name`",
-which makes `sops -d ... | kubectl apply -f -` safe to run per file.
+A file may hold one or more Secret objects (`app.sops.yaml` bundles the app's
+DB/S3/NATS/OIDC/Authentik/Valkey/Hydra/Grafana Secrets); applying it with
+`sops -d ... | kubectl apply -f -` reconciles every Secret in that file.
 
 Encrypted files keep `apiVersion`, `kind`, `metadata`, and `type` in plaintext
 (see `.sops.yaml`'s `encrypted_regex`) so the outer YAML stays kubectl-parseable
@@ -56,7 +59,7 @@ Rotate the cleartext value (e.g. a leaked DB password):
 2. Replace the value, save, commit the new ciphertext.
 3. Apply the new Secret (`sops -d ... | kubectl apply -f -`).
 4. Restart the consuming workloads so they pick the new env value
-   (`kubectl -n tbite rollout restart deploy/api` etc.).
+   (`kubectl -n tbite rollout restart deploy -l app.kubernetes.io/instance=tbite`).
 
 ## Adding a recipient
 

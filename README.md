@@ -35,14 +35,14 @@ employee/merchant/admin       api / realtime-gateway / outbox-relay /
 ```
 
 - **Frontend**: SvelteKit 2 + Svelte 5 + Tailwind 3 (adapter-node, SSR)
-- **Backend**: Go 1.23 modular monolith dispatched into per-role Deployments by `--role=<name>`
+- **Backend**: Go 1.26.3 modular monolith dispatched into per-role Deployments by `--role=<name>`
 - **Data**: Postgres (state of record, RW + RO routing), Valkey HA (sessions / cache / read models), NATS JetStream (durable events + outbox-only publication), S3-compatible object storage (presigned upload/download)
 - **Observability**: OpenTelemetry → VictoriaMetrics + VictoriaLogs + VictoriaTraces + Grafana
 - **Deployment**: Helm umbrella chart [`chart/tbite-platform`](chart/tbite-platform/) is the sole canonical deployment path. The previous kustomize overlays (`single-node`, `gcp`) have been removed.
 
 ## Local development
 
-Pre-reqs: Node 20.11+, pnpm 9, Go 1.23, `kubectl`, `helm`, and a
+Pre-reqs: Node 24+, pnpm 10.28, Go 1.26.3, `kubectl`, `helm`, and a
 local Kubernetes runtime such as kind, k3d, or OrbStack.
 
 ```bash
@@ -99,14 +99,15 @@ It ships the application, the self-hosted data plane (CloudNativePG, PgBouncer,
 Valkey HA, NATS JetStream, MinIO Operator), the Traefik gateway with cert-manager,
 the Victoria observability stack, the OpenTelemetry Collector, KEDA, and the
 optional Authentik + Hydra identity providers. The base `values.yaml` is the
-single-enterprise production profile; `values-dev.yaml` and
-`values-prod-ha.yaml` are overlays for laptop and multi-AZ HA shapes. BYO
+single-enterprise production profile; `values-dev.yaml`,
+`values-local-ha.yaml`, and `values-prod-ha.yaml` are overlays for laptop,
+single-node HA, and multi-AZ HA shapes. BYO
 endpoints are supplied through values without changing application code.
 
 ```bash
 make chart-deps              # one-shot, populates chart/tbite-platform/charts/
 make chart-lint              # lints against values-dev + values-prod-ha
-make chart-render            # dry-renders to stdout (VALUES=… to override)
+make chart-render            # dry-renders to stdout (CHART_VALUES=… to override)
 make chart-install           # installs into current kubectl context (interactive)
 make chart-upgrade           # upgrades the release
 ```
@@ -142,7 +143,7 @@ Application you want on a cluster that already runs ArgoCD.
 
 ```
 apps/{employee,merchant,admin}/      SvelteKit frontends
-packages/{ui,tokens,api-client,web-auth,pickup}/   shared
+packages/{ui,tokens,api-client,web-auth,web-shared,pickup}/   shared
 services/api/                        Go modular monolith (11 roles via --role=<name>)
 migrations/                          golang-migrate SQL
 chart/tbite-platform/                Helm umbrella chart (canonical deployment)
