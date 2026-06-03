@@ -1,0 +1,86 @@
+# tbite-platform — Control / Data / Application planes, annotated Single → HA
+#
+# Pitch-deck conceptual diagram: plane-level abstraction, precise service names.
+# Static. Render: d2 --layout=elk --theme=4 planes.d2 planes.svg  (or make diagrams)
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 4
+    pad: 15
+  }
+}
+
+direction: down
+
+classes: {
+  app:  { style: { fill: "#d6eaf8"; stroke: "#2e86c1"; border-radius: 8 } }
+  data: { style: { fill: "#d5f5e3"; stroke: "#229954"; border-radius: 8 } }
+  ctrl: { style: { fill: "#fcf3cf"; stroke: "#b7950b"; border-radius: 8 } }
+  ext:  { style: { fill: "#fde2e2"; stroke: "#c0392b"; border-radius: 8 } }
+  edge: { style: { fill: "#d6eaf8"; stroke: "#2e86c1"; border-radius: 8; bold: true } }
+  data_path: { style: { stroke: "#2e86c1"; stroke-width: 2 } }
+  control:   { style: { stroke: "#b7950b"; stroke-width: 2; stroke-dash: 4 } }
+}
+
+title: {
+  label: "tbite — Control / Data / Application planes (×Single → ×HA)"
+  near: top-center
+  shape: text
+  style: { font-size: 24; bold: true }
+}
+
+clients: "Employee / Merchant / Admin · MCP clients" { class: ext }
+
+gw: "Traefik Gateway API (control + data)\nGateway + HTTPRoute · ×1 → ×3\nor Cloudflare Tunnel overlay" { class: edge }
+
+# ───────────────────────────── Application plane ─────────────────────────────
+app: "Application plane — stateless (HPA / KEDA autoscaling)" {
+  style: { fill: "#f3f8fd"; stroke: "#2e86c1" }
+
+  api:    "api · REST / OpenAPI / MCP\n×1 → ×3 · HPA (CPU / RPS / inflight)" { class: app }
+  rt:     "realtime-gateway · SSE\n×1 → ×3 · HPA (active connections)\nper-pod fanout consumer" { class: app }
+  web:    "web ×3 · SvelteKit SSR\n×1 → ×2-3 · HPA" { class: app }
+  workers:"workers · outbox-relay / payroll-settler / on-time-evaluator\n×1 → ×2+ · KEDA · competing consumers" { class: app }
+  sched:  "schedulers ×4\nLease leader election (1 active)" { class: app }
+}
+
+# ───────────────────────────── Control plane ─────────────────────────────
+ctrl: "Control plane — reconcile loops (leader-elected · off the request path)" {
+  style: { fill: "#fdf9ec"; stroke: "#b7950b" }
+
+  cnpg:  "CloudNativePG operator\n×1 (cluster-wide)" { class: ctrl }
+  miniop:"MinIO operator ×1" { class: ctrl }
+  keda:  "KEDA · operator + metrics-apiserver ×1" { class: ctrl }
+  certm: "cert-manager · controller / webhook / cainjector\n1 → 2" { class: ctrl }
+}
+
+# ───────────────────────────── Data plane ─────────────────────────────
+data: "Data plane — stateful (quorum / replication)" {
+  style: { fill: "#f0faf3"; stroke: "#229954" }
+
+  pg:     "PostgreSQL · CloudNativePG\n×1 → ×3 (primary + 2 standby) · PgBouncer\noperator-driven failover" { class: data }
+  nats:   "NATS JetStream\n×1 → ×5 · streamReplicas 1 → 3\nRAFT quorum" { class: data }
+  valkey: "Valkey\nstandalone → ×3 + Sentinel (quorum 2)" { class: data }
+  minio:  "MinIO\n1 pod → distributed 4×4 · erasure coding" { class: data }
+}
+
+# ── Data path (application → data plane) ──
+clients -> gw: { class: data_path }
+gw -> app.api: { class: data_path }
+gw -> app.web: { class: data_path }
+gw -> app.rt: { class: data_path }
+app.web -> app.api: { class: data_path }
+app.api -> data.pg: "RW / RO" { class: data_path }
+app.api -> data.valkey: "cache / session" { class: data_path }
+app.api -> data.nats: "outbox → publish" { class: data_path }
+app.api -> data.minio: "presigned URL" { class: data_path }
+app.workers -> data.nats: { class: data_path }
+app.workers -> data.pg: { class: data_path }
+data.nats -> app.rt: "ORDERS_V1 tap" { class: data_path }
+
+# ── Control path (reconcile, dashed) ──
+ctrl.cnpg -> data.pg: "manages · failover" { class: control }
+ctrl.miniop -> data.minio: "manages" { class: control }
+ctrl.keda -> app.workers: "ScaledObject · backlog / lag" { class: control }
+ctrl.certm -> gw: "issues TLS cert" { class: control }

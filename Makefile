@@ -26,6 +26,7 @@ CHART_VALUES ?= $(CHART_DIR)/values.yaml
         build clean \
         sops-encrypt sops-decrypt sops-edit \
         chart-deps chart-lint chart-render chart-install chart-upgrade chart-uninstall \
+        diagrams \
         image-build-local \
         demo-seed-tsmc demo-load-tsmc demo-crisis
 
@@ -245,6 +246,23 @@ chart-lint: ## Lint the umbrella chart against dev, local HA, and prod HA values
 
 chart-render: ## Render the chart to stdout. Usage: make chart-render CHART_VALUES=chart/tbite-platform/values-prod-ha.yaml
 	@$(HELM) template $(CHART_RELEASE) $(CHART_DIR) -f $(CHART_VALUES) --namespace $(CHART_NAMESPACE)
+
+# Compact ELK spacing keeps the static diagrams short enough for 16:9 slides.
+# edgeNodeBetweenLayers is the big lever — it shrinks the empty edge-routing
+# channels between the plane bands.
+D2_ELK := --layout=elk --theme=4 --elk-padding='[top=12,left=12,bottom=12,right=12]' --elk-nodeNodeBetweenLayers=20 --elk-edgeNodeBetweenLayers=15
+
+diagrams: ## Render the D2 deployment diagrams (static topology per env + animated event sequence)
+	@command -v d2 >/dev/null || (echo "d2 not found — install via 'brew install d2'" && exit 1)
+	@d2 $(D2_ELK) --target=''            docs/deployment/diagrams/topology.d2 docs/deployment/diagrams/topology-dev.svg
+	@d2 $(D2_ELK) --target='steps.prod'  docs/deployment/diagrams/topology.d2 docs/deployment/diagrams/topology-prod.svg
+	@d2 $(D2_ELK) --target='steps.ha'    docs/deployment/diagrams/topology.d2 docs/deployment/diagrams/topology-ha.svg
+	@d2 $(D2_ELK)                        docs/deployment/diagrams/ingress.d2 docs/deployment/diagrams/ingress.svg
+	@d2 $(D2_ELK)                        docs/deployment/diagrams/planes.d2 docs/deployment/diagrams/planes.svg
+	@d2 $(D2_ELK)                        docs/deployment/diagrams/request-routing.d2 docs/deployment/diagrams/request-routing.svg
+	@d2 $(D2_ELK)                        docs/deployment/diagrams/distribution.d2 docs/deployment/diagrams/distribution.svg
+	@d2 --theme=4 --animate-interval=1400             docs/deployment/diagrams/dataflow.d2 docs/deployment/diagrams/dataflow.svg
+	@echo "==> docs/deployment/diagrams/{topology-dev,topology-prod,topology-ha,ingress,planes,request-routing,distribution}.svg + dataflow.svg (animated)"
 
 chart-install: ## Install the umbrella chart into the current kubectl context
 	@echo "==> context: $$($(KUBECTL) config current-context)"

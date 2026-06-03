@@ -1,0 +1,146 @@
+# tbite-platform — deployment topology (Dev / Production / Production HA)
+#
+# Static structural diagram. A single source expresses the cumulative deltas
+# of the three values overlays via D2 `steps`; `--target` renders each as its
+# own static SVG.
+#
+#   d2 --layout=elk --theme=4 --target=''           topology.d2 topology-dev.svg
+#   d2 --layout=elk --theme=4 --target='steps.prod' topology.d2 topology-prod.svg
+#   d2 --layout=elk --theme=4 --target='steps.ha'   topology.d2 topology-ha.svg
+# or: make diagrams
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 4
+    pad: 15
+  }
+}
+
+classes: {
+  app:  { style: { fill: "#d6eaf8"; stroke: "#2e86c1"; border-radius: 8 } }
+  data: { style: { fill: "#d5f5e3"; stroke: "#229954"; border-radius: 8 } }
+  idc:  { style: { fill: "#fcf3cf"; stroke: "#b7950b"; border-radius: 8 } }
+  obs:  { style: { fill: "#ebdef0"; stroke: "#7d3c98"; border-radius: 8 } }
+  ext:  { style: { fill: "#fde2e2"; stroke: "#c0392b"; border-radius: 8 } }
+  flow: { style: { stroke: "#2e86c1"; stroke-width: 2 } }
+  aux:  { style: { stroke-dash: 4; stroke: "#7d3c98" } }
+  acme: { style: { stroke-dash: 3; stroke: "#c0392b" } }
+}
+
+title: {
+  label: "tbite-platform — Dev (single-node: kind / k3d / OrbStack)"
+  near: top-center
+  shape: text
+  style: { font-size: 26; bold: true }
+}
+
+# ───────────────────────── External / clients ─────────────────────────
+clients: "Developer browser\n*.tbite.local" { class: ext }
+le:      "Let's Encrypt\n(staging ACME)" { class: ext }
+gitops:  "GHCR + ArgoCD\n(GitOps)" { class: ext }
+
+# ───────────────────────── Kubernetes cluster ─────────────────────────
+k8s: "Kubernetes (namespace: tbite)" {
+  edge: "Edge / Ingress" {
+    traefik: "Traefik Gateway API ×1" { class: app }
+    cm: "cert-manager" { class: idc }
+  }
+
+  app: "Application" {
+    api:    "api · :8080\n1 replica" { class: app }
+    rt:     "realtime-gateway · :8081 (SSE)\n1 replica" { class: app }
+    web:    "web · employee / merchant / admin\n1 replica each" { class: app }
+    workers:"workers · outbox-relay / payroll-settler / on-time-evaluator\n1 replica each" { class: app }
+    sched:  "schedulers · cutoff / no-show / doc-expiry / feedback\n1 replica each (lease singleton)" { class: app }
+  }
+
+  idp: "stub OIDC" { class: idc }
+
+  data: "Data plane" {
+    pg:     "PostgreSQL (CloudNativePG)\n1 instance" { class: data }
+    valkey: "Valkey\nstandalone" { class: data }
+    nats:   "NATS JetStream\n1 node · streamReplicas 1" { class: data }
+    minio:  "MinIO\n1 server × 1 volume" { class: data }
+  }
+
+  obs: "Observability\nVictoriaMetrics + Logs (7d) · Grafana · OTel" { class: obs }
+}
+
+# ───────────────────────── Connections ─────────────────────────
+clients -> k8s.edge.traefik: { class: flow }
+k8s.edge.traefik -> k8s.app.web: { class: flow }
+k8s.edge.traefik -> k8s.app.api: { class: flow }
+k8s.edge.traefik -> k8s.app.rt: { class: flow }
+k8s.app.web -> k8s.app.api: { class: flow }
+
+k8s.app.api -> k8s.data.pg: { class: flow }
+k8s.app.api -> k8s.data.valkey: { class: flow }
+k8s.app.api -> k8s.data.nats: "outbox → publish" { class: flow }
+k8s.app.api -> k8s.data.minio: { class: flow }
+k8s.app.api -> k8s.idp: { class: aux }
+
+k8s.data.nats -> k8s.app.rt: "ORDERS_V1 tap" { class: flow }
+k8s.app.workers -> k8s.data.pg: { class: flow }
+k8s.app.workers -> k8s.data.nats: { class: flow }
+k8s.app.sched -> k8s.data.pg: { class: aux }
+
+k8s.app -> k8s.obs: "OTLP" { class: aux }
+k8s.edge.cm -> le: "HTTP-01" { class: acme }
+gitops -> k8s: "helm sync" { class: aux }
+
+# ═══════════════════════════════════════════════════════════════════
+# STEP 1 — Production (default values.yaml, single-node)
+# ═══════════════════════════════════════════════════════════════════
+steps: {
+  prod: {
+    title.label: "tbite-platform — Production (single-node)"
+
+    clients.label: "Employee / Merchant / Admin · MCP clients\n*.tbite.example.com"
+    le.label: "Let's Encrypt\n(production ACME)"
+
+    k8s.edge.traefik.label: "Traefik Gateway API ×2"
+    k8s.app.api.label:     "api · :8080\n2 replicas · HPA 2-10"
+    k8s.app.rt.label:      "realtime-gateway · :8081 (SSE)\n2 replicas · HPA 2-6"
+    k8s.app.web.label:     "web · employee / merchant / admin\n2 / 1 / 1 replicas · HPA"
+    k8s.app.workers.label: "workers · outbox-relay / payroll-settler / on-time-evaluator\nKEDA 1-6 / 1-4 / 1-4"
+
+    k8s.idp.label: "Authentik (server + worker)\nOry Hydra (MCP DCR)"
+
+    k8s.data.pg.label:     "PostgreSQL (CloudNativePG)\n2 instances (primary + standby) · PgBouncer"
+    k8s.data.valkey.label: "Valkey\nstandalone"
+    k8s.data.nats.label:   "NATS JetStream\n3 nodes"
+    k8s.data.minio.label:  "MinIO standalone\n1 pod"
+
+    k8s.obs.label: "Observability\nVictoriaMetrics (30d) · Grafana · OTel"
+  }
+
+  # ═════════════════════════════════════════════════════════════════
+  # STEP 2 — Production HA (values.yaml + values-prod-ha.yaml, multi-AZ)
+  # ═════════════════════════════════════════════════════════════════
+  ha: {
+    title.label: "tbite-platform — Production HA (multi-AZ)"
+    k8s.label: "Kubernetes · multi-AZ — NetworkPolicy · topology spread · pod anti-affinity"
+
+    k8s.edge.traefik.label: "Traefik Gateway API ×3"
+    k8s.app.api.label:     "api · :8080\n3 replicas · HPA 3-30"
+    k8s.app.rt.label:      "realtime-gateway · :8081 (SSE)\n3 replicas · HPA 3-15 · drain 120s"
+    k8s.app.web.label:     "web · employee / merchant / admin\n3 / 2 / 2 replicas · HPA"
+    k8s.app.workers.label: "workers · outbox-relay / payroll-settler / on-time-evaluator\nKEDA 2-20 / 1-10 / 1-10"
+
+    k8s.idp.label: "Authentik ×2 (server + worker)\nOry Hydra ×2"
+
+    k8s.data.pg.label:     "PostgreSQL (CloudNativePG)\n3 instances · PgBouncer · backup + PITR"
+    k8s.data.valkey.label: "Valkey replication\n3 nodes + Sentinel (quorum 2)"
+    k8s.data.nats.label:   "NATS JetStream\n5 nodes · streamReplicas 3"
+    k8s.data.minio.label:  "MinIO distributed\n4 servers × 4 volumes"
+
+    k8s.obs.label: "Observability (full)\nMetrics 12mo + vmagent + alertmanager\nLogs 30d · Traces 30d · Grafana ×2 · OTel ×3\nkube-state-metrics + node-exporter"
+
+    # HA-only external dependencies
+    cf: "Cloudflare Tunnel\n(optional overlay)" { class: ext }
+    s3bk: "External S3\n(CNPG backup target)" { class: ext }
+    cf -> k8s.edge.traefik: "optional ingress" { class: aux }
+    k8s.data.pg -> s3bk: "WAL / base backup" { class: flow }
+  }
+}
