@@ -14,9 +14,10 @@ A monorepo: 3 SvelteKit frontends + a Go modular monolith + a self-hostable clou
 
 ## 最終版簡報 (Final Presentation)
 
-最終版簡報可透過 GitHub Pages wrapper 瀏覽，也可直接開啟原始簡報頁面。
+最終版簡報可直接開啟原始簡報頁面。
 
-- GitHub Pages wrapper: https://agentic-build.github.io/corporate-catering-system/presentation/
+[![T-Bite Final Presentation preview](docs/assets/final-presentation-preview.png)](https://agentic-build.github.io/t-bite-presentation/s/t-bite-google-slides-final/)
+
 - 原始簡報: https://agentic-build.github.io/t-bite-presentation/s/t-bite-google-slides-final/
 
 ## Architecture
