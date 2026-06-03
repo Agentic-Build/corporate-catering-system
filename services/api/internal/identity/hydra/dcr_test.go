@@ -128,9 +128,10 @@ func TestSanitizingDCRProxy_ScrubsResponse(t *testing.T) {
 	assert.Equal(t, "passthrough", rr.Header().Get("X-Custom"))
 	assert.Equal(t, itoa(len(rr.Body.Bytes())), rr.Header().Get("Content-Length"))
 
-	// scope expansion added offline_access (request only had openid).
+	// scope expansion added offline + offline_access (request only had openid).
 	scope, _ := seenBody["scope"].(string)
 	assert.Contains(t, scope, "openid")
+	assert.Contains(t, scope, "offline")
 	assert.Contains(t, scope, "offline_access")
 }
 
@@ -217,8 +218,8 @@ func TestSanitizingDCRProxy_ScopeAlreadyComplete(t *testing.T) {
 
 	proxy := &hydra.SanitizingDCRProxy{HydraURL: upstream.URL, HTTP: upstream.Client()}
 	rr := httptest.NewRecorder()
-	// Already has both required scopes → body forwarded unchanged.
-	in := `{"scope":"openid offline_access"}`
+	// Already has all required scopes → body forwarded unchanged.
+	in := `{"scope":"openid offline offline_access"}`
 	req := httptest.NewRequest(http.MethodPost, "/oauth2/register", strings.NewReader(in))
 	proxy.ServeHTTP(rr, req)
 	assert.JSONEq(t, in, seenBody)
