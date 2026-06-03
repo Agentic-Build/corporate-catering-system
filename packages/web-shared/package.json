@@ -1,6 +1,7 @@
 {
   "name": "@tbite/web-shared",
   "version": "0.0.0",
+  "license": "MIT",
   "type": "module",
   "svelte": "./src/index.ts",
   "types": "./src/index.ts",

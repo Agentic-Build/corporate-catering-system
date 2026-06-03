@@ -191,4 +191,4 @@ Full list: `make help`.
 
 ## License
 
-Internal. (c) Agentic-Build.
+MIT. See [LICENSE](LICENSE).
