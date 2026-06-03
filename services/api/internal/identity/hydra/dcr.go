@@ -106,10 +106,12 @@ func (p *SanitizingDCRProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// expandRegistrationScope adds `openid` + `offline_access` to a DCR request's
-// scope. Strict MCP clients (Claude Code) register without offline_access but
-// later request it at authorize, which Hydra rejects (scope is bound at
-// registration). Returns (rewritten body, true) when changed.
+// expandRegistrationScope adds `openid` + `offline` + `offline_access` to a DCR
+// request's scope. Strict MCP clients (Claude Code) register without the
+// refresh-token scopes but later request them at authorize, which Hydra rejects
+// (scope is bound at registration). Claude Code requests the legacy `offline`
+// alias, web/ChatGPT request `offline_access` — Hydra honours both for refresh
+// tokens, so whitelist both. Returns (rewritten body, true) when changed.
 func expandRegistrationScope(body []byte) ([]byte, bool) {
 	if len(body) == 0 {
 		return body, false
@@ -120,7 +122,7 @@ func expandRegistrationScope(body []byte) ([]byte, bool) {
 	}
 	current, _ := doc["scope"].(string)
 	scopes := strings.Fields(current)
-	required := []string{"openid", "offline_access"}
+	required := []string{"openid", "offline", "offline_access"}
 	added := false
 	for _, want := range required {
 		found := false
