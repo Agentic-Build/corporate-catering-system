@@ -90,8 +90,10 @@ ops/secrets/
   README.md
   example.sops.yaml                 # template, intentionally not encrypted
   <env>/
-    app.sops.yaml                   # tbite-app-secrets: DB, NATS, S3, OIDC, Hydra
-    monitoring.sops.yaml            # monitoring-secrets: Grafana admin, exporter DSNs
+    app.sops.yaml                   # multiple Secrets: tbite-db, tbite-s3, tbite-nats,
+                                    #   tbite-oidc-clients, tbite-authentik, tbite-valkey,
+                                    #   tbite-authentik-config, tbite-hydra, tbite-grafana-admin
+                                    #   (see ops/secrets/example.sops.yaml)
 chart/tbite-platform/               # umbrella chart; values reference Secret names, not values
 ```
 
@@ -130,7 +132,7 @@ After applying a rotated Secret, restart the consumers so they pick up the
 new env values:
 
 ```bash
-kubectl -n tbite rollout restart deploy/api deploy/worker deploy/scheduler
+kubectl -n tbite rollout restart deploy -l app.kubernetes.io/instance=tbite
 ```
 
 ## GitOps integration
@@ -148,15 +150,16 @@ in order of how much we recommend them:
 2. **`kustomize-sops` as a generator** inside the kustomize overlay, with
    the operator running `kubectl apply -k …` locally. Good fit for single-
    node installs where ArgoCD isn't worth the extra moving parts.
-3. **`sops -d … | kubectl apply -f -`** as a pre-apply step in `make prod-up`
-   or an equivalent runbook script. Simplest, requires the operator to have
-   the age private key on their workstation at deploy time.
+3. **`sops -d … | kubectl apply -f -`** as a pre-apply step before
+   `make chart-upgrade` or an equivalent runbook script. Simplest, requires
+   the operator to have the age private key on their workstation at deploy
+   time.
 
 The Makefile only ships the raw SOPS targets; pick (1) or (2) per
 environment and wire them in your overlay/Application manifest. See
-[`docs/deployment/argocd.md`](./argocd.md) for the ArgoCD bootstrap and
-[`docs/deployment/single-node.md`](./single-node.md) for the local-apply
-path.
+[`docs/deployment/k3s-cloudflare-tsmc.md`](./k3s-cloudflare-tsmc.md) for the
+ArgoCD bootstrap and [`docs/deployment/local-clusters.md`](./local-clusters.md)
+for the local-apply path.
 
 ## BYO mode: external-secrets / Vault / cloud KMS
 

@@ -172,11 +172,12 @@ layout; that ordering is intentionally out of scope of this chart.
 
 ## Helm hooks
 
-The chart ships three pre-install/pre-upgrade hook Jobs:
+The chart ships four install/upgrade hook Jobs (`db-migrate` runs pre-install/pre-upgrade; the rest run post-install/post-upgrade):
 
 | Job | Purpose | Image |
 | --- | --- | --- |
 | `db-migrate` | runs `migrate -path /migrations -database $DATABASE_RW_URL up` | `migrate/migrate` |
+| `identity-db-init` | bootstraps `authentik` + `hydra` databases and roles inside the CNPG cluster (idempotent) | postgres cluster image |
 | `provision-streams` | runs the platform binary with `--role=provision-streams` (idempotent) | platform image |
 | `bucket-bootstrap` | ensures S3 buckets exist and policies are applied | `minio/mc` |
 

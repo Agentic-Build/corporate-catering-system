@@ -39,8 +39,9 @@ WWW-Authenticate: Bearer realm="https://api.tbite.com/mcp",
                   resource_metadata="https://api.tbite.com/.well-known/oauth-protected-resource"
 ```
 
-`GET /.well-known/oauth-protected-resource` returns the Authentik issuer URL
-so MCP clients can run a standard OAuth 2.0 / PKCE flow before retrying.
+`GET /.well-known/oauth-protected-resource` returns the API origin when Hydra
+is enabled (the Authentik issuer URL is the legacy fallback when Hydra is
+off) so MCP clients can run a standard OAuth 2.0 / PKCE flow before retrying.
 
 ## Tools
 
@@ -246,7 +247,7 @@ MCP client (Claude.ai / ChatGPT)
         │
         ├──→ GET  /oauth2/auth?…                              (reverse-proxied to Hydra)
         │      ↳ 302 → /oauth/login (T-Bite consent bridge)
-        │      ↳ employee pastes session token / logs in via Authentik
+        │      ↳ always redirects to Authentik OIDC (no token-paste)
         │      ↳ Hydra accepts login → /oauth/consent (auto-approve)
         │      ↳ 302 back to client redirect_uri with `code=…`
         │
