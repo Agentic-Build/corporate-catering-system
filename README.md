@@ -4,6 +4,14 @@
 
 A monorepo: 3 SvelteKit frontends + a Go modular monolith + a self-hostable cloud-native Helm umbrella chart + an MCP server for AI agents.
 
+## 正式環境 (Live)
+
+- https://tbite-app.nycu.ai — 員工
+- https://tbite-merchant.nycu.ai — 商家
+- https://tbite-admin.nycu.ai — 福委會
+- https://tbite-api.nycu.ai/docs — API reference (Stoplight Elements)
+- https://tbite-api.nycu.ai/openapi.yaml — OpenAPI 3.1 spec
+
 ## Architecture
 
 The canonical architecture is recorded in [`docs/architecture/`](docs/architecture/). The
